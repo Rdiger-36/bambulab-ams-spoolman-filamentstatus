@@ -23,7 +23,7 @@ This project integrates a Bambulab AMS system with Spoolman to synchronize filam
 
 1. Pull the Docker image:
    ```bash
-   docker pull ghcr.io/Rdiger-36/bambulab-ams-spoolman-filamentstatus
+   docker pull ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus
    ```
 
 2. Run the container:
@@ -35,7 +35,7 @@ This project integrates a Bambulab AMS system with Spoolman to synchronize filam
      -e SPOOLMAN_IP=<spoolman_ip_address> \
      -e SPOOLMAN_PORT=<spoolman_port> \
      --name bambulab-ams-spoolman-filamentstatus \
-    ghcr.io/Rdiger-36/bambulab-ams-spoolman-filamentstatus
+    ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus
    ```
    
    Docker Compose
@@ -43,7 +43,7 @@ This project integrates a Bambulab AMS system with Spoolman to synchronize filam
    version: '3.8'
     services:
       bambulab-ams-spoolman-filamentstatus:
-        image: ghcr.io/Rdiger-36/bambulab-ams-spoolman-filamentstatus
+        image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus
         container_name: bambulab-ams-spoolman-filamentstatus
         environment:
           - PRINTER_ID=<your_printer_serial>
