@@ -1,0 +1,16 @@
+{
+  "name": "filament-status",
+  "version": "1.0.0",
+  "type": "module", 
+  "main": "filament_status.js",
+  "dependencies": {
+    "mqtt": "^4.3.7",
+    "got": "^11.8.2",
+    "dotenv": "^10.0.0"
+  },
+  "scripts": {
+    "start": "node filament_status.js"
+  },
+  "author": "",
+  "license": "ISC"
+}
