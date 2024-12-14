@@ -57,7 +57,7 @@ async function main() {
               let found = false;
               for (const spool of spools) {
                 // Prüfe auf mehrere Tag-Felder
-                const tagsToCheck = [spool.extra?.tag, spool.extra?.secondary-tag];
+                const tagsToCheck = [spool.extra?.tag, spool.extra?.secondary_tag];
 
                 if (tagsToCheck.some((tag) => tag && JSON.parse(tag) === slot.tag_uid)) {
                   found = true;
