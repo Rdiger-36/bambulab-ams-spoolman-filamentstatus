@@ -6,11 +6,11 @@ import { config } from "dotenv";
 config();
 
 // Umgebungsvariablen
-const PRINTER_ID = process.env.PRINTER_ID || "serial";
-const PRINTER_CODE = process.env.PRINTER_CODE || "accesscode";
-const PRINTER_IP = process.env.PRINTER_IP || "127.0.0.1";
-const SPOOLMAN_IP = process.env.SPOOLMAN_IP || "127.0.0.1";
-const SPOOLMAN_PORT = process.env.SPOOLMAN_PORT || "12345";
+const PRINTER_ID = process.env.PRINTER_ID;
+const PRINTER_CODE = process.env.PRINTER_CODE;
+const PRINTER_IP = process.env.PRINTER_IP;
+const SPOOLMAN_IP = process.env.SPOOLMAN_IP;
+const SPOOLMAN_PORT = process.env.SPOOLMAN_PORT;
 
 async function num2letter(num) {
   return String.fromCharCode("A".charCodeAt(0) + Number(num));
@@ -56,19 +56,20 @@ async function main() {
 
               let found = false;
               for (const spool of spools) {
-                if (!spool.extra?.tag) continue;
+                // Prüfe auf mehrere Tag-Felder
+                const tagsToCheck = [spool.extra?.tag, spool.extra?.secondary-tag];
 
-                const tag = JSON.parse(spool.extra.tag);
-                if (tag !== slot.tag_uid) continue;
+                if (tagsToCheck.some((tag) => tag && JSON.parse(tag) === slot.tag_uid)) {
+                  found = true;
 
-                found = true;
-
-                await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`, {
-                  json: {
-                    remaining_weight: (slot.remain / 100) * slot.tray_weight,
-                  },
-                });
-                console.log(`Updated spool ${spool.id}`);
+                  await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`, {
+                    json: {
+                      remaining_weight: (slot.remain / 100) * slot.tray_weight,
+                    },
+                  });
+                  console.log(`Updated spool ${spool.id}`);
+                  break;
+                }
               }
 
               if (!found) {
@@ -83,7 +84,6 @@ async function main() {
     });
 
     console.log("Waiting for MQTT messages...");
-
   } catch (e) {
     console.error(`Error in main: ${e}`);
   }
