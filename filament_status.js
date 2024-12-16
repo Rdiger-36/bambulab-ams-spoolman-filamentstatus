@@ -1,4 +1,4 @@
-import mqtt from "mqtt";
+import mqtt from "async-mqtt";
 import got from "got";
 import { config } from "dotenv";
 
@@ -19,47 +19,39 @@ async function num2letter(num) {
 async function main() {
   try {
     // MQTT Client erstellen
-    const client = mqtt.connect(`tls://bblp:${PRINTER_CODE}@${PRINTER_IP}:8883`, {
+    const client = await mqtt.connectAsync(`tls://bblp:${PRINTER_CODE}@${PRINTER_IP}:8883`, {
       rejectUnauthorized: false,
     });
 
-    client.on("connect", () => {
-      console.log("MQTT client connected");
+    console.log("MQTT client connected");
 
-      // Abonnieren des MQTT-Themas
-      client.subscribe(`device/${PRINTER_ID}/report`, (err) => {
-        if (err) {
-          console.log(`Subscription error: ${err}`);
-        } else {
-          console.log(`Subscribed to device/${PRINTER_ID}/report`);
-        }
-      });
-    });
-
-    // Fehlerbehandlung
-    client.on("error", (err) => {
-      console.log(`MQTT connection error: ${err}`);
-    });
+    // Abonnieren des MQTT-Themas
+    await client.subscribe(`device/${PRINTER_ID}/report`);
+    console.log(`Subscribed to device/${PRINTER_ID}/report`);
 
     // Nachricht empfangen
     client.on("message", async (topic, message) => {
       try {
         const data = JSON.parse(message);
-        if (data.print.ams?.ams) {
+
+        // Überprüfen, ob die verschachtelten Objekte vorhanden sind
+        if (data?.print?.ams?.ams) {
           const response = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool`);
           const spools = JSON.parse(response.body);
 
           for (const ams of data.print.ams.ams) {
             console.log(`AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
+
             for (const slot of ams.tray) {
-              console.log(`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tag_uid} ]]`);
+              console.log(
+                `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`
+              );
 
               let found = false;
-              for (const spool of spools) {
-                // Prüfe auf mehrere Tag-Felder
-                const tagsToCheck = [spool.extra?.tag, spool.extra?.secondary_tag];
 
-                if (tagsToCheck.some((tag) => tag && JSON.parse(tag) === slot.tag_uid)) {
+              for (const spool of spools) {
+                // Prüfe nur spool.extra?.tag
+                if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
                   found = true;
 
                   await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`, {
