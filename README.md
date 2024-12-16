@@ -105,8 +105,7 @@ AMS [A] (hum: 30, temp: 25ºC)
 4. After entering all your necessary information you have to add the serial number of your spool to the Extra Field called "tag"
 5. Click on save.
 
-![Bildschirmfoto 2024-12-14 um 19 38 00](https://github.com/user-attachments/assets/bcd8d51b-44a6-403c-b921-bacbcc231bd1)
-
+![image](https://github.com/user-attachments/assets/b33ad131-07db-4317-ad4f-74ddeffffcd9)
 
 ---
 
