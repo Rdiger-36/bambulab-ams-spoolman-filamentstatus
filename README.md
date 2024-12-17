@@ -36,6 +36,7 @@ This project is based on the script from [Diogo Resende](https://github.com/dres
      -e PRINTER_IP=<printer_ip_address> \
      -e SPOOLMAN_IP=<spoolman_ip_address> \
      -e SPOOLMAN_PORT=<spoolman_port> \
+     -e UPDATE_INTERVAL=120000 \
      --name bambulab-ams-spoolman-filamentstatus \
     ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus
    ```
@@ -53,6 +54,7 @@ This project is based on the script from [Diogo Resende](https://github.com/dres
           - PRINTER_IP=<printer_ip_address>
           - SPOOLMAN_IP=<spoolman_ip_address>
           - SPOOLMAN_PORT=<spoolman_port>
+          - UPDATE_INTERVAL=120000 // Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 1000
         restart: unless-stopped
    ```
 ---
@@ -66,6 +68,7 @@ This project is based on the script from [Diogo Resende](https://github.com/dres
 | `PRINTER_IP`      | Local IP address of the printer               |
 | `SPOOLMAN_IP`     | IP address of the Spoolman instance           |
 | `SPOOLMAN_PORT`   | Port of the Spoolman instance                 |
+| `UPDATE_INTERVAL` | Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 1000|
 
 ---
 
@@ -84,7 +87,7 @@ AMS [A] (hum: 30, temp: 25ºC)
     - [A0] Bambu Basic Black (75%) [[ ABCD1234 ]]
       - Not found. Update spool tag!
     - [A1] Bambu PLA White (50%) [[ EFGH5678 ]]
-      - Updated remaining weight.
+      - Updated spool 12
 ```
 
 | Slot in Log  | Slot on AMS  |
@@ -123,7 +126,7 @@ AMS [A] (hum: 30, temp: 25ºC)
 7. The log output should now look like this:
    ```bash
     - [A0] Bambu PETG Black (75%) [[ ABCD1234 ]]
-      - Updated remaining weight.
+      - Updated spool 15
    ```
 8. This must be done with every spool that is not yet linked
 

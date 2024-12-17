@@ -11,6 +11,12 @@ const PRINTER_CODE = process.env.PRINTER_CODE;
 const PRINTER_IP = process.env.PRINTER_IP;
 const SPOOLMAN_IP = process.env.SPOOLMAN_IP;
 const SPOOLMAN_PORT = process.env.SPOOLMAN_PORT;
+const UPDATE_INTERVAL = process.env.UPDATE_INTERVAL 
+  ? Math.max(parseInt(process.env.UPDATE_INTERVAL, 10), 1000) 
+  : 300000; // Aktualisierungsfrequenz in Millisekunden, Standard: 5 Minuten, Mindestwert: 1 Sekunde
+
+// Speicher für den letzten Aktualisierungszeitpunkt
+const lastUpdateTimes = {};
 
 async function num2letter(num) {
   return String.fromCharCode("A".charCodeAt(0) + Number(num));
@@ -40,31 +46,58 @@ async function main() {
           const spools = JSON.parse(response.body);
 
           for (const ams of data.print.ams.ams) {
-            console.log(`AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
+            let amsHeaderPrinted = false;
 
             for (const slot of ams.tray) {
-              console.log(
-                `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`
-              );
+              if (slot.remain < 0) {
+                continue;
+              }
 
               let found = false;
+              const currentTime = Date.now();
 
               for (const spool of spools) {
                 // Prüfe nur spool.extra?.tag
                 if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
                   found = true;
 
+                  // Überprüfe den letzten Aktualisierungszeitpunkt
+                  if (
+                    lastUpdateTimes[spool.id] &&
+                    currentTime - lastUpdateTimes[spool.id] < UPDATE_INTERVAL
+                  ) {
+                    // Kein Logging, wenn Update übersprungen wird
+                    break;
+                  }
+
+                  if (!amsHeaderPrinted) {
+                    console.log(`AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
+                    amsHeaderPrinted = true;
+                  }
+
+                  console.log(
+                    `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`
+                  );
+
                   await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`, {
                     json: {
                       remaining_weight: (slot.remain / 100) * slot.tray_weight,
                     },
                   });
-                  console.log(`Updated spool ${spool.id}`);
+                  console.log(`      - Updated spool ${spool.id}`);
+
+                  // Aktualisiere den letzten Aktualisierungszeitpunkt
+                  lastUpdateTimes[spool.id] = currentTime;
                   break;
                 }
               }
 
               if (!found) {
+                if (!amsHeaderPrinted) {
+                  console.log(`AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
+                  amsHeaderPrinted = true;
+                }
+
                 console.log("      - Not found. Update spool tag!");
               }
             }
