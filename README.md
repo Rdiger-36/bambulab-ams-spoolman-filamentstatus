@@ -131,3 +131,8 @@ AMS [A] (hum: 30, temp: 25ºC)
 8. This must be done with every spool that is not yet linked
 
 
+## Things and Features I'm Working on
+ - simple Web UI with Bambulab MQTT and Spoolman integration
+   - add new recognized spools to Spoolman incl. mapping filaments or register new filament
+   - merge new spool with empty, new or not paired spool
+ - Multiple printer Support 
