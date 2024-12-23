@@ -68,7 +68,10 @@ async function main() {
                   );
 
                   await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`, {
-                    json: { remaining_weight: (slot.remain / 100) * slot.tray_weight },
+                    json: { 
+                      remaining_weight: (slot.remain / 100) * slot.tray_weight,
+                      last_used: currentTime
+                    },
                   });
 
                   console.log(`      - Updated spool ${spool.id}`);
