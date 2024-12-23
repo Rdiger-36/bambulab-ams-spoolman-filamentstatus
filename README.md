@@ -21,6 +21,19 @@ This project is based on the script from [Diogo Resende](https://github.com/dres
 - A running instance of Spoolman
 - Access to your Bambulab AMS printer with its **serial number**, **access code**, and **IP address**
 
+### Supported Architectures
+
+Simply pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` should retrieve the correct image for your arch.
+
+The architectures supported by this image are:
+
+| Architecture | Spoorted |
+| :----: | :----: |
+| x86-64 | ✅ |
+| arm64 | ✅ |
+| armhf | ✅ |
+
+
 ### Installation
 
 1. Pull the Docker image:
@@ -38,7 +51,7 @@ This project is based on the script from [Diogo Resende](https://github.com/dres
      -e SPOOLMAN_PORT=<spoolman_port> \
      -e UPDATE_INTERVAL=120000 \
      --name bambulab-ams-spoolman-filamentstatus \
-    ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus
+    ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
    ```
    
    Docker Compose
@@ -49,12 +62,12 @@ This project is based on the script from [Diogo Resende](https://github.com/dres
         image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus
         container_name: bambulab-ams-spoolman-filamentstatus
         environment:
-          - PRINTER_ID=<your_printer_serial> // Must be in capital letters!
+          - PRINTER_ID=<your_printer_serial> # Must be in capital letters!
           - PRINTER_CODE=<your_access_code>
           - PRINTER_IP=<printer_ip_address>
           - SPOOLMAN_IP=<spoolman_ip_address>
           - SPOOLMAN_PORT=<spoolman_port>
-          - UPDATE_INTERVAL=120000 // Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 1000
+          - UPDATE_INTERVAL=120000 # Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 1000
         restart: unless-stopped
    ```
 ---
