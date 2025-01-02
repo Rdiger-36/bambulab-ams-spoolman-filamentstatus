@@ -145,7 +145,7 @@ AMS [A] (hum: 30, temp: 25ºC)
 
 
 ## Things and Features I'm Working on
- - simple Web UI with Bambulab MQTT and Spoolman integration
-   - add new recognized spools to Spoolman incl. mapping filaments or register new filament
-   - merge new spool with empty, new or not paired spool
+ - simple Web UI with Bambulab MQTT and Spoolman integration --> ready for test in dev build
+   - add new recognized spools to Spoolman incl. mapping filaments or register new filament --> ready for test in dev build
+   - merge new spool with empty, new or not paired spool --> ready for test in dev build
  - Multiple printer Support 
