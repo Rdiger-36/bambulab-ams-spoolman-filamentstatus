@@ -172,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <td>${amsSpool.slot.tray_sub_brands}</td>
                     <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
                     <td style="background-color: #${amsSpool.existingSpool.filament.color_hex}; color: ${getTextColor(amsSpool.existingSpool.filament.color_hex)}">
-                        ${amsSpool.existingSpool.filament.name.replace("For AMS", "").replace("Support for PLA/PETG", "").replace("Support for PLA", "")}
+                        ${cutDisplayColorName(amsSpool.existingSpool.filament.name)}
                     </td>
                     <td>${amsSpool.slot.tray_uuid}</td>
                 `;
@@ -185,7 +185,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <td>${amsSpool.slot.tray_sub_brands}</td>
                     <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
                     <td style="${colorName !== 'N/A' ? `background-color: #${amsSpool.slot.tray_color}; color: ${getTextColor(amsSpool.slot.tray_color)}` : ''}">
-                        ${colorName.replace("For AMS", "").replace("Support for PLA/PETG", "").replace("Support for PLA", "")}
+                        ${cutDisplayColorName(colorName)}
                     </td>
                     <td>${amsSpool.slot.tray_uuid}</td>
                 `;
@@ -197,6 +197,22 @@ document.addEventListener("DOMContentLoaded", () => {
             spoolRow.appendChild(buttonCell);
             spoolListElement.appendChild(spoolRow);
         }
+    }
+    
+    function cutDisplayColorName(colorName) {
+        
+        let cuttedName = colorName.replace("For AMS ", "")
+                                  .replace("Support for PLA/PETG ", "")
+                                  .replace("Support for PLA ", "")
+                                  .replace("Matte ", "")
+                                  .replace("Silk ", "")
+                                  .replace("Silk+ ", "")
+                                  .replace("Glow ", "")
+                                  .replace("HF ", "")
+                                  .replace("FR ", "")
+        
+        return cuttedName;
+        
     }
 
     // Configure the action button based on spool options

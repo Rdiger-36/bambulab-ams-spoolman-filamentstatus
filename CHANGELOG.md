@@ -1,7 +1,18 @@
 -----------------------------------------------------------------------------------------------
-Version 1.0.1-Dev
-   - Add footer to Main Menu
-   - Remove "Support for..." and "For AMS" from color field
+Version 1.0.2
+   - Added a script for the command line to check the main functionalities of the stored printers
+      - connect to your internal docker container like this: docker exec -it NAME_OF_YOU_CONTAINER /bin/sh
+        now execute the command "debug-printers"
+   - Fixed multiple creations of filaments and spools
+   - Fixed false merging of spools if there are multiple spools loaded with the same filament and different serials
+   - Fixed error: Cannot read properties of undefined (reading 'extra')
+   - Changed color field behavior: all materials will not be displayed in color field
+   - Fixed Dockerfile to properly create the log directory, preventing the following error: 'Failed to read log file for printerId'
+   - Fixed loosing connection and reconnection problems
+-----------------------------------------------------------------------------------------------
+Version 1.0.1
+   - Added footer to Main Menu
+   - Changed color filed behavior: remove "Support for..." and "For AMS" from color field
    - Changed data display behavior in Main Menu
       - From now on, the displayed data will be read from the spool of Spoolman instead of using the external filament database as a source.
         This means that the filament can also be adjusted if there are any problems or errors

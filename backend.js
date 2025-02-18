@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.1";
+const version = "1.0.2";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -64,7 +64,7 @@ fs.writeFile(serverLogFilePath, `Log started at: ${formatDateLog(new Date())}\n`
   if (err) {
     originalConsoleError("Server", `Failed to create log file: ${err.message}`);
   } else {
-    originalConsoleLog("Server", `Server Log file created}`);
+    originalConsoleLog("Server", `Server Log file created`);
   }
 });
 
@@ -397,16 +397,23 @@ function findMatchingExternalFilament(amsSpool, externalFilaments) {
     return null; // No match found
 }
 
-// Find mergabel Spool in Spoolman with allmost the same stats as the AMS Spool
+// Find mergeable Spool in Spoolman with almost the same stats as the AMS Spool
 function findMergeableSpool(amsSpool, allSpools) {
     // Find spools with the same material and color code
     const matchingSpools = allSpools.filter((spoolmanSpool) =>
-                                   spoolmanSpool.filament.material.toLowerCase() === amsSpool.tray_sub_brands.toLowerCase() &&
-                                   spoolmanSpool.filament.color_hex.toLowerCase() === amsSpool.tray_color.slice(0,6).toLowerCase()
-                            );
+        spoolmanSpool.filament.material.toLowerCase() === amsSpool.tray_sub_brands.toLowerCase() &&
+        spoolmanSpool.filament.color_hex.toLowerCase() === amsSpool.tray_color.slice(0, 6).toLowerCase()
+    );
 
     // Check if any matching spool can be merged based on weight tolerance
     return matchingSpools.find(spoolmanSpool => {
+        const tag = spoolmanSpool.extra?.tag;
+
+        const isTagSet = tag && tag.trim() !== "" && tag.trim() !== '""';
+
+        if (isTagSet) {
+            return false; // Spule mit gesetztem Tag ignorieren
+        }
         const spoolRemainingWeight = (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
         const lowerTolerance = spoolRemainingWeight * 0.85; // -15%
         const upperTolerance = spoolRemainingWeight * 1.15; // +15%
@@ -579,20 +586,23 @@ async function mergeSpool(spoolData) {
 }
 
 async function haveSpoolDataChanged(spools, lastSpoolData) {
-    
-    const length = spools.length !== lastSpoolData.length;
-                   
-       const dataChanged = !spools.every((spool, index) => {
-       const lastSpool = lastSpoolData[index];
-       const isEqual = spool.extra.tag === lastSpool.extra.tag &&
-                       spool.remaining_weight === lastSpool.remaining_weight &&
-                       JSON.stringify(spool.filament) === JSON.stringify(lastSpool.filament);
-       
-       return isEqual;
-       });
-    
-    // compare last Spool Data with new fetched data to see if there are any changes
-    return length || dataChanged;
+    if (!Array.isArray(spools) || !Array.isArray(lastSpoolData)) return true;
+
+    const lengthChanged = spools.length !== lastSpoolData.length;
+
+    const dataChanged = !spools.every((spool, index) => {
+        const lastSpool = lastSpoolData[index];
+
+        if (!spool || !lastSpool) return false;
+
+        const isEqual = spool?.extra?.tag === lastSpool?.extra?.tag &&
+                        spool.remaining_weight === lastSpool.remaining_weight &&
+                        JSON.stringify(spool.filament) === JSON.stringify(lastSpool.filament);
+
+        return isEqual;
+    });
+
+    return lengthChanged || dataChanged;
 }
 
 
@@ -620,6 +630,29 @@ function formatDateLog(date) {
     return `${year}-${month}-${day}_${hours}:${minutes}:${seconds}`;
 }
 
+function processData(amsData) {
+    return amsData.map(ams => ({
+        ...ams,
+        tray: ams.tray.map(slot => {
+            // Correct false color PETG Translucent
+            const isPetgTranslucent = slot.tray_sub_brands === "PETG Translucent" && slot.tray_color === "00000000";
+            const updatedTrayColor = isPetgTranslucent ? "FFFFFF00" : (slot.tray_color ?? "N/A");
+
+            // Set remaining Filament to 0 if slot indicates it as negative
+            if (!slot.remain || slot.remain < 0) slot.remain = 0;
+
+            return {
+                ...slot,
+                remain: slot.remain,
+                tray_color: updatedTrayColor,
+                tray_sub_brands: slot.tray_sub_brands === "" ? "N/A" : (slot.tray_sub_brands ?? "N/A"),
+                tray_weight: slot.tray_weight ?? 0,
+                tray_uuid: slot.tray_uuid === "000000000000000000000000000000000" ? "N/A" : (slot.tray_uuid ?? "N/A"),
+            };
+        })
+    }));
+}
+
 // Main function to handle the printers mqtt messages and proceed to update, merge, create Spools and Filament
 async function handleMqttMessage(printer, topic, message) {
         
@@ -645,15 +678,15 @@ async function handleMqttMessage(printer, topic, message) {
             
                 console.debug(printer.name, printer.logFilePath,'Fetch Data from Spoolman');
                 // Fetch data from Spoolman API
-                const spools = await getSpoolmanSpools();
+                let spools = await getSpoolmanSpools();
                 console.debug(printer.name, printer.logFilePath,'Registered Spools:');
                 console.debug(printer.name, printer.logFilePath,JSON.stringify(spools));
                 
                 if (lastSpoolData.length === 0) lastSpoolData = spools;
                 
-                const externalFilaments = await getSpoolmanExternalFilaments();
+                let externalFilaments = await getSpoolmanExternalFilaments();
+                let internalFilaments = await getSpoolmanInternalFilaments();
                 
-                const internalFilaments = await getSpoolmanInternalFilaments();
                 console.debug(printer.name, printer.logFilePath,'Registered Filaments:');
                 console.debug(printer.name, printer.logFilePath,JSON.stringify(internalFilaments));
                         
@@ -661,26 +694,7 @@ async function handleMqttMessage(printer, topic, message) {
                 const spoolsChanged = await haveSpoolDataChanged(spools, lastSpoolData);
                 
                 // Processing AMS Data for valid options
-                const processedAmsData = data.print.ams.ams.map(ams => ({
-                    ...ams,
-                    tray: ams.tray.map(slot => {
-                        // Correct false color PETG Translucent
-                        const isPetgTranslucent = slot.tray_sub_brands === "PETG Translucent" && slot.tray_color === "00000000";
-                        const updatedTrayColor = isPetgTranslucent ? "FFFFFF00" : (slot.tray_color ?? "N/A");
-
-                        // Set remaining Filament to 0 if slot indicates it as negative
-                        if (!slot.remain || slot.remain < 0) slot.remain = 0;
-
-                        return {
-                            ...slot,
-                            remain: slot.remain,
-                            tray_color: updatedTrayColor,
-                            tray_sub_brands: slot.tray_sub_brands === "" ? "N/A" : (slot.tray_sub_brands ?? "N/A"),
-                            tray_weight: slot.tray_weight ?? 0,
-                            tray_uuid: slot.tray_uuid === "000000000000000000000000000000000" ? "N/A" : (slot.tray_uuid ?? "N/A"),
-                        };
-                    })
-                }));
+                const processedAmsData = processData(data.print.ams.ams);
                 
                 console.debug(printer.name, printer.logFilePath,'Check if AMS Data is valid and check if Spoolman or AMS Data got any changes');
                 // If valid AMS data and different from last received, process and Spool Data in Spoolman changed
@@ -709,10 +723,14 @@ async function handleMqttMessage(printer, topic, message) {
 
                             for (const slot of ams.tray) {
                                 
+                                // get all newest updates from spoolman for processing each spool
+                                spools = await getSpoolmanSpools();
+                                externalFilaments = await getSpoolmanExternalFilaments();
+                                internalFilaments = await getSpoolmanInternalFilaments();
+                                
+                                // Check if slot is a valid Slot (loaded or empty slot)
                                 const validSlot = Object.keys(slot).length > 6;
                                 
-                                originalConsoleLog(Object.keys(slot).length);
-
                                 // Check if slot is loaded and valid
                                 if (validSlot) {
                                 
@@ -974,73 +992,96 @@ async function handleMqttMessage(printer, topic, message) {
 
 // setting up all mqtt connections for passed printer
 async function setupMqtt(printer) {
+    const now = Date.now();
+    const COOLDOWN_PERIOD = 30000;
 
-    // break if there is already a mqtt connection for this printer
-    if (printer.mqttRunning) return;
-    
+    printer.lastReconnectAttempt = printer.lastReconnectAttempt || 0;
+    printer.reconnectAttempts = printer.reconnectAttempts || 0;
+
+    // Cooldown
+    if (printer.mqttRunning || printer.isReconnecting || (now - printer.lastReconnectAttempt < COOLDOWN_PERIOD)) {
+        return;
+    }
+
+    printer.isReconnecting = true;
+    printer.lastReconnectAttempt = now;
+
     try {
         console.log(printer.name, printer.logFilePath, `Setting up MQTT connection for Printer: ${printer.id}...`);
 
-        // connect to printer with creds
         const client = await mqtt.connectAsync(`tls://bblp:${printer.code}@${printer.ip}:8883`, {
             rejectUnauthorized: false,
         });
 
         printer.mqttStatus = "Connected";
         printer.mqttRunning = true;
-
-        // set topic to search for messages
+        printer.reconnectAttempts = 0;
+        printer.isReconnecting = false;
+        
         console.log(printer.name, printer.logFilePath, `MQTT client connected for Printer: ${printer.id}`);
         await client.subscribe(`device/${printer.id}/report`);
 
-        // handle all messages from printer
         client.on("message", (topic, message) => {
             handleMqttMessage(printer, topic, message);
         });
 
-        // close mqtt connection for printer
-        client.on("close", () => {
+        client.on("close", async () => {
             printer.mqttStatus = "Disconnected";
             printer.mqttRunning = false;
-            console.log(printer.name, printer.logFilePath, `MQTT connection closed for Printer: ${printer.id}`);
+            printer.reconnectAttempts++;
+
+            const backoffTime = Math.min(60000, 5000 * Math.pow(2, printer.reconnectAttempts));
+            console.log(printer.name, printer.logFilePath, `Connection lost. Reconnecting in ${backoffTime / 1000} seconds...`);
+
+            await sleep(backoffTime);
+            setupMqtt(printer);
+        });
+
+        client.on("error", (error) => {
+            console.error(printer.name, printer.logFilePath, `MQTT error for Printer: ${printer.id} - ${error.message}`);
+            client.end();
         });
 
         console.log(printer.name, printer.logFilePath, `Waiting for MQTT messages for Printer: ${printer.id}...`);
     } catch (error) {
         printer.mqttStatus = "Error";
         printer.mqttRunning = false;
+        printer.reconnectAttempts++;
+        printer.isReconnecting = false;
+
         console.error(printer.name, printer.logFilePath, `Error in setupMqtt for Printer: ${printer.id} - ${error.message}`);
+
+        const backoffTime = Math.min(60000, 5000 * Math.pow(2, printer.reconnectAttempts));
+        console.log(printer.name, printer.logFilePath, `Retrying connection in ${backoffTime / 1000} seconds...`);
+
+        await sleep(backoffTime);
+        setupMqtt(printer);
     }
 }
 
-// starting logic for initialize all needed stuff and the connection to spoolman and mqtt sessions
+// starting logic for initializing all needed stuff and the connection to spoolman and mqtt sessions
 async function starting() {
     if (printers) {
-        
-        // add logpath to printer object
         for (const key in printers) {
             printers[key] = {
                 ...printers[key],
                 logFilePath: path.join(__dirname, "logs", `${printers[key].id}.log`),
             };
         }
-        
+
         try {
-            
-            // Check spoolman health status on startup
             const spoolmanHealthApi = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/health`);
             const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
-    
+
             if (spoolmanHealth.status === "healthy") {
                 console.log("Server", serverLogFilePath, "Spoolman connection: true");
-                spoolmanStatus = "Connected"
-                
-                // Check vendor and Extra Field
+                spoolmanStatus = "Connected";
+
                 if (await checkAndSetVendor() && await checkAndSetExtraField()) {
                     console.log("Server", serverLogFilePath, `Backend running on http://localhost:${PORT}`);
-                    monitorPrinters(); // Start the printer monitoring loop
+                    monitorPrinters();
                 } else {
-                    console.error("Server", serverLogFilePath, `Error: Vendor or Extra Field "tag" could not be set!`);
+                    console.error("Server", serverLogFilePath, `Error: Vendor or Extra Field 'tag' could not be set!`);
                 }
             } else {
                 console.error("Server", serverLogFilePath, "Spoolman connection could not be established");
@@ -1049,21 +1090,19 @@ async function starting() {
             console.error("Server", serverLogFilePath, "Error starting the service:", error);
         }
     } else {
-        console.error("Server", serverLogFilePath, "Error no printers in printers.json found!");
+        console.error("Server", serverLogFilePath, "Error: no printers found in printers.json!");
     }
 }
 
-// monitoring printers to handle all mqtt connections
+// Monitoring printers to handle all mqtt connections
 async function monitorPrinters() {
     while (true) {
-        // establish a connection for every registered in printers.json
         for (const printer of printers) {
             try {
                 const isAlive = await ping.promise.probe(printer.ip);
-                // if printer is online continue, if not try again in 60 seconds
+
                 if (isAlive.alive) {
-                    // setup mqtt if it is not running
-                    if (!printer.mqttRunning) {
+                    if (!printer.mqttRunning && !printer.isReconnecting) {
                         console.log(printer.name, printer.logFilePath, `MQTT not running for Printer: ${printer.id}, attempting to reconnect...`);
                         setupMqtt(printer);
                     }

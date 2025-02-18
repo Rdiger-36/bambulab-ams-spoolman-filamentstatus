@@ -1,6 +1,6 @@
 # Bambulab AMS Spoolman Filament Status
 
-This project integrates a Bambulab AMS system with Spoolman to synchronize filament spool usage. It listens for MQTT updates from the printer and manages spools on Spoolman.
+This project integrates Bambu Lab Printers with one or multiple AMS with Spoolman to synchronize filament spool usage. It listens for MQTT updates from the printers and manages spools on Spoolman.
 
 Please note that these data represent rough estimates communicated by the AMS!
 
@@ -8,24 +8,26 @@ This project is based on the idea of a script from [Diogo Resende](https://githu
 
 
 ## !! Attention !!
-This Solution only Works on Bambu Lab AMS Systems for the P and X Series. The AMS Lite is not supported because it only shows 100% or 0% left on the Spool: [#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)
+This Solution only Works on Bambu Lab Printers with AMS for the P and X Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
+However it can be used to Create Spools and Filaments on Spoolman and connect thier serials with it.
+
 
 
 ## Features
 
 - Real-time AMS filament status updates for all possible AMS on one printer (max. 4)
-- Multiple Printer Support (in development status: golden master (will be released soon), can be tested via [dev channel](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/tree/main?tab=readme-ov-file#dev-channel))
+- Multiple Printer Support
 - Synchronizes spool usage with Spoolman
 - Lightweight Docker container for easy deployment
-- Web UI for manually merge or create Spools with collected data
-- Automatic Mode for automatically merge or create Spools with collected data
+- Web UI for manually merge or create Spools and Filaments with collected data
+- Automatic Mode for automatically merge or create Spools and Filaments with collected data
 
 ## Getting Started
 
 ### Prerequisites
 
 - A running instance of Spoolman
-- Access to your Bambulab AMS printer with its **serial number**, **access code**, and **IP address**
+- Access to your Bambu Lab printers with its **serial number**, **access code**, and **IP address**
 - Turn on the "Update remaining capacity" option in Bambu Studio:
   ![Bildschirmfoto 2025-01-16 um 18 00 45](https://github.com/user-attachments/assets/fe6cf018-b211-4fd6-8931-1c895842d71b) ![Bildschirmfoto 2025-01-16 um 18 01 44](https://github.com/user-attachments/assets/23c60d83-e5ed-41af-9fbc-24cc9dd8ede7)
 
@@ -73,7 +75,11 @@ The architectures supported by this image are:
               "ip": "192.168.1.X"
           }
       ]
-     ``` 
+     ```
+   | Attributes | Printer |
+   | :--------: | :-----: |
+   | id         | Serial from Printer |
+   | code       | AccessCode from Printer |
 
 2. Run the container:
    ```bash
@@ -90,21 +96,24 @@ The architectures supported by this image are:
    
    or as Docker Compose:
    ```bash
-   version: '3.8'
-    services:
-      bambulab-ams-spoolman-filamentstatus:
-        image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
-        container_name: bambulab-ams-spoolman-filamentstatus
-        ports:
-          - 4000:4000
-        environment:
-          - SPOOLMAN_IP=<spoolman_ip_address>
-          - SPOOLMAN_PORT=<spoolman_port>
-          - UPDATE_INTERVAL=120000
-          - MODE=automatic
-        volumes:
-          - /path/to/your/config/printers:/app/printers
-        restart: unless-stopped
+   services:
+    bambulab-ams-spoolman-filamentstatus:
+      image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
+      container_name: bambulab-ams-spoolman-filamentstatus
+      depends_on:
+        spoolman:
+          condition: service_started
+          restart: true
+      ports:
+        - 4000:4000
+      environment:
+        - SPOOLMAN_IP=<spoolman_ip_address>
+        - SPOOLMAN_PORT=<spoolman_port>
+        - UPDATE_INTERVAL=120000
+        - MODE=automatic
+      volumes:
+        - /path/to/your/config/printers:/app/printers
+      restart: unless-stopped
    ```
 
 ## Environment Variables
@@ -271,8 +280,9 @@ Extra Field "tag" successfully created!
 ```
 
 ## Web UI
-Main Menu:
-![Bildschirmfoto 2025-01-19 um 22 23 50](https://github.com/user-attachments/assets/a648f96d-42d2-4c7b-ac36-55ea86ca9b65)
+Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots :
+![image](https://github.com/user-attachments/assets/4c7f3cfa-cfa7-49f9-82b6-1f6a77fe4f09)
+
 
 Menubar for seletion Printers, Logs or change Dark-/Lightmode:
 ![image](https://github.com/user-attachments/assets/c93c95bf-551b-459e-ae8b-b027b37b067d)
@@ -280,9 +290,78 @@ Menubar for seletion Printers, Logs or change Dark-/Lightmode:
 Logs can be accessed over the Backend Logs Menubutton (it only display the logs of the selected Printer from the Main Menu):
 ![Bildschirmfoto 2025-01-19 um 22 38 12](https://github.com/user-attachments/assets/848e35de-ad8a-4826-8264-6a21f5070765)
 
+## Debug-Printers CLI
+You have the ability to check the network and MQTT status of your printer directly from the docker containers build in script.
+To use this script, just connect to your intenal CLI of your docker container like this:
 
-## Support Me
-[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)
+```bash
+docker exec -it CONTAINER_NAME /bin/sh
+```
+
+Then you can run the following command
+
+```bash
+debug-printers
+```
+
+Now you can type in the number of your printer and hit enter to select your printer
+
+```bash
+--- Printer Selection ---
+1. Bambu Lab P1S - 01PXXXXXXXXXX - 192.168.XXX.XXX
+Choose a printer (number): 
+```
+
+Now the script will check if your printer is reachable and request its certificate for the authorization.
+After that you can choose between 3 options (option 3 is to go back to the main menu):
+
+```bash
+Checking availability of 192.168.XXX.XXX...
+192.168.XXX.XXX is reachable. Fetching certificate...
+Certificate saved at /app/certs/01PXXXXXXXXXX.crt
+ 
+--- Options for Bambu Lab P1S ---
+1. Subscribe to MQTT messages
+2. Ping
+3. Back to main menu
+ 
+Choose a option (number): 
+```
+
+Option 1, "Subscribe to MQTT messages," connects to your printer and displays all MQTT messages it sends (the long message contains the AMS spool data):
+
+```bash
+Receiving MQTT messages from 01PXXXXXXXXXX... (Press Ctrl+C to stop)
+Client null sending CONNECT
+Client null received CONNACK (0)
+Client null sending SUBSCRIBE (Mid: 1, Topic: device/01PXXXXXXXXXX/report, QoS: 0, Options: 0x00)
+Client null received SUBACK
+Subscribed (mid: 1): 0
+Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (110 bytes))
+{"print":{"bed_temper":11.96875,"wifi_signal":"-67dBm","command":"push_status","msg":1,"sequence_id":"40941"}}
+Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (104 bytes))
+{"print":{"bed_temper":12,"wifi_signal":"-68dBm","command":"push_status","msg":1,"sequence_id":"40942"}}
+Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (4416 bytes))
+{"print":{"ipcam":{"ipcam_dev":"1","ipcam_record":"disable","timelapse":"disable","resolution":"","tutk_server":"disable","mode_bits":3},"upload":{"status":"idle","progress":0,"message":""},"net":{"conf":0,"info":[{"ip":XXXXXX,"mask":XXXXXXX}]},"nozzle_temper":15.0625,"nozzle_target_temper":0,"bed_temper":12,"bed_target_temper":0,"chamber_temper":5,"mc_print_stage":"1","heatbreak_fan_speed":"0","cooling_fan_speed":"0","big_fan1_speed":"0","big_fan2_speed":"0","mc_percent":100,"mc_remaining_time":0,"ams_status":0,"ams_rfid_status":0,"hw_switch_state":0,"spd_mag":100,"spd_lvl":2,"print_error":0,"lifecycle":"product","wifi_signal":"-68dBm","gcode_state":"FINISH","gcode_file_prepare_percent":"100","queue_number":0,"queue_total":0,"queue_est":0,"queue_sts":0,"project_id":"XXXXX","profile_id":"XXXXX","task_id":"XXXXX","subtask_id":"XXXXX","subtask_name":"XXXXXXX","gcode_file":"","stg":[],"stg_cur":255,"print_type":"idle","home_flag":24331672,"mc_print_line_number":"0","mc_print_sub_stage":0,"sdcard":true,"force_upgrade":false,"mess_production_state":"active","layer_num":260,"total_layer_num":260,"s_obj":[],"filam_bak":[],"fan_gear":0,"nozzle_diameter":"0.4","nozzle_type":"hardened_steel","cali_version":0,"k":"0.0200","flag3":15,"upgrade_state":{"sequence_id":0,"progress":"","status":"IDLE","consistency_request":false,"dis_state":0,"err_code":0,"force_upgrade":false,"message":"0%, 0B/s","module":"","new_version_state":2,"cur_state_code":0,"idx2":3954728311,"new_ver_list":[]},"hms":[],"online":{"ahb":false,"rfid":false,"version":408456019},"ams":{"ams":[{"id":"0","humidity":"5","temp":"0.0","tray":[{"id":"0","remain":83,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-P5","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"5E43B7FF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"1","bed_temp":"35","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["5E43B7FF"]},{"id":"1","remain":100,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-B9","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"0A2989FF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["0A2989FF"]},{"id":"2","remain":100,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-R0","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"C12E1FFF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["C12E1FFF"]},{"id":"3","remain":100,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-K0","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"000000FF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["000000FF"]}]}],"ams_exist_bits":"1","tray_exist_bits":"f","tray_is_bbl_bits":"f","tray_tar":"255","tray_now":"255","tray_pre":"255","tray_read_done_bits":"f","tray_reading_bits":"0","version":103,"insert_flag":true,"power_on_flag":true},"vt_tray":{"id":"254","tag_uid":"0000000000000000","tray_id_name":"","tray_info_idx":"","tray_type":"","tray_sub_brands":"","tray_color":"00000000","tray_weight":"0","tray_diameter":"0.00","tray_temp":"0","tray_time":"0","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"0","nozzle_temp_min":"0","xcam_info":"000000000000000000000000","tray_uuid":"00000000000000000000000000000000","remain":0,"k":0.019999999552965164,"n":1,"cali_idx":-1},"lights_report":[{"node":"chamber_light","mode":"off"}],"command":"push_status","msg":0,"sequence_id":"40943"}}
+Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (87 bytes))
+```
+
+Option 2, "Ping," is a simple ping check of your printer:
+
+```bash
+Pinging 192.168.XXX.XXX...
+PING 192.168.XXX.XXX (192.168.XXX.XXX): 56 data bytes
+64 bytes from 192.168.XXX.XXX: seq=0 ttl=254 time=1.936 ms
+64 bytes from 192.168.XXX.XXX: seq=1 ttl=254 time=1.505 ms
+64 bytes from 192.168.XXX.XXX: seq=2 ttl=254 time=1.225 ms
+64 bytes from 192.168.XXX.XXX: seq=3 ttl=254 time=2.733 ms
+
+--- 192.168.XXX.XXX ping statistics ---
+4 packets transmitted, 4 packets received, 0% packet loss
+round-trip min/avg/max = 1.225/1.849/2.733 ms
+Press Enter to continue...
+```
+
 
 ## FAQ
 Q: I can not merge my existing Spool to Spoolman. I can only create a new Spool or the container creates it automatically.
@@ -294,4 +373,11 @@ Q: I can not handle my Bambu Lab dual or gradient color Spools with this service
 A: For this filaments i don't have data to check how I can process it. Please send me some logs, so I can implement it!
 
 ## Things and Features I'm Working on
- - make the code more stable
+
+| Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
+|------|-------------|------------------------|-----------------------------|-------------|
+| Feature | Background Spoolman connection check | ❌ | ❌ | - |
+| Bug | Sometimes the footer overlaps the table or other parts of the website | ❌ | ❌ | - |
+
+## Support Me
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)

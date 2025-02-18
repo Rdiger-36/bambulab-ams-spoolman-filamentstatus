@@ -1,16 +1,15 @@
 # Base Image
 FROM node:18-alpine
 
-# Zeitdaten und Zeitzone installieren und festlegen
-RUN apk update && apk add --no-cache tzdata 
+# install packahe to set time from ENV
+RUN apk update && apk add --no-cache tzdata
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Copy package files, set needed dirs and install dependencies
 COPY package.json package-lock.json ./
-RUN mkdir /app/logs
-RUN mkdir /app/printers
+RUN mkdir -p /app/logs /app/printers && chmod -R 777 /app/logs /app/printers
 RUN npm install
 
 # Copy application code
