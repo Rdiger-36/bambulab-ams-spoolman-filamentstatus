@@ -378,6 +378,7 @@ A: For this filaments i don't have data to check how I can process it. Please se
 |------|-------------|------------------------|-----------------------------|-------------|
 | Feature | Background Spoolman connection check | ❌ | ❌ | - |
 | Bug | Sometimes the footer overlaps the table or other parts of the website | ❌ | ❌ | - |
+| Feature | Custom filament selection via web, because sometimes the data of the AMS did not match with the official data from BambuLab (e.g. false color codes) | ❌ | ❌ | In progress, [Issue-22](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/22) |
 
 ## Support Me
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)
