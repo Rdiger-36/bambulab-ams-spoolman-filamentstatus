@@ -1,19 +1,25 @@
 # Base Image
 FROM node:18-alpine
 
-# install packahe to set time from ENV
-RUN apk update && apk add --no-cache tzdata
+# Zeitdaten und Zeitzone installieren und festlegen
+RUN apk update && apk add --no-cache tzdata mosquitto-clients openssl jq
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files, set needed dirs and install dependencies
+# Copy package files and install dependencies
 COPY package.json package-lock.json ./
-RUN mkdir -p /app/logs /app/printers && chmod -R 777 /app/logs /app/printers
+RUN mkdir -p /app/logs /app/printers /app/certs && chmod -R 777 /app/logs /app/printers /app/certs
 RUN npm install
 
 # Copy application code
 COPY . .
+
+# Make the script executable
+RUN chmod +x /app/scripts/debug.sh
+
+# Create an alias for the script
+RUN ln -s /app/scripts/debug.sh /usr/local/bin/debug-printers
 
 # Expose port 4000 for the backend
 EXPOSE 4000
