@@ -90,6 +90,7 @@ The architectures supported by this image are:
      -e MODE=automatic \
      -p 4000:4000 \
      -v /path/to/your/config/printers:/app/printers \
+     -v /path/to/your/config/logs:/app/logs \
      --name bambulab-ams-spoolman-filamentstatus \
     ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
    ```
@@ -113,6 +114,7 @@ The architectures supported by this image are:
         - MODE=automatic
       volumes:
         - /path/to/your/config/printers:/app/printers
+        - /path/to/your/config/logs:/app/logs
       restart: unless-stopped
    ```
 
