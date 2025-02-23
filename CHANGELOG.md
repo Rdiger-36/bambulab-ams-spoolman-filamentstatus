@@ -1,4 +1,7 @@
 -----------------------------------------------------------------------------------------------
+Version 1.0.3
+   - Fix Dockerfile that does not contain the script command
+-----------------------------------------------------------------------------------------------
 Version 1.0.2
    - Added a script for the command line to check the main functionalities of the stored printers
       - connect to your internal docker container like this: docker exec -it NAME_OF_YOU_CONTAINER /bin/sh
