@@ -378,7 +378,7 @@ A: For this filaments i don't have data to check how I can process it. Please se
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
-| Feature | Background Spoolman connection check | ❌ | ❌ | - |
+| Feature | Background Spoolman connection check | ❌ | ❌ | implemented, can be testet in next dev build (release soon) |
 | Bug | Sometimes the footer overlaps the table or other parts of the website | ❌ | ❌ | implemented, can be testet in next dev build (release soon) |
 | Feature | Custom filament selection via web, because sometimes the data of the AMS did not match with the official data from BambuLab (e.g. false color codes) | ❌ | ❌ | In progress, [Issue-22](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/22) |
 | Feature | Support for relative urls | ❌ | ❌ | implemented, can be testet in next dev build (release soon), [Issue-28](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/28) |
