@@ -90,6 +90,7 @@ The architectures supported by this image are:
      -e MODE=automatic \
      -p 4000:4000 \
      -v /path/to/your/config/printers:/app/printers \
+     -v /path/to/your/config/logs:/app/logs \
      --name bambulab-ams-spoolman-filamentstatus \
     ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
    ```
@@ -113,18 +114,21 @@ The architectures supported by this image are:
         - MODE=automatic
       volumes:
         - /path/to/your/config/printers:/app/printers
+        - /path/to/your/config/logs:/app/logs
       restart: unless-stopped
    ```
 
 ## Environment Variables
 
-| Variable         | Description                                    |
-|-------------------|-----------------------------------------------|
-| `SPOOLMAN_IP`     | IP address of the Spoolman instance           |
-| `SPOOLMAN_PORT`   | Port of the Spoolman instance                 |
-| `UPDATE_INTERVAL` | Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 5000 (5 sec), max 3000000 (5 min)|
-| `MODE`            | Set the mode of the service: "automatic" or "manual" (standard: manual) |
-| `DEBUG`   | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (standard: false)|
+| Variable             | Description                                   |
+|----------------------|-----------------------------------------------|
+| `SPOOLMAN_IP`        | IP address of the Spoolman instance           |
+| `SPOOLMAN_PORT`      | Port of the Spoolman instance                 |
+| `SPOOLMAN_SUBFOLDER` | Set this if Spoolman is running in a subfolder |
+| `SPOOLMAN_FQDN`      | Access Spoolman via a web link in the footer or from the button "Go to Spoolman" from "Show Info!" dialog (e.g., http(s)://spoolman.your.domain or http(s)://your.domain/spoolman) |
+| `UPDATE_INTERVAL`    | Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 5000 (5 sec), max 3000000 (5 min)|
+| `MODE`               | Set the mode of the service: "automatic" or "manual" (standard: manual) |
+| `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (standard: false)|
 
 Old ENVs (PRINTER_IP, PRINTER_ID, PRINTER_CODE) also works, but will be overwritten if you use multiple printers in printers.json 
 
@@ -240,13 +244,10 @@ There are two modes you can run this container: automatic and manual
       ```
 
       The above functions can also be accessed by a Web UI which is reachable on http://localhost:4000
-      ![Bildschirmfoto 2025-01-19 um 22 23 50](https://github.com/user-attachments/assets/a648f96d-42d2-4c7b-ac36-55ea86ca9b65)
-
       You will find more infos about it on te Web UI section
 
 - manual:
-      In manual mode you can click action buttons to manual merge and create spools and filaments:
-      ![Bildschirmfoto 2025-01-04 um 01 33 10](https://github.com/user-attachments/assets/85d9ab66-5afa-45a1-822e-e226c089bc78)
+      Link to WEB UI
 
 ### AMS Infos
 
@@ -280,8 +281,22 @@ Extra Field "tag" successfully created!
 ```
 
 ## Web UI
-Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots :
-![image](https://github.com/user-attachments/assets/4c7f3cfa-cfa7-49f9-82b6-1f6a77fe4f09)
+Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:
+![image](https://github.com/user-attachments/assets/ef105065-fb3a-4901-85ae-80557d7124af)
+
+The State column indicates the behavoir of the loaded spool and its data.
+- ✅ (Checkmark) → Spools recognized correctly and can be processed.
+- ⚠️ (Warning) → Empty slot or non-BambuLab spool loaded.
+- ❗ (Error) → Filament check failed for BambuLab spools.
+
+If there is an error and you click on the Button "Show Info!", a dialog appears:
+![image](https://github.com/user-attachments/assets/aae0bdab-54ce-4f38-aeac-898d882ae80c)
+
+After you followed the guide and its all setup correctly, the table should look like this:
+![image](https://github.com/user-attachments/assets/34fb14c4-7e3f-44e6-9979-ed577d4d2ba6)
+
+if you are runing this container in manual mode the filament and spool creation and the spool merging will not be done automatically. For this you can use the buttons and a dialog appears like this;
+![Bildschirmfoto 2025-01-04 um 01 33 10](https://github.com/user-attachments/assets/85d9ab66-5afa-45a1-822e-e226c089bc78)
 
 
 Menubar for seletion Printers, Logs or change Dark-/Lightmode:
@@ -368,22 +383,12 @@ Q: I can not merge my existing Spool to Spoolman. I can only create a new Spool 
 
 A: Please check your filament, not spool, in spoolman. The material must be the same material from the Web UI or Logs. For example PETG HF could be set as PETG.
 
-Q: I can not handle my Bambu Lab dual or gradient color Spools with this service.
-
-A: For this filaments i don't have data to check how I can process it. Please send me some logs, so I can implement it!
 
 ## Things and Features I'm Working on
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
-| Feature | Background Spoolman connection check | ❌ | ❌ | - |
-| Bug | Sometimes the footer overlaps the table or other parts of the website | ❌ | ❌ | - |
-| Feature | Custom filament selection via web, because sometimes the data of the AMS did not match with the official data from BambuLab (e.g. false color codes) | ❌ | ❌ | In progress, [Issue-22](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/22) |
-| Feature | Support for relative urls | ❌ | ❌ | In progress, [Issue-28](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/28) |
-| Feature | Support for spoolman running in subfolder | ❌ | ❌ | In progress, [Issue-23](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/23) |
-| Bug | Error on creating/reading server and printer logs | ❌ | ❌ | In progress, [Issue-21](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/21) and [Issue-24](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/24) |
-| Feature | Processing and using multicolor filamennt and spools | ❌ | ❌ | In progress, [Issue-26](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/26) |
-| Feature | Add actual loaded slot as location in spoolman (optional via env) | ❌ | ❌ | In progress, [Issue-27](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/27) |
+| Feature | ~~Add actual loaded slot as location in spoolman (optional via env)~~ Create a new extra field that shows in which printer and AMS Slot the spool is loaded (optional via env) | ❌ | ❌ | In progress, [Issue-27](https://github.com/Rdiger-36/bambulab-ams-spoolman-
 
 ## Support Me
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)

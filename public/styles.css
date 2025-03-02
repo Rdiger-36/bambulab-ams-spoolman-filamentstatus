@@ -242,7 +242,7 @@ body.dark-mode #log-button {
 }
 
 .footer {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   display: flex;
   justify-content: center;
@@ -250,6 +250,13 @@ body.dark-mode #log-button {
   text-align: center;
   padding: 10px 0;
   width: 99%;
+  background-color: #f4f4f4;
+  color: #333;
+}
+
+body.dark-mode .footer {
+  background-color: #1e1e1e;
+  color: #f1f1f1;
 }
 
 .footer .row {
@@ -263,12 +270,4 @@ body.dark-mode #log-button {
 
 .footer a:hover {
   text-decoration: underline;
-}
-
-.hide-footer .footer {
-  display: none;
-}
-
-.show-footer .footer {
-  display: flex;
 }

@@ -5,39 +5,41 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const toggleButton = document.getElementById("dark-mode-toggle");
     const body = document.body;
-    const darkModeEnabled = localStorage.getItem("dark-mode") === "true";
+    let darkModeEnabled = localStorage.getItem("dark-mode") === "true";
     const lightModeIcon = "https://img.icons8.com/ios-glyphs/30/moon-symbol.png";
-    const darkModeIcon = document.getElementById("dark-mode-icon");
+    let darkModeIcon = document.getElementById("dark-mode-icon");
     const darkModeIconUrl = "https://img.icons8.com/color/48/sun--v1.png";
     
     // Apply dark mode if it was previously enabled
     if (darkModeEnabled) {
-        const darkModeEnabled = body.classList.toggle("dark-mode");
+        darkModeEnabled = body.classList.toggle("dark-mode");
         darkModeIcon.src = darkModeEnabled ? darkModeIconUrl : lightModeIcon;
         localStorage.setItem("dark-mode", darkModeEnabled);
     }
-
+	
     // Dynamically add transition after page load
-    window.addEventListener("DOMContentLoaded", () => {
-        // Add the transition class after a short delay to prevent the initial animation
-        setTimeout(() => {
-            body.classList.add("transition-enabled");
-        }, 100);
-    });
+    // Add the transition class after a short delay to prevent the initial animation
+    setTimeout(() => {
+        body.classList.add("transition-enabled");
+    }, 100);
     
     // Handle dark mode toggle button clicks
-    toggleButton.addEventListener("click", () => {
-        const darkModeEnabled = body.classList.toggle("dark-mode");
-        darkModeIcon.src = darkModeEnabled ? darkModeIconUrl : lightModeIcon;
-        localStorage.setItem("dark-mode", darkModeEnabled);
-    });
+	if (toggleButton) {
+	    toggleButton.addEventListener("click", () => {
+	        darkModeEnabled = body.classList.toggle("dark-mode");
+	        darkModeIcon.src = darkModeEnabled ? darkModeIconUrl : lightModeIcon;
+	        localStorage.setItem("dark-mode", darkModeEnabled);
+	    });
+	} else {
+	    console.error('Button with ID "dark-mode-toggle" not found!');
+	}
     
     // Fetch initial data and set up periodic updates
     // Fetch and display printers dynamically
     fetchPrinters();
 
     // Set up Server-Sent Events (SSE) connection for real-time updates
-    const eventSource = new EventSource('/api/events'); // Backend URL for events
+    const eventSource = new EventSource('./api/events'); // Backend URL for events
 
     // Handle incoming messages from SSE
     eventSource.onmessage = function (event) {
@@ -65,7 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch printers from the backend
     async function fetchPrinters() {
         try {
-            const response = await fetch("/api/printers");
+            const response = await fetch("./api/printers");
             if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
             const printers = await response.json();
@@ -103,8 +105,8 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadPrinterData(printerId) {
         try {
             const [statusResponse, spoolsResponse] = await Promise.all([
-                fetch(`/api/status/${printerId}`),
-                fetch(`/api/spools/${printerId}`)
+                fetch(`./api/status/${printerId}`),
+                fetch(`./api/spools/${printerId}`)
             ]);
 
             if (!statusResponse.ok || !spoolsResponse.ok) {
@@ -120,7 +122,6 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error(`Error loading data for printer ${printerId}:`, error);
         }
     }
-
     
     // Update the displayed list of spools based on fetched data
     async function updateSpools(spools) {
@@ -151,45 +152,33 @@ document.addEventListener("DOMContentLoaded", () => {
             button.addEventListener("click", () => {
                 const content = generateDialogContent(button, amsSpool);
 
-                let actionText;
-                if (button.textContent === "Create Spool") {
-                    actionText = "Create";
-                } else if (button.textContent === "Merge Spool") {
-                    actionText = "Merge";
-                } else {
-                    actionText = "Create Filament and Spool";
-                }
+				const actionMap = {
+				    "Create Spool": "Create",
+				    "Merge Spool": "Merge",
+				    "Create Filament & Spool": "Create Filament & Spool",
+					"Show Info!": "Go to Spoolman"
+				};
+
+				const actionText = actionMap[button.textContent] || "No actions available";
 
                 const actionCallback = () => performAction(button, amsSpool);
                 showDialog(button, content, actionText, actionCallback);
             });
 
-            if (amsSpool.existingSpool?.filament?.name) {
-                // Populate table row with spool data
-                spoolRow.innerHTML = `
-                    <td>${amsSpool.amsId}</td>
-                    <td>${amsSpool.slotState}</td>
-                    <td>${amsSpool.slot.tray_sub_brands}</td>
-                    <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
-                    <td style="background-color: #${amsSpool.existingSpool.filament.color_hex}; color: ${getTextColor(amsSpool.existingSpool.filament.color_hex)}">
-                        ${cutDisplayColorName(amsSpool.existingSpool.filament.name)}
-                    </td>
-                    <td>${amsSpool.slot.tray_uuid}</td>
-                `;
-            } else {
-            
-                // Populate table row with spool data
-                spoolRow.innerHTML = `
-                    <td>${amsSpool.amsId}</td>
-                    <td>${amsSpool.slotState}</td>
-                    <td>${amsSpool.slot.tray_sub_brands}</td>
-                    <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
-                    <td style="${colorName !== 'N/A' ? `background-color: #${amsSpool.slot.tray_color}; color: ${getTextColor(amsSpool.slot.tray_color)}` : ''}">
-                        ${cutDisplayColorName(colorName)}
-                    </td>
-                    <td>${amsSpool.slot.tray_uuid}</td>
-                `;
-            }
+			const filament = amsSpool.existingSpool?.filament;
+			const colorStyle = getSpoolColorStyle(filament, amsSpool.slot.tray_color, colorName);
+
+			spoolRow.innerHTML = `
+			    <td>${amsSpool.amsId}</td>
+			    <td>${amsSpool.slotState}</td>
+			    <td>${amsSpool.slot.tray_sub_brands}</td>
+			    <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
+			    <td style="${colorStyle}">
+			        ${cutDisplayColorName(filament?.name || colorName)}
+			    </td>
+			    <td>${amsSpool.slot.tray_uuid}</td>
+			    <td>${setIcon(amsSpool.error, amsSpool.slotState)}</td>
+			`;
 
             // Add the action button to the row
             const buttonCell = document.createElement("td");
@@ -199,37 +188,43 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     
-    function cutDisplayColorName(colorName) {
-        
-        let cuttedName = colorName.replace("For AMS ", "")
-                                  .replace("Support for PLA/PETG ", "")
-                                  .replace("Support for PLA ", "")
-                                  .replace("Matte ", "")
-                                  .replace("Silk ", "")
-                                  .replace("Silk+ ", "")
-                                  .replace("Glow ", "")
-                                  .replace("HF ", "")
-                                  .replace("FR ", "")
-        
-        return cuttedName;
-        
-    }
+	function cutDisplayColorName(colorName) {
+	    return colorName.replace(/^(For AMS |Support for PLA\/PETG |Support for PLA |Matte |Silk\+? |Glow |HF |FR )/g, "");
+	}
+
+	function getSpoolColorStyle(filament, defaultColor, colorName) {
+	    if (colorName === 'N/A') {
+	        return '';
+	    }
+	    
+	    if (filament?.color_hex) {
+	        return `background-color: #${filament.color_hex}; color: ${getTextColor(filament.color_hex)};`;
+	    } else if (filament?.multi_color_hexes) {
+	        const colors = filament.multi_color_hexes.split(",");
+	        return `background: linear-gradient(to right, #${colors[0]} 50%, #${colors[1]} 50%); color: ${getTextColor(colors[0])};`;
+	    }
+	    
+	    return `background-color: #${defaultColor}; color: ${getTextColor(defaultColor)};`;
+	}
 
     // Configure the action button based on spool options
-    function setupButton(button, amsSpool) {
-        if (amsSpool.option === "Merge Spool") {
-            button.textContent = "Merge Spool";
-            if (amsSpool.enableButton === "true") button.disabled = false;
-        } else if (amsSpool.option === "Create Spool") {
-            button.textContent = "Create Spool";
-            if (amsSpool.enableButton === "true") button.disabled = false;
-        } else if (amsSpool.option === "Create Filament & Spool") {
-            button.textContent = "Create Filament & Spool";
-            if (amsSpool.enableButton === "true") button.disabled = false;
-        } else {
-            button.textContent = "No actions available";
-        }
-    }
+	function setupButton(button, amsSpool) {
+	    if (amsSpool.error && amsSpool.slotState === "Loaded (Bambu Lab)") {
+	        button.textContent = "Show Info!";
+	        button.disabled = false;
+	        return;
+	    }
+
+	    const actionMap = {
+	        "Merge Spool": "Merge Spool",
+	        "Create Spool": "Create Spool",
+	        "Create Filament & Spool": "Create Filament & Spool",
+			"Show Info!": "Show Info!"
+	    };
+
+	    button.textContent = actionMap[amsSpool.option] || "No actions available";
+	    button.disabled = amsSpool.enableButton !== "true" || document.getElementById('spoolman-status').textContent.trim().startsWith("Disconnected");
+	}
 
     // Generate the content of the confirmation dialog
     function generateDialogContent(button, amsSpool) {
@@ -263,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </tr>
                 </table>
             `;
-        } else {
+        } else if (button.textContent === "Create Filament & Spool") {
             return `
                 <p>Do you really want to create a Spool and a new Filament with the following stats in Spoolman?</p>
                 <table>
@@ -277,7 +272,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     </tr>
                 </table>
             `;
-        }
+        } else {
+			return `
+			    <p>No machting Filament found in Database, please check manually!</p>
+				<p>This error shows up when the official data from BambuLab does not matches with the collected data from the spool!</p>
+				<p>To solve this issue, please follow this guide:</p>
+				<p>&emsp;1. Click on "Go to Spoolman". This will open Spoolman in the Spool creation menu.</p>
+				<p>&emsp;2. Type in the Name of your BambuLab Filament and select it, the necessary data will be filled in automatically.</p>
+				<p>&emsp;3. If you wish, you can enter any optional data you need (e.g., first used, price, location…)</p>
+				<p>&emsp;4. Copy the serial into the Extra Field 'tag' and click save</p>
+				<p>&emsp;5. Wait until the new data is collected. After this, the spool will be displayed correctly!</p>
+			`;
+		}
     }
 
     // Show a confirmation dialog
@@ -290,29 +296,37 @@ document.addEventListener("DOMContentLoaded", () => {
         dialogContent.innerHTML = content;
         updateElementText("action-button", actionButtonText);
 
-        actionButton.onclick = () => {
-            actionCallback();
-            dialog.close();
-        };
-
+		if (actionButton.textContent === "Go to Spoolman") {
+			actionButton.onclick = () => {
+			    actionCallback();
+			    dialog.close();
+				
+				const spoolmanLink = document.getElementById("spoolmanLink");
+				let linkUrl = spoolmanLink.href;
+				linkUrl += "spool/create";
+				window.open(linkUrl, "_blank");
+			};
+		} else {
+			actionButton.onclick = () => {
+			    actionCallback();
+			    dialog.close();
+			};	
+		}
+		
         closeDialog.onclick = () => dialog.close();
         dialog.showModal();
     }
 
     // Send the selected action to the backend
     function performAction(button, amsSpool) {
-        let endpoint;
+		const endpointMap = {
+		    "Create Spool": "./api/createSpool",
+		    "Merge Spool": "./api/mergeSpool",
+		    "Create Filament & Spool": "./api/createSpoolWithFilament"
+		};
 
-        if (button.textContent === "Create Spool") {
-            endpoint = "/api/createSpool";
-        } else if (button.textContent === "Merge Spool") {
-            endpoint = "/api/mergeSpool";
-        } else if (button.textContent === "Create Filament & Spool") {
-            endpoint = "/api/createSpoolWithFilament";
-        } else {
-            console.log("Unknown action!");
-            return;
-        }
+		const endpoint = endpointMap[button.textContent];
+		if (!endpoint) return;
 
         fetch(endpoint, {
             method: "POST",
@@ -336,16 +350,45 @@ document.addEventListener("DOMContentLoaded", () => {
         data.lastMqttAmsUpdate = data.lastMqttAmsUpdate
             ? formatDate(new Date(data.lastMqttAmsUpdate))
             : "No update yet";
-        
-        updateElementText("spoolman-status", data.spoolmanStatus);
-        updateElementText("mqtt-status", data.mqttStatus);
+		
+		updateStatusWithIcon("spoolman-status", data.spoolmanStatus);
+		updateStatusWithIcon("mqtt-status", data.mqttStatus);
         updateElementText("last-mqtt-update", data.lastMqttUpdate);
         updateElementText("last-mqtt-ams-update", data.lastMqttAmsUpdate);
         updateElementText("printer-name", data.printerName);
         updateElementText("mode", data.MODE);
         updateElementText("printer-serial", data.PRINTER_ID);
         
+		const footer = document.getElementById("dynamic-footer");
+
+		if (footer) {
+			const URL = data.SPOOLMAN_FQDN || data.SPOOLMAN_URL;
+		    footer.innerHTML = `
+		        <div class="container">
+		            <div class="content">
+		                2025 - v.${data.VERSION} | 
+		                <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">GitHub Repository</a> - 
+		                Created by 
+		                <a href="https://github.com/Rdiger-36" target="_blank">Rdiger-36</a> |
+						<a id="spoolmanLink" href="${URL}" target="_blank">Link to Spoolman</a>
+		            </div>
+		        </div>
+		    `;
+		}
     }
+	
+	// Set status icon for element
+	function updateStatusWithIcon(elementId, status) {
+	    let icon = status === "Connected" ? " ✅" : " ❌";
+	    updateElementText(elementId, status + icon);
+	}
+	
+	// Set status icon for spool behavior
+	function setIcon(status, slotState) {
+		let icon = "⚠️";
+		if (slotState === "Loaded (Bambu Lab)") icon = status ? "❗️" : "✅";
+	    return icon;
+	}
 
     // Safely get an element by ID and log a warning if it doesn't exist
     function getElementSafe(id) {
@@ -361,21 +404,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const element = getElementSafe(id);
         if (element) element.textContent = text;
     }
-
-    // Display an error message to the user
-    function showError(message) {
-        const errorElement = getElementSafe("error-message");
-        if (errorElement) {
-            errorElement.textContent = message;
-            errorElement.style.display = "block";
-        }
-    }
-
+	
     // Calculate the appropriate text color based on background brightness
-    function getTextColor(hexColor) {
-        
-        if (hexColor === "N/A") hexColor = "FFFFFFFF"
-        
+    function getTextColor(hexColor) {        
         const r = parseInt(hexColor.slice(0, 2), 16);
         const g = parseInt(hexColor.slice(2, 4), 16);
         const b = parseInt(hexColor.slice(4, 6), 16);
@@ -394,12 +425,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
     }
-    
 });
 
 // redirect to log page on button click
 function redirectToLogs(type) {
-    
     if (type === "server") {
         window.location.href = `logs.html?name=server`;
     } else {

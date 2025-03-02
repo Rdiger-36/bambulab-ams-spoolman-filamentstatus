@@ -1,4 +1,32 @@
 -----------------------------------------------------------------------------------------------
+Version 1.0.4
+   - Bugfixes:
+      - The footer now has a background to prevent it from overlapping the table or other parts of the website.
+      - Fixed an error when creating or reading server and printer logs.
+      - Scrolling through logs on the web was not possible due to automatic scrolling back to the bottom on refresh.
+      - Fixed the bug that prevented merging an empty spool with a new one and its associated tag 
+
+   - New Features:
+      - Added a background connection check and reconnection logic for Spoolman.
+      - Introduced a new "State" column to indicate whether the data has been processed correctly. If not, an action button allows users to view an info dialog. This helps in cases where AMS data does not match official BambuLab data (e.g., incorrect color codes).
+         - ✅ (Checkmark) → Spools recognized correctly and can be processed.
+         - ⚠️ (Warning) → Empty slot or non-BambuLab spool loaded.
+         - ❗ (Error) → Filament check failed for BambuLab spools.
+      - Added support for relative URLs.
+      - Added support for Spoolman running in a subfolder.
+      - Added support for processing and using multicolor filament and spools.
+      - Added a link to Spoolman integration and support for FQDN with HTTPS.
+      - Added icons for connection status.
+      - If the log displays ‘No new AMS data or changes in Spoolman found…’, only the timestamps will be updated to provide a clearer view
+      - The material from a non-BambuLab spool is now shown in the table on the Web-App and in the logs
+   
+   - New Environment Variables (ENVs):
+      - SPOOLMAN_SUBFOLDER → Set this if Spoolman is running in a subfolder.
+      - SPOOLMAN_FQDN → Use this to access Spoolman via a web link in the footer or from the button "Go to Spoolman" from "Show Info!" dialog (e.g., http(s)://spoolman.your.domain or http(s)://your.domain/spoolman).
+-----------------------------------------------------------------------------------------------
+Version 1.0.3
+   - Fix Dockerfile that does not contain the script command
+-----------------------------------------------------------------------------------------------
 Version 1.0.2
    - Added a script for the command line to check the main functionalities of the stored printers
       - connect to your internal docker container like this: docker exec -it NAME_OF_YOU_CONTAINER /bin/sh

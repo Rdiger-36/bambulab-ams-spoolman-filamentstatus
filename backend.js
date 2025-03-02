@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.3";
+const version = "1.0.4";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -21,6 +21,9 @@ const PRINTER_CODE = process.env.PRINTER_CODE;
 const PRINTER_IP = process.env.PRINTER_IP;
 const SPOOLMAN_IP = process.env.SPOOLMAN_IP;
 const SPOOLMAN_PORT = process.env.SPOOLMAN_PORT;
+const SPOOLMAN_SUBFOLDER = process.env.SPOOLMAN_SUBFOLDER || null;
+let SPOOLMAN_URL = `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}`;
+const SPOOLMAN_FQDN = process.env.SPOOLMAN_FQDN || null;
 const UPDATE_INTERVAL = process.env.UPDATE_INTERVAL
   ? Math.min(Math.max(parseInt(process.env.UPDATE_INTERVAL, 10), 5000), 300000)
   : 120000;
@@ -34,6 +37,12 @@ const DEBUG = process.env.DEBUG || "false";
 const MODE = process.env.MODE || "manual";
 
 const RECONNECT_INTERVAL = 60000; // Intervall for try to reconnect once in a minute
+
+const baseURL = `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}`;
+
+SPOOLMAN_URL = SPOOLMAN_SUBFOLDER ? `${baseURL}${SPOOLMAN_SUBFOLDER}` : baseURL;
+
+console.log(SPOOLMAN_URL);
 
 // save original console.log
 const originalConsoleLog = console.log;
@@ -57,8 +66,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverLogFilePath = path.join(__dirname, "logs", "server.log");
 const configPath = path.resolve(__dirname, "printers", "printers.json");
 
-const printers = loadPrintersConfig();
-
 // Creating server log
 fs.writeFile(serverLogFilePath, `Log started at: ${formatDateLog(new Date())}\n`, (err) => {
   if (err) {
@@ -67,6 +74,8 @@ fs.writeFile(serverLogFilePath, `Log started at: ${formatDateLog(new Date())}\n`
     originalConsoleLog("Server", `Server Log file created`);
   }
 });
+
+const printers = loadPrintersConfig();
 
 // Enable Cross-Origin Resource Sharing (CORS) to allow requests from other domains, for reverse proxys
 app.use(cors());
@@ -84,13 +93,22 @@ app.get("/", (req, res) => {
 // override von console.log for logs and frontend
 console.log = (device, logFilePath, ...args) => {
     const logMessage = `[LOG] ${formatDateLog(new Date())} - ${device} - ${args.join(" ")}`;
-    originalConsoleLog(logMessage); // logs for origin console
-    
-    fs.appendFile(logFilePath, logMessage + '\n', (err) => {
-      if (err) {
-        originalConsoleLog(`[ERROR] Failed to write log: ${err.message}`);
-      }
-    });
+
+    // log to original console
+    originalConsoleLog(logMessage);
+
+    const logPrefix = "No new AMS Data or changes in Spoolman found. Processing AMS Data for this printer will be paused until";
+
+    if (args.some(arg => typeof arg === 'string' && arg.startsWith(logPrefix))) {
+        updateLastLogLine(logFilePath, logMessage);
+    } else {
+        // normal logging if line does not match
+        fs.appendFile(logFilePath, logMessage + '\n', (err) => {
+            if (err) {
+                originalConsoleLog(`[ERROR] Failed to write log: ${err.message}`);
+            }
+        });
+    }
 };
 
 // override of console.error for logs and frontend
@@ -118,6 +136,38 @@ console.debug = (device, logFilePath, ...args) => {
         });
     }
 };
+
+function updateLastLogLine(logFilePath, newLogMessage) {
+    fs.readFile(logFilePath, 'utf8', (err, data) => {
+        if (err) {
+            console.error(`[ERROR] Failed to read log file: ${err.message}`);
+            return;
+        }
+
+        let lines = data.trim().split('\n');
+        if (lines.length === 0) return;
+
+        const logPrefix = "No new AMS Data or changes in Spoolman found. Processing AMS Data for this printer will be paused until";
+
+        let lastLine = lines[lines.length - 1];
+
+        // Check if last line matches the pattern
+        if (lastLine.includes(logPrefix)) {
+            // rewrite last line
+            lines[lines.length - 1] = newLogMessage;
+        } else {
+            // append new log line
+            lines.push(newLogMessage);
+        }
+
+        // write log
+        fs.writeFile(logFilePath, lines.join('\n'), (err) => {
+            if (err) {
+                console.error(`[ERROR] Failed to write updated log file: ${err.message}`);
+            }
+        });
+    });
+}
 
 // initialize all printers. If there is no printer.json or it is faulty check if there is valifd printer in ENVs and use it
 function loadPrintersConfig() {
@@ -184,10 +234,11 @@ async function num2letter(num) {
 // Fetching actual Spolls from Spoolman
 async function getSpoolmanSpools() {
     try {
-        const response = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool`);
+        const response = await got(`${SPOOLMAN_URL}/api/v1/spool`);
         return JSON.parse(response.body);
       } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching spools from Spoolman:", error);
+		spoolmanStatus = "Disconnected";
         return [];
       }
 }
@@ -195,10 +246,11 @@ async function getSpoolmanSpools() {
 // Fetching actual internal Filaments from Spoolman
 async function getSpoolmanInternalFilaments() {
     try {
-           const response = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/filament`);
-           return JSON.parse(response.body);
+    	const response = await got(`${SPOOLMAN_URL}/api/v1/filament`);
+        return JSON.parse(response.body);
       } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error);
+		spoolmanStatus = "Disconnected";
         return [];
       }
 }
@@ -206,10 +258,11 @@ async function getSpoolmanInternalFilaments() {
 // Fetching actual external Filaments from Spoolman
 async function getSpoolmanExternalFilaments() {
       try {
-        const response = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/external/filament`);
+        const response = await got(`${SPOOLMAN_URL}/api/v1/external/filament`);
         return JSON.parse(response.body);
       } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error);
+		spoolmanStatus = "Disconnected";
         return [];
       }
 }
@@ -221,7 +274,7 @@ async function checkAndSetVendor() {
     
     // Check if there is a vendor called "Bambu Lab"
     try {
-        const response = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/vendor`);
+        const response = await got(`${SPOOLMAN_URL}/api/v1/vendor`);
         const vendors = JSON.parse(response.body);
 
         for (const vendor of vendors) {
@@ -241,6 +294,7 @@ async function checkAndSetVendor() {
         }
      } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error);
+		spoolmanStatus = "Disconnected";
          throw error;
      }
 }
@@ -259,7 +313,7 @@ async function createVendor() {
             empty_spool_weight: 250
         };
 
-        const manufacturerResponse = await got.post(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/vendor`, {
+        const manufacturerResponse = await got.post(`${SPOOLMAN_URL}/api/v1/vendor`, {
             json: manufacturerPayload,
             responseType: 'json'
         });
@@ -288,7 +342,7 @@ async function checkAndSetExtraField() {
     
     // check if there is the extra field called "tag"
     try {
-        const response = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/field/spool`);
+        const response = await got(`${SPOOLMAN_URL}/api/v1/field/spool`);
         const fields = JSON.parse(response.body);
         let extraFieldExists = false;
 
@@ -327,7 +381,7 @@ async function createExtraField() {
             field_type: "text"
         };
 
-        const manufacturerResponse = await got.post(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/field/spool/tag`, {
+        const manufacturerResponse = await got.post(`${SPOOLMAN_URL}/api/v1/field/spool/tag`, {
             json: payload,
             responseType: 'json'
         });
@@ -349,15 +403,25 @@ async function createExtraField() {
 function findExistingSpool(amsSpool, allSpools) {
     return allSpools.find(spoolmanSpool => {
         const tag = spoolmanSpool.extra?.tag?.replace(/"/g, ''); // Remove quotes from the "tag"
-        const colorHex = spoolmanSpool.filament.color_hex;
-        const truncatedColor = amsSpool.tray_color.slice(0, 6);
-        
-        // Return matching spool if material, color, and tag match
-        return (
-            spoolmanSpool.filament.material === amsSpool.tray_sub_brands &&
-            colorHex.toLowerCase() === truncatedColor.toLowerCase() &&
-            tag === amsSpool.tray_uuid
-        );
+        const materialMatches = spoolmanSpool.filament.material === amsSpool.tray_sub_brands;
+        const tagMatches = tag === amsSpool.tray_uuid;
+
+        // Check if the AMS spool has multiple colors
+        if (amsSpool.cols.length > 1) {
+            // AMS is multi-color → Look for a multi-color spool
+            if (!spoolmanSpool.filament.multi_color_hexes) return false; // If the Spoolman spool is not multi-color, no match
+
+            const amsColors = amsSpool.cols.map(color => color.slice(0, 6).toLowerCase()).sort();
+            const filamentColors = spoolmanSpool.filament.multi_color_hexes.split(',').map(color => color.toLowerCase()).sort();
+
+            return materialMatches && JSON.stringify(filamentColors) === JSON.stringify(amsColors) && tagMatches;
+        } else {
+            // AMS is single-color → Look for a single-color spool
+            const colorHex = spoolmanSpool.filament.color_hex?.toLowerCase();
+            const amsColor = amsSpool.tray_color.slice(0, 6).toLowerCase();
+
+            return materialMatches && colorHex === amsColor && tagMatches;
+        }
     }) || null; // Return null if no matching spool is found
 }
 
@@ -372,25 +436,31 @@ function findMatchingExternalFilament(amsSpool, externalFilaments) {
         (material) => material.split(' ')[0].replace(/[^A-Za-z]/g, '').toLowerCase()
     ];
 
+    // Get all Color from AMS Spool
+    const amsColors = amsSpool.cols.map(color => color.slice(0, 6).toLowerCase()).sort();
+
     // Try each transformation to find a matching filament
     for (const transform of transformations) {
         const transformedMaterial = transform(amsSpool.tray_sub_brands || '');
+
         const matchingFilament = externalFilaments.find(filament => {
-            const colorHex = filament.color_hex || '';
-            
-            let id = "";
-            
+            const filamentColors = filament.color_hex 
+                ? [filament.color_hex.toLowerCase()] // sinlge Color
+                : (filament.color_hexes || []).map(color => color.toLowerCase()).sort(); // sorted multi color
+
+            let idMatches = false;
             if (amsSpool.tray_sub_brands.toLowerCase().includes("support")) {
-                id = filament.id.startsWith(`bambulab_${amsSpool.tray_type.split('-')[0].toLowerCase()}_${transformedMaterial}`) &&
-                           colorHex.toLowerCase() === amsSpool.tray_color.slice(0,6).toLowerCase();
+                idMatches = filament.id.startsWith(`bambulab_${amsSpool.tray_type.split('-')[0].toLowerCase()}_${transformedMaterial}`);
             } else {
-                id = filament.id.startsWith(`bambulab_${transformedMaterial}`) &&
-                           colorHex.toLowerCase() === amsSpool.tray_color.slice(0,6).toLowerCase();
+                idMatches = filament.id.startsWith(`bambulab_${transformedMaterial}`);
             }
-                       
-                       
-            return id;
+
+            // Check matching colors
+            const colorMatches = JSON.stringify(filamentColors) === JSON.stringify(amsColors);
+
+            return idMatches && colorMatches;
         });
+
         if (matchingFilament) return matchingFilament;
     }
 
@@ -399,33 +469,52 @@ function findMatchingExternalFilament(amsSpool, externalFilaments) {
 
 // Find mergeable Spool in Spoolman with almost the same stats as the AMS Spool
 function findMergeableSpool(amsSpool, allSpools) {
-    // Find spools with the same material and color code
-    const matchingSpools = allSpools.filter((spoolmanSpool) =>
-        spoolmanSpool.filament.material.toLowerCase() === amsSpool.tray_sub_brands.toLowerCase() &&
-        spoolmanSpool.filament.color_hex.toLowerCase() === amsSpool.tray_color.slice(0, 6).toLowerCase()
-    );
+    // Get all Colors to support multi-color filament
+    const amsColors = amsSpool.cols.map(color => color.slice(0, 6).toLowerCase());
+
+    // If there are multiple colors, we check the multi_color_hexes, otherwise we check color_hex
+    const matchingSpools = allSpools.filter(spoolmanSpool => {
+        const materialMatches = spoolmanSpool.filament.material.toLowerCase() === amsSpool.tray_sub_brands.toLowerCase();
+
+        if (amsColors.length > 1) {
+            // If multi_color_hexes exists, split the hex codes into an array
+            const multiColorHexes = spoolmanSpool.filament.multi_color_hexes
+                ? spoolmanSpool.filament.multi_color_hexes.split(',')
+                : [];
+            // Check if any of the colors match
+            const colorMatches = amsColors.some(color => 
+                multiColorHexes.map(hex => hex.toLowerCase()).includes(color)
+            );
+            return materialMatches && colorMatches;
+        }
+
+        // If there is only one color, compare it with color_hex
+        return materialMatches && amsColors.some(color => 
+            spoolmanSpool.filament.color_hex.toLowerCase() === color
+        );
+    });
 
     // Check if any matching spool can be merged based on weight tolerance
     return matchingSpools.find(spoolmanSpool => {
-        const tag = spoolmanSpool.extra?.tag;
+        const tag = spoolmanSpool.extra?.tag?.trim();
 
-        const isTagSet = tag && tag.trim() !== "" && tag.trim() !== '""';
-
-        if (isTagSet) {
-            return false; // Spule mit gesetztem Tag ignorieren
-        }
         const spoolRemainingWeight = (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
-        const lowerTolerance = spoolRemainingWeight * 0.85; // -15%
-        const upperTolerance = spoolRemainingWeight * 1.15; // +15%
+        const lowerTolerance = spoolRemainingWeight * 0.85;
+        const upperTolerance = spoolRemainingWeight * 1.15;
 
         const weightMatches =
             spoolmanSpool.remaining_weight >= lowerTolerance &&
             spoolmanSpool.remaining_weight <= upperTolerance;
 
-        // Return matching spool if weight matches or if no weight has been used
-        return (spoolmanSpool.remaining_weight === 0 || weightMatches || spoolmanSpool.used_weight === 0);
+        const hasTag = tag && tag !== "" && tag !== '""';
+
+        // Allow merging if weight matches, no weight has been used, or if remaining weight is 0 and there is a tag
+        return (spoolmanSpool.remaining_weight === 0 && hasTag) ||
+               (spoolmanSpool.remaining_weight === 0 || weightMatches || spoolmanSpool.used_weight === 0);
     });
 }
+
+
 
 // Function to find a matching internal filament based on external filament ID
 function findMatchingInternalFilament(externalFilament, internalFilaments) {
@@ -451,14 +540,14 @@ async function createSpool(spoolData) {
     };
     
     // Debugging URL and Payload
-    console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool`);
+    console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `${SPOOLMAN_URL}/api/v1/spool`);
     console.debug(spoolData.printerName, spoolData.logFilePath, "        Payload:", JSON.stringify(postData));
 
     
     try {
         
         // Send a POST request to create a new spool with the provided spool data
-        const response = await got.post(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool`, {
+        const response = await got.post(`${SPOOLMAN_URL}/api/v1/spool`, {
             json: postData,
         });
 
@@ -491,7 +580,7 @@ async function createFilamentAndSpool(spoolData) {
             color_hex: spoolData.matchingExternalFilament.color_hex,
             external_id: spoolData.matchingExternalFilament.id,
             spool_type: spoolData.matchingExternalFilament.spool_type,
-            color_hexes: spoolData.matchingExternalFilament.color_hexes,
+            multi_color_hexes: spoolData.matchingExternalFilament.color_hexes ? spoolData.matchingExternalFilament.color_hexes.join(",") : "",
             finish: spoolData.matchingExternalFilament.finish,
             multi_color_direction: spoolData.matchingExternalFilament.multi_color_direction,
             pattern: spoolData.matchingExternalFilament.pattern,
@@ -501,11 +590,11 @@ async function createFilamentAndSpool(spoolData) {
         };
 
         // Debugging URL and Payload
-        console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/filament`);
+        console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `${SPOOLMAN_URL}/api/v1/filament`);
         console.debug(spoolData.printerName, spoolData.logFilePath, "        Payload:", JSON.stringify(filamentPayload));
         
         // Create filament in the Spoolman system
-        const filamentResponse = await got.post(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/filament`, {
+        const filamentResponse = await got.post(`${SPOOLMAN_URL}/api/v1/filament`, {
             json: filamentPayload,
             responseType: 'json'
         });
@@ -533,11 +622,11 @@ async function createFilamentAndSpool(spoolData) {
             };
             
             // Debugging URL and Payload
-            console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool`);
+            console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `${SPOOLMAN_URL}/api/v1/spool`);
             console.debug(spoolData.printerName, spoolData.logFilePath, "        Payload:", JSON.stringify(spoolPayload));
 
             // Create spool in the Spoolman system
-            await got.post(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool`, {
+            await got.post(`${SPOOLMAN_URL}/api/v1/spool`, {
                 json: spoolPayload,
                 responseType: 'json'
             });
@@ -565,12 +654,12 @@ async function mergeSpool(spoolData) {
     };
 
     // Debugging URL and Payload
-    console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spoolData.mergeableSpool.id}`);
+    console.debug(spoolData.printerName, spoolData.logFilePath, "        Sending POST request to:", `${SPOOLMAN_URL}/api/v1/spool/${spoolData.mergeableSpool.id}`);
     console.debug(spoolData.printerName, spoolData.logFilePath, "        Payload:", JSON.stringify(postData));
     
     try {
         // Send a PATCH request to update the spool with new tag data
-        const response = await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spoolData.mergeableSpool.id}`, {
+        const response = await got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolData.mergeableSpool.id}`, {
             json: postData
         });
 
@@ -604,7 +693,6 @@ async function haveSpoolDataChanged(spools, lastSpoolData) {
 
     return lengthChanged || dataChanged;
 }
-
 
 // Format given Date to readable date
 function formatDate(date) {
@@ -647,7 +735,7 @@ function processData(amsData) {
                 tray_color: updatedTrayColor,
                 tray_sub_brands: slot.tray_sub_brands === "" ? "N/A" : (slot.tray_sub_brands ?? "N/A"),
                 tray_weight: slot.tray_weight ?? 0,
-                tray_uuid: slot.tray_uuid === "000000000000000000000000000000000" ? "N/A" : (slot.tray_uuid ?? "N/A"),
+                tray_uuid: /^0+$/.test(slot.tray_uuid) ? "N/A" : (slot.tray_uuid ?? "N/A"),
             };
         })
     }));
@@ -657,336 +745,352 @@ function processData(amsData) {
 async function handleMqttMessage(printer, topic, message) {
         
     // block updates when there is already updates to proceed
-    if (printer.blockMqttUpdates) return;
+    if (printer.blockMqttUpdates || spoolmanStatus === "Disconnected") return;
     
-    printer.blockMqttUpdates = true;
-        
-    try {
-        printer.mqttStatus = "Connected";
-        const data = JSON.parse(message);
-        console.debug(printer.name, printer.logFilePath,`Processing MQTT message for Printer: ${printer.id}`);
-        console.debug(printer.name, printer.logFilePath,'Check if message contains AMS Data');
-        if (data?.print?.ams?.ams) {
-            const currentTime = new Date();
-            let printHeader = false;
-            
-            console.debug(printer.name, printer.logFilePath,'Check next Update Interval');
-            // Update if the AMS data is stale
-            if ((currentTime.getTime() - printer.lastUpdateTime.getTime() > printer.update_interval) || printer.first_run) {
-                printer.first_run = false;
-                const isValidAmsData = data.print.ams.humidity !== "" && data.print.ams.temp !== "";
-            
-                console.debug(printer.name, printer.logFilePath,'Fetch Data from Spoolman');
-                // Fetch data from Spoolman API
-                let spools = await getSpoolmanSpools();
-                console.debug(printer.name, printer.logFilePath,'Registered Spools:');
-                console.debug(printer.name, printer.logFilePath,JSON.stringify(spools));
-                
-                if (lastSpoolData.length === 0) lastSpoolData = spools;
-                
-                let externalFilaments = await getSpoolmanExternalFilaments();
-                let internalFilaments = await getSpoolmanInternalFilaments();
-                
-                console.debug(printer.name, printer.logFilePath,'Registered Filaments:');
-                console.debug(printer.name, printer.logFilePath,JSON.stringify(internalFilaments));
-                        
-                // Check if Spool Data changed
-                const spoolsChanged = await haveSpoolDataChanged(spools, lastSpoolData);
-                
-                // Processing AMS Data for valid options
-                const processedAmsData = processData(data.print.ams.ams);
-                
-                console.debug(printer.name, printer.logFilePath,'Check if AMS Data is valid and check if Spoolman or AMS Data got any changes');
-                // If valid AMS data and different from last received, process and Spool Data in Spoolman changed
-                if (isValidAmsData && (spoolsChanged || JSON.stringify(processedAmsData) !== JSON.stringify(printer.lastAmsData))) {
-                    
-                    console.debug(printer.name, printer.logFilePath,'Loaded AMS Spools:');
-                    console.debug(printer.name, printer.logFilePath,JSON.stringify(processedAmsData));
-                    printHeader = true;
-                    // Reset spool data before updating
-                    printer.spoolData = [];
-    
-                    console.debug(printer.name, printer.logFilePath,'Check completed and there are changes');
-                    
-                    console.debug(printer.name, printer.logFilePath,'Check each AMS Slot and process its Spool Data');
-                    // Iterate through AMS trays and process each slot
-                    for (const ams of processedAmsData) {
-                        
-                        if (printHeader) {
-                            console.log(printer.name, printer.logFilePath,`AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
-                            printHeader = false;
-                        }
-    
-                        // Process valid tray slots
-                        console.debug(printer.name, printer.logFilePath,'    Check if data from the Slots are valid');
-                        if (Array.isArray(ams.tray)) {
-
-                            for (const slot of ams.tray) {
-                                
-                                // get all newest updates from spoolman for processing each spool
-                                spools = await getSpoolmanSpools();
-                                externalFilaments = await getSpoolmanExternalFilaments();
-                                internalFilaments = await getSpoolmanInternalFilaments();
-                                
-                                // Check if slot is a valid Slot (loaded or empty slot)
-                                const validSlot = Object.keys(slot).length > 6;
-                                
-                                // Check if slot is loaded and valid
-                                if (validSlot) {
-                                
-                                    // Check if loaded spool is a original Bambu Lab spool or a 3rd party spool
-                                    if (slot.tray_uuid !== "N/A" && slot.tray_sub_brands !== "N/A") {
-    
-                                        console.debug(printer.name, printer.logFilePath,'    Slot is valid');
-                                                                                                                                
-                                        let found = false;
-                                        let remainingWeight = "";
-                                        let mergeableSpool = null;
-                                        let matchingExternalFilament = null;
-                                        let matchingInternalFilament = null;
-                                        let existingSpool = null;
-                                        let option = "No actions available";
-                                        let enableButton = "false";
-                                        let automatic = false;
-    
-                                        // Set automatic mode
-                                        if (MODE === "automatic") automatic = true;
-    
-                                        // Find matching filaments for the slot
-                                        matchingExternalFilament = await findMatchingExternalFilament(slot, externalFilaments);
-                                        matchingInternalFilament = await findMatchingInternalFilament(matchingExternalFilament, internalFilaments);
-    
-                                        console.debug(printer.name, printer.logFilePath,"    Check if there are any Spools in Spoolman");
-                                        if (spools.length !== 0) {
-                                        
-                                            // Check existing spools
-                                            console.debug(printer.name, printer.logFilePath,'    Spools found. Check if there is a Spool in Spoolman with an already connected Serial');
-                                            for (const spool of spools) {
-                                                if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
-                                                    console.debug(printer.name, printer.logFilePath,'    Connected Spool found: ' + JSON.stringify(spool));
-                                                    found = true;
-                                                    remainingWeight = (slot.remain / 100) * slot.tray_weight;
-                                                    
-                                                    const patchData = {
-                                                        remaining_weight: remainingWeight,
-                                                        last_used: currentTime
-                                                    };
-    
-                                                    // Debug URL and Payload
-                                                    console.debug(printer.name, printer.logFilePath,"    Sending PATCH request to:", `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`);
-                                                    console.debug(printer.name, printer.logFilePath,"    Payload:", JSON.stringify(patchData));
-    
-                                                    try {
-                                                        // Send a PATCH request to update the spool with new tag data
-                                                        const response = await got.patch(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/spool/${spool.id}`, {
-                                                            json: patchData
-                                                        });
-                                                        
-                                                        // Log success message if the spool update is successful
-                                                        console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
-                                                        console.log(printer.name, printer.logFilePath,`        - Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
-    
-                                                    } catch (error) {
-                                                        // Log error details if the update fails
-                                                        console.error(printer.name, printer.logFilePath,'          #####');
-                                                        console.error(printer.name, printer.logFilePath,'          Spool update failed: ', error.message);
-                                                        console.error(printer.name, printer.logFilePath,'          Error details:', error.response?.statusCode, error.response?.body || error.stack);
-                                                        console.error(printer.name, printer.logFilePath,'          #####');
-                                                    }
-    
-                                                    printer.lastUpdateTime = currentTime;
-                                                    existingSpool = spool;
-                                                    break;
-                                                }
-                                            }
-                                        } else {
-                                            console.debug(printer.name, printer.logFilePath,"No Spools in Spoolman, skip this part");
-                                        }
-    
-                                        // Handle no matching spool found
-                                        if (!found) {
-                                            console.debug(printer.name, printer.logFilePath,'    Connected Spool not found, process with merging and creation logic');
-                                            console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
-    
-                                            if (spools.length !== 0) {
-                                                // Try to find mergeable spools
-                                                mergeableSpool = await findMergeableSpool(slot, spools);
-                                            } else {
-                                                mergeableSpool == null;
-                                            }
-    
-                                            console.debug(printer.name, printer.logFilePath,'    Check if Spool is mergeable with an existing Spool');
-                                            if (!mergeableSpool) {
-                                                console.debug(printer.name, printer.logFilePath,'    Spool is not mergable, check for other existing spools');
-                                                // Create new spool if no matching or mergeable spool found
-                                                
-                                                if (spools.length !== 0) {
-                                                    // Try to find mergeable spools
-                                                    existingSpool = await findExistingSpool(slot, spools);
-                                                } else {
-                                                    existingSpool == null;
-                                                }
-                                                
-                                                
-                                                console.debug(printer.name, printer.logFilePath,'    Check if there is an existing Spool');
-                                                if (!existingSpool) {
-                                                    console.debug(printer.name, printer.logFilePath,'    No existing Spool, check if Filament is created');
-                                                    if (matchingInternalFilament) {
-                                                        console.log(printer.name, printer.logFilePath,'        Filament exists, create s Spool with this Data');
-                                                        console.log(printer.name, printer.logFilePath,"        - A new Spool can be created with following Filament:");
-                                                        console.log(printer.name, printer.logFilePath,`          Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
-    
-                                                        if (automatic) {
-                                                            console.log(printer.name, printer.logFilePath,`          creating Spool...`);
-                                                            let info = [];
-                                                            info.push({
-                                                              amsId: (await num2letter(ams.id)) + slot.id,
-                                                              slot,
-                                                              matchingInternalFilament,
-                                                              matchingExternalFilament,
-                                                              printerName: printer.name,
-                                                              logFilePath: printer.logFilePath,
-                                                            });
-                                                            await createSpool(info[0]);
-                                                        }
-                                                        option = "Create Spool";
-                                                    } else if (matchingExternalFilament) {
-                                                        console.debug(printer.name, printer.logFilePath,'        Filament does not exists. Create a new Filament');
-                                                        // Create new filament and spool if no matching internal filament or existing spool or mergeable spool found
-                                                        console.log(printer.name, printer.logFilePath,"        - A new Filament and Spool can be created:");
-                                                        console.log(printer.name, printer.logFilePath,`          Material: ${matchingExternalFilament.material}, Color: ${matchingExternalFilament.name}`);
-    
-                                                        if (automatic) {
-                                                            console.log(printer.name, printer.logFilePath,`          creating Filament and Spool...`);
-                                                            let info = [];
-                                                               info.push({
-                                                                amsId: (await num2letter(ams.id)) + slot.id,
-                                                                 slot,
-                                                                 matchingInternalFilament,
-                                                                 matchingExternalFilament,
-                                                                 printerName: printer.name,
-                                                                 logFilePath: printer.logFilePath,
-                                                               });
-                                                               await createFilamentAndSpool(info[0]);
-                                                        }
-                                                        option = "Create Filament & Spool";
-                                                    }
-                                                }
-                                            } else {
-                                                console.log(printer.name, printer.logFilePath,`        - Found mergeable Spool => Spoolman Spool ID: ${mergeableSpool.id}, Material: ${mergeableSpool.filament.material}, Color: ${mergeableSpool.filament.name}`);
-    
-                                                if (automatic) {
-                                                    console.log(printer.name, printer.logFilePath,`          merging Spool...`);
-                                                    let info = [];
-                                                       info.push({
-                                                         amsId: (await num2letter(ams.id)) + slot.id,
-                                                         slot,
-                                                         mergeableSpool,
-                                                         matchingInternalFilament,
-                                                         matchingExternalFilament,
-                                                         printerName: printer.name,
-                                                         logFilePath: printer.logFilePath,
-                                                       });
-                                                    await mergeSpool(info[0]);
-                                                }
-                                                option = "Merge Spool";
-                                            }
-    
-                                            // Enable button for manual actions
-                                            if (!automatic) enableButton = "true";
-                                            printer.lastUpdateTime = new Date();
-                                        }
-    
-                                        // Store updated spool data for frontend
-                                        printer.spoolData.push({
-                                            amsId: (await num2letter(ams.id)) + slot.id,
-                                            slot,
-                                            mergeableSpool,
-                                            matchingInternalFilament,
-                                            matchingExternalFilament,
-                                            existingSpool,
-                                            option,
-                                            enableButton,
-                                            printerName: printer.name,
-                                            logFilePath: printer.logFilePath,
-                                            slotState: "Loaded (Bambu Lab)",
-                                        });
-                                    } else {
-                                        
-                                        console.debug(printer.name, printer.logFilePath,'Slot is read-only and will not trigger Spoolman updates, because there is a false remaining Filament state, no Serial or no color. Maybe it is not a Bambu Lab Spool');
-                                        
-                                        // push info as 3rd party spool
-                                        printer.spoolData.push({
-                                            amsId: (await num2letter(ams.id)) + slot.id,
-                                            slot,
-                                            mergeableSpool: null,
-                                            matchingInternalFilament: null,
-                                            matchingExternalFilament: null,
-                                            existingSpool: null,
-                                            option: "No actions available",
-                                            enableButton: "false",
-                                            printerName: printer.name,
-                                            logFilePath: printer.logFilePath,
-                                            slotState: "Loaded (3rd party)",
-                                        });
-                                        console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
-                                    }
-                                } else {
-                                    console.debug(printer.name, printer.logFilePath,'No Data found in Slots');
-
-                                    // push info as not loaded slot
-                                    printer.spoolData.push({
-                                        amsId: (await num2letter(ams.id)) + slot.id,
-                                        slot,
-                                        mergeableSpool: null,
-                                        matchingInternalFilament: null,
-                                        matchingExternalFilament: null,
-                                        existingSpool: null,
-                                        option: "No actions available",
-                                        enableButton: "false",
-                                        printerName: printer.name,
-                                        logFilePath: printer.logFilePath,
-                                        slotState: "Empty",
-                                    });
-                                    console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
-                                }
-                            }
-
-                        } else {
-                            console.debug(printer.name, printer.logFilePath,'Data from Slots are not valid');
-                        }
-                    }
-                    
-                    lastSpoolData = spools;
-                    
-                    // Update last MQTT AMS data timestamp
-                    printer.lastMqttAmsUpdate = new Date();
-                    printer.lastAmsData = processedAmsData;
-                    console.log(printer.name, printer.logFilePath,"");
-                                        
-                    clients.forEach(client => {
-                      client.write(`data: ${JSON.stringify({ type: "refresh", printer: printer.id})}\n\n`);
-                    });
-                    
-                } else {
-                    const UpdateIntSec = printer.update_interval / 1000;
-                    const nextUpdateTime = new Date(currentTime.getTime() + printer.update_interval);
-                    const nextUpdate = formatDate(nextUpdateTime);
-                    console.log(printer.name, printer.logFilePath,`No new AMS Data or changes in Spoolman found. Processing AMS Data for this printer will be paused until ${nextUpdate} (${UpdateIntSec} seconds)...`);
-                    printer.lastUpdateTime = new Date();
-                }
-                
-                printer.lastMqttUpdate = new Date();
-            } else {
-                console.debug(printer.name, printer.logFilePath,`Data will not be processed because of manually set intervall`);
-            }
-        } else {
-            console.debug(printer.name, printer.logFilePath,`No processable Data found for JSON filter data.printer.ams.ams`);
-        }
-    } catch (error) {
-        console.error(printer.name, printer.logFilePath,`Error processing message for Printer: ${printer.id} - ${error.message}`);
-    }
-    
+	    printer.blockMqttUpdates = true;
+	        
+	    try {
+	        printer.mqttStatus = "Connected";
+	        const data = JSON.parse(message);
+	        console.debug(printer.name, printer.logFilePath,`Processing MQTT message for Printer: ${printer.id}`);
+	        console.debug(printer.name, printer.logFilePath,'Check if message contains AMS Data');
+	        if (data?.print?.ams?.ams) {
+	            const currentTime = new Date();
+	            let printHeader = false;
+	            
+	            console.debug(printer.name, printer.logFilePath,'Check next Update Interval');
+	            // Update if the AMS data is stale
+	            if ((currentTime.getTime() - printer.lastUpdateTime.getTime() > printer.update_interval) || printer.first_run) {
+	                printer.first_run = false;
+	                const isValidAmsData = data.print.ams.humidity !== "" && data.print.ams.temp !== "";
+	            
+	                console.debug(printer.name, printer.logFilePath,'Fetch Data from Spoolman');
+	                // Fetch data from Spoolman API
+	                let spools = await getSpoolmanSpools();
+					
+					if (spoolmanStatus !== "Disconnected") {
+					
+		                console.debug(printer.name, printer.logFilePath,'Registered Spools:');
+		                console.debug(printer.name, printer.logFilePath,JSON.stringify(spools));
+		                
+		                if (lastSpoolData.length === 0) lastSpoolData = spools;
+		                
+		                let externalFilaments = await getSpoolmanExternalFilaments();
+		                let internalFilaments = await getSpoolmanInternalFilaments();
+		                
+		                console.debug(printer.name, printer.logFilePath,'Registered Filaments:');
+		                console.debug(printer.name, printer.logFilePath,JSON.stringify(internalFilaments));
+		                        
+		                // Check if Spool Data changed
+		                const spoolsChanged = await haveSpoolDataChanged(spools, lastSpoolData);
+		                
+		                // Processing AMS Data for valid options
+		                const processedAmsData = processData(data.print.ams.ams);
+		                
+		                console.debug(printer.name, printer.logFilePath,'Check if AMS Data is valid and check if Spoolman or AMS Data got any changes');
+		                // If valid AMS data and different from last received, process and Spool Data in Spoolman changed
+		                if (isValidAmsData && (spoolsChanged || JSON.stringify(processedAmsData) !== JSON.stringify(printer.lastAmsData))) {
+		                    
+		                    console.debug(printer.name, printer.logFilePath,'Loaded AMS Spools:');
+		                    console.debug(printer.name, printer.logFilePath,JSON.stringify(processedAmsData));
+		                    printHeader = true;
+		                    // Reset spool data before updating
+		                    printer.spoolData = [];
+		    
+		                    console.debug(printer.name, printer.logFilePath,'Check completed and there are changes');
+		                    
+		                    console.debug(printer.name, printer.logFilePath,'Check each AMS Slot and process its Spool Data');
+		                    // Iterate through AMS trays and process each slot
+		                    for (const ams of processedAmsData) {
+		                        
+		                        if (printHeader) {
+		                            console.log(printer.name, printer.logFilePath,`AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
+		                            printHeader = false;
+		                        }
+		    
+		                        // Process valid tray slots
+		                        console.debug(printer.name, printer.logFilePath,'    Check if data from the Slots are valid');
+		                        if (Array.isArray(ams.tray)) {
+		
+		                            for (const slot of ams.tray) {
+		                               									
+		                                // get all newest updates from spoolman for processing each spool
+		                                spools = await getSpoolmanSpools();
+		                                externalFilaments = await getSpoolmanExternalFilaments();
+		                                internalFilaments = await getSpoolmanInternalFilaments();
+		                                
+		                                // Check if slot is a valid Slot (loaded or empty slot)
+		                                const validSlot = Object.keys(slot).length > 6;
+		                                
+		                                // Check if slot is loaded and valid
+		                                if (validSlot) {
+		                                
+		                                    // Check if loaded spool is a original Bambu Lab spool or a 3rd party spool
+		                                    if (slot.tray_uuid !== "N/A" && slot.tray_sub_brands !== "N/A") {
+		    
+		                                        console.debug(printer.name, printer.logFilePath,'    Slot is valid');
+		                                                                                                                                
+		                                        let found = false;
+		                                        let remainingWeight = "";
+		                                        let mergeableSpool = null;
+		                                        let matchingExternalFilament = null;
+		                                        let matchingInternalFilament = null;
+		                                        let existingSpool = null;
+		                                        let option = "No actions available";
+		                                        let enableButton = "false";
+		                                        let automatic = false;
+												let error = false;
+		    
+		                                        // Set automatic mode
+		                                        if (MODE === "automatic") automatic = true;
+		    
+		                                        // Find matching filaments for the slot
+		                                        matchingExternalFilament = await findMatchingExternalFilament(slot, externalFilaments);
+		                                        matchingInternalFilament = await findMatchingInternalFilament(matchingExternalFilament, internalFilaments);
+		    
+		                                        console.debug(printer.name, printer.logFilePath,"    Check if there are any Spools in Spoolman");
+		                                        if (spools.length !== 0) {
+		                                        
+		                                            // Check existing spools
+		                                            console.debug(printer.name, printer.logFilePath,'    Spools found. Check if there is a Spool in Spoolman with an already connected Serial');
+		                                            for (const spool of spools) {
+		                                                if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
+		                                                    console.debug(printer.name, printer.logFilePath,'    Connected Spool found: ' + JSON.stringify(spool));
+		                                                    found = true;
+		                                                    remainingWeight = (slot.remain / 100) * slot.tray_weight;
+		                                                    
+		                                                    const patchData = {
+		                                                        remaining_weight: remainingWeight,
+		                                                        last_used: currentTime
+		                                                    };
+		    
+		                                                    // Debug URL and Payload
+		                                                    console.debug(printer.name, printer.logFilePath,"    Sending PATCH request to:", `${SPOOLMAN_URL}/api/v1/spool/${spool.id}`);
+		                                                    console.debug(printer.name, printer.logFilePath,"    Payload:", JSON.stringify(patchData));
+		    
+		                                                    try {
+		                                                        // Send a PATCH request to update the spool with new tag data
+		                                                        const response = await got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spool.id}`, {
+		                                                            json: patchData
+		                                                        });
+		                                                        
+		                                                        // Log success message if the spool update is successful
+		                                                        console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+		                                                        console.log(printer.name, printer.logFilePath,`        - Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
+		    
+		                                                    } catch (error) {
+		                                                        // Log error details if the update fails
+		                                                        console.error(printer.name, printer.logFilePath,'          #####');
+		                                                        console.error(printer.name, printer.logFilePath,'          Spool update failed: ', error.message);
+		                                                        console.error(printer.name, printer.logFilePath,'          Error details:', error.response?.statusCode, error.response?.body || error.stack);
+		                                                        console.error(printer.name, printer.logFilePath,'          #####');
+		                                                    }
+		    
+		                                                    printer.lastUpdateTime = currentTime;
+		                                                    existingSpool = spool;
+		                                                    break;
+		                                                }
+		                                            }
+		                                        } else {
+		                                            console.debug(printer.name, printer.logFilePath,"No Spools in Spoolman, skip this part");
+		                                        }
+		    
+		                                        // Handle no matching spool found
+		                                        if (!found) {
+		                                            console.debug(printer.name, printer.logFilePath,'    Connected Spool not found, process with merging and creation logic');
+		                                            console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+		    
+		                                            if (spools.length !== 0) {
+		                                                // Try to find mergeable spools
+		                                                mergeableSpool = await findMergeableSpool(slot, spools);
+		                                            } else {
+		                                                mergeableSpool == null;
+		                                            }
+		    
+		                                            console.debug(printer.name, printer.logFilePath,'    Check if Spool is mergeable with an existing Spool');
+		                                            if (!mergeableSpool) {
+		                                                console.debug(printer.name, printer.logFilePath,'    Spool is not mergable, check for other existing spools');
+		                                                // Create new spool if no matching or mergeable spool found
+		                                                
+		                                                if (spools.length !== 0) {
+		                                                    // Try to find mergeable spools
+		                                                    existingSpool = await findExistingSpool(slot, spools);
+		                                                } else {
+		                                                    existingSpool == null;
+		                                                }
+		                                                
+		                                                
+		                                                console.debug(printer.name, printer.logFilePath,'    Check if there is an existing Spool');
+		                                                if (!existingSpool) {
+		                                                    console.debug(printer.name, printer.logFilePath,'    No existing Spool, check if Filament is created');
+		                                                    if (matchingInternalFilament) {
+		                                                        console.log(printer.name, printer.logFilePath,'        Filament exists, create s Spool with this Data');
+		                                                        console.log(printer.name, printer.logFilePath,"        - A new Spool can be created with following Filament:");
+		                                                        console.log(printer.name, printer.logFilePath,`          Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
+		    
+		                                                        if (automatic) {
+		                                                            console.log(printer.name, printer.logFilePath,`          creating Spool...`);
+		                                                            let info = [];
+		                                                            info.push({
+		                                                              amsId: (await num2letter(ams.id)) + slot.id,
+		                                                              slot,
+		                                                              matchingInternalFilament,
+		                                                              matchingExternalFilament,
+		                                                              printerName: printer.name,
+		                                                              logFilePath: printer.logFilePath,
+		                                                            });
+		                                                            await createSpool(info[0]);
+		                                                        }
+		                                                        option = "Create Spool";
+		                                                    } else if (matchingExternalFilament) {
+		                                                        console.debug(printer.name, printer.logFilePath,'        Filament does not exists. Create a new Filament');
+		                                                        // Create new filament and spool if no matching internal filament or existing spool or mergeable spool found
+		                                                        console.log(printer.name, printer.logFilePath,"        - A new Filament and Spool can be created:");
+		                                                        console.log(printer.name, printer.logFilePath,`          Material: ${matchingExternalFilament.material}, Color: ${matchingExternalFilament.name}`);
+		    
+		                                                        if (automatic) {
+		                                                            console.log(printer.name, printer.logFilePath,`          creating Filament and Spool...`);
+		                                                            let info = [];
+		                                                               info.push({
+		                                                                amsId: (await num2letter(ams.id)) + slot.id,
+		                                                                 slot,
+		                                                                 matchingInternalFilament,
+		                                                                 matchingExternalFilament,
+		                                                                 printerName: printer.name,
+		                                                                 logFilePath: printer.logFilePath,
+		                                                               });
+		                                                               await createFilamentAndSpool(info[0]);
+		                                                        }
+		                                                        option = "Create Filament & Spool";
+		                                                    } else {
+																console.error(printer.name, printer.logFilePath,"        - No machting Filament found in Database, please check manually!");
+																error = true;
+															}
+		                                                }
+		                                            } else {
+		                                                console.log(printer.name, printer.logFilePath,`        - Found mergeable Spool => Spoolman Spool ID: ${mergeableSpool.id}, Material: ${mergeableSpool.filament.material}, Color: ${mergeableSpool.filament.name}`);
+		    
+		                                                if (automatic) {
+		                                                    console.log(printer.name, printer.logFilePath,`          merging Spool...`);
+		                                                    let info = [];
+		                                                       info.push({
+		                                                         amsId: (await num2letter(ams.id)) + slot.id,
+		                                                         slot,
+		                                                         mergeableSpool,
+		                                                         matchingInternalFilament,
+		                                                         matchingExternalFilament,
+		                                                         printerName: printer.name,
+		                                                         logFilePath: printer.logFilePath,
+		                                                       });
+		                                                    await mergeSpool(info[0]);
+		                                                }
+		                                                option = "Merge Spool";
+		                                            }
+		    
+		                                            // Enable button for manual actions
+		                                            if (!automatic) enableButton = "true";
+		                                            printer.lastUpdateTime = new Date();
+		                                        }
+		    
+		                                        // Store updated spool data for frontend
+		                                        printer.spoolData.push({
+		                                            amsId: (await num2letter(ams.id)) + slot.id,
+		                                            slot,
+		                                            mergeableSpool,
+		                                            matchingInternalFilament,
+		                                            matchingExternalFilament,
+		                                            existingSpool,
+		                                            option,
+		                                            enableButton,
+		                                            printerName: printer.name,
+		                                            logFilePath: printer.logFilePath,
+		                                            slotState: "Loaded (Bambu Lab)",
+													error,
+		                                        });
+		                                    } else {
+		                                        
+		                                        console.debug(printer.name, printer.logFilePath,'Slot is read-only and will not trigger Spoolman updates, because there is a false remaining Filament state, no Serial or no color. Maybe it is not a Bambu Lab Spool');
+		                                        
+												slot.tray_sub_brands = slot.tray_type;
+												
+		                                        // push info as 3rd party spool
+		                                        printer.spoolData.push({
+		                                            amsId: (await num2letter(ams.id)) + slot.id,
+		                                            slot,
+		                                            mergeableSpool: null,
+		                                            matchingInternalFilament: null,
+		                                            matchingExternalFilament: null,
+		                                            existingSpool: null,
+		                                            option: "No actions available",
+		                                            enableButton: "false",
+		                                            printerName: printer.name,
+		                                            logFilePath: printer.logFilePath,
+		                                            slotState: "Loaded (3rd party)",
+													error: false,
+		                                        });
+		                                        console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
+		                                    }
+		                                } else {
+		                                    console.debug(printer.name, printer.logFilePath,'No Data found in Slots');
+		
+		                                    // push info as not loaded slot
+		                                    printer.spoolData.push({
+		                                        amsId: (await num2letter(ams.id)) + slot.id,
+		                                        slot,
+		                                        mergeableSpool: null,
+		                                        matchingInternalFilament: null,
+		                                        matchingExternalFilament: null,
+		                                        existingSpool: null,
+		                                        option: "No actions available",
+		                                        enableButton: "false",
+		                                        printerName: printer.name,
+		                                        logFilePath: printer.logFilePath,
+		                                        slotState: "Empty",
+												error: false,
+		                                    });
+		                                    console.log(printer.name, printer.logFilePath,`    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+		                                }
+		                            }
+		
+		                        } else {
+		                            console.debug(printer.name, printer.logFilePath,'Data from Slots are not valid');
+		                        }
+		                    }
+		                    
+		                    lastSpoolData = spools;
+		                    
+		                    // Update last MQTT AMS data timestamp
+		                    printer.lastMqttAmsUpdate = new Date();
+		                    printer.lastAmsData = processedAmsData;
+		                    console.log(printer.name, printer.logFilePath,"");
+		                                        
+		                    clients.forEach(client => {
+		                      client.write(`data: ${JSON.stringify({ type: "refresh", printer: printer.id})}\n\n`);
+		                    });
+		                    
+		                } else {
+		                    const UpdateIntSec = printer.update_interval / 1000;
+		                    const nextUpdateTime = new Date(currentTime.getTime() + printer.update_interval);
+		                    const nextUpdate = formatDate(nextUpdateTime);
+		                    console.log(printer.name, printer.logFilePath,`No new AMS Data or changes in Spoolman found. Processing AMS Data for this printer will be paused until ${nextUpdate} (${UpdateIntSec} seconds)...`);
+		                    printer.lastUpdateTime = new Date();
+		                }
+		                
+		                printer.lastMqttUpdate = new Date();
+					} else {
+						console.error("Server", serverLogFilePath, `Spoolman is currently unreachable. A background check will automatically attempt to reconnect...`);
+					}
+	            } else {
+	                console.debug(printer.name, printer.logFilePath,`Data will not be processed because of manually set intervall`);
+	            }
+	        } else {
+	            console.debug(printer.name, printer.logFilePath,`No processable Data found for JSON filter data.printer.ams.ams`);
+	        }
+	    } catch (error) {
+	        console.error(printer.name, printer.logFilePath,`Error processing message for Printer: ${printer.id} - ${error.message}`);
+	    }
+	
+	
     printer.blockMqttUpdates = false;
 }
 
@@ -1037,9 +1141,9 @@ async function setupMqtt(printer) {
             setupMqtt(printer);
         });
 
-        client.on("error", (error) => {
+        client.on("error", async (error) => {
             console.error(printer.name, printer.logFilePath, `MQTT error for Printer: ${printer.id} - ${error.message}`);
-            client.end();
+			client.end();
         });
 
         console.log(printer.name, printer.logFilePath, `Waiting for MQTT messages for Printer: ${printer.id}...`);
@@ -1059,44 +1163,106 @@ async function setupMqtt(printer) {
     }
 }
 
-// starting logic for initializing all needed stuff and the connection to spoolman and mqtt sessions
-async function starting() {
-    if (printers) {
-        for (const key in printers) {
-            printers[key] = {
-                ...printers[key],
-                logFilePath: path.join(__dirname, "logs", `${printers[key].id}.log`),
-            };
-        }
-
+// Check Spoolman on first start and only continue if its online and reachable
+async function monitorSpoolman() {
+    while (true) {
         try {
-            const spoolmanHealthApi = await got(`http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}/api/v1/health`);
+            const spoolmanHealthApi = await got(`${SPOOLMAN_URL}/api/v1/health`);
             const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
 
             if (spoolmanHealth.status === "healthy") {
-                console.log("Server", serverLogFilePath, "Spoolman connection: true");
-                spoolmanStatus = "Connected";
-
-                if (await checkAndSetVendor() && await checkAndSetExtraField()) {
-                    console.log("Server", serverLogFilePath, `Backend running on http://localhost:${PORT}`);
-                    monitorPrinters();
-                } else {
-                    console.error("Server", serverLogFilePath, `Error: Vendor or Extra Field 'tag' could not be set!`);
+                if (spoolmanStatus !== "Connected") {
+                    console.log("Server", serverLogFilePath, "Spoolman connected successfully!");
                 }
+                spoolmanStatus = "Connected";
+				
+				// Run vendor & extra field check
+				if (await checkAndSetVendor() && await checkAndSetExtraField()) {
+				    console.log("Server", serverLogFilePath, `Backend running on http://localhost:${PORT}`);
+				    return; // Exit loop and continue initialization
+				} else {
+				    console.error("Server", serverLogFilePath, `Error: Vendor or Extra Field 'tag' could not be set! Retrying...`);
+				}
             } else {
-                console.error("Server", serverLogFilePath, "Spoolman connection could not be established");
+                console.error("Server", serverLogFilePath, "Spoolman reported an unhealthy status, retrying...");
             }
         } catch (error) {
-            console.error("Server", serverLogFilePath, "Error starting the service:", error);
+            console.error("Server", serverLogFilePath, "Spoolman is unreachable. Retrying in 30 seconds...");
         }
-    } else {
-        console.error("Server", serverLogFilePath, "Error: no printers found in printers.json!");
+
+        await sleep(30000); // Retry every 30 seconds until successful
     }
+}
+
+// Check Spoolman connection in Background. If its unhealthy or disconnected try to reconnect
+async function monitorSpoolmanBackground() {
+    while (true) {
+        try {
+            const spoolmanHealthApi = await got(`${SPOOLMAN_URL}/api/v1/health`);
+            const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
+
+            if (spoolmanHealth.status === "healthy") {
+                if (spoolmanStatus !== "Connected") {
+                    console.log("Server", serverLogFilePath, "Spoolman reconnected successfully!");
+                }
+                spoolmanStatus = "Connected";
+            } else {
+                console.error("Server", serverLogFilePath, "Spoolman reported an unhealthy status!");
+                spoolmanStatus = "Disconnected";
+            }
+        } catch (error) {
+            console.error("Server", serverLogFilePath, "Spoolman is unreachable. Retrying in 60 seconds...");
+            spoolmanStatus = "Disconnected";
+        }
+
+        await sleep(60000); // Check every 60 seconds
+    }
+}
+
+// starting logic for initializing all needed stuff and the connection to spoolman and mqtt sessions
+async function starting() {
+    console.log("Server", serverLogFilePath, "Starting service...");
+	console.log("Server", serverLogFilePath, `Backend running on http://localhost:${PORT}`);
+	
+    // Ensure Spoolman is healthy before proceeding
+    await monitorSpoolman();
+
+    if (!printers) {
+        console.error("Server", serverLogFilePath, "Error: no printers found in printers.json!");
+        return;
+    }
+
+    for (const key in printers) {
+        printers[key] = {
+            ...printers[key],
+            logFilePath: path.join(__dirname, "logs", `${printers[key].id}.log`),
+        };
+		
+		if (!fs.existsSync(printers[key].logFilePath)) {
+	        fs.writeFile(printers[key].logFilePath, `Log started at: ${formatDateLog(new Date())}\n`, (err) => {
+	            if (err) {
+	                console.error(printers[key].name, printers[key].logFilePath, `Failed to create log file: ${err.message}`);
+	            } else {
+	                console.log(printers[key], printers[key].logFilePath, "Log file created");
+	            }
+	        });
+	    }
+    }
+
+    // Start monitoring printers and Spoolman in the background
+    monitorPrinters();
+    monitorSpoolmanBackground();
 }
 
 // Monitoring printers to handle all mqtt connections
 async function monitorPrinters() {
     while (true) {
+		
+		if (spoolmanStatus === "Disconnected") {
+		    await sleep(RECONNECT_INTERVAL);
+		    continue;
+		}
+		
         for (const printer of printers) {
             try {
                 const isAlive = await ping.promise.probe(printer.ip);
@@ -1118,7 +1284,6 @@ async function monitorPrinters() {
         await sleep(RECONNECT_INTERVAL);
     }
 }
-
 
 // A helper function for sleeping
 function sleep(ms) {
@@ -1142,6 +1307,10 @@ app.get("/api/status/:printerId", (req, res) => {
         PRINTER_ID: printer.id,
         printerName: printer.name,
         MODE: MODE,
+		SPOOLMAN_URL,
+		VERSION: version,
+		SPOOLMAN_URL,
+		SPOOLMAN_FQDN,
     });
 });
 

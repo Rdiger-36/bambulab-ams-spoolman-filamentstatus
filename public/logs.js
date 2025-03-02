@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const logContainer = document.getElementById("logs");
   const logBox = document.getElementById("log-box");
   let logAPI;
+  let userScrolling = false; // Variable to detect manual scrolling
 
   const lightModeIcon = "https://img.icons8.com/ios-glyphs/30/moon-symbol.png";
   const darkModeIconUrl = "https://img.icons8.com/color/48/sun--v1.png";
@@ -33,14 +34,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (name === "server") {
     document.getElementById("headline").textContent = "Server";
-    logAPI = `/api/logs/server`;
+    logAPI = `./api/logs/server`;
   } else if (printerSerial) {
     document.getElementById("headline").textContent = `${name} - ${printerSerial}`;
-    logAPI = `/api/logs/${printerSerial}`;
+    logAPI = `./api/logs/${printerSerial}`;
   } else {
     logContainer.innerHTML = '<p>Error: No printer serial provided in the URL.</p>';
     return;
   }
+
+  // Detect if the user is scrolling manually
+  logBox.addEventListener("scroll", () => {
+    // Check if the user is not at the bottom
+    userScrolling = logBox.scrollTop + logBox.clientHeight < logBox.scrollHeight - 5;
+  });
 
   // Load logs dynamically
   async function loadLogs() {
@@ -54,16 +61,19 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Update logs and scroll down
+      const isAtBottom = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 5;
+
+      // Update logs without forcing scrolling
       logContainer.innerHTML = logData.logs
         .map((line) => `<p>${line}</p>`)
         .join("");
-                
+
+      // If the user has not manually scrolled or is already at the bottom, auto-scroll down
+      if (!userScrolling || isAtBottom) {
         requestAnimationFrame(() => {
-          setTimeout(() => {
-            logBox.scrollTop = logContainer.scrollHeight;
-          }, 0);
+          logBox.scrollTop = logBox.scrollHeight;
         });
+      }
     } catch (error) {
       console.error("Error loading logs:", error);
       logContainer.innerHTML = "<p>Error loading logs. Please try again later.</p>";
