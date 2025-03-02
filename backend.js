@@ -1243,7 +1243,7 @@ async function starting() {
 	            if (err) {
 	                console.error(printers[key].name, printers[key].logFilePath, `Failed to create log file: ${err.message}`);
 	            } else {
-	                console.log(printers[key], printers[key].logFilePath, "Log file created");
+	                console.log(printers[key].name, printers[key].logFilePath, "Log file created");
 	            }
 	        });
 	    }
