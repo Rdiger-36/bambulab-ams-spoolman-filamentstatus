@@ -388,7 +388,8 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
-| Feature | ~~Add actual loaded slot as location in spoolman (optional via env)~~ Create a new extra field that shows in which printer and AMS Slot the spool is loaded (optional via env) | ❌ | ❌ | In progress, [Issue-27](https://github.com/Rdiger-36/bambulab-ams-spoolman-
+
+Nothing at this moment
 
 ## Support Me
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)
