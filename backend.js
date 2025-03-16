@@ -27,6 +27,7 @@ const SPOOLMAN_FQDN = process.env.SPOOLMAN_FQDN || null;
 const UPDATE_INTERVAL = process.env.UPDATE_INTERVAL
     ? Math.min(Math.max(parseInt(process.env.UPDATE_INTERVAL, 10), 5000), 300000)
     : 120000;
+const NEVER_MERGE_IF_TAG = (process.env.NEVER_MERGE_IF_TAG || "false") === "true";
 const DEBUG = process.env.DEBUG || "false";
 
 /**
@@ -507,6 +508,8 @@ function findMergeableSpool(amsSpool, allSpools) {
             spoolmanSpool.remaining_weight <= upperTolerance;
 
         const hasTag = tag && tag !== "" && tag !== '""';
+
+        if (NEVER_MERGE_IF_TAG && hasTag) return false;
 
         // Allow merging if weight matches, no weight has been used, or if remaining weight is 0 and there is a tag
         return (spoolmanSpool.remaining_weight === 0 && hasTag) ||
