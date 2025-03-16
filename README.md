@@ -125,6 +125,7 @@ The architectures supported by this image are:
 | `SPOOLMAN_IP`        | IP address of the Spoolman instance           |
 | `SPOOLMAN_PORT`      | Port of the Spoolman instance                 |
 | `SPOOLMAN_SUBFOLDER` | Set this if Spoolman is running in a subfolder |
+| `SPOOLMAN_ENDPOINT`  | Provide Spoolman full endpoint instead of IP, PORT & SUBFOLDER |
 | `SPOOLMAN_FQDN`      | Access Spoolman via a web link in the footer or from the button "Go to Spoolman" from "Show Info!" dialog (e.g., http(s)://spoolman.your.domain or http(s)://your.domain/spoolman) |
 | `UPDATE_INTERVAL`    | Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 5000 (5 sec), max 3000000 (5 min)|
 | `MODE`               | Set the mode of the service: "automatic" or "manual" (standard: manual) |
