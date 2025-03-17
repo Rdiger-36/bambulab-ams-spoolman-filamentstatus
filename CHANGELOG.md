@@ -1,4 +1,12 @@
 -----------------------------------------------------------------------------------------------
+Version 1.0.5
+   - Bugfixes:
+      - Fix Bug that new Spools throw this error: Cannot read properties of undefined (reading 'toLowerCase')
+
+   - New Features and ENVs:
+      - Added a optional feature to prevent merging an existing empty spool if it has a tag, by introducing a new ENV called NEVER_MERGE_IF_TAG wich will be disabled by default.
+      - Added a new ENV called SPOOLMAN_ENDPOINT for better backend handling. This will deprecate the ENVs SPOOLMAN_IP, SPOOLMAN_PORT, and SPOOLMAN_SUBFOLDER.
+-----------------------------------------------------------------------------------------------
 Version 1.0.4
    - Bugfixes:
       - The footer now has a background to prevent it from overlapping the table or other parts of the website.
