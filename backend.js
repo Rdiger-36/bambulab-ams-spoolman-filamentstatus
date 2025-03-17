@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.4";
+const version = "1.0.5";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -470,34 +470,35 @@ function findMatchingExternalFilament(amsSpool, externalFilaments) {
 
 // Find mergeable Spool in Spoolman with almost the same stats as the AMS Spool
 function findMergeableSpool(amsSpool, allSpools) {
-    // Get all Colors to support multi-color filament
-    const amsColors = amsSpool.cols.map(color => color.slice(0, 6).toLowerCase());
+    // Get all Colors to support multi-color filament    
+    const amsColors = (amsSpool.cols || []).map(color => (color || '').slice(0, 6).toLowerCase());
 
     // If there are multiple colors, we check the multi_color_hexes, otherwise we check color_hex
     const matchingSpools = allSpools.filter(spoolmanSpool => {
-        const materialMatches = spoolmanSpool.filament.material.toLowerCase() === amsSpool.tray_sub_brands.toLowerCase();
+        const materialA = (spoolmanSpool.filament?.material || '').toLowerCase();
+        const materialB = (amsSpool.tray_sub_brands || '').toLowerCase();
+        const materialMatches = materialA === materialB;
 
         if (amsColors.length > 1) {
             // If multi_color_hexes exists, split the hex codes into an array
-            const multiColorHexes = spoolmanSpool.filament.multi_color_hexes
-                ? spoolmanSpool.filament.multi_color_hexes.split(',')
+            const multiColorHexes = spoolmanSpool.filament?.multi_color_hexes
+                ? spoolmanSpool.filament.multi_color_hexes.split(',').map(hex => (hex || '').toLowerCase())
                 : [];
             // Check if any of the colors match
             const colorMatches = amsColors.some(color =>
-                multiColorHexes.map(hex => hex.toLowerCase()).includes(color)
+                multiColorHexes.includes(color)
             );
             return materialMatches && colorMatches;
         }
 
         // If there is only one color, compare it with color_hex
-        return materialMatches && amsColors.some(color =>
-            spoolmanSpool.filament.color_hex.toLowerCase() === color
-        );
+        const colorHex = (spoolmanSpool.filament?.color_hex || '').toLowerCase();
+        return materialMatches && amsColors.some(color => colorHex === color);
     });
 
     // Check if any matching spool can be merged based on weight tolerance
     return matchingSpools.find(spoolmanSpool => {
-        const tag = spoolmanSpool.extra?.tag?.trim();
+        const tag = (spoolmanSpool.extra?.tag || '').trim();
 
         const spoolRemainingWeight = (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
         const lowerTolerance = spoolRemainingWeight * 0.85;
