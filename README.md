@@ -84,8 +84,7 @@ The architectures supported by this image are:
 2. Run the container:
    ```bash
    docker run -d \
-     -e SPOOLMAN_IP=<spoolman_ip_address> \
-     -e SPOOLMAN_PORT=<spoolman_port> \
+     -e SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>] \
      -e UPDATE_INTERVAL=120000 \
      -e MODE=automatic \
      -p 4000:4000 \
@@ -108,8 +107,7 @@ The architectures supported by this image are:
       ports:
         - 4000:4000
       environment:
-        - SPOOLMAN_IP=<spoolman_ip_address>
-        - SPOOLMAN_PORT=<spoolman_port>
+        - SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>]
         - UPDATE_INTERVAL=120000
         - MODE=automatic
       volumes:
@@ -122,17 +120,24 @@ The architectures supported by this image are:
 
 | Variable             | Description                                   |
 |----------------------|-----------------------------------------------|
-| `SPOOLMAN_IP`        | IP address of the Spoolman instance           |
-| `SPOOLMAN_PORT`      | Port of the Spoolman instance                 |
-| `SPOOLMAN_SUBFOLDER` | Set this if Spoolman is running in a subfolder |
-| `SPOOLMAN_ENDPOINT`  | Provide Spoolman full endpoint instead of IP, PORT & SUBFOLDER |
-| `SPOOLMAN_FQDN`      | Access Spoolman via a web link in the footer or from the button "Go to Spoolman" from "Show Info!" dialog (e.g., http(s)://spoolman.your.domain or http(s)://your.domain/spoolman) |
-| `UPDATE_INTERVAL`    | Time in ms for updating spools in Spoolman (standard 120000 ms -> 2 minutes) min. 5000 (5 sec), max 3000000 (5 min)|
-| `MODE`               | Set the mode of the service: "automatic" or "manual" (standard: manual) |
+| `SPOOLMAN_ENDPOINT`  | Provide Spoolman full endpoint (use http or https and optional subfolder) |
+| `SPOOLMAN_FQDN`      | Access Spoolman via a web link in the footer or from the button "Go to Spoolman" from "Show Info!" dialog (e.g., http(s)://spoolman.your.domain[/spoolman]) |
+| `UPDATE_INTERVAL`    | Time in ms for updating spools in Spoolman (default: 120000 ms -> 2 minutes) min. 5000 (5 sec), max 3000000 (5 min)|
+| `MODE`               | Set the mode of the service: "automatic" or "manual" (default: manual) |
 | `NEVER_MERGE_IF_TAG` | Never merge spools if a tag is already set, even if the one is empty (default: "false") |
-| `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (standard: false)|
+| `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (default: false)|
 
-Old ENVs (PRINTER_IP, PRINTER_ID, PRINTER_CODE) also works, but will be overwritten if you use multiple printers in printers.json 
+### !!Deprected ENVs!!
+| Variable                 | Why is it deprecated?                                                  |
+|--------------------------|------------------------------------------------------------------------|
+| ~~`SPOOLMAN_IP`~~        | Merged to ENV: SPOOLMAN_ENDPOINT                                       |
+| ~~`SPOOLMAN_PORT`~~      | Merged to ENV: SPOOLMAN_ENDPOINT                                       |
+| ~~`SPOOLMAN_SUBFOLDER`~~ | Merged to ENV: SPOOLMAN_ENDPOINT                                       |
+| ~~`PRINTER_IP`~~         | Instead of using a single ENV its recommended to use the printers.json |
+| ~~`PRINTER_ID`~~         | Instead of using a single ENV its recommended to use the printers.json |
+| ~~`PRINTER_CODE`~~       | Instead of using a single ENV its recommended to use the printers.json |
+
+The above deprecated environment variables still work, but it is recommended to avoid using them in the future.
 
 ## Usage
 
