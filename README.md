@@ -8,7 +8,7 @@ This project is based on the idea of a script from [Diogo Resende](https://githu
 
 
 ## !! Attention !!
-This Solution only Works on Bambu Lab Printers with AMS for the P and X Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
+This Solution only Works on Original Bambu Lab Spools with RFID tag and Bambu Lab Printers with AMS for the P and X Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
 However it can be used to Create Spools and Filaments on Spoolman and connect thier serials with it.
 
 
