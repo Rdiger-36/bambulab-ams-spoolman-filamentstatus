@@ -39,7 +39,7 @@ Simply pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` s
 
 The architectures supported by this image are:
 
-| Architecture | Spoorted |
+| Architecture | Supported |
 | :----: | :----: |
 | x86-64 | ✅ |
 | arm64 | ✅ |
@@ -49,7 +49,7 @@ The architectures supported by this image are:
 
 The Hardware supported by this image are:
 
-| Hardware | Spoorted |
+| Hardware | Supported |
 | :----: | :----: |
 | A Series | ⚠️ - no update status (read only) |
 | P Series | ✅ |
