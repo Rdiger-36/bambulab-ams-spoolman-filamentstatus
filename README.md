@@ -2,6 +2,8 @@
 
 This project integrates Bambu Lab Printers with one or multiple AMS with Spoolman to synchronize filament spool usage. It listens for MQTT updates from the printers and manages spools on Spoolman.
 
+Only original BambuLab Spools are supported!
+
 Please note that these data represent rough estimates communicated by the AMS!
 
 This project is based on the idea of a script from [Diogo Resende](https://github.com/dresende) posted in this issue https://github.com/Donkie/Spoolman/issues/217 
