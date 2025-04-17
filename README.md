@@ -59,7 +59,7 @@ The Hardware supported by this image are:
 | H2D | not tested |
 | AMS | ✅ |
 | AMS Lite | ⚠️ - no update status (read only) |
-| AMS Pro 2 | Not tested |
+| AMS Pro 2 | ✅ |
 | AMS HT | Not tested |
 
 Please let me know if it works on the "not tested" Hardware.
