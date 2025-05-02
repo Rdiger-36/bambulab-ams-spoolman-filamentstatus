@@ -1,4 +1,7 @@
 -----------------------------------------------------------------------------------------------
+Version 1.0.6
+   - Spool updates are now only triggered when AMS tray data changes, not when temperature, humidity, or other unrelated values change.
+-----------------------------------------------------------------------------------------------
 Version 1.0.5
    - Bugfixes:
       - Fix Bug that new Spools throw this error: Cannot read properties of undefined (reading 'toLowerCase')

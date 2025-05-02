@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.5";
+const version = "1.0.6";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -470,7 +470,7 @@ function findMatchingExternalFilament(amsSpool, externalFilaments) {
 
 // Find mergeable Spool in Spoolman with almost the same stats as the AMS Spool
 function findMergeableSpool(amsSpool, allSpools) {
-    // Get all Colors to support multi-color filament    
+    // Get all Colors to support multi-color filament
     const amsColors = (amsSpool.cols || []).map(color => (color || '').slice(0, 6).toLowerCase());
 
     // If there are multiple colors, we check the multi_color_hexes, otherwise we check color_hex
@@ -745,6 +745,41 @@ function processData(amsData) {
     }));
 }
 
+function extractFullTrayData(amsArray) {
+    return amsArray.map(ams => ({
+        id: ams.id,
+        tray: ams.tray
+            .map(tray => ({
+                id: tray.id,
+                state: tray.state,
+                remain: tray.remain,
+                k: tray.k,
+                n: tray.n,
+                cali_idx: tray.cali_idx,
+                total_len: tray.total_len,
+                tag_uid: tray.tag_uid,
+                tray_id_name: tray.tray_id_name,
+                tray_info_idx: tray.tray_info_idx,
+                tray_type: tray.tray_type,
+                tray_sub_brands: tray.tray_sub_brands,
+                tray_color: tray.tray_color,
+                tray_weight: tray.tray_weight,
+                tray_diameter: tray.tray_diameter,
+                tray_temp: tray.tray_temp,
+                tray_time: tray.tray_time,
+                bed_temp_type: tray.bed_temp_type,
+                bed_temp: tray.bed_temp,
+                nozzle_temp_max: tray.nozzle_temp_max,
+                nozzle_temp_min: tray.nozzle_temp_min,
+                xcam_info: tray.xcam_info,
+                tray_uuid: tray.tray_uuid,
+                ctype: tray.ctype,
+                cols: tray.cols
+            }))
+            .sort((a, b) => a.id - b.id)
+    })).sort((a, b) => a.id - b.id);
+}
+
 // Main function to handle the printers mqtt messages and proceed to update, merge, create Spools and Filament
 async function handleMqttMessage(printer, topic, message) {
 
@@ -790,11 +825,18 @@ async function handleMqttMessage(printer, topic, message) {
 
                     // Processing AMS Data for valid options
                     const processedAmsData = processData(data.print.ams.ams);
+                    
+                    // Only get the needed tray data from the AMS, so changes in temperature, humidity and so on wil not trigger any updates
+                    const newTrayData = extractFullTrayData(processedAmsData);
+                    const lastTrayData = extractFullTrayData(printer.lastAmsData || []);
+
+                    // compare the new and old ams tray data
+                    const trayDataChanged = JSON.stringify(newTrayData) !== JSON.stringify(lastTrayData);
 
                     console.debug(printer.name, printer.logFilePath, 'Check if AMS Data is valid and check if Spoolman or AMS Data got any changes');
                     // If valid AMS data and different from last received, process and Spool Data in Spoolman changed
-                    if (isValidAmsData && (spoolsChanged || JSON.stringify(processedAmsData) !== JSON.stringify(printer.lastAmsData))) {
-
+                    if (isValidAmsData && (spoolsChanged || trayDataChanged)) {
+                     
                         console.debug(printer.name, printer.logFilePath, 'Loaded AMS Spools:');
                         console.debug(printer.name, printer.logFilePath, JSON.stringify(processedAmsData));
                         printHeader = true;
