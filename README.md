@@ -56,13 +56,12 @@ The Hardware supported by this image are:
 | A Series | ⚠️ - no update status (read only) |
 | P Series | ✅ |
 | X Series | ✅ |
-| H2D | not tested |
+| H2D | ✅ |
 | AMS | ✅ |
 | AMS Lite | ⚠️ - no update status (read only) |
-| AMS Pro 2 | ✅ |
-| AMS HT | Not tested |
+| AMS 2 Pro | ✅ |
+| AMS HT | ✅ |
 
-Please let me know if it works on the "not tested" Hardware.
 
 ### Installation
 
