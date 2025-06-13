@@ -42,6 +42,7 @@ table td.color-cell {
   color: inherit !important;
 }
 
+
 body.transition-enabled {
   transition: background-color 0.3s, color 0.3s;
 }
