@@ -306,7 +306,8 @@ Extra Field "tag" successfully created!
 
 ## Web UI
 Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:
-![image](https://github.com/user-attachments/assets/ef105065-fb3a-4901-85ae-80557d7124af)
+![Dashboard](https://github.com/user-attachments/assets/9e77a5c6-d3a8-4a77-996c-5af866b32824)
+
 
 The State column indicates the behavoir of the loaded spool and its data.
 - ✅ (Checkmark) → Spools recognized correctly and can be processed.

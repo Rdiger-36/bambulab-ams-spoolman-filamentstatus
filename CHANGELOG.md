@@ -1,4 +1,17 @@
 -----------------------------------------------------------------------------------------------
+Version 1.0.7
+   - Bugfixes:
+      - Fix false labeling for AMS HT 
+         - Normally, all AMS units are assigned a letter from A to D based on their IDs.
+           The AMS-HT units originally received the IDs À, Á, Â, and Ã, each followed by an increasing number.
+           Since the AMS-HT only has one slot, it does not require an increasing number and is now labeled as HT-A, HT-B, HT-C, and HT-D.
+      - Fix wrong remaining weight for spools smaller than 1kg
+         - The estimated remaining filament is based on the assumption of 1kg spools.
+           However, Bambu also applies these estimates to spools smaller than 1kg, which results in inaccurate measurements
+
+   - New Features:
+      - The table layout has been updated. Now each AMS has its own table for a better overview.
+-----------------------------------------------------------------------------------------------
 Version 1.0.6
    - Spool updates are now only triggered when AMS tray data changes, not when temperature, humidity, or other unrelated values change.
 -----------------------------------------------------------------------------------------------

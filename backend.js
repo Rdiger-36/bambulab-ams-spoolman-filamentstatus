@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.6";
+const version = "1.0.7-dev";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -227,9 +227,25 @@ function loadPrintersConfig() {
     }
 }
 
-// Convert numbers in alphabetical letters
-async function num2letter(num) {
-    return String.fromCharCode("A".charCodeAt(0) + Number(num));
+/**
+ * Converts a number to a letter (A-D) or a special "HT-X" format for AMS HT.
+ * - For numbers 0-3, returns "A" to "D" (max. 4 AMS)
+ * - For numbers 128-131, returns "HT-A" to "HT-D" (max. 4 AMS-HT)
+ * - For all other numbers, returns "E" for Error
+ */
+async function convertAMSandSlot(amsID, slotID) {
+    amsID = Number(amsID);
+    const letters = ["A", "B", "C", "D"];
+
+    if (slotID === null) slotID = "";
+    
+    if (amsID >= 0 && amsID <= 3) {
+        return letters[amsID] + slotID;
+    } else if (amsID >= 128 && amsID <= 131) {
+        return `HT-${letters[amsID - 128]}`;
+    } else {
+        return "Z";
+    }
 }
 
 // Fetching actual Spolls from Spoolman
@@ -698,6 +714,22 @@ async function haveSpoolDataChanged(spools, lastSpoolData) {
     return lengthChanged || dataChanged;
 }
 
+// Correct the initial remain send by Bambu if the initial spool weight is not a 1kg spool
+function correctRemainInt(remainOn1kgBasis, trayWeight) {
+  const remain = parseFloat(remainOn1kgBasis);
+  const weight = parseFloat(trayWeight);
+
+  if (weight < 1000) {
+    let grams = (remain / 100) * 1000;
+    let percent = (grams / weight) * 100;
+    if (percent > 100) percent = 100;
+    if (percent < 0) percent = 0;
+    return Math.round(percent);
+  } else {
+    return Math.round(remain);
+  }
+}
+
 // Format given Date to readable date
 function formatDate(date) {
     const day = String(date.getDate()).padStart(2, '0');
@@ -826,11 +858,9 @@ async function handleMqttMessage(printer, topic, message) {
                     // Processing AMS Data for valid options
                     const processedAmsData = processData(data.print.ams.ams);
                     
-                    // Only get the needed tray data from the AMS, so changes in temperature, humidity and so on wil not trigger any updates
                     const newTrayData = extractFullTrayData(processedAmsData);
                     const lastTrayData = extractFullTrayData(printer.lastAmsData || []);
 
-                    // compare the new and old ams tray data
                     const trayDataChanged = JSON.stringify(newTrayData) !== JSON.stringify(lastTrayData);
 
                     console.debug(printer.name, printer.logFilePath, 'Check if AMS Data is valid and check if Spoolman or AMS Data got any changes');
@@ -850,7 +880,7 @@ async function handleMqttMessage(printer, topic, message) {
                         for (const ams of processedAmsData) {
 
                             if (printHeader) {
-                                console.log(printer.name, printer.logFilePath, `AMS [${await num2letter(ams.id)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
+                                console.log(printer.name, printer.logFilePath, `AMS [${await convertAMSandSlot(ams.id, null)}] (hum: ${ams.humidity}, temp: ${ams.temp}ºC)`);
                                 printHeader = false;
                             }
 
@@ -859,7 +889,6 @@ async function handleMqttMessage(printer, topic, message) {
                             if (Array.isArray(ams.tray)) {
 
                                 for (const slot of ams.tray) {
-
                                     // get all newest updates from spoolman for processing each spool
                                     spools = await getSpoolmanSpools();
                                     externalFilaments = await getSpoolmanExternalFilaments();
@@ -867,10 +896,9 @@ async function handleMqttMessage(printer, topic, message) {
 
                                     // Check if slot is a valid Slot (loaded or empty slot)
                                     const validSlot = Object.keys(slot).length > 6;
-
+                                    
                                     // Check if slot is loaded and valid
                                     if (validSlot) {
-
                                         // Check if loaded spool is a original Bambu Lab spool or a 3rd party spool
                                         if (slot.tray_uuid !== "N/A" && slot.tray_sub_brands !== "N/A") {
 
@@ -900,9 +928,13 @@ async function handleMqttMessage(printer, topic, message) {
                                                 // Check existing spools
                                                 console.debug(printer.name, printer.logFilePath, '    Spools found. Check if there is a Spool in Spoolman with an already connected Serial');
                                                 for (const spool of spools) {
+                                                    
+                                                    
+                                                    
                                                     if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
                                                         console.debug(printer.name, printer.logFilePath, '    Connected Spool found: ' + JSON.stringify(spool));
                                                         found = true;
+                                                        slot.remain = correctRemainInt(slot.remain, slot.tray_weight);
                                                         remainingWeight = (slot.remain / 100) * slot.tray_weight;
 
                                                         const patchData = {
@@ -921,7 +953,7 @@ async function handleMqttMessage(printer, topic, message) {
                                                             });
 
                                                             // Log success message if the spool update is successful
-                                                            console.log(printer.name, printer.logFilePath, `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+                                                            console.log(printer.name, printer.logFilePath, `    - [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
                                                             console.log(printer.name, printer.logFilePath, `        - Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
 
                                                         } catch (error) {
@@ -944,7 +976,7 @@ async function handleMqttMessage(printer, topic, message) {
                                             // Handle no matching spool found
                                             if (!found) {
                                                 console.debug(printer.name, printer.logFilePath, '    Connected Spool not found, process with merging and creation logic');
-                                                console.log(printer.name, printer.logFilePath, `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+                                                console.log(printer.name, printer.logFilePath, `    - [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
 
                                                 if (spools.length !== 0) {
                                                     // Try to find mergeable spools
@@ -978,7 +1010,7 @@ async function handleMqttMessage(printer, topic, message) {
                                                                 console.log(printer.name, printer.logFilePath, `          creating Spool...`);
                                                                 let info = [];
                                                                 info.push({
-                                                                    amsId: (await num2letter(ams.id)) + slot.id,
+                                                                    amsId: await convertAMSandSlot(ams.id, slot.id),
                                                                     slot,
                                                                     matchingInternalFilament,
                                                                     matchingExternalFilament,
@@ -998,7 +1030,7 @@ async function handleMqttMessage(printer, topic, message) {
                                                                 console.log(printer.name, printer.logFilePath, `          creating Filament and Spool...`);
                                                                 let info = [];
                                                                 info.push({
-                                                                    amsId: (await num2letter(ams.id)) + slot.id,
+                                                                    amsId: await convertAMSandSlot(ams.id, slot.id),
                                                                     slot,
                                                                     matchingInternalFilament,
                                                                     matchingExternalFilament,
@@ -1020,7 +1052,7 @@ async function handleMqttMessage(printer, topic, message) {
                                                         console.log(printer.name, printer.logFilePath, `          merging Spool...`);
                                                         let info = [];
                                                         info.push({
-                                                            amsId: (await num2letter(ams.id)) + slot.id,
+                                                            amsId: await convertAMSandSlot(ams.id, slot.id),
                                                             slot,
                                                             mergeableSpool,
                                                             matchingInternalFilament,
@@ -1040,7 +1072,7 @@ async function handleMqttMessage(printer, topic, message) {
 
                                             // Store updated spool data for frontend
                                             printer.spoolData.push({
-                                                amsId: (await num2letter(ams.id)) + slot.id,
+                                                amsId: await convertAMSandSlot(ams.id, slot.id),
                                                 slot,
                                                 mergeableSpool,
                                                 matchingInternalFilament,
@@ -1061,7 +1093,7 @@ async function handleMqttMessage(printer, topic, message) {
 
                                             // push info as 3rd party spool
                                             printer.spoolData.push({
-                                                amsId: (await num2letter(ams.id)) + slot.id,
+                                                amsId: await convertAMSandSlot(ams.id, slot.id),
                                                 slot,
                                                 mergeableSpool: null,
                                                 matchingInternalFilament: null,
@@ -1074,14 +1106,14 @@ async function handleMqttMessage(printer, topic, message) {
                                                 slotState: "Loaded (3rd party)",
                                                 error: false,
                                             });
-                                            console.log(printer.name, printer.logFilePath, `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
+                                            console.log(printer.name, printer.logFilePath, `    - [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
                                         }
                                     } else {
                                         console.debug(printer.name, printer.logFilePath, 'No Data found in Slots');
 
                                         // push info as not loaded slot
                                         printer.spoolData.push({
-                                            amsId: (await num2letter(ams.id)) + slot.id,
+                                            amsId: await convertAMSandSlot(ams.id, slot.id),
                                             slot,
                                             mergeableSpool: null,
                                             matchingInternalFilament: null,
@@ -1094,7 +1126,7 @@ async function handleMqttMessage(printer, topic, message) {
                                             slotState: "Empty",
                                             error: false,
                                         });
-                                        console.log(printer.name, printer.logFilePath, `    - [${await num2letter(ams.id)}${slot.id}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+                                        console.log(printer.name, printer.logFilePath, `    - [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
                                     }
                                 }
 
