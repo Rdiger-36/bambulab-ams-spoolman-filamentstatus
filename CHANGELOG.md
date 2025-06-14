@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------------------------
 Version 1.0.8
    - Changes:
-      - Changed the maximum possible amount of comnected AMS-HT to a single printer to 8
+      - Changed the maximum possible amount of connected AMS-HT to a single printer to 8
 -----------------------------------------------------------------------------------------------
 Version 1.0.7
    - Bugfixes:
