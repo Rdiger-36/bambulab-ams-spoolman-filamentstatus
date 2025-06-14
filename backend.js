@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.7";
+const version = "1.0.8";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -230,18 +230,18 @@ function loadPrintersConfig() {
 /**
  * Converts a number to a letter (A-D) or a special "HT-X" format for AMS HT.
  * - For numbers 0-3, returns "A" to "D" (max. 4 AMS)
- * - For numbers 128-131, returns "HT-A" to "HT-D" (max. 4 AMS-HT)
- * - For all other numbers, returns "E" for Error
+ * - For numbers 128-135, returns "HT-A" to "HT-H" (max. 8 AMS-HT)
+ * - For all other numbers, returns "Z" for Error
  */
 async function convertAMSandSlot(amsID, slotID) {
     amsID = Number(amsID);
-    const letters = ["A", "B", "C", "D"];
+    const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
     if (slotID === null) slotID = "";
     
     if (amsID >= 0 && amsID <= 3) {
         return letters[amsID] + slotID;
-    } else if (amsID >= 128 && amsID <= 131) {
+    } else if (amsID >= 128 && amsID <= 135) {
         return `HT-${letters[amsID - 128]}`;
     } else {
         return "Z";
