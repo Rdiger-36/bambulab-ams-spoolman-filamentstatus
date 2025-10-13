@@ -30,16 +30,16 @@ check_and_fetch_cert() {
     ip=$(echo "$printer" | jq -r '.ip')
     serial=$(echo "$printer" | jq -r '.id')
 
-    echo "Checking availability of $ip..."
-    if ping -c 2 "$ip" >/dev/null 2>&1; then
-        echo "$ip is reachable. Fetching certificate..."
+    echo "Checking availability of $ip:8883..."
+    if nc -z -w 3 "$ip" 8883 >/dev/null 2>&1; then
+        echo "$ip:8883 is reachable. Fetching certificate..."
         mkdir -p "$CERTS_DIR"
         openssl s_client -connect "$ip:8883" -showcerts </dev/null 2>/dev/null |
         awk '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/' > "$CERTS_DIR/$serial.crt"
         echo "Certificate saved at $CERTS_DIR/$serial.crt"
         printer_menu "$printer"
     else
-        echo "$ip is not reachable."
+        echo "$ip:8883 is not reachable."
         main_menu
     fi
 }
@@ -88,11 +88,15 @@ mqtt_messages() {
     mosquitto_sub -h "$ip" -p 8883 -u "bblp" -P "$access_code" -t "device/$serial/report" --cafile "$CERTS_DIR/$serial.crt" --insecure -d
 }
 
-# Function to ping the printer
+# Function to check printer port with nc
 ping_printer() {
     ip="$1"
-    echo "Pinging $ip..."
-    ping -c 4 "$ip"
+    echo "Checking $ip:8883..."
+    if nc -z -w 3 "$ip" 8883 >/dev/null 2>&1; then
+        echo "$ip:8883 is reachable."
+    else
+        echo "$ip:8883 is not reachable."
+    fi
     echo "Press Enter to continue..."
     read
     main_menu

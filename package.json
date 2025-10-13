@@ -2,14 +2,13 @@
   "dependencies": {
     "async-mqtt": "^2.6.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "got": "^14.4.5",
-    "ping": "^0.4.4",
-    "fs-extra": "^11.2.0"
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "got": "^14.4.9",
+    "fs-extra": "^11.3.2"
   },
-  "name": "ams-spool-manager",
-  "version": "1.0.0",
+  "name": "bambulab-ams-spoolman-filamentstatus",
+  "version": "1.0.9",
   "main": "app.js",
   "type": "module",
   "scripts": {

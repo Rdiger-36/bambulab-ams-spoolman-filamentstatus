@@ -1,7 +1,15 @@
 -----------------------------------------------------------------------------------------------
+Version 1.0.9
+   - Changes:
+      - Switched printer accessibility check from ping to TCP Port check.
+      - Enhanced logging to improve the chronological order.
+      - Display only the last 250 lines of the log on the web interface. Include an option to download the complete log via a dedicated Download button.
+      - Handling for Spool Updates for Spoolman and the web UI is now separate and not combined for all spools/trays.
+      - Removed the Header from the logs (Header for AMS A, B, C with humidity and temp). Now, only the slots and the most recent information will be displayed.
+-----------------------------------------------------------------------------------------------
 Version 1.0.8
    - Changes:
-      - Changed the maximum possible amount of comnected AMS-HT to a single printer to 8
+      - Changed the maximum possible amount of connected AMS-HT to a single printer to 8
 -----------------------------------------------------------------------------------------------
 Version 1.0.7
    - Bugfixes:

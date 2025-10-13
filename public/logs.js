@@ -34,13 +34,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (name === "server") {
     document.getElementById("headline").textContent = "Server";
-    logAPI = `./api/logs/server`;
+    logAPI = `./api/logs/server?limit=250`;
   } else if (printerSerial) {
     document.getElementById("headline").textContent = `${name} - ${printerSerial}`;
-    logAPI = `./api/logs/${printerSerial}`;
+    logAPI = `./api/logs/${printerSerial}?limit=250`;
   } else {
     logContainer.innerHTML = '<p>Error: No printer serial provided in the URL.</p>';
     return;
+  }
+  
+  const downloadBtn = document.getElementById("download-logs");
+  if (downloadBtn) {
+    downloadBtn.addEventListener("click", () => {
+      const downloadUrl = (name === "server")
+        ? `./api/logs/server/download`
+        : `./api/logs/${printerSerial}/download`;
+      window.location.href = downloadUrl;
+    });
   }
 
   // Detect if the user is scrolling manually

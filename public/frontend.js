@@ -43,14 +43,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Handle incoming messages from SSE
     eventSource.onmessage = function (event) {
-        
         // Parse the event data
         const data = JSON.parse(event.data);
         const printerId = document.getElementById('printer-serial').textContent;
             
-        if (data.type === 'refresh' && data.printer === printerId && !isDialogOpen()) {
-            fetchPrinters(); // Refresh data when needed
-        }
+        if (data.type === 'slot_update' && data.printer === printerId && !isDialogOpen()) {
+            upsertSpoolRow(data.spool);
+        } else if (data.type === 'status' && data.printer === printerId) {
+			
+		    if (data.lastMqttUpdate) {
+		        updateElementText(
+		           "last-mqtt-update",
+		           formatDate(new Date(data.lastMqttUpdate))
+		        );
+		    }
+		    if (data.lastMqttAmsUpdate) {
+		        updateElementText(
+		           "last-mqtt-ams-update",
+		           formatDate(new Date(data.lastMqttAmsUpdate))
+		        );
+		    }
+	    } else if (data.type === 'refresh' && data.printer === printerId) {
+		  fetchPrinters();
+		}
     };
 
     // Handle errors in SSE connection
@@ -155,6 +170,8 @@ document.addEventListener("DOMContentLoaded", () => {
             for (let j = i; j < i + 4 && j < spools.length; j++) {
                 const amsSpool = spools[j];
                 const spoolRow = document.createElement("tr");
+        		spoolRow.setAttribute("data-amsid", amsSpool.amsId);
+
 
                 const amsSpoolRemainingWeight = (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain;
                 let colorName = amsSpool.slot.tray_color;
@@ -252,9 +269,74 @@ document.addEventListener("DOMContentLoaded", () => {
         
         return `background-color: #${defaultColor}; color: ${getTextColor(defaultColor)};`;
     }
-
-    // Configure the action button based on spool options
-    function setupButton(button, amsSpool) {
+    
+	function createSpoolRow(amsSpool) {
+	    const tr = document.createElement("tr");
+	    tr.setAttribute("data-amsid", amsSpool.amsId);
+	
+	    const amsSpoolRemainingWeight = (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain;
+	    let colorName = amsSpool.slot.tray_color;
+	    if (amsSpool.matchingExternalFilament?.name) colorName = amsSpool.matchingExternalFilament?.name;
+	
+	    const button = document.createElement("button");
+	    button.type = "button";
+	    button.disabled = true;
+	    setupButton(button, amsSpool);
+	
+	    button.addEventListener("click", () => {
+	        const content = generateDialogContent(button, amsSpool);
+	        const actionMap = {
+	            "Create Spool": "Create",
+	            "Merge Spool": "Merge",
+	            "Create Filament & Spool": "Create Filament & Spool",
+	            "Show Info!": "Go to Spoolman"
+	        };
+	        const actionText = actionMap[button.textContent] || "No actions available";
+	        const actionCallback = () => performAction(button, amsSpool);
+	        showDialog(button, content, actionText, actionCallback);
+	    });
+	
+	    const filament = amsSpool.existingSpool?.filament;
+	    const colorStyle = getSpoolColorStyle(filament, amsSpool.slot.tray_color, colorName);
+	
+	    tr.innerHTML = `
+	        <td>${amsSpool.amsId}</td>
+	        <td>${amsSpool.slotState}</td>
+	        <td>${amsSpool.slot.tray_sub_brands}</td>
+	        <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
+	        <td style="${colorStyle}">${cutDisplayColorName(filament?.name || colorName)}</td>
+	        <td>${amsSpool.slot.tray_uuid}</td>
+	        <td>${setIcon(amsSpool.error, amsSpool.slotState)}</td>
+	    `;
+	    const tdBtn = document.createElement("td");
+	    tdBtn.appendChild(button);
+	    tr.appendChild(tdBtn);
+	
+	    return tr;
+	}
+	
+	function upsertSpoolRow(amsSpool) {
+	    const selector = `[data-amsid="${amsSpool.amsId}"]`;
+	    const existingRow = document.querySelector(selector);
+	    const newRow = createSpoolRow(amsSpool);
+	
+	    if (existingRow && existingRow.parentElement) {
+	        existingRow.parentElement.replaceChild(newRow, existingRow);
+	    } else {
+	        const tables = document.querySelectorAll('.spool-table tbody');
+	        const targetTbody = tables[tables.length - 1] || null;
+	        if (targetTbody) {
+	            targetTbody.appendChild(newRow);
+	            if (typeof synchronizeSelectedColumns === 'function') {
+	                try { synchronizeSelectedColumns([0,1,2,3,4,5]); } catch (e) {}
+	            }
+	        } else {
+	            if (typeof fetchPrinters === 'function') fetchPrinters();
+	        }
+	    }
+	}
+	
+	function setupButton(button, amsSpool) {
         if (amsSpool.error && amsSpool.slotState === "Loaded (Bambu Lab)") {
             button.textContent = "Show Info!";
             button.disabled = false;

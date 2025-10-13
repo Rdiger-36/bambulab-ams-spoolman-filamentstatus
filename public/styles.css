@@ -226,7 +226,7 @@ body.dark-mode .dropdown-content a:hover {
   display: block;
 }
 
-#log-button {
+.log-button {
   background-color: #f4f4f4;
   color: #333;
   border: 1px solid #ccc;
@@ -236,7 +236,7 @@ body.dark-mode .dropdown-content a:hover {
   transition: background-color 0.3s, color 0.3s;
 }
 
-body.dark-mode #log-button {
+body.dark-mode .log-button {
   background-color: #444;
   color: #f1f1f1;
   border: 1px solid #555;

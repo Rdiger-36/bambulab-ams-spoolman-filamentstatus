@@ -413,6 +413,11 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
+|Bug|Logs did not show up in correct order|yes|no|free for testing|
+|Enhancment|Only update recently used spools in spoolman and not all loaded spools in AMS|yes|no|free for testing, [Issue-42](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/42)|
+|Enhancement|Use TCP Port check instead of ping for better container support (docker, podman)|yes|no|free for testing, [Issue-45](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/45)|
+|Enhancement|Only show the last 250 lines of logs in web. Download full logs via web|yes|no|free for testing|
+
 
 Nothing at this moment
 
