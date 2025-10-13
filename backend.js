@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.9-dev";
+const version = "1.0.9";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
