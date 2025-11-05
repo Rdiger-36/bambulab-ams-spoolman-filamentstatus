@@ -56,7 +56,7 @@ The Hardware supported by this image are:
 | A Series | ⚠️ - no update status (read only) |
 | P Series | ✅ |
 | X Series | ✅ |
-| H2D | ✅ |
+| H Series | ✅ |
 | AMS | ✅ |
 | AMS Lite | ⚠️ - no update status (read only) |
 | AMS 2 Pro | ✅ |
@@ -144,18 +144,6 @@ The Hardware supported by this image are:
 | `NEVER_MERGE_IF_TAG` | Never merge spools if a tag is already set, even if the one is empty (default: "false") |
 | `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (default: false)|
 
-### !!Deprected ENVs!!
-| Variable                 | Why is it deprecated?                                                  |
-|--------------------------|------------------------------------------------------------------------|
-| ~~`SPOOLMAN_IP`~~        | Merged to ENV: SPOOLMAN_ENDPOINT                                       |
-| ~~`SPOOLMAN_PORT`~~      | Merged to ENV: SPOOLMAN_ENDPOINT                                       |
-| ~~`SPOOLMAN_SUBFOLDER`~~ | Merged to ENV: SPOOLMAN_ENDPOINT                                       |
-| ~~`PRINTER_IP`~~         | Instead of using a single ENV its recommended to use the printers.json |
-| ~~`PRINTER_ID`~~         | Instead of using a single ENV its recommended to use the printers.json |
-| ~~`PRINTER_CODE`~~       | Instead of using a single ENV its recommended to use the printers.json |
-
-The above deprecated environment variables still work, but it is recommended to avoid using them in the future.
-
 ## Usage
 
 ### Checking Logs
@@ -174,14 +162,14 @@ Example Output:
 [LOG] Server - Checking Extra Field "tag"...
 [LOG] Server - Spoolman Extra Field "tag" for Spool is set: true
 [LOG] Server - Backend running on http://localhost:4000
-[LOG] Bambu Lab P1S - MQTT not running for Printer: 01P00A460901001, attempting to reconnect...
-[LOG] Bambu Lab P1S - Setting up MQTT connection for Printer: 01P00A460901001...
+[LOG] Bambu Lab P1S - MQTT not running for Printer: 01PXXXXXXXXXX, attempting to reconnect...
+[LOG] Bambu Lab P1S - Setting up MQTT connection for Printer: 01PXXXXXXXXXX...
 [LOG] Bambu Lab Test Printer A - MQTT not running for Printer: 0AX12345678, attempting to reconnect...
 [LOG] Bambu Lab Test Printer A - Setting up MQTT connection for Printer: 0AX12345678...
 [LOG] Bambu Lab Test Printer A - MQTT client connected for Printer: 0AX12345678
 [LOG] Bambu Lab Test Printer A - Waiting for MQTT messages for Printer: 0AX12345678...
-[LOG] Bambu Lab P1S - MQTT client connected for Printer: 01P00A460901001
-[LOG] Bambu Lab P1S - Waiting for MQTT messages for Printer: 01P00A460901001...
+[LOG] Bambu Lab P1S - MQTT client connected for Printer: 01PXXXXXXXXXX
+[LOG] Bambu Lab P1S - Waiting for MQTT messages for Printer: 01PXXXXXXXXXX...
 [LOG] Bambu Lab Test Printer A - AMS [A] (hum: 5, temp: 0.0ºC)
 [LOG] Bambu Lab Test Printer A -     - [A0] ASA-CF 000000FF (85%) [[ XXXXXX000001 ]]
 [LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 5 => Black
@@ -352,17 +340,13 @@ Now you can type in the number of your printer and hit enter to select your prin
 Choose a printer (number): 
 ```
 
-Now the script will check if your printer is reachable and request its certificate for the authorization.
 After that you can choose between 3 options (option 3 is to go back to the main menu):
 
 ```bash
-Checking availability of 192.168.XXX.XXX...
-192.168.XXX.XXX is reachable. Fetching certificate...
-Certificate saved at /app/certs/01PXXXXXXXXXX.crt
  
 --- Options for Bambu Lab P1S ---
 1. Subscribe to MQTT messages
-2. Ping
+2. Check reachability
 3. Back to main menu
  
 Choose a option (number): 
@@ -386,19 +370,12 @@ Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ...
 Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (87 bytes))
 ```
 
-Option 2, "Ping," is a simple ping check of your printer:
+Option 2, "Check reachability," checks if the printer is reachable from your docker container:
 
 ```bash
-Pinging 192.168.XXX.XXX...
-PING 192.168.XXX.XXX (192.168.XXX.XXX): 56 data bytes
-64 bytes from 192.168.XXX.XXX: seq=0 ttl=254 time=1.936 ms
-64 bytes from 192.168.XXX.XXX: seq=1 ttl=254 time=1.505 ms
-64 bytes from 192.168.XXX.XXX: seq=2 ttl=254 time=1.225 ms
-64 bytes from 192.168.XXX.XXX: seq=3 ttl=254 time=2.733 ms
+Checking if printer (192.168.XXX.XXX - 01PXXXXXXXXXX) is reachable on port 8883...
+Printer (192.168.XXX.XXX - 01PXXXXXXXXXX) is reachable on port 8883.
 
---- 192.168.XXX.XXX ping statistics ---
-4 packets transmitted, 4 packets received, 0% packet loss
-round-trip min/avg/max = 1.225/1.849/2.733 ms
 Press Enter to continue...
 ```
 
@@ -413,13 +390,9 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
-|Bug|Logs did not show up in correct order|yes|no|free for testing|
-|Enhancment|Only update recently used spools in spoolman and not all loaded spools in AMS|yes|no|free for testing, [Issue-42](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/42)|
-|Enhancement|Use TCP Port check instead of ping for better container support (docker, podman)|yes|no|free for testing, [Issue-45](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/45)|
-|Enhancement|Only show the last 250 lines of logs in web. Download full logs via web|yes|no|free for testing|
 
-
-Nothing at this moment
+Nothing at this moment.
+If you find some bugs/issues/improvements let me know!
 
 ## Support Me
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)

@@ -172,8 +172,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 const spoolRow = document.createElement("tr");
         		spoolRow.setAttribute("data-amsid", amsSpool.amsId);
 
-
-                const amsSpoolRemainingWeight = (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain;
+		const amsSpoolRemainingWeight = amsSpool.correctedWeight ?? ((amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
+		const correctedRemain = amsSpool.correctedRemain ?? amsSpool.slot.remain;
                 let colorName = amsSpool.slot.tray_color;
                 if (amsSpool.matchingExternalFilament?.name) colorName = amsSpool.matchingExternalFilament?.name;
 
@@ -205,7 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <td>${amsSpool.amsId}</td>
                     <td>${amsSpool.slotState}</td>
                     <td>${amsSpool.slot.tray_sub_brands}</td>
-                    <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
+                    <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${correctedRemain}%)</td>
                     <td style="${colorStyle}">
                         ${cutDisplayColorName(filament?.name || colorName)}
                     </td>
@@ -274,7 +274,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const tr = document.createElement("tr");
 	    tr.setAttribute("data-amsid", amsSpool.amsId);
 	
-	    const amsSpoolRemainingWeight = (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain;
+	    const amsSpoolRemainingWeight = amsSpool.correctedWeight ?? ((amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
+	    const correctedRemain = amsSpool.correctedRemain ?? amsSpool.slot.remain;
 	    let colorName = amsSpool.slot.tray_color;
 	    if (amsSpool.matchingExternalFilament?.name) colorName = amsSpool.matchingExternalFilament?.name;
 	
@@ -303,7 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        <td>${amsSpool.amsId}</td>
 	        <td>${amsSpool.slotState}</td>
 	        <td>${amsSpool.slot.tray_sub_brands}</td>
-	        <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${amsSpool.slot.remain}%)</td>
+	        <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${correctedRemain}%)</td>
 	        <td style="${colorStyle}">${cutDisplayColorName(filament?.name || colorName)}</td>
 	        <td>${amsSpool.slot.tray_uuid}</td>
 	        <td>${setIcon(amsSpool.error, amsSpool.slotState)}</td>

@@ -1,7 +1,6 @@
 #!/bin/sh
 
 PRINTERS_FILE="/app/printers/printers.json"
-CERTS_DIR="/app/certs"
 
 # Function to display the main menu
 main_menu() {
@@ -17,29 +16,9 @@ main_menu() {
     selected_printer=$(jq -r ".[$((choice-1))]" "$PRINTERS_FILE")
 
     if [ -n "$selected_printer" ]; then
-        check_and_fetch_cert "$selected_printer"
+        printer_menu "$selected_printer"
     else
         echo "Invalid selection."
-        main_menu
-    fi
-}
-
-# Function to check availability and fetch the certificate
-check_and_fetch_cert() {
-    printer="$1"
-    ip=$(echo "$printer" | jq -r '.ip')
-    serial=$(echo "$printer" | jq -r '.id')
-
-    echo "Checking availability of $ip:8883..."
-    if nc -z -w 3 "$ip" 8883 >/dev/null 2>&1; then
-        echo "$ip:8883 is reachable. Fetching certificate..."
-        mkdir -p "$CERTS_DIR"
-        openssl s_client -connect "$ip:8883" -showcerts </dev/null 2>/dev/null |
-        awk '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/' > "$CERTS_DIR/$serial.crt"
-        echo "Certificate saved at $CERTS_DIR/$serial.crt"
-        printer_menu "$printer"
-    else
-        echo "$ip:8883 is not reachable."
         main_menu
     fi
 }
@@ -55,7 +34,7 @@ printer_menu() {
     echo " "
     echo "--- Options for $name ---"
     echo "1. Subscribe to MQTT messages"
-    echo "2. Ping"
+    echo "2. Check reachability"
     echo "3. Back to main menu"
     echo " "
     echo "Choose a option (number): "
@@ -66,7 +45,7 @@ printer_menu() {
             mqtt_messages "$ip" "$access_code" "$serial"
             ;;
         2)
-            ping_printer "$ip"
+            ping_printer "$ip" "$serial"
             ;;
         3)
             main_menu
@@ -84,21 +63,27 @@ mqtt_messages() {
     access_code="$2"
     serial="$3"
 
-    echo "Receiving MQTT messages from $serial... (Press Ctrl+C to stop)"
-    mosquitto_sub -h "$ip" -p 8883 -u "bblp" -P "$access_code" -t "device/$serial/report" --cafile "$CERTS_DIR/$serial.crt" --insecure -d
+    echo "Starting Node.js MQTT listener for printer $serial..."
+    echo "Press Ctrl+C to stop."
+    echo " "
+
+    node /app/scripts/mqtt.js "$ip" "$access_code" "$serial"
 }
 
 # Function to check printer port with nc
 ping_printer() {
     ip="$1"
-    echo "Checking $ip:8883..."
+    serial="$2"
+    echo "Checking if printer ($ip - $serial) is reachable on port 8883..."
+
     if nc -z -w 3 "$ip" 8883 >/dev/null 2>&1; then
-        echo "$ip:8883 is reachable."
+        echo "Printer ($ip - $serial) is reachable on port 8883."
     else
-        echo "$ip:8883 is not reachable."
+        echo "Printer ($ip - $serial) is NOT reachable on port 8883."
     fi
-    echo "Press Enter to continue..."
-    read
+
+    echo
+    read -rp "Press Enter to continue..."
     main_menu
 }
 

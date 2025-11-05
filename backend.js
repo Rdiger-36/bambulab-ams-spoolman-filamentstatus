@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 // loading .env
 config();
 
-const version = "1.0.9";
+const version = "1.1.0";
 const app = express();
 const PORT = 4000; // Port for backend --> also used by frontend for Web UI
 
@@ -220,7 +220,7 @@ function updateLastLogLine(logFilePath, newLogMessage) {
     });
 }
 
-function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
+function updateLastMatchingLine_old(logFilePath, messagePrefix, newLogMessage) {
     fs.readFile(logFilePath, 'utf8', (err, data) => {
         if (err) {
             console.error(`[ERROR] Failed to read log file: ${err.message}`);
@@ -247,6 +247,31 @@ function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
         enqueueTask(logFilePath, () => fsp.writeFile(logFilePath, lines.join('\n') + '\n'));
     });
 }
+
+function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
+    fs.readFile(logFilePath, 'utf8', (err, data) => {
+        if (err) {
+            console.error(`[ERROR] Failed to read log file: ${err.message}`);
+            return;
+        }
+
+        let lines = data.split('\n');
+        if (lines.length && lines[lines.length - 1] === '') lines.pop(); // leere letzte Zeile entfernen
+
+        const lastLine = lines[lines.length - 1] || '';
+
+        // Nur überschreiben, wenn die letzte Zeile mit dem Prefix übereinstimmt
+        if (lastLine.includes(messagePrefix)) {
+            lines[lines.length - 1] = newLogMessage.trimEnd();
+        } else {
+            lines.push(newLogMessage.trimEnd());
+        }
+
+        // Datei überschreiben (atomar, innerhalb der Queue)
+        enqueueTask(logFilePath, () => fsp.writeFile(logFilePath, lines.join('\n') + '\n'));
+    });
+}
+
 
 
 // initialize all printers. If there is no printer.json or it is faulty check if there is valifd printer in ENVs and use it
@@ -1014,7 +1039,8 @@ async function handleMqttMessage(printer, topic, message) {
                                                         try {
                                                             const __amsId = await convertAMSandSlot(ams.id, slot.id);
                                                             const __prevSlot = prevByAmsId[__amsId]?.slot;
-                                                            const __prevRemain = __prevSlot ? correctRemainInt(__prevSlot.remain, __prevSlot.tray_weight) : null;
+							    const __prevRemain = __prevSlot ? Math.round(__prevSlot.remain) : null;
+                                                            //const __prevRemain = __prevSlot ? correctRemainInt(__prevSlot.remain, __prevSlot.tray_weight) : null;
                                                             const __currRemain = correctRemainInt(slot.remain, slot.tray_weight);
                                                             const __slotChanged = !__prevSlot ||
                                                                 __currRemain !== __prevRemain ||
@@ -1032,7 +1058,7 @@ async function handleMqttMessage(printer, topic, message) {
                                                         }
                                                         // end guard
                                                         slot.remain = correctRemainInt(slot.remain, slot.tray_weight);
-                                                        remainingWeight = (slot.remain / 100) * slot.tray_weight;
+                                                        remainingWeight = Math.round((slot.remain / 100) * slot.tray_weight);
 
                                                         const patchData = {
                                                             remaining_weight: remainingWeight,
@@ -1188,6 +1214,9 @@ async function handleMqttMessage(printer, topic, message) {
                                                 printer.lastUpdateTime = new Date();
                                             }
 
+					    const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight);
+					    const correctedWeight = Math.round((correctedRemain / 100) * slot.tray_weight);
+
                                             // Store updated spool data for frontend
                                             const newUiSpool = {
                                                 amsId: await convertAMSandSlot(ams.id, slot.id),
@@ -1202,6 +1231,8 @@ async function handleMqttMessage(printer, topic, message) {
                                                 logFilePath: printer.logFilePath,
                                                 slotState: "Loaded (Bambu Lab)",
                                                 error,
+ 						correctedRemain,
+						correctedWeight,
                                             };
 											if (shouldSendSlotUpdate(slot, printer.first_run)
 											    && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {

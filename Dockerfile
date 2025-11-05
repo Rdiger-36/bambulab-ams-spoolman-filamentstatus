@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package.json package-lock.json ./
-RUN mkdir -p /app/logs /app/printers /app/certs && chmod -R 777 /app/logs /app/printers /app/certs
+RUN mkdir -p /app/logs /app/printers && chmod -R 777 /app/logs /app/printers
 RUN npm install
 
 # Copy application code
@@ -25,4 +25,4 @@ RUN ln -s /app/scripts/debug.sh /usr/local/bin/debug-printers
 EXPOSE 4000
 
 # Start the backend
-CMD ["node", "backend.js"]
+CMD ["node", "entrypoint.js"]

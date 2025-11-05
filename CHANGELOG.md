@@ -1,4 +1,11 @@
 -----------------------------------------------------------------------------------------------
+Version 1.1.0
+   - Changes:
+      - Replaced MQTT subscription in debug-printers from mosquitto_sub to an external Node.js solution. No certificate is needed anymore (this solves issues with Bambulab P2S printers that don't provide a Root CA).
+      - Enhanced logging to also capture startup and crash errors that were previously not logged by the app.
+      - Improved calculation of remaining filament for spools with capacities other than 1000 grams.
+      - Improved handling of the last log line.
+-----------------------------------------------------------------------------------------------
 Version 1.0.9
    - Changes:
       - Switched printer accessibility check from ping to TCP Port check.
