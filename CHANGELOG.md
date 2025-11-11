@@ -1,4 +1,8 @@
 -----------------------------------------------------------------------------------------------
+Version 1.1.1-dev
+   - Changes:
+      - Better handling for multiple AMS-HT 
+-----------------------------------------------------------------------------------------------
 Version 1.1.0
    - Changes:
       - Replaced MQTT subscription in debug-printers from mosquitto_sub to an external Node.js solution. No certificate is needed anymore (this solves issues with Bambulab P2S printers that don't provide a Root CA).
