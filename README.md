@@ -17,7 +17,7 @@ However it can be used to Create Spools and Filaments on Spoolman and connect th
 
 ## Features
 
-- Real-time AMS filament status updates for all possible AMS on one printer (max. 4)
+- Real-time AMS filament status updates for all possible AMS on one printer (max. 4 AMS + 8 AMS HT)
 - Multiple Printer Support
 - Synchronizes spool usage with Spoolman
 - Lightweight Docker container for easy deployment
@@ -263,14 +263,15 @@ There are two modes you can run this container: automatic and manual
 
 ### AMS Infos
 
-| Slot in Log  | Slot on AMS         | Slot in Log  | Slot on AMS      |
-|--------------|---------------------|--------------|------------------|
-| `A0`         | first AMS, Slot 1   |`B0`          |second AMS, Slot 1|
-| `A1`         | first AMS, Slot 2   |`B1`          |second AMS, Slot 2|
-| `A2`         | first AMS, Slot 3   |`B2`          |second AMS, Slot 3|
-| `A3`         | first AMS, Slot 4   |`B3`          |second AMS, Slot 4|
+| Slot in Log  | Slot on AMS          | Slot in Log  | Slot on AMS         |
+|--------------|----------------------|--------------|---------------------|
+| `A0`         | first AMS, Slot 1    |`B0`          |second AMS, Slot 1   |
+| `A1`         | first AMS, Slot 2    |`B1`          |second AMS, Slot 2   |
+| `A2`         | first AMS, Slot 3    |`B2`          |second AMS, Slot 3   |
+| `A3`         | first AMS, Slot 4    |`B3`          |second AMS, Slot 4   |
+| `HT-A`       | first AMS-HT, Slot 1 |`HT-B`        |second AMS-HT, Slot 1|
 
-This will be expanded till D (max. 4 AMS on one Printer)
+This will be expanded till D on normal AMS (max. 4 AMS on one Printer) and from HT-A till HT-H for all connected AMS-HT
 
 
 ## Spoolman Spool Configuration
