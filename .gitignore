@@ -1,0 +1,10 @@
+node_modules
+README.md
+.DS_Store
+.log
+.env
+.settings
+.project
+printers
+logs
+package-lock.json
