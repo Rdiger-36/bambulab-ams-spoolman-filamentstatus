@@ -139,90 +139,83 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     // Update the displayed list of spools based on fetched data
-    async function updateSpools(spools) {
-        const spoolListElement = getElementSafe("spool-list");
-        if (!spoolListElement) return;
+	async function updateSpools(spools) {
+	    const spoolListElement = getElementSafe("spool-list");
+	    if (!spoolListElement) return;
 
-        spoolListElement.innerHTML = "";
+	    spoolListElement.innerHTML = "";
 
-        const columns = [
-          "AMS Slot ID", "Slot state", "Material",
-          "Remaining (estimated)", "Color",
-          "Serialnumber", "State", "Action"
-        ];
+	    const columns = [
+	        "AMS Slot ID", "Slot state", "Material",
+	        "Remaining (estimated)", "Color",
+	        "Serialnumber", "State", "Action"
+	    ];
 
-        for (let i = 0; i < spools.length; i += 4) {
-            const table = document.createElement("table");
-            table.className = "spool-table";
+	    // Split AMS types:
+	    // Normal AMS = up to 4 slots per unit
+	    // AMS HT = 1 slot per unit, each should have its own table
+	    const normalAMS = spools.filter(s => !s.amsId.startsWith("HT-"));
+	    const htAMS = spools.filter(s => s.amsId.startsWith("HT-"));
 
-            const thead = document.createElement("thead");
-            const headerRow = document.createElement("tr");
-            for (const col of columns) {
-                const th = document.createElement("th");
-                th.textContent = col;
-                headerRow.appendChild(th);
-            }
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
+	    // Render normal AMS units in tables of four (original behavior)
+	    for (let i = 0; i < normalAMS.length; i += 4) {
+	        const table = document.createElement("table");
+	        table.className = "spool-table";
 
-            const tbody = document.createElement("tbody");
+	        // Build table header
+	        const thead = document.createElement("thead");
+	        const headerRow = document.createElement("tr");
 
-            for (let j = i; j < i + 4 && j < spools.length; j++) {
-                const amsSpool = spools[j];
-                const spoolRow = document.createElement("tr");
-        		spoolRow.setAttribute("data-amsid", amsSpool.amsId);
+	        for (const col of columns) {
+	            const th = document.createElement("th");
+	            th.textContent = col;
+	            headerRow.appendChild(th);
+	        }
 
-		const amsSpoolRemainingWeight = amsSpool.correctedWeight ?? ((amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
-		const correctedRemain = amsSpool.correctedRemain ?? amsSpool.slot.remain;
-                let colorName = amsSpool.slot.tray_color;
-                if (amsSpool.matchingExternalFilament?.name) colorName = amsSpool.matchingExternalFilament?.name;
+	        thead.appendChild(headerRow);
+	        table.appendChild(thead);
 
-                const button = document.createElement("button");
-                button.type = "button";
-                button.disabled = true;
+	        // Build table rows
+	        const tbody = document.createElement("tbody");
 
-                setupButton(button, amsSpool);
+	        for (let j = i; j < i + 4 && j < normalAMS.length; j++) {
+	            const spoolRow = createSpoolRow(normalAMS[j]);
+	            tbody.appendChild(spoolRow);
+	        }
 
-                button.addEventListener("click", () => {
-                    const content = generateDialogContent(button, amsSpool);
+	        table.appendChild(tbody);
+	        spoolListElement.appendChild(table);
+	    }
 
-                    const actionMap = {
-                        "Create Spool": "Create",
-                        "Merge Spool": "Merge",
-                        "Create Filament & Spool": "Create Filament & Spool",
-                        "Show Info!": "Go to Spoolman"
-                    };
+	    // Render each AMS HT spool in its own table (1 slot per table)
+	    htAMS.forEach(amsSpool => {
+	        const table = document.createElement("table");
+	        table.className = "spool-table";
 
-                    const actionText = actionMap[button.textContent] || "No actions available";
-                    const actionCallback = () => performAction(button, amsSpool);
-                    showDialog(button, content, actionText, actionCallback);
-                });
+	        // Build table header
+	        const thead = document.createElement("thead");
+	        const headerRow = document.createElement("tr");
 
-                const filament = amsSpool.existingSpool?.filament;
-                const colorStyle = getSpoolColorStyle(filament, amsSpool.slot.tray_color, colorName);
+	        for (const col of columns) {
+	            const th = document.createElement("th");
+	            th.textContent = col;
+	            headerRow.appendChild(th);
+	        }
 
-                spoolRow.innerHTML = `
-                    <td>${amsSpool.amsId}</td>
-                    <td>${amsSpool.slotState}</td>
-                    <td>${amsSpool.slot.tray_sub_brands}</td>
-                    <td>${amsSpoolRemainingWeight} g / ${amsSpool.slot.tray_weight} g (${correctedRemain}%)</td>
-                    <td style="${colorStyle}">
-                        ${cutDisplayColorName(filament?.name || colorName)}
-                    </td>
-                    <td>${amsSpool.slot.tray_uuid}</td>
-                    <td>${setIcon(amsSpool.error, amsSpool.slotState)}</td>
-                `;
+	        thead.appendChild(headerRow);
+	        table.appendChild(thead);
 
-                const buttonCell = document.createElement("td");
-                buttonCell.appendChild(button);
-                spoolRow.appendChild(buttonCell);
-                tbody.appendChild(spoolRow);
-            }
-            table.appendChild(tbody);
-            spoolListElement.appendChild(table);
-        }
-        synchronizeSelectedColumns([0, 1, 2, 3, 4, 5]);
-    }
+	        // Build table row (single-slot)
+	        const tbody = document.createElement("tbody");
+	        tbody.appendChild(createSpoolRow(amsSpool));
+
+	        table.appendChild(tbody);
+	        spoolListElement.appendChild(table);
+	    });
+
+	    // Synchronize column widths across all tables
+	    synchronizeSelectedColumns([0,1,2,3,4,5]);
+	}
     
     function synchronizeSelectedColumns(indices) {
         const tables = Array.from(document.querySelectorAll('.spool-table'));
