@@ -391,8 +391,8 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
+|Feature|(Semi-)Automatic hibernation if the printer is offline (via button, environment variable, or automatic system).|❌|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
 
-Nothing at this moment.
 If you find some bugs/issues/improvements let me know!
 
 ## Support Me
