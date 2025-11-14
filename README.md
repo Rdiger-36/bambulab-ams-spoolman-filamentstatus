@@ -391,7 +391,7 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
-|Feature|Pause monitoring for selected printer. Set state via web ui, api Home Assistant Add On|✅|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
+|Feature|Pause monitoring for selected printer. Set state via WEB UI, API and Home Assistant Add On|✅|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
 
 If you find some bugs/issues/improvements let me know!
 
