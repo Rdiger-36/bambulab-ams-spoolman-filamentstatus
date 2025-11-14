@@ -37,7 +37,20 @@
       <p>Printer Serial Number: <span id="printer-serial"></span></p>
       <p>Mode: <span id="mode"></span></p>
       <p>Last MQTT update: <span id="last-mqtt-update"></span></p>
-      <p>Last MQTT update contains new AMS infos: <span id="last-mqtt-ams-update"></span></p>
+	  <p class="status-row-split">
+	    <span>
+	        Last MQTT update contains new AMS infos:
+	        <span id="last-mqtt-ams-update"></span>
+	    </span>
+	
+	    <span class="monitoring-align">
+	        Monitoring:
+	        <label class="switch">
+	            <input type="checkbox" id="monitoring-toggle">
+	            <span class="slider round"></span>
+	        </label>
+	    </span>
+	  </p>
     </div>
     <div id="spool-list"></div>
   </div>

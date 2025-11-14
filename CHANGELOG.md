@@ -2,6 +2,10 @@
 Version 1.1.1-dev
    - Changes:
       - Better handling for multiple AMS-HT 
+      - New option to stop/start monitoring AMS for each printer
+         - possible via switch on WEB UI and via API Call
+           (e.g. curl -X POST http://IP_FROM_SERVVICE:PORT/api/printer/PRINTER_ID/monitoring/stop and start)
+         - Home Assistant Addon to get state from toggle switch and also use this switch to toggle monitoring
 -----------------------------------------------------------------------------------------------
 Version 1.1.0
    - Changes:

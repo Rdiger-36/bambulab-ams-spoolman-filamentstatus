@@ -33,6 +33,8 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         console.error('Button with ID "dark-mode-toggle" not found!');
     }
+	
+	document.getElementById("monitoring-toggle").addEventListener("change", toggleMonitoring);
     
     // Fetch initial data and set up periodic updates
     // Fetch and display printers dynamically
@@ -65,7 +67,14 @@ document.addEventListener("DOMContentLoaded", () => {
 		    }
 	    } else if (data.type === 'refresh' && data.printer === printerId) {
 		  fetchPrinters();
-		}
+		} else if (data.type === "monitoring_update") {
+			const current = document.getElementById("printer-serial").textContent;
+
+			if (data.printer === current) {
+			    document.getElementById("monitoring-toggle").checked = data.enabled;
+			}
+	  }
+
     };
 
     // Handle errors in SSE connection
@@ -130,6 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const status = await statusResponse.json();
             const spools = await spoolsResponse.json();
+			
+			currentPrinterId = printerId;
+			await updateMonitoringUI();
 
             updateStatus(status);
             updateSpools(spools);
@@ -560,4 +572,37 @@ function redirectToLogs(type) {
         const encodedName = encodeURIComponent(printerName);
         window.location.href = `logs.html?serial=${encodedSerial}&name=${encodedName}`;
     }
+}
+
+let currentPrinterId = null;
+
+async function updateMonitoringUI() {
+	
+	console.log(currentPrinterId);
+	
+    if (!currentPrinterId) return;
+
+    const toggle = document.getElementById("monitoring-toggle");
+
+    const res = await fetch(`./api/status/${currentPrinterId}`);
+    const data = await res.json();
+
+	console.log(data);
+	
+    const enabled = data.monitoringEnabled === true;
+
+    toggle.checked = enabled;
+}
+
+async function toggleMonitoring() {
+    if (!currentPrinterId) return;
+
+    const toggle = document.getElementById("monitoring-toggle");
+    const enable = toggle.checked;
+
+    const action = enable ? "start" : "stop";
+
+    await fetch(`./api/printer/${currentPrinterId}/monitoring/${action}`, {
+        method: "POST"
+    });
 }

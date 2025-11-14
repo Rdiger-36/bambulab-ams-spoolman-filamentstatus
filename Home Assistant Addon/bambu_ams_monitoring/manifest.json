@@ -1,0 +1,12 @@
+{
+  "domain": "bambu_ams_monitoring",
+  "name": "Bambu AMS Monitoring Integration",
+  "version": "1.0.0",
+  "documentation":"https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus",
+  "dependencies": [],
+  "requirements": [],
+  "icon": "mdi:printer-3d-nozzle",
+  "codeowners": ["@Rdiger-36"],
+  "config_flow": true
+}
+
