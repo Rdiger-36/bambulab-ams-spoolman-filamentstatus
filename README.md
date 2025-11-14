@@ -391,7 +391,7 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
-|Feature|(Semi-)Automatic hibernation if the printer is offline (via button, environment variable, or automatic system).|❌|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
+|Feature|Pause monitoring for selected printer. Set state via web ui, api Home Assistant Add On|✅|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
 
 If you find some bugs/issues/improvements let me know!
 
