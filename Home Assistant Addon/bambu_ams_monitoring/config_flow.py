@@ -3,30 +3,28 @@ import voluptuous as vol
 from homeassistant import config_entries
 import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_PRINTERS
+from .const import DOMAIN, CONF_BASE_URL, CONF_PRINTERS
 
 
 class AmsManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Step 1: enter host + port."""
+        """Step 1: enter base URL."""
         if user_input is None:
             return self.async_show_form(
                 step_id="user",
                 data_schema=vol.Schema({
-                    vol.Required(CONF_HOST): str,
-                    vol.Required(CONF_PORT, default=4000): int
+                    vol.Required(CONF_BASE_URL): str
                 })
             )
 
-        host = user_input[CONF_HOST]
-        port = user_input[CONF_PORT]
+        base_url = user_input[CONF_BASE_URL].rstrip("/")
 
-        # Test API
+        # Test API: /api/printers
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"http://{host}:{port}/api/printers") as resp:
+                async with session.get(f"{base_url}/api/printers") as resp:
                     if resp.status != 200:
                         raise Exception()
                     printers = await resp.json()
@@ -34,17 +32,16 @@ class AmsManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user",
                 data_schema=vol.Schema({
-                    vol.Required(CONF_HOST): str,
-                    vol.Required(CONF_PORT, default=4000): int
+                    vol.Required(CONF_BASE_URL): str
                 }),
                 errors={"base": "cannot_connect"},
             )
 
-        self._host = host
-        self._port = port
+        self._base_url = base_url
         self._printers_raw = printers
 
         return await self.async_step_select_printers()
+
 
     async def async_step_select_printers(self, user_input=None):
         """Step 2: printer selection."""
@@ -62,18 +59,14 @@ class AmsManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 })
             )
 
-        # Selected printer IDs
         selected = user_input[CONF_PRINTERS]
 
-        # Map ID → Name
         printer_map = {p["id"]: p["name"] for p in self._printers_raw}
 
-        # FINAL ENTRY CREATION
         return self.async_create_entry(
-            title=f"Bambu AMS Monitoring ({self._host}:{self._port})",
+            title=f"Bambu AMS Monitoring ({self._base_url})",
             data={
-                CONF_HOST: self._host,
-                CONF_PORT: self._port,
+                CONF_BASE_URL: self._base_url,
                 CONF_PRINTERS: [
                     {"id": pid, "name": printer_map[pid]}
                     for pid in selected

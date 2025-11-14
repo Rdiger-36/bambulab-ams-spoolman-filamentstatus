@@ -7,8 +7,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
 
     hass.data[DOMAIN][entry.entry_id] = {
-        "host": entry.data["host"],
-        "port": entry.data["port"],
+        "base_url": entry.data["base_url"],
         "printers": entry.data["printers"]
     }
 

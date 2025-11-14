@@ -1,35 +1,34 @@
 import aiohttp
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.entity import DeviceInfo
-from .const import DOMAIN
+from .const import DOMAIN, CONF_BASE_URL, CONF_PRINTERS
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up switches from a config entry."""
+    """Set up the AMS monitoring switches."""
     data = hass.data[DOMAIN][entry.entry_id]
 
-    host = data["host"]
-    port = data["port"]
-    printers = data["printers"]   # [{"id":..., "name":...}, ...]
+    base_url = data[CONF_BASE_URL]
+    printers = data[CONF_PRINTERS]   # [{id,name}, ...]
 
     entities = []
+
     for printer in printers:
         printer_id = printer["id"]
         printer_name = printer["name"]
 
         entities.append(
-            AmsPrinterSwitch(host, port, printer_id, printer_name)
+            AmsPrinterSwitch(base_url, printer_id, printer_name)
         )
 
     async_add_entities(entities, update_before_add=True)
 
 
 class AmsPrinterSwitch(SwitchEntity):
-    """Switch to toggle printer monitoring."""
+    """Entity representing the monitoring on/off switch for a Bambu printer."""
 
-    def __init__(self, host, port, printer_id, printer_name):
-        self._host = host
-        self._port = port
+    def __init__(self, base_url, printer_id, printer_name):
+        self._base_url = base_url.rstrip("/")
         self._printer_id = printer_id
         self._printer_name = printer_name
 
@@ -37,7 +36,6 @@ class AmsPrinterSwitch(SwitchEntity):
         self._attr_unique_id = f"ams_monitoring_{printer_id}"
         self._attr_should_poll = True
         self._attr_is_on = False
-        self._attr_icon = "mdi:printer-3d-nozzle"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, printer_id)},
@@ -47,30 +45,33 @@ class AmsPrinterSwitch(SwitchEntity):
         )
 
     async def async_turn_on(self, **kwargs):
-        """Enable monitoring."""
+        """Enable monitoring for this printer."""
+        url = f"{self._base_url}/api/printer/{self._printer_id}/monitoring/start"
+
         async with aiohttp.ClientSession() as session:
-            await session.post(
-                f"http://{self._host}:{self._port}/api/printer/{self._printer_id}/monitoring/start"
-            )
+            await session.post(url)
 
         self._attr_is_on = True
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs):
-        """Disable monitoring."""
+        """Disable monitoring for this printer."""
+        url = f"{self._base_url}/api/printer/{self._printer_id}/monitoring/stop"
+
         async with aiohttp.ClientSession() as session:
-            await session.post(
-                f"http://{self._host}:{self._port}/api/printer/{self._printer_id}/monitoring/stop"
-            )
+            await session.post(url)
 
         self._attr_is_on = False
         self.async_write_ha_state()
 
     async def async_update(self):
-        """Update monitoring state from backend."""
+        """Pull the monitoring status from the backend."""
+        url = f"{self._base_url}/api/status/{self._printer_id}"
+
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://{self._host}:{self._port}/api/status/{self._printer_id}"
-            ) as resp:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return
+
                 data = await resp.json()
                 self._attr_is_on = data.get("monitoringEnabled", False)
