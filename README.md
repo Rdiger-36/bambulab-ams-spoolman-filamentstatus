@@ -392,6 +392,10 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 | Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
 |------|-------------|------------------------|-----------------------------|-------------|
 |Feature|Pause monitoring for selected printer. Set state via WEB UI, API and Home Assistant Add On|✅|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
+|Enhancement|Also search for other fields in Spoolman for the Serial of the Spool|❌|❌|in developement [Issue-57](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/57)|
+|Enhancement|Better Filament detection for inconsistent data Bambu<>SpoolmanDB|❌|❌|in developement [Issue-56](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/56)|
+|Enhancement|Better handling for offline Printers, maybe via extended ENVs for better timings|❌|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
+
 
 If you find some bugs/issues/improvements let me know!
 
