@@ -10,14 +10,13 @@ This project is based on the idea of a script from [Diogo Resende](https://githu
 
 
 ## !! Attention !!
-This Solution only Works on Original Bambu Lab Spools with RFID tag and Bambu Lab Printers with connected AMS for the P and X Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
-However it can be used to Create Spools and Filaments on Spoolman and connect thier serials with it.
-
+This Solution only Works on Original Bambu Lab Spools with RFID tag and Bambu Lab Printers with connected AMS for the P, H and X-Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
+However it can be used to Create Spools and Filaments on Spoolman and connect their serials with it.
 
 
 ## Features
 
-- Real-time AMS filament status updates for all possible AMS on one printer (max. 4 AMS + 8 AMS HT)
+- Real-time AMS filament status updates for all possible AMS on one printer (12 AMS max --> max. 4 AMS Standard/2-Pro + 8 AMS HT)
 - Multiple Printer Support
 - Synchronizes spool usage with Spoolman
 - Lightweight Docker container for easy deployment
@@ -32,8 +31,6 @@ However it can be used to Create Spools and Filaments on Spoolman and connect th
 - Access to your Bambu Lab printers with its **serial number**, **access code**, and **IP address**
 - Turn on the "Update remaining capacity" option in Bambu Studio:
   ![Bildschirmfoto 2025-01-16 um 18 00 45](https://github.com/user-attachments/assets/fe6cf018-b211-4fd6-8931-1c895842d71b) ![Bildschirmfoto 2025-01-16 um 18 01 44](https://github.com/user-attachments/assets/23c60d83-e5ed-41af-9fbc-24cc9dd8ede7)
-
-
 
 ### Supported Architectures
 
@@ -50,13 +47,18 @@ The architectures supported by this image are:
 ### Supported Hardware
 
 The Hardware supported by this image are:
-
+#### Printer Models
 | Hardware | Supported |
 | :----: | :----: |
-| A Series | ⚠️ - no update status (read only) |
+| A Series with AMS Lite | ⚠️ - no update status (read only) |
+| A1 with AMS Standard/2-Pro | ❓ - not testet, please let me know if it works  |
+| H Series | ✅ |
 | P Series | ✅ |
 | X Series | ✅ |
-| H Series | ✅ |
+
+#### AMS Types
+| Hardware | Supported |
+| :----: | :----: |
 | AMS | ✅ |
 | AMS Lite | ⚠️ - no update status (read only) |
 | AMS 2 Pro | ✅ |
@@ -395,6 +397,7 @@ A: Please check your filament, not spool, in spoolman. The material must be the 
 |Enhancement|Also search for other fields in Spoolman for the Serial of the Spool|❌|❌|in developement [Issue-57](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/57)|
 |Enhancement|Better Filament detection for inconsistent data Bambu<>SpoolmanDB|❌|❌|in developement [Issue-56](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/56)|
 |Enhancement|Better handling for offline Printers, maybe via extended ENVs for better timings|❌|❌|in developement [Issue-54](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/54)|
+|Feature|Control settings via Web UI like printer profiles, server powermanagement (shutdown, restart) and other settings|❌|❌|in developement |
 
 
 If you find some bugs/issues/improvements let me know!
