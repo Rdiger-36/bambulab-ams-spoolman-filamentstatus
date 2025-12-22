@@ -564,7 +564,7 @@ function findMergeableSpool(amsSpool, allSpools) {
 
     // Check if any matching spool can be merged based on weight tolerance
     return matchingSpools.find(spoolmanSpool => {
-        const tag = (spoolmanSpool.extra?.tag || '').trim();
+        const tag = (spoolmanSpool.extra?.tag || '').replace(/"/g, ''); // Remove quotes from the "tag"
 
         const spoolRemainingWeight = (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
         const lowerTolerance = spoolRemainingWeight * 0.85;
@@ -575,6 +575,10 @@ function findMergeableSpool(amsSpool, allSpools) {
             spoolmanSpool.remaining_weight <= upperTolerance;
 
         const hasTag = tag && tag !== "" && tag !== '""';
+
+        // Skip spools that already have a tag assigned to a DIFFERENT spool
+        // This prevents merging multiple physical spools to the same Spoolman entry
+        if (hasTag && tag !== amsSpool.tray_uuid) return false;
 
         if (NEVER_MERGE_IF_TAG && hasTag) return false;
 
