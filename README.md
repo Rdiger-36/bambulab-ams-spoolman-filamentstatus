@@ -51,7 +51,7 @@ The Hardware supported by this image are:
 | Hardware | Supported |
 | :----: | :----: |
 | A Series with AMS Lite | ⚠️ - no update status (read only) |
-| A1 with AMS Standard/2-Pro | ❓ - not testet, please let me know if it works  |
+| A 1 with AMS Standard/2-Pro | ✅ |
 | H Series | ✅ |
 | P Series | ✅ |
 | X Series | ✅ |
