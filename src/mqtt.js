@@ -10,6 +10,7 @@ import {
     RECONNECT_INTERVAL,
     UPDATE_INTERVAL,
 } from "./config.js";
+import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
 import { sleep, formatDate, formatInterval, convertAMSandSlot } from "./utils.js";
 import {
@@ -39,7 +40,13 @@ function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
 }
 
 function broadcastSSE(data) {
-    const payload = `data: ${JSON.stringify(data)}\n\n`;
+    let payload;
+    try {
+        payload = `data: ${JSON.stringify(data)}\n\n`;
+    } catch (err) {
+        originalConsoleLog(`[ERROR] broadcastSSE: failed to serialize data - ${err.message}`);
+        return;
+    }
     state.clients.forEach(client => client.write(payload));
 }
 

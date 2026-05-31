@@ -57,26 +57,35 @@ const COLLAPSING_PREFIXES = [
     "Monitoring for following Printer stopped:",
 ];
 
+function safeStringify(args) {
+    return args.map(a => {
+        if (typeof a === "string") return a;
+        try { return JSON.stringify(a); } catch { return String(a); }
+    }).join(" ");
+}
+
 // Override console.log — signature: (device, logFilePath, ...args)
 console.log = (device, logFilePath, ...args) => {
-    const logMessage = `[LOG] ${formatDateLog(new Date())} - ${device} - ${args.join(" ")}`;
+    const logMessage = `[LOG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleLog(logMessage);
 
+    const path = logFilePath || serverLogFilePath;
     const messageText = args.map(a => String(a)).join(" ");
     const collapsePrefix = COLLAPSING_PREFIXES.find(p => messageText.startsWith(p));
     if (collapsePrefix) {
-        updateLastMatchingLine(logFilePath, collapsePrefix, logMessage);
+        updateLastMatchingLine(path, collapsePrefix, logMessage);
     } else {
-        enqueueAppend(logFilePath, logMessage + "\n");
+        enqueueAppend(path, logMessage + "\n");
     }
 };
 
 // Override console.error — signature: (device, logFilePath, ...args)
 console.error = (device, logFilePath, ...args) => {
-    const errorMessage = `[ERROR] ${formatDateLog(new Date())} - ${device} - ${args.join(" ")}`;
+    const errorMessage = `[ERROR] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleError(errorMessage);
 
-    fs.appendFile(logFilePath, errorMessage + "\n", err => {
+    const path = logFilePath || serverLogFilePath;
+    fs.appendFile(path, errorMessage + "\n", err => {
         if (err) originalConsoleLog(`[ERROR] Failed to write log: ${err.message}`);
     });
 };
@@ -84,10 +93,11 @@ console.error = (device, logFilePath, ...args) => {
 // Override console.debug — signature: (device, logFilePath, ...args)
 console.debug = (device, logFilePath, ...args) => {
     if (DEBUG === "true") {
-        const debugMessage = `[DEBUG] ${formatDateLog(new Date())} - ${device} - ${args.join(" ")}`;
+        const debugMessage = `[DEBUG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
         originalConsoleLog(debugMessage);
 
-        fs.appendFile(logFilePath, debugMessage + "\n", err => {
+        const path = logFilePath || serverLogFilePath;
+        fs.appendFile(path, debugMessage + "\n", err => {
             if (err) originalConsoleLog(`[ERROR] Failed to write log: ${err.message}`);
         });
     }
