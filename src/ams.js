@@ -111,12 +111,16 @@ export function findMatchingInternalFilament(externalFilament, internalFilaments
 }
 
 export function findMergeableSpool(amsSpool, allSpools) {
-    const amsColors = (amsSpool.cols || []).map(c => (c || "").slice(0, 6).toLowerCase());
+    // Use tray_color as fallback when cols is missing or empty
+    const rawColors = amsSpool.cols?.length ? amsSpool.cols : (amsSpool.tray_color ? [amsSpool.tray_color] : []);
+    const amsColors = rawColors.map(c => (c || "").slice(0, 6).toLowerCase());
 
     const matchingSpools = allSpools.filter(spoolmanSpool => {
         const materialA = (spoolmanSpool.filament?.material || "").toLowerCase();
         const materialB = (amsSpool.tray_sub_brands || "").toLowerCase();
-        if (materialA !== materialB) return false;
+        // Allow partial match to handle naming differences (e.g. "PLA" vs "PLA Basic")
+        const materialMatches = materialA === materialB || materialA.includes(materialB) || materialB.includes(materialA);
+        if (!materialMatches) return false;
 
         if (amsColors.length > 1) {
             const multiColorHexes = spoolmanSpool.filament?.multi_color_hexes
@@ -141,11 +145,13 @@ export function findMergeableSpool(amsSpool, allSpools) {
 
         if (NEVER_MERGE_IF_TAG && hasTag) return false;
 
+        const neverUsed = spoolmanSpool.used_weight === 0 || spoolmanSpool.used_weight == null;
+
         return (
             (spoolmanSpool.remaining_weight === 0 && hasTag) ||
             spoolmanSpool.remaining_weight === 0 ||
             weightMatches ||
-            spoolmanSpool.used_weight === 0
+            neverUsed
         );
     });
 }
