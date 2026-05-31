@@ -46,7 +46,7 @@ export function registerRoutes(app, printers) {
     });
 
     app.get("/api/printers", (req, res) => {
-        res.json(printers);
+        res.json(printers.map(({ id, name }) => ({ id, name })));
     });
 
     app.post("/api/mergeSpool", async (req, res) => {
