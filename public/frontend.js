@@ -533,7 +533,7 @@ document.addEventListener("DOMContentLoaded", () => {
             footer.innerHTML = `
                 <div class="container">
                     <div class="content">
-                        2025 - v.${data.VERSION} | 
+                        2026 - v.${data.VERSION} | 
                         <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">GitHub Repository</a> - 
                         Created by 
                         <a href="https://github.com/Rdiger-36" target="_blank">Rdiger-36</a> |

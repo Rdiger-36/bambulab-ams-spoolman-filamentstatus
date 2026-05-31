@@ -10,7 +10,7 @@ export const __rootDir = path.dirname(path.dirname(__filename));
 export const serverLogFilePath = path.join(__rootDir, "logs", "server.log");
 export const configPath = path.resolve(__rootDir, "printers", "printers.json");
 
-export const version = "1.1.1-dev";
+export const version = "1.1.2-dev";
 export const PORT = 4000;
 
 export const PRINTER_ID = process.env.PRINTER_ID;
