@@ -153,6 +153,15 @@ export function registerRoutes(app, printers) {
 
         if (printer.monitoringEnabled) {
             printer.monitoringEnabled = false;
+
+            // Actively close the existing MQTT connection instead of waiting for it to drop
+            if (printer.mqttClient) {
+                printer.mqttClient.end();
+                printer.mqttClient = null;
+            }
+            printer.mqttRunning = false;
+            printer.mqttStatus = "Disabled";
+
             state.clients.forEach(client => {
                 client.write(`data: ${JSON.stringify({ type: "monitoring_update", printer: printer.id, enabled: false })}\n\n`);
             });
@@ -175,17 +184,13 @@ export function registerRoutes(app, printers) {
                 client.write(`data: ${JSON.stringify({ type: "monitoring_update", printer: printer.id, enabled: true })}\n\n`);
             });
             res.json({ ok: true, printer: printer.id, monitoringEnabled: true });
-            console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}`);
 
-            if (MAX_RETRIES > 0) {
-                console.log(printer.name, printer.logFilePath, "Monitoring re-enabled → resetting state & restarting MQTT");
-                printer.reconnectAttempts = 0;
-                printer.mqttRunning = false;
-                printer.mqttStatus = "Reconnecting";
-                setupMqtt(printer);
-            } else {
-                console.log(printer.name, printer.logFilePath, "Monitoring re-enabled (MAX_RETRIES = 0 → unlimited). Nothing to restart.");
-            }
+            // Always restart MQTT immediately, regardless of MAX_RETRIES setting
+            printer.reconnectAttempts = 0;
+            printer.mqttRunning = false;
+            printer.mqttStatus = "Reconnecting";
+            console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}, restarting MQTT...`);
+            setupMqtt(printer);
         }
     });
 }

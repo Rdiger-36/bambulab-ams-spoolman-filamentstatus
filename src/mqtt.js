@@ -385,6 +385,7 @@ export async function setupMqtt(printer) {
 
         printer.mqttStatus = "Connected";
         printer.mqttRunning = true;
+        printer.mqttClient = client;
         printer.reconnectAttempts = 0;
         printer.isReconnecting = false;
 
@@ -398,13 +399,12 @@ export async function setupMqtt(printer) {
         client.on("close", async () => {
             printer.mqttStatus = "Disconnected";
             printer.mqttRunning = false;
+            printer.mqttClient = null;
 
             if (printer.monitoringEnabled) {
                 console.log(printer.name, printer.logFilePath, ` Retrying connection in ${formatInterval(OFFLINE_CHECK_INTERVAL)}...`);
                 await sleep(OFFLINE_CHECK_INTERVAL);
                 setupMqtt(printer);
-            } else {
-                client.end();
             }
         });
 
