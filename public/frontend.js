@@ -139,9 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const status = await statusResponse.json();
             const spools = await spoolsResponse.json();
-			
-			currentPrinterId = printerId;
-			await updateMonitoringUI();
+
+            currentPrinterId = printerId;
+            document.getElementById("monitoring-toggle").checked = status.monitoringEnabled === true;
 
             updateStatus(status);
             updateSpools(spools);
@@ -452,7 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Send the selected action to the backend
-    function performAction(button, amsSpool) {
+    async function performAction(button, amsSpool) {
         const endpointMap = {
             "Create Spool": "./api/createSpool",
             "Merge Spool": "./api/mergeSpool",
@@ -462,16 +462,49 @@ document.addEventListener("DOMContentLoaded", () => {
         const endpoint = endpointMap[button.textContent];
         if (!endpoint) return;
 
-        fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(amsSpool)
-        });
-
-        button.textContent = "No actions available";
+        const originalText = button.textContent;
         button.disabled = true;
+        button.textContent = "Sending...";
 
-        alert("Action successfully sent to the backend. After the next MQTT Event, the UI will be updated. If not, please check your logs!");
+        try {
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ printerId: currentPrinterId, amsId: amsSpool.amsId })
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                showNotification(`Error: ${err.error || "Action failed"}`, "error");
+                button.textContent = originalText;
+                button.disabled = false;
+                return;
+            }
+
+            button.textContent = "No actions available";
+            showNotification("Action sent successfully. UI updates after next MQTT event.", "success");
+        } catch (err) {
+            console.error("Action failed:", err);
+            showNotification("Request failed. Please check your connection.", "error");
+            button.textContent = originalText;
+            button.disabled = false;
+        }
+    }
+
+    function showNotification(message, type = "success") {
+        let note = document.getElementById("action-notification");
+        if (!note) {
+            note = document.createElement("div");
+            note.id = "action-notification";
+            note.style.cssText = "position:fixed;bottom:1.5rem;right:1.5rem;padding:0.75rem 1.25rem;border-radius:6px;font-size:0.9rem;z-index:9999;transition:opacity 0.4s";
+            document.body.appendChild(note);
+        }
+        note.textContent = message;
+        note.style.background = type === "error" ? "#c0392b" : "#27ae60";
+        note.style.color = "#fff";
+        note.style.opacity = "1";
+        clearTimeout(note._timeout);
+        note._timeout = setTimeout(() => { note.style.opacity = "0"; }, 3500);
     }
 
     // Update various status elements in the UI
@@ -576,23 +609,6 @@ function redirectToLogs(type) {
 
 let currentPrinterId = null;
 
-async function updateMonitoringUI() {
-	
-	console.log(currentPrinterId);
-	
-    if (!currentPrinterId) return;
-
-    const toggle = document.getElementById("monitoring-toggle");
-
-    const res = await fetch(`./api/status/${currentPrinterId}`);
-    const data = await res.json();
-
-	console.log(data);
-	
-    const enabled = data.monitoringEnabled === true;
-
-    toggle.checked = enabled;
-}
 
 async function toggleMonitoring() {
     if (!currentPrinterId) return;

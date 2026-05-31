@@ -1,0 +1,16 @@
+node_modules
+Dockerfile
+.DS_Store
+.dockerignore
+.env
+.project
+.settings
+.gitignore
+.git
+.github
+logs/
+printers/
+LICENSE
+Home\ Assistant\ Addon/
+CHANGELOG.md
+README.md

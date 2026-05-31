@@ -1,9 +1,8 @@
-node_modules
 .DS_Store
-.log
 .env
 .settings
 .project
-printers
 logs
+node_modules
+printers
 package-lock.json
