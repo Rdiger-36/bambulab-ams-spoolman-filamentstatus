@@ -31,6 +31,7 @@ export const MAX_RETRIES = process.env.MAX_RETRIES
     ? Math.max(parseInt(process.env.MAX_RETRIES, 10), 0)
     : 0;
 export const NEVER_MERGE_IF_TAG = (process.env.NEVER_MERGE_IF_TAG || "false") === "true";
+export const SET_LOCATION = (process.env.SET_LOCATION || "false") === "true";
 export const DEBUG = process.env.DEBUG || "false";
 export const MODE = process.env.MODE || "manual";
 export const RECONNECT_INTERVAL = 60000;

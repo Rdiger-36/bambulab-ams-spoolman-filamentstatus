@@ -9,6 +9,7 @@ import {
     OFFLINE_CHECK_INTERVAL,
     RECONNECT_INTERVAL,
     UPDATE_INTERVAL,
+    SET_LOCATION,
 } from "./config.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
@@ -21,6 +22,7 @@ import {
     createFilamentAndSpool,
     mergeSpool,
     patchSpoolWeight,
+    patchSpoolLocation,
 } from "./spoolman.js";
 import {
     processData,
@@ -166,12 +168,27 @@ async function handleMqttMessage(printer, topic, message) {
     printer.blockMqttUpdates = false;
 }
 
+async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevByAmsId) {
+    if (!SET_LOCATION) return;
+    const prevSpoolId = prevByAmsId[amsId]?.existingSpool?.id ?? null;
+    if (prevSpoolId && prevSpoolId !== currentSpoolId) {
+        try {
+            await patchSpoolLocation(prevSpoolId, "");
+            console.log(printer.name, printer.logFilePath, `    Cleared location for Spool-ID ${prevSpoolId} (removed from ${amsId})`);
+        } catch (err) {
+            console.error(printer.name, printer.logFilePath, `    Failed to clear location for Spool-ID ${prevSpoolId}:`, err.message);
+        }
+    }
+}
+
 async function processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime) {
+    const amsId = await convertAMSandSlot(ams.id, slot.id);
     const validSlot = Object.keys(slot).length > 6;
 
     if (!validSlot) {
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots");
-        const newUiSpool = buildEmptySpool(printer, await convertAMSandSlot(ams.id, slot.id), slot);
+        const newUiSpool = buildEmptySpool(printer, amsId, slot);
+        await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
         pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
         return;
     }
@@ -179,10 +196,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
         slot.tray_sub_brands = slot.tray_type;
-        const newUiSpool = buildThirdPartySpool(printer, await convertAMSandSlot(ams.id, slot.id), slot);
+        const newUiSpool = buildThirdPartySpool(printer, amsId, slot);
+        await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
         if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
             broadcastSlotUpdate(printer.id, newUiSpool);
-            console.log(printer.name, printer.logFilePath, ` [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
+            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
         }
         printer.spoolData.push(newUiSpool);
         return;
@@ -209,7 +227,6 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 found = true;
 
                 try {
-                    const amsId = await convertAMSandSlot(ams.id, slot.id);
                     const prevSlot = prevByAmsId[amsId]?.slot;
                     const prevRemain = prevSlot ? Math.round(prevSlot.remain) : null;
                     const currRemain = correctRemainInt(slot.remain, slot.tray_weight);
@@ -227,13 +244,14 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
                 slot.remain = correctRemainInt(slot.remain, slot.tray_weight);
                 const remainingWeight = Math.round((slot.remain / 100) * slot.tray_weight);
+                const newLocation = SET_LOCATION ? `${printer.name} - ${amsId}` : null;
 
                 console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${SPOOLMAN_URL}/api/v1/spool/${spool.id}`);
-                console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime }));
+                console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime, ...(newLocation && { location: newLocation }) }));
 
                 try {
-                    await patchSpoolWeight(spool.id, remainingWeight, currentTime);
-                    console.log(printer.name, printer.logFilePath, ` [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+                    await patchSpoolWeight(spool.id, remainingWeight, currentTime, newLocation);
+                    console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
                     console.log(printer.name, printer.logFilePath, `    Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
                 } catch (err) {
                     console.error(printer.name, printer.logFilePath, "   #####");
@@ -251,7 +269,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
     if (!found) {
         console.debug(printer.name, printer.logFilePath, " Connected Spool not found, process with merging and creation logic");
-        console.log(printer.name, printer.logFilePath, ` [${await convertAMSandSlot(ams.id, slot.id)}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
 
         mergeableSpool = spools.length !== 0 ? findMergeableSpool(slot, spools) : null;
 
@@ -263,7 +281,6 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                     console.log(printer.name, printer.logFilePath, "    Filament exists, create a Spool with this Data");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
                     if (automatic) {
-                        const amsId = await convertAMSandSlot(ams.id, slot.id);
                         const prev = prevByAmsId[amsId];
                         const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Create Spool", enableButton, slotState: "", error };
                         if (!prev || hasSpoolUiChanged(preview, prev)) {
@@ -275,7 +292,6 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                     console.log(printer.name, printer.logFilePath, "    Filament does not exist. Create a new Filament");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingExternalFilament.material}, Color: ${matchingExternalFilament.name}`);
                     if (automatic) {
-                        const amsId = await convertAMSandSlot(ams.id, slot.id);
                         const prev = prevByAmsId[amsId];
                         const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Create Filament & Spool", enableButton, slotState: "", error };
                         if (!prev || hasSpoolUiChanged(preview, prev)) {
@@ -291,7 +307,6 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         } else {
             console.log(printer.name, printer.logFilePath, `    Found mergeable Spool => Spoolman Spool ID: ${mergeableSpool.id}, Material: ${mergeableSpool.filament.material}, Color: ${mergeableSpool.filament.name}`);
             if (automatic) {
-                const amsId = await convertAMSandSlot(ams.id, slot.id);
                 const prev = prevByAmsId[amsId];
                 const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Merge Spool", enableButton, slotState: "", error };
                 if (!prev || hasSpoolUiChanged(preview, prev)) {
@@ -308,8 +323,10 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight);
     const correctedWeight = Math.round((correctedRemain / 100) * slot.tray_weight);
 
+    await clearLocationIfSpoolChanged(printer, amsId, existingSpool?.id ?? null, prevByAmsId);
+
     const newUiSpool = {
-        amsId: await convertAMSandSlot(ams.id, slot.id),
+        amsId,
         slot,
         mergeableSpool,
         matchingInternalFilament,

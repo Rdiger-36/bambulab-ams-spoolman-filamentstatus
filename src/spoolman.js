@@ -235,8 +235,12 @@ export async function mergeSpool(spoolData) {
     }
 }
 
-export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed) {
-    return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, {
-        json: { remaining_weight: remainingWeight, last_used: lastUsed },
-    });
+export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed, location = null) {
+    const payload = { remaining_weight: remainingWeight, last_used: lastUsed };
+    if (location !== null) payload.location = location;
+    return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: payload });
+}
+
+export async function patchSpoolLocation(spoolId, location) {
+    return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { location } });
 }
