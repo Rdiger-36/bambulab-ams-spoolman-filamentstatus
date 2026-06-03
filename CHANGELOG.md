@@ -1,5 +1,9 @@
 -----------------------------------------------------------------------------------------------
 Version 1.2.0-dev
+   - New Features:
+      - New ENV SET_LOCATION: automatically syncs the spool location in Spoolman with the current AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected
+         - Disabled by default, enable with SET_LOCATION=true
+
    - Bugfixes:
       - Fix: Empty AMS slots reported by the printer with N/A values (tray_uuid, tray_sub_brands, tray_color) and tray_weight 0 were incorrectly displayed as "Loaded (3rd party)" instead of "Empty"
          - The slot detection now distinguishes between truly empty slots (tray_weight = 0 + N/A values) and actual 3rd party spools (N/A values but with a valid weight)
