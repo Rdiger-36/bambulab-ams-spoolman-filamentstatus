@@ -193,6 +193,14 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         return;
     }
 
+    if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0")) {
+        console.debug(printer.name, printer.logFilePath, "No Data found in Slots (empty slot with N/A values)");
+        const newUiSpool = buildEmptySpool(printer, amsId, slot);
+        await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
+        pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+        return;
+    }
+
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
         slot.tray_sub_brands = slot.tray_type;

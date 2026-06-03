@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Version 1.2.0-dev
+   - Bugfixes:
+      - Fix: Empty AMS slots reported by the printer with N/A values (tray_uuid, tray_sub_brands, tray_color) and tray_weight 0 were incorrectly displayed as "Loaded (3rd party)" instead of "Empty"
+         - The slot detection now distinguishes between truly empty slots (tray_weight = 0 + N/A values) and actual 3rd party spools (N/A values but with a valid weight)
+-----------------------------------------------------------------------------------------------
 Version 1.1.1-dev
    - Changes:
       - Better handling for multiple AMS-HT 
