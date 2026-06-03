@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Version 1.2.0-dev
+Version 1.2.0
    - New Features:
       - New ENV SET_LOCATION: automatically syncs the spool location in Spoolman with the current AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected
          - Disabled by default, enable with SET_LOCATION=true
