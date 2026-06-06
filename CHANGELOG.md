@@ -1,4 +1,10 @@
 -----------------------------------------------------------------------------------------------
+Version 1.2.1
+   - Bugfixes:
+      - Fix: 3rd party spools (no RFID chip) with tray_weight=0 were incorrectly displayed as "Empty" instead of "Loaded (3rd party)"
+         - 3rd party spools have no RFID chip and therefore always report tray_weight=0, which caused them to match the empty-slot detection introduced in v1.2.0
+         - The empty-slot detection now additionally checks that tray_type is empty, which correctly distinguishes truly empty slots from loaded 3rd party spools
+-----------------------------------------------------------------------------------------------
 Version 1.2.0
    - New Features:
       - New ENV SET_LOCATION: automatically syncs the spool location in Spoolman with the current AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected
