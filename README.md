@@ -1,12 +1,30 @@
-# Bambulab AMS Spoolman Filament Status
+<h1 align="center">Bambulab AMS Spoolman Filament Status</h1>
 
-This project integrates Bambu Lab Printers with one or multiple AMS with Spoolman to synchronize filament spool usage. It listens for MQTT updates from the printers and manages spools on Spoolman.
+<p align="center">
+  Synchronize your Bambu Lab AMS filament spools with Spoolman — automatically.<br/>
+  Listens for MQTT updates from your printers and keeps spool usage in sync in real time.
+</p>
 
-Only original BambuLab Spools are supported!
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=version&color=blue" alt="version" />
+  <img src="https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20armhf-lightgrey?style=flat-square" alt="platform" />
+  <img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" alt="license" />
+  <img src="https://img.shields.io/badge/maintained-yes-brightgreen?style=flat-square" alt="maintained" />
+</p>
 
-Please note that these data represent rough estimates communicated by the AMS!
+<p align="center">
+  <img src="https://img.shields.io/github/stars/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&color=yellow" alt="stars" />
+  <img src="https://img.shields.io/github/forks/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&color=orange" alt="forks" />
+  <img src="https://img.shields.io/github/issues/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square" alt="open issues" />
+  <img src="https://img.shields.io/github/downloads/Rdiger-36/bambulab-ams-spoolman-filamentstatus/total?style=flat-square&label=downloads&color=blue" alt="total downloads" />
+  <img src="https://img.shields.io/github/last-commit/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=last%20commit" alt="last commit" />
+</p>
 
-This project is based on the idea of a script from [Diogo Resende](https://github.com/dresende) posted in this issue https://github.com/Donkie/Spoolman/issues/217 
+---
+
+This project is based on the idea of a script from [Diogo Resende](https://github.com/dresende) posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
 
 
 ## !! Attention !!
