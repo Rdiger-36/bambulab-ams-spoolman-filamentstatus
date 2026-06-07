@@ -2,20 +2,9 @@ name: Build & Publish Docker Image
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      version_tag:
-        description: 'Version tag (e.g. 1.1.2-dev)'
-        required: false
-        default: '1.1.2-dev'
-      channel_tag:
-        description: 'Channel tag (e.g. dev, latest)'
-        required: false
-        default: 'dev'
 
 env:
   REGISTRY: ghcr.io
@@ -52,20 +41,16 @@ jobs:
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           IMAGE="${IMAGE,,}"  # lowercase
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version_tag }}"
-            CHANNEL="${{ github.event.inputs.channel_tag }}"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            CHANNEL="latest"
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          if [[ "$VERSION" == *-dev ]]; then
+            TAGS="${IMAGE}:${VERSION},${IMAGE}:dev"
           else
-            VERSION="dev"
-            CHANNEL="dev"
+            TAGS="${IMAGE}:${VERSION},${IMAGE}:latest"
           fi
 
-          echo "tags=${IMAGE}:${VERSION},${IMAGE}:${CHANNEL}" >> $GITHUB_OUTPUT
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
@@ -80,5 +65,6 @@ jobs:
             org.opencontainers.image.version=${{ steps.tags.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
