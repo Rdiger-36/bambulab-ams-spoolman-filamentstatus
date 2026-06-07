@@ -20,12 +20,7 @@ jobs:
         id: stats
         run: |
           COUNT=$(curl -s "https://github.com/Rdiger-36?tab=packages&repo_name=bambulab-ams-spoolman-filamentstatus" | \
-            python3 -c "
-import sys, re
-html = sys.stdin.read()
-m = re.search(r'octicon-download[^>]*>.*?</svg>\s*(\S+)\s*</span>', html, re.DOTALL)
-print(m.group(1) if m else '0')
-")
+            python3 -c "import sys,re; m=re.search(r'octicon-download[^>]*>.*?</svg>\s*(\S+)\s*</span>',sys.stdin.read(),re.DOTALL); print(m.group(1) if m else '0')")
           echo "count=$COUNT" >> $GITHUB_OUTPUT
 
       - name: Write badge JSON
@@ -40,4 +35,4 @@ print(m.group(1) if m else '0')
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/badges/downloads.json
           git diff --staged --quiet || git commit -m "chore: update package download stats"
-          git push
+          git push origin HEAD:main
