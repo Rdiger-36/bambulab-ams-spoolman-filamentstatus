@@ -1,0 +1,63 @@
+name: Update Package Stats
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch package download count
+        id: stats
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESPONSE=$(gh api graphql -f query='
+            {
+              repository(owner: "Rdiger-36", name: "bambulab-ams-spoolman-filamentstatus") {
+                packages(first: 1) {
+                  nodes {
+                    statistics {
+                      downloadsTotalCount
+                    }
+                  }
+                }
+              }
+            }
+          ')
+
+          COUNT=$(echo "$RESPONSE" | jq -r '.data.repository.packages.nodes[0].statistics.downloadsTotalCount // 0')
+
+          if [ "$COUNT" -ge 1000000 ]; then
+            FORMATTED="$(awk "BEGIN {printf \"%.1f\", $COUNT/1000000}")M"
+          elif [ "$COUNT" -ge 1000 ]; then
+            FORMATTED="$(awk "BEGIN {printf \"%d\", $COUNT/1000}")k"
+          else
+            FORMATTED="$COUNT"
+          fi
+
+          echo "formatted=$FORMATTED" >> $GITHUB_OUTPUT
+
+      - name: Write badge JSON
+        run: |
+          mkdir -p .github/badges
+          printf '{"schemaVersion":1,"label":"pulls","message":"%s","color":"blue"}\n' \
+            "${{ steps.stats.outputs.formatted }}" > .github/badges/downloads.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/downloads.json
+          git diff --staged --quiet || git commit -m "chore: update package download stats"
+          git push
