@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: write
-  packages: read
 
 jobs:
   update-stats:
@@ -19,40 +18,21 @@ jobs:
 
       - name: Fetch package download count
         id: stats
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RESPONSE=$(gh api graphql -f query='
-            {
-              repository(owner: "Rdiger-36", name: "bambulab-ams-spoolman-filamentstatus") {
-                packages(first: 1) {
-                  nodes {
-                    statistics {
-                      downloadsTotalCount
-                    }
-                  }
-                }
-              }
-            }
-          ')
-
-          COUNT=$(echo "$RESPONSE" | jq -r '.data.repository.packages.nodes[0].statistics.downloadsTotalCount // 0')
-
-          if [ "$COUNT" -ge 1000000 ]; then
-            FORMATTED="$(awk "BEGIN {printf \"%.1f\", $COUNT/1000000}")M"
-          elif [ "$COUNT" -ge 1000 ]; then
-            FORMATTED="$(awk "BEGIN {printf \"%d\", $COUNT/1000}")k"
-          else
-            FORMATTED="$COUNT"
-          fi
-
-          echo "formatted=$FORMATTED" >> $GITHUB_OUTPUT
+          COUNT=$(curl -s "https://github.com/Rdiger-36?tab=packages&repo_name=bambulab-ams-spoolman-filamentstatus" | \
+            python3 -c "
+import sys, re
+html = sys.stdin.read()
+m = re.search(r'octicon-download[^>]*>.*?</svg>\s*(\S+)\s*</span>', html, re.DOTALL)
+print(m.group(1) if m else '0')
+")
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
 
       - name: Write badge JSON
         run: |
           mkdir -p .github/badges
           printf '{"schemaVersion":1,"label":"pulls","message":"%s","color":"blue"}\n' \
-            "${{ steps.stats.outputs.formatted }}" > .github/badges/downloads.json
+            "${{ steps.stats.outputs.count }}" > .github/badges/downloads.json
 
       - name: Commit and push
         run: |
