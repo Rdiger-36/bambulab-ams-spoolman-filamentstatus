@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/github/v/release/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=version&color=blue" alt="version" />
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20armhf-lightgrey?style=flat-square" alt="platform" />
+  <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20armhf-lightgrey?style=flat-square&color=orange" alt="platform" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" alt="license" />
   <img src="https://img.shields.io/badge/maintained-yes-brightgreen?style=flat-square" alt="maintained" />
 </p>
