@@ -28,10 +28,20 @@ This project is based on the idea of a script from [Diogo Resende](https://githu
 
 
 ## !! Attention !!
-### Note: Developing a G-code method to accurately measure consumption and support for third-party spools! ###
 This Solution only Works on Original Bambu Lab Spools with RFID tag and Bambu Lab Printers with connected AMS for the P, H and X-Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
 However it can be used to Create Spools and Filaments on Spoolman and connect their serials with it.
 
+### Note: Developing a G-code method to accurately measure consumption and support for third-party spools! ###
+<table>
+<tr>
+<td align="center"><b>MQTT Mode (Old)</b></td>
+<td align="center"><b>G-code Mode (New!)</b></td>
+</tr>
+<tr>
+<td><img src="https://github.com/user-attachments/assets/1498ea96-2bf5-49a9-a98e-b50776341efa" width="300"/></td>
+<td><img src="https://github.com/user-attachments/assets/35fd8251-5577-41e3-8510-ed41cf8a35b3" width="300"/></td>
+</tr>
+</table>
 
 ## Features
 
