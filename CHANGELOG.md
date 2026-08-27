@@ -1,4 +1,28 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0
+   - New Features:
+      - Filament consumption is now tracked from the sliced G-code instead of the AMS RFID remain percentage
+         - While a print runs, the sliced .gcode.3mf is downloaded from the printer via FTPS (port 990, same access code as MQTT) and the needed grams per filament are read from Metadata/slice_info.config
+         - On FINISH the full amount is booked onto the matching Spoolman spool; on FAILED/CANCEL the amount is scaled to the layers that were actually printed
+         - This works for 3rd party spools without an RFID chip as well, which the old remain-percentage tracking could never cover
+      - Manual spool assignment: an AMS slot can be linked to a Spoolman spool from the Web UI
+         - Required for 3rd party spools, which carry no RFID tag and therefore no extra.tag link in Spoolman
+         - Also resolves two loaded spools that are identical in material and color, which the automatic tag match cannot tell apart
+         - The assignment is dropped automatically as soon as a different filament is detected in that slot
+         - Stored in printers/mappings.json
+      - New ENV LEGACY_MODE: keeps the previous behaviour of writing the AMS RFID remain percentage to Spoolman (default: "false")
+      - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
+
+   - Bugfixes:
+      - Fix: support and accessory material (tray_type suffix "-S", e.g. "PLA-S") had its remaining percentage rescaled to a 1kg basis, although it is already reported relative to its real spool size
+      - Fix: spools were compared by list position instead of by ID, so a reordered Spoolman response looked like a content change on every update
+      - Fix: the AMS remain value was overwritten in place during processing, which desynced the change detection for every spool that does not weigh 1000g and made the AMS data look changed on every single message
+      - Fix: MQTT reconnects were scheduled both by the connection handler and the monitor loop, which made the actual retry cadence unpredictable
+      - Fix: after creating or merging a spool the Web UI stayed on the pending action until some unrelated change triggered a reprocess
+      - Fix: action buttons were no longer disabled while Spoolman is unreachable
+      - Spoolman spool and filament lists are no longer refetched for every AMS slot, only after a slot actually created or merged something
+-----------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------
 Version 1.2.1
    - Bugfixes:
       - Fix: 3rd party spools (no RFID chip) with tray_weight=0 were incorrectly displayed as "Empty" instead of "Loaded (3rd party)"

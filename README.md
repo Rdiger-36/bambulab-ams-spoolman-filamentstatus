@@ -28,8 +28,11 @@ This project is based on the idea of a script from [Diogo Resende](https://githu
 
 
 ## !! Attention !!
-This Solution only Works on Original Bambu Lab Spools with RFID tag and Bambu Lab Printers with connected AMS for the P, H and X-Series. The AMS Lite is not supported on updating Spools on Spoolman because it only shows 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)).
-However it can be used to Create Spools and Filaments on Spoolman and connect their serials with it.
+This Solution works with Bambu Lab Printers with a connected AMS for the P, H and X-Series.
+
+Spool weight is tracked from the sliced G-code by default, which works for 3rd party spools without an RFID tag as well (see [Tracking modes](#tracking-modes)). Automatically creating and merging Spools and Filaments in Spoolman still relies on the RFID tag of original Bambu Lab spools; a 3rd party spool is linked to a Spoolman spool manually in the Web UI instead.
+
+In the legacy tracking mode (`LEGACY_MODE=true`) the AMS Lite is not supported for updating Spools on Spoolman, because it only reports 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)). It can still be used to Create Spools and Filaments on Spoolman and connect their serials with it.
 
 
 ## Features
@@ -37,6 +40,8 @@ However it can be used to Create Spools and Filaments on Spoolman and connect th
 - Real-time AMS filament status updates for all possible AMS on one printer (12 AMS max --> max. 4 AMS Standard/2-Pro + 8 AMS HT)
 - Multiple Printer Support
 - Synchronizes spool usage with Spoolman
+- Tracks filament consumption from the sliced G-code, so 3rd party spools without an RFID tag are covered too
+- Manually assign a Spoolman spool to an AMS slot for spools the printer cannot identify by itself
 - Lightweight Docker container for easy deployment
 - Web UI for manually merge or create Spools and Filaments with collected data
 - Automatic Mode for automatically merge or create Spools and Filaments with collected data
@@ -163,6 +168,7 @@ The Hardware supported by this image are:
 | `MODE`               | Set the mode of the service: "automatic" or "manual" (default: manual) |
 | `NEVER_MERGE_IF_TAG` | Never merge spools if a tag is already set, even if the one is empty (default: "false") |
 | `SET_LOCATION`       | Automatically sync the spool location in Spoolman with the AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected (default: "false") |
+| `LEGACY_MODE`        | Track spool weight from the AMS RFID remain % instead of the sliced G-code: "true" or "false" (default: "false"). See [Tracking modes](#tracking-modes) |
 | `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (default: false)|
 
 ## Usage
@@ -232,6 +238,22 @@ The collected data can be used for:
     - If a spool is detected in the AMS that has no spool in Spoolman, it can be created by using an existing registered filament in Spoolman. In this case, the spool will be created and the tag will also be set.
 - Creating Filaments and Spools:
     - If a spool is detected in the AMS that, has no spool in Spoolman and has no matching registered filament, then it all can be created by importing a external filament from the SpoolmanDB that matches to the loaded spool in the AMS. After the filament is created an registered, the spool in Spoolman will be created and the tag will also be set.
+
+### Tracking modes
+
+There are two ways the remaining weight of a spool can be tracked.
+
+**G-code tracking (default)**
+
+While a print is running, the service downloads the sliced `.gcode.3mf` from the printer via FTPS and reads how many grams of each filament the print needs. When the print reaches a final state, that amount is booked onto the matching Spoolman spool. A cancelled or failed print is booked proportionally to the layers that were actually printed.
+
+Because the numbers come from the slicer and not from the RFID chip, this also works for 3rd party spools. Those spools carry no chip, so the printer cannot say which spool is loaded — assign it to a Spoolman spool once in the Web UI and the consumption of that slot is booked onto it. The assignment is dropped automatically as soon as a different filament is detected in the slot. The same assignment resolves the rare case of two loaded spools that are identical in material and color, which the RFID tag alone cannot tell apart.
+
+Requirements: LAN access to the printer on port 990 (FTPS) with the printer's access code, which is the same code already used for MQTT.
+
+**Legacy tracking (`LEGACY_MODE=true`)**
+
+The behaviour of earlier versions: the remaining weight is read from the AMS RFID chip's remain percentage on every MQTT update and written to Spoolman. Original Bambu Lab spools only, and the AMS Lite is not supported (see [Attention](#-attention-)).
 
 ### Mode:
 There are two modes you can run this container: automatic and manual
