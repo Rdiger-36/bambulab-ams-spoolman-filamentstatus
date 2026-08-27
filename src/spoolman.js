@@ -166,32 +166,47 @@ export async function createSpool(spoolData) {
     }
 }
 
+/**
+ * Builds the Spoolman filament payload from the matched SpoolmanDB entry.
+ *
+ * Every value is taken from what was actually read rather than assumed: weight
+ * and spool_weight used to be hardcoded to 1000/250, which silently mislabelled
+ * anything not sold on a 1 kg spool — Support for PLA, for instance, only
+ * exists as a 500 g entry in SpoolmanDB.
+ *
+ * The filament describes the product, so its weight comes from SpoolmanDB. The
+ * weight of the physical spool is the AMS reading and belongs on the spool
+ * (initial_weight), where it may legitimately differ.
+ *
+ * spool_type, finish, pattern, translucent and glow are not part of Spoolman's
+ * FilamentParameters (verified against the 0.26.1 OpenAPI schema) and were
+ * discarded on arrival, so they are no longer sent.
+ */
+export function buildFilamentPayload(spoolData) {
+    const external = spoolData.matchingExternalFilament;
+
+    return {
+        name: external.name,
+        material: spoolData.slot.tray_sub_brands,
+        density: external.density,
+        diameter: external.diameter,
+        spool_weight: external.spool_weight,
+        weight: external.weight,
+        settings_extruder_temp: external.extruder_temp,
+        settings_bed_temp: external.bed_temp,
+        color_hex: external.color_hex,
+        external_id: external.id,
+        multi_color_hexes: external.color_hexes ? external.color_hexes.join(",") : "",
+        multi_color_direction: external.multi_color_direction,
+        vendor_id: state.vendorID,
+    };
+}
+
 export async function createFilamentAndSpool(spoolData) {
     let filamentId;
 
     try {
-        const filamentPayload = {
-            name: spoolData.matchingExternalFilament.name,
-            material: spoolData.slot.tray_sub_brands,
-            density: spoolData.matchingExternalFilament.density,
-            diameter: spoolData.matchingExternalFilament.diameter,
-            spool_weight: 250,
-            weight: 1000,
-            settings_extruder_temp: spoolData.matchingExternalFilament.extruder_temp,
-            settings_bed_temp: spoolData.matchingExternalFilament.bed_temp,
-            color_hex: spoolData.matchingExternalFilament.color_hex,
-            external_id: spoolData.matchingExternalFilament.id,
-            spool_type: spoolData.matchingExternalFilament.spool_type,
-            multi_color_hexes: spoolData.matchingExternalFilament.color_hexes
-                ? spoolData.matchingExternalFilament.color_hexes.join(",")
-                : "",
-            finish: spoolData.matchingExternalFilament.finish,
-            multi_color_direction: spoolData.matchingExternalFilament.multi_color_direction,
-            pattern: spoolData.matchingExternalFilament.pattern,
-            translucent: spoolData.matchingExternalFilament.translucent,
-            glow: spoolData.matchingExternalFilament.glow,
-            vendor_id: state.vendorID,
-        };
+        const filamentPayload = buildFilamentPayload(spoolData);
 
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${SPOOLMAN_URL}/api/v1/filament`);
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(filamentPayload));
@@ -212,7 +227,7 @@ export async function createFilamentAndSpool(spoolData) {
         try {
             const spoolPayload = {
                 filament_id: filamentId,
-                initial_weight: spoolData.slot.tray_weight,
+                initial_weight: Number(spoolData.slot.tray_weight),
                 used_weight: usedWeightFromSlot(spoolData.slot),
                 first_used: Date.now(),
                 extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },

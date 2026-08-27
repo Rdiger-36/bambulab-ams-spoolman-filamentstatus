@@ -18,6 +18,9 @@ Version 1.3.0
          - "auto" is now accepted as a shorthand, and any unrecognised value is reported at startup instead of quietly falling back to manual
       - Fix: on a fresh Spoolman with no spools yet, the very first spool created was never detected as a change
          - The change-detection baseline was re-seeded from the current fetch while it was empty, so the new spool was compared against itself and the slot kept offering "Create Spool" although it was already linked
+      - Fix: new filaments were always created with weight 1000g and spool_weight 250g regardless of the actual product
+         - Both values now come from the matched SpoolmanDB entry, so e.g. Support for PLA is created as the 500g product it is; the physical spool weight read from the AMS stays on the spool as initial_weight
+         - spool_type, finish, pattern, translucent and glow are no longer sent, since Spoolman does not accept them and discarded them on arrival
       - Fix: last_used was not set when booking consumption, because PUT /spool/{id}/use accepts only use_weight and use_length and drops anything else
       - Fix: support and accessory material (tray_type suffix "-S", e.g. "PLA-S") had its remaining percentage rescaled to a 1kg basis, although it is already reported relative to its real spool size
       - Fix: spools were compared by list position instead of by ID, so a reordered Spoolman response looked like a content change on every update
