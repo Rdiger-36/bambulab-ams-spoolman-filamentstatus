@@ -58,21 +58,6 @@ export async function fetchSliceInfo(printer, jobName) {
         const entry = zip.getEntry("Metadata/slice_info.config");
         if (!entry) return null;
 
-        // Investigation aid, DEBUG only: slice_info.config doesn't carry which
-        // physical AMS slot each filament was assigned to, only its material
-        // profile + color — ambiguous when two loaded spools share both (the
-        // manual assignment in the Web UI is the answer for that today).
-        // BambuStudio is reported to also embed the AMS slot mapping in
-        // Metadata/plate_<n>.json, which could resolve it automatically. Dump
-        // the raw content so the undocumented structure can be inspected before
-        // anyone writes a parser against it.
-        const plateEntry = zip.getEntries().find(e => /^Metadata\/plate_\d+\.json$/i.test(e.entryName));
-        if (plateEntry) {
-            console.debug(printer.name, printer.logFilePath, `[Print] ${plateEntry.entryName} raw content:`, plateEntry.getData().toString("utf8"));
-        } else {
-            console.debug(printer.name, printer.logFilePath, "[Print] No Metadata/plate_*.json found in 3MF");
-        }
-
         return parseSliceInfo(entry.getData().toString("utf8"));
     } finally {
         client.close();
