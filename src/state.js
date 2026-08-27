@@ -3,5 +3,8 @@ export const state = {
     spoolmanStatus: "Disconnected",
     vendorID: null,
     clients: [],       // SSE client connections
-    lastSpoolData: [], // last known Spoolman spool list for change detection
+    // Last known Spoolman spool list for change detection. null means "not yet
+    // seeded" — deliberately not [], which is a legitimate value for an empty
+    // Spoolman and must still be comparable against the next fetch.
+    lastSpoolData: null,
 };

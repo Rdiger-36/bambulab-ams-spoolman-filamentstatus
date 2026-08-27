@@ -260,7 +260,19 @@ export async function patchSpoolLocation(spoolId, location) {
 }
 
 export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
-    return got.put(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}/use`, {
-        json: { use_weight: usedGrams, last_used: lastUsed },
+    const result = await got.put(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}/use`, {
+        json: { use_weight: usedGrams },
     });
+
+    // The /use endpoint only accepts use_weight and use_length — a last_used sent
+    // along with them is silently dropped, so the timestamp has to be patched
+    // separately. Failing to stamp it must not lose the booking, which already
+    // succeeded above.
+    try {
+        await got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { last_used: lastUsed } });
+    } catch (error) {
+        console.error("Server", serverLogFilePath, `Booked consumption for spool ${spoolId}, but could not set last_used:`, error.message);
+    }
+
+    return result;
 }

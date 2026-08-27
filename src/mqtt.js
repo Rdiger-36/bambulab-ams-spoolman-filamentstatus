@@ -277,7 +277,12 @@ async function handleMqttMessage(printer, topic, message) {
                         console.debug(printer.name, printer.logFilePath, "Registered Spools:");
                         console.debug(printer.name, printer.logFilePath, JSON.stringify(spools));
 
-                        if (state.lastSpoolData.length === 0) state.lastSpoolData = spools;
+                        // Seed the baseline on the very first pass only. Testing for an
+                        // empty array here re-seeded it on every pass for as long as
+                        // Spoolman held no spools, so the first spool ever created was
+                        // compared against itself and never registered as a change —
+                        // exactly what happens on a fresh Spoolman install.
+                        if (state.lastSpoolData === null) state.lastSpoolData = spools;
 
                         let externalFilaments = await getSpoolmanExternalFilaments();
                         let internalFilaments = await getSpoolmanInternalFilaments();
