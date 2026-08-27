@@ -1,4 +1,3 @@
-import fs from "fs-extra";
 import { promises as fsp } from "fs";
 import { DEBUG, serverLogFilePath } from "./config.js";
 import { formatDateLog } from "./utils.js";
@@ -24,14 +23,27 @@ function enqueueAppend(filePath, content) {
     return enqueueTask(filePath, () => fsp.appendFile(filePath, content));
 }
 
+// Collapses a repeated message into the last line instead of appending it again.
+//
+// The read has to happen inside the queue: it used to run outside, so the file
+// was snapshotted before the write was scheduled and every line appended in
+// between was overwritten by that stale snapshot. With a collapsing message
+// firing every few seconds that silently ate most of the log.
 function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
-    fs.readFile(logFilePath, "utf8", (err, data) => {
-        if (err) {
-            originalConsoleLog(`[ERROR] Failed to read log file: ${err.message}`);
-            return;
+    return enqueueTask(logFilePath, async () => {
+        let data;
+        try {
+            data = await fsp.readFile(logFilePath, "utf8");
+        } catch (err) {
+            // No file yet is normal on the very first message
+            if (err.code !== "ENOENT") {
+                originalConsoleLog(`[ERROR] Failed to read log file: ${err.message}`);
+                return;
+            }
+            data = "";
         }
 
-        let lines = data.split("\n");
+        const lines = data.split("\n");
         if (lines.length && lines[lines.length - 1] === "") lines.pop();
 
         const lastLine = lines[lines.length - 1] || "";
@@ -42,7 +54,7 @@ function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
             lines.push(newLogMessage.trimEnd());
         }
 
-        enqueueTask(logFilePath, () => fsp.writeFile(logFilePath, lines.join("\n") + "\n"));
+        await fsp.writeFile(logFilePath, lines.join("\n") + "\n");
     });
 }
 
@@ -85,9 +97,7 @@ console.error = (device, logFilePath, ...args) => {
     originalConsoleError(errorMessage);
 
     const path = logFilePath || serverLogFilePath;
-    fs.appendFile(path, errorMessage + "\n", err => {
-        if (err) originalConsoleLog(`[ERROR] Failed to write log: ${err.message}`);
-    });
+    enqueueAppend(path, errorMessage + "\n");
 };
 
 // Override console.debug — signature: (device, logFilePath, ...args)
@@ -97,9 +107,7 @@ console.debug = (device, logFilePath, ...args) => {
         originalConsoleLog(debugMessage);
 
         const path = logFilePath || serverLogFilePath;
-        fs.appendFile(path, debugMessage + "\n", err => {
-            if (err) originalConsoleLog(`[ERROR] Failed to write log: ${err.message}`);
-        });
+        enqueueAppend(path, debugMessage + "\n");
     }
 };
 
@@ -137,6 +145,15 @@ export async function tailFileLines(filePath, maxLines = 250, chunkSize = 64 * 1
     } finally {
         await fh.close();
     }
+}
+
+/**
+ * Resolves once every write queued for a file has been flushed. Log writes are
+ * fire-and-forget everywhere else; this exists so tests can assert on the file
+ * without sleeping and guessing.
+ */
+export function flushLogs(filePath) {
+    return (__logQueues.get(filePath) || Promise.resolve()).catch(() => {});
 }
 
 export { originalConsoleLog, originalConsoleError };

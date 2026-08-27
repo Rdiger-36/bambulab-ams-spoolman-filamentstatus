@@ -17,6 +17,10 @@ Version 1.3.0
       - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
 
    - Bugfixes:
+      - Fix: the log lost most of its lines while the service was running
+         - Messages that collapse into the previous line (e.g. "No new AMS Data or changes in Spoolman found.") rewrite the whole file. The file was read outside the write queue, so everything appended between that read and the write was overwritten by the stale snapshot
+         - console.error and console.debug appended outside the queue as well and could be dropped the same way
+         - A reproduction interleaving 300 ordinary lines with a collapsing one kept 1 of 300 before the fix and all 300 after
       - Fix: MODE="auto" silently behaved like manual mode, because only the exact value "automatic" was recognised
          - "auto" is now accepted as a shorthand, and any unrecognised value is reported at startup instead of quietly falling back to manual
       - Fix: on a fresh Spoolman with no spools yet, the very first spool created was never detected as a change
