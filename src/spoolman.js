@@ -48,6 +48,54 @@ export async function getSpoolmanExternalFilaments() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Lookups and creation used by the "new spool" dialog for 3rd party spools.
+// Those spools carry no RFID tag, so nothing about them can be derived — the
+// data has to be entered once, and these endpoints feed the dialog's dropdowns.
+// ---------------------------------------------------------------------------
+
+async function getJson(path, what) {
+    try {
+        const response = await got(`${SPOOLMAN_URL}${path}`);
+        return JSON.parse(response.body);
+    } catch (error) {
+        console.error("Server", serverLogFilePath, `Error fetching ${what} from Spoolman:`, error.message);
+        throw error;
+    }
+}
+
+export const getSpoolmanVendors = () => getJson("/api/v1/vendor", "vendors");
+export const getSpoolmanLocations = () => getJson("/api/v1/location", "locations");
+// Materials already in use in this Spoolman instance
+export const getSpoolmanMaterials = () => getJson("/api/v1/material", "materials");
+// The known material catalogue, which also carries density and temperatures —
+// density is required when creating a filament and cannot be read off the spool.
+export const getSpoolmanExternalMaterials = () => getJson("/api/v1/external/material", "external materials");
+
+export async function createNamedVendor(name) {
+    const response = await got.post(`${SPOOLMAN_URL}/api/v1/vendor`, {
+        json: { name },
+        responseType: "json",
+    });
+    return response.body;
+}
+
+export async function createFilament(payload) {
+    const response = await got.post(`${SPOOLMAN_URL}/api/v1/filament`, {
+        json: payload,
+        responseType: "json",
+    });
+    return response.body;
+}
+
+export async function createSpoolRecord(payload) {
+    const response = await got.post(`${SPOOLMAN_URL}/api/v1/spool`, {
+        json: payload,
+        responseType: "json",
+    });
+    return response.body;
+}
+
 export async function checkAndSetVendor() {
     console.log("Server", serverLogFilePath, "Checking Vendors...");
     try {

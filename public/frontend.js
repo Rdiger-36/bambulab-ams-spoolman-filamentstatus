@@ -8,6 +8,8 @@ let spoolmanConnected = false;
 // Render context of the last full legacy-table render, reused for single-row
 // SSE updates (see upsertSpoolRow).
 let lastLegacyCtx = null;
+// Printer name, used to suggest a location matching the SET_LOCATION format.
+let currentPrinterName = "";
 
 // Mirrors src/ams.js correctRemainInt: Bambu reports remain% on a 1kg basis
 // for regular color filament <1kg, but support/accessory material (tray_type
@@ -408,48 +410,302 @@ document.addEventListener("DOMContentLoaded", () => {
 	}
 
 	async function showAssignDialog(button, amsSpool) {
+	    showDialog(button, `<p>Loading data from Spoolman…</p>`, "Assign", () => {});
 	    const dialogContent = document.getElementById("dialog-content");
-	    showDialog(button, `<p>Loading spools from Spoolman…</p>`, "Assign", () => {});
-	    // Keep the confirm button inert until the list is actually there
-	    const actionButton = document.getElementById("action-button");
+	    const actionButton  = document.getElementById("action-button");
 	    actionButton.disabled = true;
 
-	    let spools;
+	    let spools, lookups;
 	    try {
-	        const res = await fetch("./api/spoolman/spools");
-	        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
-	        spools = await res.json();
+	        [spools, lookups] = await Promise.all([
+	            fetchJson("./api/spoolman/spools"),
+	            fetchJson("./api/spoolman/lookups"),
+	        ]);
 	    } catch (err) {
-	        dialogContent.innerHTML = `<p class="gc-bad">Could not load spools from Spoolman: ${err.message}</p>`;
-	        return;
-	    }
-
-	    if (!spools.length) {
-	        dialogContent.innerHTML = `<p>No spools found in Spoolman. Create one there first, then assign it here.</p>`;
+	        dialogContent.innerHTML = `<p class="gc-bad">Could not load data from Spoolman: ${escapeHtml(err.message)}</p>`;
 	        return;
 	    }
 
 	    const slot = amsSpool.slot || {};
-	    const rows = rankSpoolsForSlot(spools, slot).map(({ sp }) => `
-	        <label style="display:block;padding:4px 0;cursor:pointer">
+	    dialogContent.innerHTML = `
+	        <p style="margin-top:0">AMS slot <strong>${escapeHtml(amsSpool.amsId)}</strong> holds a spool the printer cannot identify
+	           (${escapeHtml([slot.tray_type, slot.tray_sub_brands].filter(Boolean).join(" · ") || "unknown filament")}).
+	           Link it to a Spoolman spool so its consumption can be booked.</p>
+	        <div class="sp-tabs">
+	            <button type="button" class="sp-tab sp-tab-active" data-mode="assign">Use existing spool</button>
+	            <button type="button" class="sp-tab" data-mode="create">Create new spool</button>
+	        </div>
+	        <div id="sp-pane"></div>`;
+
+	    const pane = dialogContent.querySelector("#sp-pane");
+	    const tabs = [...dialogContent.querySelectorAll(".sp-tab")];
+
+	    const selectMode = (mode) => {
+	        for (const t of tabs) t.classList.toggle("sp-tab-active", t.dataset.mode === mode);
+	        if (mode === "assign") renderAssignPane(pane, actionButton, button, amsSpool, spools);
+	        else renderCreatePane(pane, actionButton, button, amsSpool, lookups);
+	    };
+	    for (const t of tabs) t.addEventListener("click", () => selectMode(t.dataset.mode));
+
+	    // Nothing to assign yet on a fresh Spoolman — start on the form instead of
+	    // an empty picker.
+	    selectMode(spools.length ? "assign" : "create");
+	}
+
+	function renderAssignPane(pane, actionButton, button, amsSpool, spools) {
+	    actionButton.textContent = "Assign";
+	    actionButton.disabled = true;
+
+	    if (!spools.length) {
+	        pane.innerHTML = `<p class="gc-muted">No spools in Spoolman yet — use "Create new spool".</p>`;
+	        return;
+	    }
+
+	    const rows = rankSpoolsForSlot(spools, amsSpool.slot || {}).map(({ sp }) => `
+	        <label class="sp-pick">
 	            <input type="radio" name="assign-spool" value="${sp.id}"> ${spoolPickerLabel(sp)}
 	        </label>`).join("");
 
-	    dialogContent.innerHTML = `
-	        <p>Assign a Spoolman spool to AMS slot <strong>${amsSpool.amsId}</strong>
-	           (${[slot.tray_type, slot.tray_sub_brands].filter(Boolean).join(" · ") || "unknown filament"}).</p>
-	        <p class="gc-muted" style="font-size:0.85em">Filament consumption of this slot will be booked onto the selected spool.
-	           The assignment is dropped automatically when a different filament is detected in the slot.</p>
-	        <div style="max-height:40vh;overflow-y:auto;text-align:left;margin-top:8px">${rows}</div>`;
-
-	    dialogContent.addEventListener("change", () => { actionButton.disabled = false; }, { once: true });
+	    pane.innerHTML = `<div class="sp-scroll">${rows}</div>`;
+	    pane.addEventListener("change", () => { actionButton.disabled = false; }, { once: true });
 
 	    actionButton.onclick = () => {
-	        const picked = dialogContent.querySelector('input[name="assign-spool"]:checked');
+	        const picked = pane.querySelector('input[name="assign-spool"]:checked');
 	        if (!picked) return;
 	        document.getElementById("info-dialog").close();
 	        sendMapping(button, amsSpool, Number(picked.value));
 	    };
+	}
+
+	// Values a chipless spool does report, used to pre-fill the form.
+	function slotDefaults(slot) {
+	    return {
+	        material: slot.tray_type || "",
+	        color: normColorJS(slot.tray_color) || "000000",
+	    };
+	}
+
+	function renderCreatePane(pane, actionButton, button, amsSpool, lookups) {
+	    actionButton.textContent = "Create";
+	    actionButton.disabled = false;
+
+	    const slot = amsSpool.slot || {};
+	    const defaults = slotDefaults(slot);
+
+	    // Materials already used here first, then everything Spoolman knows about
+	    const materials = [...new Set([...(lookups.materials || []), ...(lookups.externalMaterials || []).map(m => m.material)])];
+
+	    const filamentOptions = (lookups.filaments || [])
+	        .map(f => `<option value="${f.id}">#${f.id} ${escapeHtml([f.vendor?.name, f.material, f.name].filter(Boolean).join(" · "))}</option>`)
+	        .join("");
+
+	    pane.innerHTML = `
+	        <div class="sp-scroll">
+	            <div class="sp-section">Filament</div>
+	            <label class="sp-field sp-wide">
+	                <span>Use filament</span>
+	                <select id="sp-filament">
+	                    <option value="">— Create a new filament —</option>
+	                    ${filamentOptions}
+	                </select>
+	            </label>
+
+	            <div id="sp-filament-fields">
+	                <label class="sp-field">
+	                    <span>Manufacturer</span>
+	                    <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu">
+	                    <datalist id="sp-vendors">${(lookups.vendors || []).map(v => `<option value="${escapeHtml(v.name)}">`).join("")}</datalist>
+	                    <small class="gc-muted" id="sp-vendor-hint"></small>
+	                </label>
+	                <label class="sp-field">
+	                    <span>Material *</span>
+	                    <input id="sp-material" list="sp-materials" autocomplete="off" value="${escapeHtml(defaults.material)}">
+	                    <datalist id="sp-materials">${materials.map(m => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
+	                    <small class="gc-muted" id="sp-material-hint"></small>
+	                </label>
+	                <label class="sp-field">
+	                    <span>Name</span>
+	                    <input id="sp-name" placeholder="e.g. Galaxy Black">
+	                </label>
+	                <label class="sp-field">
+	                    <span>Colour</span>
+	                    <span class="sp-colour">
+	                        <input type="color" id="sp-colour-pick" value="#${defaults.color}">
+	                        <input id="sp-colour" value="${defaults.color}" maxlength="6" autocomplete="off">
+	                    </span>
+	                </label>
+	                <label class="sp-field">
+	                    <span>Density * (g/cm³)</span>
+	                    <input type="number" id="sp-density" step="0.01" min="0.01">
+	                </label>
+	                <label class="sp-field">
+	                    <span>Diameter * (mm)</span>
+	                    <input type="number" id="sp-diameter" step="0.01" min="0.01" value="1.75">
+	                </label>
+	                <label class="sp-field">
+	                    <span>Nozzle temp (°C)</span>
+	                    <input type="number" id="sp-extruder-temp">
+	                </label>
+	                <label class="sp-field">
+	                    <span>Bed temp (°C)</span>
+	                    <input type="number" id="sp-bed-temp">
+	                </label>
+	                <label class="sp-field">
+	                    <span>Full weight (g)</span>
+	                    <input type="number" id="sp-weight" min="0" value="1000">
+	                </label>
+	                <label class="sp-field">
+	                    <span>Empty spool (g)</span>
+	                    <input type="number" id="sp-spool-weight" min="0" value="250">
+	                </label>
+	            </div>
+
+	            <div class="sp-section">Spool</div>
+	            <label class="sp-field">
+	                <span>Initial weight (g)</span>
+	                <input type="number" id="sp-initial-weight" min="0" value="1000">
+	            </label>
+	            <label class="sp-field">
+	                <span>Remaining (g)</span>
+	                <input type="number" id="sp-remaining-weight" min="0" placeholder="leave empty if full">
+	            </label>
+	            <label class="sp-field">
+	                <span>Location</span>
+	                <input id="sp-location" list="sp-locations" autocomplete="off" value="${escapeHtml(currentPrinterName ? `${currentPrinterName} - ${amsSpool.amsId}` : "")}">
+	                <datalist id="sp-locations">${(lookups.locations || []).map(l => `<option value="${escapeHtml(l)}">`).join("")}</datalist>
+	            </label>
+	            <label class="sp-field sp-wide">
+	                <span>Comment</span>
+	                <input id="sp-comment" placeholder="optional">
+	            </label>
+	            <p class="gc-muted sp-note">The spool is linked to this AMS slot right away. A chipless spool reports no weight,
+	               so full and remaining weight have to be entered by hand.</p>
+	            <p id="sp-error" class="gc-bad"></p>
+	        </div>`;
+
+	    const $ = (id) => pane.querySelector(`#${id}`);
+
+	    // Picking an existing filament makes every filament field irrelevant
+	    $("sp-filament").addEventListener("change", (e) => {
+	        $("sp-filament-fields").style.display = e.target.value ? "none" : "";
+	    });
+
+	    // Density is required and cannot be read off the spool, so fill it (and the
+	    // temperatures) from Spoolman's material catalogue as soon as one matches.
+	    const applyMaterialDefaults = () => {
+	        const value = $("sp-material").value.trim().toLowerCase();
+	        const known = (lookups.externalMaterials || []).find(m => m.material.toLowerCase() === value);
+	        const hint = $("sp-material-hint");
+	        if (!known) {
+	            hint.textContent = value ? "Not a known material — enter density yourself" : "";
+	            return;
+	        }
+	        hint.textContent = `Defaults from ${known.material}`;
+	        if (!$("sp-density").value) $("sp-density").value = known.density ?? "";
+	        if (!$("sp-extruder-temp").value && known.extruder_temp != null) $("sp-extruder-temp").value = known.extruder_temp;
+	        if (!$("sp-bed-temp").value && known.bed_temp != null) $("sp-bed-temp").value = known.bed_temp;
+	    };
+	    $("sp-material").addEventListener("input", applyMaterialDefaults);
+	    applyMaterialDefaults();
+
+	    // Typing a manufacturer that does not exist yet creates it on save
+	    const vendorNames = new Set((lookups.vendors || []).map(v => v.name.toLowerCase()));
+	    $("sp-vendor").addEventListener("input", () => {
+	        const value = $("sp-vendor").value.trim();
+	        $("sp-vendor-hint").textContent = value && !vendorNames.has(value.toLowerCase())
+	            ? "New manufacturer — will be created"
+	            : "";
+	    });
+
+	    // Keep the picker and the hex field in sync
+	    $("sp-colour-pick").addEventListener("input", () => { $("sp-colour").value = $("sp-colour-pick").value.replace("#", "").toUpperCase(); });
+	    $("sp-colour").addEventListener("input", () => {
+	        const hex = normColorJS($("sp-colour").value);
+	        if (/^[0-9A-F]{6}$/.test(hex)) $("sp-colour-pick").value = `#${hex}`;
+	    });
+
+	    // Full weight is the usual starting point for a spool's initial weight
+	    $("sp-weight").addEventListener("input", () => { $("sp-initial-weight").value = $("sp-weight").value; });
+
+	    actionButton.onclick = () => submitNewSpool(pane, actionButton, button, amsSpool, lookups);
+	}
+
+	async function submitNewSpool(pane, actionButton, button, amsSpool, lookups) {
+	    const $ = (id) => pane.querySelector(`#${id}`);
+	    const error = $("sp-error");
+	    error.textContent = "";
+
+	    const filamentId = $("sp-filament").value;
+	    const payload = { spool: {
+	        initialWeight:   $("sp-initial-weight").value,
+	        remainingWeight: $("sp-remaining-weight").value,
+	        location:        $("sp-location").value,
+	        comment:         $("sp-comment").value,
+	    } };
+
+	    if (filamentId) {
+	        payload.filamentId = Number(filamentId);
+	    } else {
+	        const vendorName = $("sp-vendor").value.trim();
+	        const known = (lookups.vendors || []).find(v => v.name.toLowerCase() === vendorName.toLowerCase());
+
+	        payload.filament = {
+	            vendorId:     known?.id ?? null,
+	            vendorName:   known ? null : vendorName,
+	            name:         $("sp-name").value,
+	            material:     $("sp-material").value,
+	            density:      $("sp-density").value,
+	            diameter:     $("sp-diameter").value,
+	            colorHex:     $("sp-colour").value,
+	            weight:       $("sp-weight").value,
+	            spoolWeight:  $("sp-spool-weight").value,
+	            extruderTemp: $("sp-extruder-temp").value,
+	            bedTemp:      $("sp-bed-temp").value,
+	        };
+
+	        if (!payload.filament.material.trim()) { error.textContent = "Material is required."; return; }
+	        if (!(Number(payload.filament.density) > 0))  { error.textContent = "Density is required and must be greater than 0."; return; }
+	        if (!(Number(payload.filament.diameter) > 0)) { error.textContent = "Diameter is required and must be greater than 0."; return; }
+	    }
+
+	    const original = actionButton.textContent;
+	    actionButton.disabled = true;
+	    actionButton.textContent = "Creating...";
+
+	    try {
+	        const res = await fetch(`./api/thirdparty/spool/${encodeURIComponent(currentPrinterId)}/${encodeURIComponent(amsSpool.amsId)}`, {
+	            method: "POST",
+	            headers: { "Content-Type": "application/json" },
+	            body: JSON.stringify(payload),
+	        });
+	        const body = await res.json().catch(() => ({}));
+
+	        if (!res.ok) {
+	            error.textContent = body.error || `Request failed (HTTP ${res.status})`;
+	            actionButton.disabled = false;
+	            actionButton.textContent = original;
+	            return;
+	        }
+
+	        document.getElementById("info-dialog").close();
+	        showNotification(`Spool #${body.spoolId} created and assigned to ${amsSpool.amsId}.`, "success");
+	        await loadPrinterData(currentPrinterId);
+	    } catch (err) {
+	        console.error("Spool creation failed:", err);
+	        error.textContent = "Request failed. Please check your connection.";
+	        actionButton.disabled = false;
+	        actionButton.textContent = original;
+	    }
+	}
+
+	async function fetchJson(url) {
+	    const res = await fetch(url);
+	    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+	    return res.json();
+	}
+
+	function escapeHtml(value) {
+	    return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 	}
 
 	function showUnassignDialog(button, amsSpool) {
@@ -1083,6 +1339,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updateStatusWithIcon("mqtt-status", data.mqttStatus);
         updateElementText("last-mqtt-update", data.lastMqttUpdate);
         updateElementText("last-mqtt-ams-update", data.lastMqttAmsUpdate);
+        currentPrinterName = data.printerName || "";
         updateElementText("printer-name", data.printerName);
         updateElementText("mode", data.MODE);
         updateElementText("printer-serial", data.PRINTER_ID);

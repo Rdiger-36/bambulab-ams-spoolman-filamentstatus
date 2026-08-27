@@ -247,7 +247,9 @@ There are two ways the remaining weight of a spool can be tracked.
 
 While a print is running, the service downloads the sliced `.gcode.3mf` from the printer via FTPS and reads how many grams of each filament the print needs. When the print reaches a final state, that amount is booked onto the matching Spoolman spool. A cancelled or failed print is booked proportionally to the layers that were actually printed.
 
-Because the numbers come from the slicer and not from the RFID chip, this also works for 3rd party spools. Those spools carry no chip, so the printer cannot say which spool is loaded — assign it to a Spoolman spool once in the Web UI and the consumption of that slot is booked onto it. The assignment is dropped automatically as soon as a different filament is detected in the slot. The same assignment resolves the rare case of two loaded spools that are identical in material and color, which the RFID tag alone cannot tell apart.
+Because the numbers come from the slicer and not from the RFID chip, this also works for 3rd party spools. Those spools carry no chip, so the printer cannot say which spool is loaded — link it to a Spoolman spool once in the Web UI and the consumption of that slot is booked onto it. The action on such a slot offers both: picking a spool that already exists in Spoolman, or creating filament and spool right there. The form starts from what the AMS does report (material and colour) and fills density and temperatures from Spoolman's material catalogue; manufacturers, materials and locations are pick-or-type, and a value that does not exist yet is created on save. Everything a chipless spool cannot report — full weight and how much is left — has to be entered by hand.
+
+The link is dropped automatically as soon as a different filament is detected in the slot. It also resolves the rare case of two loaded spools that are identical in material and color, which the RFID tag alone cannot tell apart.
 
 Requirements: LAN access to the printer on port 990 (FTPS) with the printer's access code, which is the same code already used for MQTT.
 

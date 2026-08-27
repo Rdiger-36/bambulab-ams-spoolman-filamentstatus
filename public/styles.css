@@ -169,6 +169,89 @@ body.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
 }
 body.dark-mode .gc-progress-bar { background: #5fd089; }
 
+/* ---- Spool assignment / creation dialog ---- */
+.sp-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+  border-bottom: 1px solid #8884;
+}
+.sp-tab {
+  border: none;
+  background: none;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.92em;
+  color: inherit;
+  opacity: 0.6;
+  border-bottom: 2px solid transparent;
+}
+.sp-tab-active {
+  opacity: 1;
+  font-weight: 600;
+  border-bottom-color: #1c6fd6;
+}
+body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
+
+/* The dialog is capped in height, so the form scrolls rather than the page */
+.sp-scroll {
+  max-height: 46vh;
+  overflow-y: auto;
+  text-align: left;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px 14px;
+  padding-right: 6px;
+}
+.sp-section {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  font-size: 0.9em;
+  opacity: 0.75;
+  margin-top: 6px;
+  border-bottom: 1px solid #8883;
+  padding-bottom: 3px;
+}
+.sp-wide, .sp-note, #sp-error { grid-column: 1 / -1; }
+.sp-note { font-size: 0.82em; margin: 6px 0 0; }
+#sp-error:empty { display: none; }
+
+/* #sp-filament-fields spans the grid and repeats it, so its inputs line up
+   with the spool fields below instead of forming a second, narrower column. */
+#sp-filament-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px 14px;
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.86em;
+}
+.sp-field > span { opacity: 0.75; }
+.sp-field input,
+.sp-field select {
+  padding: 5px 7px;
+  border: 1px solid #8886;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+}
+.sp-field small:empty { display: none; }
+
+.sp-colour { display: flex; gap: 6px; align-items: center; }
+.sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
+.sp-colour input:not([type="color"]) { flex: 1; text-transform: uppercase; }
+
+.sp-pick { display: block; padding: 4px 0; cursor: pointer; }
+.sp-scroll > .sp-pick { grid-column: 1 / -1; }
+
 /* ---- Colour swatch shared by spool rows and the "required" list ---- */
 .gc-swatch {
   display: inline-block;

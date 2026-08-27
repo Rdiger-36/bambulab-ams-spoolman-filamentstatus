@@ -4,7 +4,20 @@ import path from "path";
 import { serverLogFilePath, PORT, version, SPOOLMAN_URL, SPOOLMAN_FQDN, MODE, MAX_RETRIES, LEGACY_MODE } from "./config.js";
 import { state } from "./state.js";
 import { tailFileLines } from "./logger.js";
-import { createSpool, createFilamentAndSpool, mergeSpool, getSpoolmanSpools } from "./spoolman.js";
+import {
+    createSpool,
+    createFilamentAndSpool,
+    mergeSpool,
+    getSpoolmanSpools,
+    getSpoolmanVendors,
+    getSpoolmanLocations,
+    getSpoolmanMaterials,
+    getSpoolmanExternalMaterials,
+    getSpoolmanInternalFilaments,
+    createNamedVendor,
+    createFilament,
+    createSpoolRecord,
+} from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey } from "./gcode.js";
 import { setupMqtt, broadcastSlotUpdate } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping } from "./mappings.js";
@@ -339,6 +352,93 @@ export function registerRoutes(app, printers) {
         }
     });
 
+    // Everything the "new spool" dialog needs to populate its dropdowns, in one
+    // round trip. A 3rd party spool tells us only its material and colour, so
+    // the rest is picked from what Spoolman already knows.
+    app.get("/api/spoolman/lookups", async (req, res) => {
+        try {
+            const [vendors, materials, externalMaterials, locations, filaments] = await Promise.all([
+                getSpoolmanVendors(),
+                getSpoolmanMaterials(),
+                getSpoolmanExternalMaterials(),
+                getSpoolmanLocations(),
+                getSpoolmanInternalFilaments(),
+            ]);
+            res.json({ vendors, materials, externalMaterials, locations, filaments });
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not load Spoolman lookups:", err?.message);
+            res.status(502).json({ ok: false, error: err?.message || "Could not load Spoolman lookups" });
+        }
+    });
+
+    // Creates a spool for a slot the printer cannot identify by itself and links
+    // the slot to it in one step, so the user does not have to assign it
+    // separately afterwards. Creates the filament too when none is picked.
+    app.post("/api/thirdparty/spool/:printerId/:amsId", async (req, res) => {
+        const { printerId, amsId } = req.params;
+        const printer = printers.find(p => p.id === printerId);
+        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+
+        const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
+        if (!uiSpool) return res.status(404).json({ ok: false, error: "AMS slot not found" });
+
+        const { filamentId, filament, spool = {} } = req.body || {};
+
+        try {
+            let resolvedFilamentId = Number(filamentId) || null;
+
+            if (!resolvedFilamentId) {
+                const error = validateFilamentInput(filament);
+                if (error) return res.status(400).json({ ok: false, error });
+
+                let vendorId = Number(filament.vendorId) || null;
+                if (!vendorId && filament.vendorName?.trim()) {
+                    const vendor = await createNamedVendor(filament.vendorName.trim());
+                    vendorId = vendor.id;
+                    console.log(printer.name, printer.logFilePath, `[Spool] Created vendor "${vendor.name}" (${vendorId})`);
+                }
+
+                const created = await createFilament({
+                    name: filament.name?.trim() || null,
+                    material: filament.material?.trim() || null,
+                    density: Number(filament.density),
+                    diameter: Number(filament.diameter),
+                    color_hex: normalizeHex(filament.colorHex),
+                    weight: numberOrNull(filament.weight),
+                    spool_weight: numberOrNull(filament.spoolWeight),
+                    settings_extruder_temp: numberOrNull(filament.extruderTemp),
+                    settings_bed_temp: numberOrNull(filament.bedTemp),
+                    vendor_id: vendorId,
+                });
+                resolvedFilamentId = created.id;
+                console.log(printer.name, printer.logFilePath, `[Spool] Created filament "${created.name ?? "?"}" (${resolvedFilamentId})`);
+            }
+
+            const spoolPayload = {
+                filament_id: resolvedFilamentId,
+                first_used: Date.now(),
+                initial_weight: numberOrNull(spool.initialWeight),
+                remaining_weight: numberOrNull(spool.remainingWeight),
+                location: spool.location?.trim() || null,
+                lot_nr: spool.lotNr?.trim() || null,
+                comment: spool.comment?.trim() || null,
+            };
+            const createdSpool = await createSpoolRecord(spoolPayload);
+
+            // The slot has no tag to link it, so the assignment is the link.
+            const mapping = setMapping(printerId, amsId, createdSpool.id, uiSpool.slot);
+            const spools = await getSpoolmanSpools();
+            applyMappingToUiSpool(printer, uiSpool, spools.find(s => s.id === createdSpool.id) ?? createdSpool);
+
+            console.log(printer.name, printer.logFilePath, `[Spool] Created spool ${createdSpool.id} for ${amsId} and assigned it`);
+            res.json({ ok: true, spoolId: createdSpool.id, filamentId: resolvedFilamentId, mapping });
+        } catch (err) {
+            const detail = err.response?.body ? JSON.stringify(err.response.body) : err.message;
+            console.error("Server", serverLogFilePath, "Could not create 3rd party spool:", detail);
+            res.status(500).json({ ok: false, error: detail || "Could not create spool" });
+        }
+    });
+
     app.delete("/api/mappings/:printerId/:amsId", (req, res) => {
         const { printerId, amsId } = req.params;
         const printer = printers.find(p => p.id === printerId);
@@ -352,6 +452,26 @@ export function registerRoutes(app, printers) {
 
         res.json({ ok: true, removed: existed });
     });
+}
+
+function numberOrNull(value) {
+    if (value === "" || value === null || value === undefined) return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+function normalizeHex(value) {
+    const hex = String(value || "").replace(/^#/, "").slice(0, 6).toUpperCase();
+    return /^[0-9A-F]{6}$/.test(hex) ? hex : null;
+}
+
+// density and diameter are the only fields Spoolman requires on a filament, and
+// neither can be read off a chipless spool.
+function validateFilamentInput(filament) {
+    if (!filament) return "Either filamentId or filament details are required";
+    if (!Number.isFinite(Number(filament.density)) || Number(filament.density) <= 0) return "Density must be a positive number";
+    if (!Number.isFinite(Number(filament.diameter)) || Number(filament.diameter) <= 0) return "Diameter must be a positive number";
+    return null;
 }
 
 /**

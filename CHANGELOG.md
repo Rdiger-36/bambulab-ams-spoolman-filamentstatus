@@ -5,7 +5,10 @@ Version 1.3.0
          - While a print runs, the sliced .gcode.3mf is downloaded from the printer via FTPS (port 990, same access code as MQTT) and the needed grams per filament are read from Metadata/slice_info.config
          - On FINISH the full amount is booked onto the matching Spoolman spool; on FAILED/CANCEL the amount is scaled to the layers that were actually printed
          - This works for 3rd party spools without an RFID chip as well, which the old remain-percentage tracking could never cover
-      - Manual spool assignment: an AMS slot can be linked to a Spoolman spool from the Web UI
+      - Manual spool assignment: an AMS slot can be linked to a Spoolman spool from the Web UI, either by picking an existing spool or by creating filament and spool directly in the dialog
+         - The creation form is pre-filled with what the AMS reports (material, colour) and fills density and temperatures from Spoolman's material catalogue
+         - Manufacturer, material and location are pick-or-type; a value that does not exist yet is created on save
+         - The new spool is linked to the slot immediately, no separate assignment step
          - Required for 3rd party spools, which carry no RFID tag and therefore no extra.tag link in Spoolman
          - Also resolves two loaded spools that are identical in material and color, which the automatic tag match cannot tell apart
          - The assignment is dropped automatically as soon as a different filament is detected in that slot
