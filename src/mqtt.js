@@ -32,6 +32,7 @@ import {
     processData,
     extractComparableTrayData,
     correctRemainInt,
+    slotIsOccupied,
     findExistingSpool,
     findMatchingExternalFilament,
     findMatchingInternalFilament,
@@ -403,7 +404,9 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         return false;
     }
 
-    if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0") && (!slot.tray_type || slot.tray_type === "")) {
+    // An unidentified spool looks exactly like an empty slot in every field but
+    // `state`, so an occupied slot must not be swallowed by this branch.
+    if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0") && (!slot.tray_type || slot.tray_type === "") && !slotIsOccupied(slot)) {
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots (empty slot with N/A values)");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
@@ -411,9 +414,13 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         return false;
     }
 
+    // Reached by anything the printer could not identify — including a slot whose
+    // only sign of life is `state`, which the empty branch above no longer takes.
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
-        slot.tray_sub_brands = slot.tray_type;
+        // The printer may know the material because the user set it on the AMS;
+        // when it does not, leave the placeholder rather than blanking the field.
+        if (slot.tray_type) slot.tray_sub_brands = slot.tray_type;
 
         // No RFID chip means no extra.tag link in Spoolman, so the only way to
         // know which spool sits here is a manual assignment made in the UI.

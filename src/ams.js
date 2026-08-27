@@ -25,15 +25,27 @@ export function extractComparableTrayData(amsArray) {
     return amsArray.map(ams => ({
         id: ams.id,
         tray: ams.tray
-            .filter(t => t && Object.keys(t).length > 6 && t.tray_uuid !== "N/A" && t.tray_sub_brands !== "N/A")
-            .map(t => ({
-                id: t.id,
-                tray_uuid: t.tray_uuid,
-                tray_weight: t.tray_weight,
-                tray_sub_brands: t.tray_sub_brands,
-                tray_color: t.tray_color,
-                remain: t.remain,
-            }))
+            .filter(t => t && Object.keys(t).length > 6)
+            .map(t => {
+                // A spool the printer cannot identify reports no uuid, material,
+                // colour or weight, so the only thing worth comparing is whether
+                // it is there at all. Dropping such trays entirely used to hide
+                // the arrival of a 3rd party spool from the change detection, so
+                // the slot was never reprocessed. `state` itself is deliberately
+                // not compared: it varies between loaded-but-unidentified values
+                // (10 and 20 both occur) and would cause pointless reprocessing.
+                if (t.tray_uuid === "N/A" || t.tray_sub_brands === "N/A") {
+                    return { id: t.id, occupied: slotIsOccupied(t) };
+                }
+                return {
+                    id: t.id,
+                    tray_uuid: t.tray_uuid,
+                    tray_weight: t.tray_weight,
+                    tray_sub_brands: t.tray_sub_brands,
+                    tray_color: t.tray_color,
+                    remain: t.remain,
+                };
+            })
             .sort((a, b) => a.id - b.id),
     })).sort((a, b) => a.id - b.id);
 }
@@ -56,6 +68,24 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
         return Math.round(percent);
     }
     return Math.round(remain);
+}
+
+/**
+ * Whether the AMS reports something physically sitting in the slot.
+ *
+ * A slot holding a spool the printer cannot identify — no RFID chip, or one it
+ * failed to read — comes through with the same sparse payload as an empty slot:
+ * tray_uuid "N/A", no tray_type, tray_weight 0. The only field that separates
+ * them is `state`, which is 0 for an empty slot and non-zero once something is
+ * loaded (11 for a fully read Bambu Lab spool, other values while the printer
+ * has filament but no identification for it).
+ *
+ * Firmware that does not report `state` at all falls back to "not occupied", so
+ * such slots keep being treated as empty rather than sprouting phantom spools.
+ */
+export function slotIsOccupied(slot) {
+    if (slot?.state === null || slot?.state === undefined) return false;
+    return Number(slot.state) !== 0;
 }
 
 export function findExistingSpool(amsSpool, allSpools) {
