@@ -19,8 +19,8 @@ Version 1.3.0
       - Fix: on a fresh Spoolman with no spools yet, the very first spool created was never detected as a change
          - The change-detection baseline was re-seeded from the current fetch while it was empty, so the new spool was compared against itself and the slot kept offering "Create Spool" although it was already linked
       - Fix: new filaments were always created with weight 1000g and spool_weight 250g regardless of the actual product
-         - Values now come from the matched SpoolmanDB entry instead of being assumed
-         - The net weight prefers what the AMS reads off the RFID chip: Bambu Lab sample spools that cannot be bought separately have no catalogue entry at their real size, e.g. the Support for PLA sample reports 250g while SpoolmanDB only lists the 500g product. The catalogue value is used when the AMS reports no usable weight
+         - Both values now come from the matched SpoolmanDB entry, so e.g. Support for PLA is created as the 500g product it is
+         - A physical spool may deviate from the product (the Support for PLA sample reports 250g on its RFID chip); that stays on the spool as initial_weight and does not change the filament shared by every spool of that type
          - spool_type, finish, pattern, translucent and glow are no longer sent, since Spoolman does not accept them and discarded them on arrival
       - Fix: last_used was not set when booking consumption, because PUT /spool/{id}/use accepts only use_weight and use_length and drops anything else
       - Fix: support and accessory material (tray_type suffix "-S", e.g. "PLA-S") had its remaining percentage rescaled to a 1kg basis, although it is already reported relative to its real spool size

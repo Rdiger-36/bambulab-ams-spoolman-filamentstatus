@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildFilamentPayload, resolveFilamentWeight } from "../src/spoolman.js";
+import { buildFilamentPayload } from "../src/spoolman.js";
 import { state } from "../src/state.js";
 
 state.vendorID = 1;
@@ -39,7 +39,7 @@ const plaBlack = {
 
 const slot = (subBrands, trayWeight) => ({ tray_sub_brands: subBrands, tray_weight: trayWeight });
 
-test("a normally sold spool agrees with the catalogue", () => {
+test("filament weights are the catalogue values, not a hardcoded 1kg", () => {
     const p = buildFilamentPayload({
         slot: slot("PLA Basic", "1000"),
         matchingExternalFilament: plaBlack,
@@ -48,24 +48,16 @@ test("a normally sold spool agrees with the catalogue", () => {
     assert.equal(p.spool_weight, 250);
 });
 
-test("a Bambu sample spool uses its own weight over the catalogue", () => {
-    // The Support for PLA sample is not sold separately: the AMS reports 250g
-    // while SpoolmanDB only lists the 500g product.
+test("a deviating physical spool does not change the filament weight", () => {
+    // The Support for PLA sample reports 250g on its RFID chip, but the filament
+    // describes the 500g product it belongs to. The deviation lives on the spool
+    // as initial_weight, not on the filament shared by every spool of that type.
     const p = buildFilamentPayload({
         slot: slot("Support for PLA", "250"),
         matchingExternalFilament: supportForPla,
     });
-    assert.equal(p.weight, 250);
-    // Tare is not something the AMS reports, so it stays the catalogue value
+    assert.equal(p.weight, 500);
     assert.equal(p.spool_weight, 250);
-});
-
-test("resolveFilamentWeight falls back to the catalogue without a usable AMS weight", () => {
-    assert.equal(resolveFilamentWeight(supportForPla, { tray_weight: "0" }), 500);
-    assert.equal(resolveFilamentWeight(supportForPla, { tray_weight: "" }), 500);
-    assert.equal(resolveFilamentWeight(supportForPla, {}), 500);
-    assert.equal(resolveFilamentWeight(supportForPla, null), 500);
-    assert.equal(resolveFilamentWeight(supportForPla, { tray_weight: "N/A" }), 500);
 });
 
 test("material is the AMS sub brand, the rest comes from the catalogue entry", () => {
