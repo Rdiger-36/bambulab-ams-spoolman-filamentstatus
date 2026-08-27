@@ -31,26 +31,43 @@
   <!-- App Content -->
   <div id="app">
     <h1>Loaded Spools on AMS from <span id="printer-name"></span></h1>
-    <div id="status">
-      <p>Spoolman connection status: <span id="spoolman-status"></span></p>
-      <p>MQTT connection to printer: <span id="mqtt-status"></span></p>
-      <p>Printer Serial Number: <span id="printer-serial"></span></p>
-      <p>Mode: <span id="mode"></span></p>
-      <p>Last MQTT update: <span id="last-mqtt-update"></span></p>
-	  <p class="status-row-split">
-	    <span>
-	        Last MQTT update contains new AMS infos:
-	        <span id="last-mqtt-ams-update"></span>
-	    </span>
-	
-	    <span class="monitoring-align">
-	        Monitoring:
-	        <label class="switch">
-	            <input type="checkbox" id="monitoring-toggle">
-	            <span class="slider round"></span>
-	        </label>
-	    </span>
-	  </p>
+    <div id="status" class="status-card">
+      <div class="status-head">
+        <span id="tracking-mode" class="pill"></span>
+        <span class="monitoring-align">
+          Monitoring
+          <label class="switch">
+            <input type="checkbox" id="monitoring-toggle">
+            <span class="slider round"></span>
+          </label>
+        </span>
+      </div>
+      <div class="status-grid">
+        <div class="status-item">
+          <span class="status-label">Spoolman</span>
+          <span id="spoolman-status" class="status-value"></span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Printer (MQTT)</span>
+          <span id="mqtt-status" class="status-value"></span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Serial number</span>
+          <span id="printer-serial" class="status-value"></span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Operation mode</span>
+          <span id="mode" class="status-value"></span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Last update</span>
+          <span id="last-mqtt-update" class="status-value"></span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Last new AMS info</span>
+          <span id="last-mqtt-ams-update" class="status-value"></span>
+        </div>
+      </div>
     </div>
     <div id="spool-list"></div>
   </div>
