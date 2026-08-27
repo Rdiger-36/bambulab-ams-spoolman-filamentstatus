@@ -167,16 +167,29 @@ export async function createSpool(spoolData) {
 }
 
 /**
- * Builds the Spoolman filament payload from the matched SpoolmanDB entry.
+ * Net filament weight for a new filament record.
  *
- * Every value is taken from what was actually read rather than assumed: weight
- * and spool_weight used to be hardcoded to 1000/250, which silently mislabelled
- * anything not sold on a 1 kg spool — Support for PLA, for instance, only
- * exists as a 500 g entry in SpoolmanDB.
+ * SpoolmanDB is the reference, and for anything sold normally the AMS agrees
+ * with it. Bambu Lab also hands out sample spools that cannot be bought
+ * separately and therefore have no catalogue entry at their real size: the
+ * Support for PLA sample reports 250 g while SpoolmanDB only lists the 500 g
+ * product. The AMS reads the real amount off the RFID chip, so it takes
+ * precedence whenever it reports a usable one, and the catalogue value is the
+ * fallback.
+ */
+export function resolveFilamentWeight(external, slot) {
+    const fromSlot = Number(slot?.tray_weight);
+    if (Number.isFinite(fromSlot) && fromSlot > 0) return fromSlot;
+    return external.weight;
+}
+
+/**
+ * Builds the Spoolman filament payload for a matched SpoolmanDB entry.
  *
- * The filament describes the product, so its weight comes from SpoolmanDB. The
- * weight of the physical spool is the AMS reading and belongs on the spool
- * (initial_weight), where it may legitimately differ.
+ * Every value is read rather than assumed: weight and spool_weight used to be
+ * hardcoded to 1000/250, which mislabelled everything not on a 1 kg spool.
+ * spool_weight (the empty spool's tare) is not something the AMS reports, so it
+ * always comes from the catalogue; the net weight follows resolveFilamentWeight.
  *
  * spool_type, finish, pattern, translucent and glow are not part of Spoolman's
  * FilamentParameters (verified against the 0.26.1 OpenAPI schema) and were
@@ -191,7 +204,7 @@ export function buildFilamentPayload(spoolData) {
         density: external.density,
         diameter: external.diameter,
         spool_weight: external.spool_weight,
-        weight: external.weight,
+        weight: resolveFilamentWeight(external, spoolData.slot),
         settings_extruder_temp: external.extruder_temp,
         settings_bed_temp: external.bed_temp,
         color_hex: external.color_hex,
