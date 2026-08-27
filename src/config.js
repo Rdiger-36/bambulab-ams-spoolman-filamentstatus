@@ -40,7 +40,23 @@ export const SET_LOCATION = (process.env.SET_LOCATION || "false") === "true";
 // works for 3rd-party spools without an RFID chip.
 export const LEGACY_MODE = (process.env.LEGACY_MODE || "false") === "true";
 export const DEBUG = process.env.DEBUG || "false";
-export const MODE = process.env.MODE || "manual";
+// "auto" is accepted as a shorthand for "automatic"; anything unrecognised
+// falls back to manual. `valid` is reported separately so startup can warn
+// about a typo instead of silently behaving like manual mode.
+export function resolveMode(raw) {
+    const value = (raw || "manual").trim();
+    const normalized = value.toLowerCase();
+    return {
+        raw: value,
+        mode: normalized === "automatic" || normalized === "auto" ? "automatic" : "manual",
+        valid: ["automatic", "auto", "manual"].includes(normalized),
+    };
+}
+
+const resolvedMode = resolveMode(process.env.MODE);
+export const MODE = resolvedMode.mode;
+export const MODE_RAW = resolvedMode.raw;
+export const MODE_IS_VALID = resolvedMode.valid;
 export const RECONNECT_INTERVAL = 60000;
 
 const baseURL = SPOOLMAN_ENDPOINT || `http://${SPOOLMAN_IP}:${SPOOLMAN_PORT}`;

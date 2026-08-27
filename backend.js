@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs-extra";
 
 import "./src/logger.js"; // must be first — sets up console overrides
-import { PORT, serverLogFilePath, __rootDir, version, SPOOLMAN_URL } from "./src/config.js";
+import { PORT, serverLogFilePath, __rootDir, version, SPOOLMAN_URL, MODE, MODE_RAW, MODE_IS_VALID } from "./src/config.js";
 import { printers } from "./src/printers.js";
 import { checkAndSetVendor, checkAndSetExtraField } from "./src/spoolman.js";
 import { monitorSpoolman, monitorSpoolmanBackground, monitorPrinters } from "./src/mqtt.js";
@@ -25,6 +25,11 @@ registerRoutes(app, printers);
 
 async function starting() {
     console.log("Server", serverLogFilePath, "Starting service...");
+
+    if (!MODE_IS_VALID) {
+        console.error("Server", serverLogFilePath, `MODE "${MODE_RAW}" is not a valid value — falling back to "manual". Use "automatic" or "manual".`);
+    }
+    console.log("Server", serverLogFilePath, `Mode: ${MODE}`);
 
     await monitorSpoolman();
 
