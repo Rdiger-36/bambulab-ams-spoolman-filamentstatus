@@ -257,6 +257,8 @@ Requirements: LAN access to the printer on port 990 (FTPS) with the printer's ac
 
 The behaviour of earlier versions: the remaining weight is read from the AMS RFID chip's remain percentage on every MQTT update and written to Spoolman. Original Bambu Lab spools only, and the AMS Lite is not supported (see [Attention](#-attention-)).
 
+In this mode G-code tracking is switched off completely — no FTPS download, no consumption booking — and the Web UI shows the classic AMS table instead of the print dashboard. Manually assigning a spool to a slot has no effect on the weight either, since it only feeds the G-code booking.
+
 ### Mode:
 There are two modes you can run this container: automatic and manual
 - automatic:

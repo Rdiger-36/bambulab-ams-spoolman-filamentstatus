@@ -17,6 +17,9 @@ Version 1.3.0
       - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
 
    - Bugfixes:
+      - Fix: LEGACY_MODE did not switch off the G-code tracking
+         - The sliced file was downloaded on every print and consumption was booked via PUT /spool/{id}/use, on top of the remain-percentage PATCH that legacy mode is supposed to be
+         - The booking was then overwritten again by the next AMS update, so it mostly wasted requests, but it could stick if the spool was removed right after the print
       - Fix: the log lost most of its lines while the service was running
          - Messages that collapse into the previous line (e.g. "No new AMS Data or changes in Spoolman found.") rewrite the whole file. The file was read outside the write queue, so everything appended between that read and the write was overwritten by the stale snapshot
          - console.error and console.debug appended outside the queue as well and could be dropped the same way

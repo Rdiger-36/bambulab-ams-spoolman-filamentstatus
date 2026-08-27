@@ -255,7 +255,11 @@ async function handleMqttMessage(printer, topic, message) {
                 });
             }
 
-            if (data?.print?.gcode_state) {
+            // Legacy mode derives the weight from the RFID remain percentage, so
+            // the G-code tracking must stay out of it entirely — running both
+            // would download the sliced file on every print and book consumption
+            // that the next AMS update then overwrites again.
+            if (!LEGACY_MODE && data?.print?.gcode_state) {
                 await handlePrintStateChange(printer, data.print);
             }
 
