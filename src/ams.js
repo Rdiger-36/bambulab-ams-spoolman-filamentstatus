@@ -38,11 +38,17 @@ export function extractComparableTrayData(amsArray) {
     })).sort((a, b) => a.id - b.id);
 }
 
-export function correctRemainInt(remainOn1kgBasis, trayWeight) {
+export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) {
     const remain = parseFloat(remainOn1kgBasis);
     const weight = parseFloat(trayWeight);
 
-    if (weight < 1000) {
+    // Support/accessory material (tray_type suffix "-S", e.g. "PLA-S") is sold
+    // and measured at its real spool size, not estimated on a 1kg basis like
+    // regular color filament <1kg — so its remain% is already relative to the
+    // actual tray_weight and must not be rescaled.
+    const isSupportMaterial = typeof trayType === "string" && trayType.endsWith("-S");
+
+    if (weight < 1000 && !isSupportMaterial) {
         let grams = (remain / 100) * 1000;
         let percent = (grams / weight) * 100;
         if (percent > 100) percent = 100;
@@ -160,8 +166,13 @@ export async function haveSpoolDataChanged(spools, lastSpoolData) {
     if (!Array.isArray(spools) || !Array.isArray(lastSpoolData)) return true;
     if (spools.length !== lastSpoolData.length) return true;
 
-    return !spools.every((spool, index) => {
-        const lastSpool = lastSpoolData[index];
+    // Compare by spool id rather than array position: Spoolman may return the
+    // list in a different order between calls (e.g. sorted by last_used),
+    // which would otherwise look like a content change on every PATCH.
+    const lastById = new Map(lastSpoolData.map(s => [s.id, s]));
+
+    return !spools.every((spool) => {
+        const lastSpool = lastById.get(spool.id);
         if (!spool || !lastSpool) return false;
         return (
             spool?.extra?.tag === lastSpool?.extra?.tag &&

@@ -10,6 +10,7 @@ import {
     RECONNECT_INTERVAL,
     UPDATE_INTERVAL,
     SET_LOCATION,
+    LEGACY_MODE,
 } from "./config.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
@@ -23,7 +24,10 @@ import {
     mergeSpool,
     patchSpoolWeight,
     patchSpoolLocation,
+    useSpoolWeight,
 } from "./spoolman.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, normColor } from "./gcode.js";
+import { getMapping, clearMapping } from "./mappings.js";
 import {
     processData,
     extractComparableTrayData,
@@ -52,8 +56,176 @@ function broadcastSSE(data) {
     state.clients.forEach(client => client.write(payload));
 }
 
-function broadcastSlotUpdate(printerId, spool) {
+export function broadcastSlotUpdate(printerId, spool) {
     broadcastSSE({ type: "slot_update", printer: printerId, spool: sanitizeSpoolForClient(spool) });
+}
+
+// Print states that signal the end of a print job
+const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
+// Print states that indicate an active or paused job
+const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
+
+/**
+ * Tracks gcode_state transitions and triggers filament consumption tracking.
+ * Called on every MQTT message that contains a gcode_state field.
+ */
+async function handlePrintStateChange(printer, print) {
+    const newState    = print.gcode_state;
+    // subtask_name is the job name used for the FTP file (/cache/<name>.gcode.3mf).
+    // gcode_file (e.g. /data/Metadata/plate_1.gcode) is an internal path NOT
+    // exposed over FTP, so we only fall back to its basename as a last resort.
+    const jobName     = print.subtask_name || printer.currentJobName || null;
+    const layerNum    = print.layer_num   ?? printer.currentLayerNum   ?? 0;
+    const prevState   = printer.currentGcodeState || "IDLE";
+
+    // Always keep layer_num up to date for partial-print calculation
+    if (print.layer_num != null) printer.currentLayerNum = print.layer_num;
+
+    // A fresh print starts when we transition from a non-active state into an
+    // active one. Reset tracking here (even on a reprint of the same file) so
+    // consumption gets booked again for the new run.
+    const freshStart = ACTIVE_STATES.has(newState) && !ACTIVE_STATES.has(prevState);
+    if (freshStart) {
+        printer.currentJobName    = jobName;
+        printer.currentSliceInfo  = null;
+        printer.consumptionBooked = false;
+        printer.sliceFetchDone    = false;
+    }
+
+    // Fetch slice info once we reach RUNNING (the .gcode.3mf is reliably present
+    // in /cache by then). Guarded so we only attempt it once per print.
+    if (newState === "RUNNING" && jobName && !printer.sliceFetchDone) {
+        printer.sliceFetchDone = true;
+        printer.currentJobName = jobName;
+
+        console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}" — fetching slice info via FTPS...`);
+        try {
+            printer.currentSliceInfo = await fetchSliceInfo(printer, jobName);
+            if (printer.currentSliceInfo) {
+                console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
+            } else {
+                console.log(printer.name, printer.logFilePath, "[Print] slice_info.config not found in 3MF — consumption tracking unavailable for this print");
+            }
+        } catch (err) {
+            console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);
+        }
+    }
+
+    // Update tracked state
+    printer.currentGcodeState = newState;
+
+    // Book consumption on transition into a terminal state
+    if (TERMINAL_STATES.has(newState) && ACTIVE_STATES.has(prevState) && !printer.consumptionBooked) {
+        printer.consumptionBooked = true;
+
+        if (!printer.currentSliceInfo) {
+            console.log(printer.name, printer.logFilePath, `[Print] ${newState} — no slice info cached, skipping consumption tracking`);
+            return;
+        }
+
+        const consumption = newState === "FINISH"
+            ? calcFullConsumption(printer.currentSliceInfo)
+            : calcPartialConsumption(printer.currentSliceInfo, layerNum);
+
+        console.log(printer.name, printer.logFilePath, `[Print] ${newState} — booking filament consumption:`, JSON.stringify(consumption));
+        await bookConsumption(printer, consumption);
+    }
+}
+
+/**
+ * Books the consumed grams in Spoolman for each filament of a finished print.
+ *
+ * A slot is only booked when we actually know which physical spool sits in it:
+ * either through the Spoolman extra.tag field (= the slot's tray_uuid, Bambu Lab
+ * spools only) or through a manual assignment made in the UI. Filament
+ * candidates that merely match by type are never touched.
+ *
+ * Slots are matched to slice filaments in three stages, most specific first:
+ *   1. tray_info_idx + color  — exact material profile, separates e.g. PLA Black
+ *                               from PLA Jade White despite a shared profile
+ *   2. material type + color  — for 3rd-party spools, which report no usable
+ *                               tray_info_idx
+ *   3. tray_info_idx alone    — colors did not line up but the profile is unique
+ *
+ * Within a stage, manually assigned spools win over tag-connected ones: an
+ * assignment is the user explicitly resolving what the automatic match cannot,
+ * namely two connected spools identical in both profile and color.
+ */
+function materialKey(type, color) {
+    return `${type || "?"}|${normColor(color)}`;
+}
+
+async function bookConsumption(printer, consumption) {
+    if (!printer.spoolData?.length) {
+        console.log(printer.name, printer.logFilePath, "[Print] No spool data available for consumption booking");
+        return;
+    }
+
+    const candidates = [];
+    for (const uiSpool of printer.spoolData) {
+        const mapped = !!uiSpool.connectedViaMapping;
+        if (!mapped && !uiSpool.connectedViaTag) continue;
+
+        const id = uiSpool.existingSpool?.id;
+        if (!id) continue;
+
+        const idx = uiSpool.slot?.tray_info_idx || null;
+        candidates.push({
+            id,
+            amsId:  uiSpool.amsId,
+            mapped,
+            idx,
+            key:    idx ? consumptionKey(idx, uiSpool.slot?.tray_color) : null,
+            matKey: materialKey(uiSpool.slot?.tray_type, uiSpool.slot?.tray_color),
+        });
+    }
+
+    if (!candidates.length) {
+        console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools — nothing to book");
+        return;
+    }
+
+    const lastUsed = new Date().toISOString();
+
+    for (const info of Object.values(consumption)) {
+        const { tray_info_idx: idx, color, type, grams } = info;
+        if (grams <= 0) continue;
+
+        const wantedKey    = consumptionKey(idx, color);
+        const wantedMatKey = materialKey(type, color);
+
+        let matches = [];
+        for (const predicate of [
+            c => c.key === wantedKey,
+            c => c.matKey === wantedMatKey,
+            c => c.idx && c.idx === idx,
+        ]) {
+            matches = candidates.filter(predicate);
+            if (matches.length) break;
+        }
+
+        if (!matches.length) {
+            console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}) — skipping ${grams}g (assign the spool in the Web UI to track it)`);
+            continue;
+        }
+
+        // A manual assignment is the user's explicit answer, so it outranks any
+        // automatic match found in the same stage.
+        const mapped = matches.filter(c => c.mapped);
+        if (mapped.length) matches = mapped;
+
+        if (matches.length > 1) {
+            console.warn(printer.name, printer.logFilePath, `[Print] ${matches.length} spools are indistinguishable for ${idx} ${type} (${color}) — booking the full ${grams}g to spool ${matches[0].id} (${matches[0].amsId}); assign the spools manually in the Web UI to split correctly`);
+        }
+
+        const { id: spoolId } = matches[0];
+        try {
+            await useSpoolWeight(spoolId, grams, lastUsed);
+            console.log(printer.name, printer.logFilePath, `[Print] Booked ${grams}g for spool ${spoolId} (${matches[0].amsId}, ${idx} ${type} ${color}${matches[0].mapped ? ", manually assigned" : ""})`);
+        } catch (err) {
+            console.error(printer.name, printer.logFilePath, `[Print] Failed to book consumption for spool ${spoolId}: ${err.message}`);
+        }
+    }
 }
 
 async function handleMqttMessage(printer, topic, message) {
@@ -65,6 +237,27 @@ async function handleMqttMessage(printer, topic, message) {
             printer.mqttStatus = "Connected";
             const data = JSON.parse(message);
             console.debug(printer.name, printer.logFilePath, `Processing MQTT message for Printer: ${printer.id}`);
+
+            // Reception freshness: every received message proves the connection is
+            // live, regardless of the AMS processing interval below. Update the
+            // timestamp in-memory always, but throttle the SSE broadcast to ~1/s.
+            printer.lastMqttUpdate = new Date();
+            if (printer.lastMqttUpdate.getTime() - (printer.lastMqttBroadcast || 0) > 1000) {
+                printer.lastMqttBroadcast = printer.lastMqttUpdate.getTime();
+                broadcastSSE({
+                    type: "status",
+                    printer: printer.id,
+                    lastMqttUpdate: printer.lastMqttUpdate.toISOString(),
+                    lastMqttAmsUpdate: printer.lastMqttAmsUpdate
+                        ? printer.lastMqttAmsUpdate.toISOString()
+                        : null,
+                });
+            }
+
+            if (data?.print?.gcode_state) {
+                await handlePrintStateChange(printer, data.print);
+            }
+
             console.debug(printer.name, printer.logFilePath, "Check if message contains AMS Data");
 
             if (data?.print?.ams?.ams) {
@@ -93,7 +286,13 @@ async function handleMqttMessage(printer, topic, message) {
                         const processedAmsData = processData(data.print.ams.ams);
                         const newTrayData = extractComparableTrayData(processedAmsData);
                         const lastTrayData = extractComparableTrayData(printer.lastAmsData || []);
-                        const trayDataChanged = JSON.stringify(newTrayData) !== JSON.stringify(lastTrayData);
+                        // In G-code mode the AMS remain % is irrelevant (weight is
+                        // tracked from the slice), so don't let it trigger reprocessing
+                        // and log output — only react to real identity/weight changes.
+                        const stripRemain = (d) => LEGACY_MODE ? d
+                            : d.map(a => ({ ...a, tray: a.tray.map(({ remain, ...t }) => t) }));
+                        const trayDataChanged =
+                            JSON.stringify(stripRemain(newTrayData)) !== JSON.stringify(stripRemain(lastTrayData));
 
                         if (isValidAmsData && (spoolsChanged || trayDataChanged)) {
                             console.debug(printer.name, printer.logFilePath, "Loaded AMS Spools:");
@@ -111,11 +310,17 @@ async function handleMqttMessage(printer, topic, message) {
                                 }
 
                                 for (const slot of ams.tray) {
-                                    spools = await getSpoolmanSpools();
-                                    externalFilaments = await getSpoolmanExternalFilaments();
-                                    internalFilaments = await getSpoolmanInternalFilaments();
+                                    const mutated = await processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime);
 
-                                    await processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime);
+                                    // Only refetch when this slot actually created/merged a
+                                    // spool or filament in Spoolman — otherwise the cached
+                                    // lists from the top of this AMS update are still valid,
+                                    // avoiding redundant HTTP calls for every slot.
+                                    if (mutated) {
+                                        spools = await getSpoolmanSpools();
+                                        externalFilaments = await getSpoolmanExternalFilaments();
+                                        internalFilaments = await getSpoolmanInternalFilaments();
+                                    }
                                 }
                             }
 
@@ -190,7 +395,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
         pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
-        return;
+        return false;
     }
 
     if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0") && (!slot.tray_type || slot.tray_type === "")) {
@@ -198,20 +403,24 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
         pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
-        return;
+        return false;
     }
 
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
         slot.tray_sub_brands = slot.tray_type;
-        const newUiSpool = buildThirdPartySpool(printer, amsId, slot);
-        await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
+
+        // No RFID chip means no extra.tag link in Spoolman, so the only way to
+        // know which spool sits here is a manual assignment made in the UI.
+        const mappedSpool = resolveMappedSpool(printer, amsId, slot, spools);
+        const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
+        await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
         if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
             broadcastSlotUpdate(printer.id, newUiSpool);
             console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
         }
         printer.spoolData.push(newUiSpool);
-        return;
+        return false;
     }
 
     // Valid Bambu Lab spool
@@ -223,6 +432,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     let option = "No actions available";
     let enableButton = "false";
     let error = false;
+    let mutated = false;
     const automatic = MODE === "automatic";
 
     matchingExternalFilament = findMatchingExternalFilament(slot, externalFilaments);
@@ -234,42 +444,71 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 console.debug(printer.name, printer.logFilePath, " Connected Spool found: " + JSON.stringify(spool));
                 found = true;
 
-                try {
-                    const prevSlot = prevByAmsId[amsId]?.slot;
-                    const prevRemain = prevSlot ? Math.round(prevSlot.remain) : null;
-                    const currRemain = correctRemainInt(slot.remain, slot.tray_weight);
-                    const slotChanged = !prevSlot ||
-                        currRemain !== prevRemain ||
-                        slot.tray_weight !== prevSlot?.tray_weight ||
-                        slot.tray_uuid !== prevSlot?.tray_uuid;
+                // Normalize remain for comparison; slot.remain itself is left
+                // untouched (raw, as received from MQTT) so it stays comparable
+                // with the next message's raw value in the outer change-detection
+                // (extractComparableTrayData / printer.lastAmsData). Mutating it in
+                // place here used to desync that comparison for any spool whose
+                // tray_weight != 1000g (e.g. 250g support spools), causing the AMS
+                // data to look "changed" on every single message forever.
+                const prevSlot = prevByAmsId[amsId]?.slot;
+                const prevRemain = prevSlot ? correctRemainInt(prevSlot.remain, prevSlot.tray_weight, prevSlot.tray_type) : null;
+                const currRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
+                // slotChanged includes remain (relevant for legacy weight patching);
+                // meaningfulChange ignores remain (spool identity only) and gates
+                // logging/location in G-code mode so remain ticks don't spam.
+                const meaningfulChange = !prevSlot ||
+                    slot.tray_uuid       !== prevSlot?.tray_uuid ||
+                    slot.tray_info_idx   !== prevSlot?.tray_info_idx ||
+                    slot.tray_color      !== prevSlot?.tray_color ||
+                    slot.tray_sub_brands !== prevSlot?.tray_sub_brands ||
+                    slot.tray_weight     !== prevSlot?.tray_weight;
+                const slotChanged = meaningfulChange || currRemain !== prevRemain;
 
+                existingSpool = spool;
+
+                if (LEGACY_MODE) {
+                    // Legacy: derive remaining weight from the AMS RFID remain %
                     if (!slotChanged) {
                         console.debug(printer.name, printer.logFilePath, " No change for connected spool; skipping PATCH");
-                        existingSpool = spool;
                         break;
                     }
-                } catch {}
 
-                slot.remain = correctRemainInt(slot.remain, slot.tray_weight);
-                const remainingWeight = Math.round((slot.remain / 100) * slot.tray_weight);
-                const newLocation = SET_LOCATION ? `${printer.name} - ${amsId}` : null;
+                    const remainingWeight = Math.round((currRemain / 100) * slot.tray_weight);
+                    const newLocation = SET_LOCATION ? `${printer.name} - ${amsId}` : null;
 
-                console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${SPOOLMAN_URL}/api/v1/spool/${spool.id}`);
-                console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime, ...(newLocation && { location: newLocation }) }));
+                    console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${SPOOLMAN_URL}/api/v1/spool/${spool.id}`);
+                    console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime, ...(newLocation && { location: newLocation }) }));
 
-                try {
-                    await patchSpoolWeight(spool.id, remainingWeight, currentTime, newLocation);
-                    console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
-                    console.log(printer.name, printer.logFilePath, `    Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
-                } catch (err) {
-                    console.error(printer.name, printer.logFilePath, "   #####");
-                    console.error(printer.name, printer.logFilePath, "   Spool update failed:", err.message);
-                    console.error(printer.name, printer.logFilePath, "   Error details:", err.response?.statusCode, err.response?.body || err.stack);
-                    console.error(printer.name, printer.logFilePath, "   #####");
+                    try {
+                        await patchSpoolWeight(spool.id, remainingWeight, currentTime, newLocation);
+                        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${currRemain}%) [[ ${slot.tray_uuid} ]]`);
+                        console.log(printer.name, printer.logFilePath, `    Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
+                    } catch (err) {
+                        console.error(printer.name, printer.logFilePath, "   #####");
+                        console.error(printer.name, printer.logFilePath, "   Spool update failed:", err.message);
+                        console.error(printer.name, printer.logFilePath, "   Error details:", err.response?.statusCode, err.response?.body || err.stack);
+                        console.error(printer.name, printer.logFilePath, "   #####");
+                    }
+
+                    printer.lastUpdateTime = currentTime;
+                } else {
+                    // Default: weight is tracked from the sliced G-code on print
+                    // completion (see handlePrintStateChange). Here we only log /
+                    // sync location on real identity changes — not on remain ticks.
+                    if (meaningfulChange) {
+                        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} [[ ${slot.tray_uuid} ]] => Spool-ID ${spool.id} (G-code mode)`);
+
+                        if (SET_LOCATION) {
+                            try {
+                                await patchSpoolLocation(spool.id, `${printer.name} - ${amsId}`);
+                            } catch (err) {
+                                console.error(printer.name, printer.logFilePath, "   Location update failed:", err.message);
+                            }
+                        }
+                    }
                 }
 
-                printer.lastUpdateTime = currentTime;
-                existingSpool = spool;
                 break;
             }
         }
@@ -293,6 +532,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                         const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Create Spool", enableButton, slotState: "", error };
                         if (!prev || hasSpoolUiChanged(preview, prev)) {
                             await createSpool({ amsId, slot, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
+                            mutated = true;
                         }
                     }
                     option = "Create Spool";
@@ -304,6 +544,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                         const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Create Filament & Spool", enableButton, slotState: "", error };
                         if (!prev || hasSpoolUiChanged(preview, prev)) {
                             await createFilamentAndSpool({ amsId, slot, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
+                            mutated = true;
                         }
                     }
                     option = "Create Filament & Spool";
@@ -319,6 +560,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Merge Spool", enableButton, slotState: "", error };
                 if (!prev || hasSpoolUiChanged(preview, prev)) {
                     await mergeSpool({ amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
+                    mutated = true;
                 }
             }
             option = "Merge Spool";
@@ -326,10 +568,42 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
         if (!automatic) enableButton = "true";
         printer.lastUpdateTime = new Date();
+
+        // A create/merge just happened — look the spool back up right away so
+        // the UI reflects the real connection immediately. Without this, the
+        // overview would stay on the pending "Create Spool" state until some
+        // unrelated change happens to trigger reprocessing of this slot (the
+        // creation itself doesn't count as a change once state.lastSpoolData
+        // has already been refreshed to include it).
+        if (mutated) {
+            const freshSpools = await getSpoolmanSpools();
+            const linked = freshSpools.find(
+                s => s.extra?.tag && JSON.parse(s.extra.tag) === slot.tray_uuid
+            );
+            if (linked) {
+                existingSpool = linked;
+                found = true;
+                option = "No actions available";
+            }
+        }
     }
 
-    const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight);
+    const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
     const correctedWeight = Math.round((correctedRemain / 100) * slot.tray_weight);
+
+    // A manual assignment wins over the automatic tag match: it is the only way
+    // for the user to resolve two tagged spools that are identical in
+    // tray_info_idx and color, which the tag match alone cannot tell apart.
+    const mappedSpool = resolveMappedSpool(printer, amsId, slot, spools);
+    if (mappedSpool) {
+        existingSpool = mappedSpool;
+        option = "Unassign Spool";
+        enableButton = "true";
+    } else if (!found && option === "No actions available") {
+        // Nothing to create or merge, and no tag link — offer a manual assignment
+        option = "Assign Spool";
+        enableButton = "true";
+    }
 
     await clearLocationIfSpoolChanged(printer, amsId, existingSpool?.id ?? null, prevByAmsId);
 
@@ -340,6 +614,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         matchingInternalFilament,
         matchingExternalFilament,
         existingSpool,
+        // True only when the spool is physically connected to this slot via the
+        // Spoolman extra.tag (= tray_uuid) match. Consumption is only booked to
+        // these spools and to manually assigned ones, never to mere filament
+        // candidates (findExistingSpool).
+        connectedViaTag: found,
+        connectedViaMapping: !!mappedSpool,
         option,
         enableButton,
         printerName: printer.name,
@@ -351,6 +631,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     };
 
     pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+    return mutated;
 }
 
 function buildEmptySpool(printer, amsId, slot) {
@@ -370,21 +651,48 @@ function buildEmptySpool(printer, amsId, slot) {
     };
 }
 
-function buildThirdPartySpool(printer, amsId, slot) {
+function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
+    const correctedWeight = mappedSpool?.remaining_weight ?? null;
+
     return {
         amsId,
         slot,
         mergeableSpool: null,
         matchingInternalFilament: null,
         matchingExternalFilament: null,
-        existingSpool: null,
-        option: "No actions available",
-        enableButton: "false",
+        existingSpool: mappedSpool,
+        // Never true for a chipless spool — the link comes from the manual
+        // assignment below, not from an RFID tag.
+        connectedViaTag: false,
+        connectedViaMapping: !!mappedSpool,
+        correctedWeight,
+        option: mappedSpool ? "Unassign Spool" : "Assign Spool",
+        enableButton: "true",
         printerName: printer.name,
         logFilePath: printer.logFilePath,
         slotState: "Loaded (3rd party)",
         error: false,
     };
+}
+
+/**
+ * Looks up the manually assigned Spoolman spool for a slot. Returns null when
+ * nothing is assigned, when the assignment went stale (different filament in
+ * the slot now — getMapping drops it), or when the assigned spool no longer
+ * exists in Spoolman.
+ */
+function resolveMappedSpool(printer, amsId, slot, spools) {
+    const mapping = getMapping(printer.id, amsId, slot);
+    if (!mapping) return null;
+
+    const spool = (spools || []).find(s => s.id === mapping.spoolId);
+    if (!spool) {
+        console.log(printer.name, printer.logFilePath, `[Mapping] ${amsId}: assigned spool ${mapping.spoolId} no longer exists in Spoolman, dropping assignment`);
+        clearMapping(printer.id, amsId);
+        return null;
+    }
+
+    return spool;
 }
 
 function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
@@ -428,15 +736,18 @@ export async function setupMqtt(printer) {
             handleMqttMessage(printer, topic, message);
         });
 
-        client.on("close", async () => {
+        client.on("close", () => {
             printer.mqttStatus = "Disconnected";
             printer.mqttRunning = false;
             printer.mqttClient = null;
 
+            // No self-rescheduling here — monitorPrinters() is the single
+            // place driving reconnect attempts (polls every OFFLINE_CHECK_INTERVAL
+            // and calls setupMqtt() again once mqttRunning is false). Having
+            // both this handler and that loop independently retry used to
+            // race and made the actual retry cadence hard to reason about.
             if (printer.monitoringEnabled) {
-                console.log(printer.name, printer.logFilePath, ` Retrying connection in ${formatInterval(OFFLINE_CHECK_INTERVAL)}...`);
-                await sleep(OFFLINE_CHECK_INTERVAL);
-                setupMqtt(printer);
+                console.log(printer.name, printer.logFilePath, ` Connection closed — will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
             }
         });
 
@@ -465,11 +776,9 @@ export async function setupMqtt(printer) {
             return;
         }
 
-        console.log(printer.name, printer.logFilePath, ` Retrying connection in ${formatInterval(OFFLINE_CHECK_INTERVAL)}...`);
-        await sleep(OFFLINE_CHECK_INTERVAL);
-
-        if (!printer.monitoringEnabled) return;
-        setupMqtt(printer);
+        // No self-rescheduling here either — see the comment in the "close"
+        // handler above. monitorPrinters() will retry within OFFLINE_CHECK_INTERVAL.
+        console.log(printer.name, printer.logFilePath, ` Connection failed — will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
     }
 }
 

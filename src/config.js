@@ -9,8 +9,11 @@ export const __rootDir = path.dirname(path.dirname(__filename));
 
 export const serverLogFilePath = path.join(__rootDir, "logs", "server.log");
 export const configPath = path.resolve(__rootDir, "printers", "printers.json");
+// Manual AMS slot -> Spoolman spool assignments, written by the service itself.
+// Kept separate from printers.json, which is user-maintained and read-only here.
+export const mappingsPath = path.resolve(__rootDir, "printers", "mappings.json");
 
-export const version = "1.2.1";
+export const version = "1.3.0";
 export const PORT = 4000;
 
 export const PRINTER_ID = process.env.PRINTER_ID;
@@ -32,6 +35,10 @@ export const MAX_RETRIES = process.env.MAX_RETRIES
     : 0;
 export const NEVER_MERGE_IF_TAG = (process.env.NEVER_MERGE_IF_TAG || "false") === "true";
 export const SET_LOCATION = (process.env.SET_LOCATION || "false") === "true";
+// Legacy mode: update spool weight from the AMS RFID remain percentage via MQTT.
+// Default (false) tracks consumption from the sliced G-code instead, which also
+// works for 3rd-party spools without an RFID chip.
+export const LEGACY_MODE = (process.env.LEGACY_MODE || "false") === "true";
 export const DEBUG = process.env.DEBUG || "false";
 export const MODE = process.env.MODE || "manual";
 export const RECONNECT_INTERVAL = 60000;

@@ -1,6 +1,18 @@
 import got from "got";
 import { SPOOLMAN_URL, serverLogFilePath } from "./config.js";
 import { state } from "./state.js";
+import { correctRemainInt } from "./ams.js";
+
+// The AMS RFID chip reports the real remaining percentage of an already
+// partially-used spool. New spools should be created reflecting that, not as
+// if they were brand new — otherwise a spool found at e.g. 32% remaining
+// would be created at 100% (used_weight 0) and immediately drift out of sync.
+function usedWeightFromSlot(slot) {
+    const remainPct = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
+    if (!Number.isFinite(remainPct)) return 0;
+    const remainingWeight = Math.round((remainPct / 100) * slot.tray_weight);
+    return Math.max(0, Math.round(slot.tray_weight - remainingWeight));
+}
 
 export async function getSpoolmanSpools() {
     try {
@@ -135,6 +147,7 @@ export async function createSpool(spoolData) {
     const postData = {
         filament_id: Number(spoolData.matchingInternalFilament.id),
         initial_weight: Number(spoolData.slot.tray_weight),
+        used_weight: usedWeightFromSlot(spoolData.slot),
         first_used: Date.now(),
         extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
     };
@@ -200,6 +213,7 @@ export async function createFilamentAndSpool(spoolData) {
             const spoolPayload = {
                 filament_id: filamentId,
                 initial_weight: spoolData.slot.tray_weight,
+                used_weight: usedWeightFromSlot(spoolData.slot),
                 first_used: Date.now(),
                 extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
             };
@@ -243,4 +257,10 @@ export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed, locat
 
 export async function patchSpoolLocation(spoolId, location) {
     return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { location } });
+}
+
+export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
+    return got.put(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}/use`, {
+        json: { use_weight: usedGrams, last_used: lastUsed },
+    });
 }

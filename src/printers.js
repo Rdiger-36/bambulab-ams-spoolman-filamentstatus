@@ -35,6 +35,13 @@ export function loadPrintersConfig() {
             lastUpdateTime: date,
             first_run: true,
             monitoringEnabled: true,
+            // print consumption tracking
+            currentGcodeState: "IDLE",
+            currentJobName: null,
+            currentSliceInfo: null,
+            currentLayerNum: 0,
+            consumptionBooked: false,
+            sliceFetchDone: false,
         }));
     } catch (error) {
         console.error("Server", serverLogFilePath, "Error loading printers configuration:", error.message);
@@ -53,6 +60,13 @@ export function loadPrintersConfig() {
                 lastUpdateTime: date,
                 first_run: true,
                 monitoringEnabled: true,
+                // print consumption tracking
+                currentGcodeState: "IDLE",
+                currentJobName: null,
+                currentSliceInfo: null,
+                currentLayerNum: 0,
+                consumptionBooked: false,
+                sliceFetchDone: false,
             }];
         } else {
             console.error("Server", serverLogFilePath, "No valid printers found!");
