@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Version 1.3.0
+Version 1.3.0-dev
    - New Features:
       - Filament consumption is now tracked from the sliced G-code instead of the AMS RFID remain percentage
          - While a print runs, the sliced .gcode.3mf is downloaded from the printer via FTPS (port 990, same access code as MQTT) and the needed grams per filament are read from Metadata/slice_info.config

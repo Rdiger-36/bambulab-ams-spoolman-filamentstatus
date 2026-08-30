@@ -13,7 +13,7 @@ export const configPath = path.resolve(__rootDir, "printers", "printers.json");
 // Kept separate from printers.json, which is user-maintained and read-only here.
 export const mappingsPath = path.resolve(__rootDir, "printers", "mappings.json");
 
-export const version = "1.3.0";
+export const version = "1.3.0-dev";
 export const PORT = 4000;
 
 export const PRINTER_ID = process.env.PRINTER_ID;

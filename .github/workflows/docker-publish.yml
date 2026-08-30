@@ -38,17 +38,44 @@ jobs:
       - name: Determine tags
         id: tags
         run: |
+          set -euo pipefail
+
+          # Only a tag may publish. A manual run sits on a branch, where
+          # GITHUB_REF_NAME is the branch name — that was treated as a version
+          # and moved :latest to whatever happened to be on that branch.
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "::error::This workflow publishes from a tag only (got ${GITHUB_REF_TYPE} '${GITHUB_REF_NAME}'). Push a vX.Y.Z tag instead."
+            exit 1
+          fi
+
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' is not vX.Y.Z or vX.Y.Z-suffix."
+            exit 1
+          fi
+
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           IMAGE="${IMAGE,,}"  # lowercase
 
           VERSION="${GITHUB_REF_NAME#v}"
 
-          if [[ "$VERSION" == *-dev ]]; then
-            TAGS="${IMAGE}:${VERSION},${IMAGE}:dev"
-          else
-            TAGS="${IMAGE}:${VERSION},${IMAGE}:latest"
+          # Keep the image and the version the app reports in its Web UI in step
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "${VERSION}" != "${PKG_VERSION}" ]]; then
+            echo "::error::Tag version '${VERSION}' does not match package.json '${PKG_VERSION}'."
+            exit 1
           fi
 
+          # A suffix marks a pre-release and must never move :latest. A -dev
+          # suffix additionally moves the rolling :dev tag, further iterations
+          # (-dev.2 and so on) included. Any other suffix publishes its exact
+          # version only, so an -rc or -beta cannot reach users on :latest.
+          case "${VERSION}" in
+            *-dev|*-dev.*) TAGS="${IMAGE}:${VERSION},${IMAGE}:dev" ;;
+            *-*)           TAGS="${IMAGE}:${VERSION}" ;;
+            *)             TAGS="${IMAGE}:${VERSION},${IMAGE}:latest" ;;
+          esac
+
+          echo "Publishing: ${TAGS}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
