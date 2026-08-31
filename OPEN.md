@@ -93,7 +93,8 @@ None of this involved real hardware, so it says nothing about the items above.
 
 ## Before the next official release
 
-The version deliberately stays at `1.3.0-dev` for now.
+The version deliberately stays on a `-dev` prerelease for now, currently
+`1.3.0-dev.2`.
 
 - [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
   The publish workflow compares the tag against `package.json` and aborts on a
