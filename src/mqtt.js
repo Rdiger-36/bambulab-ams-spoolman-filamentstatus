@@ -500,7 +500,10 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
         // No RFID chip means no extra.tag link in Spoolman, so the only way to
         // know which spool sits here is a manual assignment made in the UI.
-        const mappedSpool = resolveMappedSpool(printer, amsId, slot, spools);
+        // Legacy mode has no use for one: it takes the weight from the RFID
+        // percentage, which a chipless spool does not report, so the slot stays
+        // read-only exactly as it was before assignments existed.
+        const mappedSpool = LEGACY_MODE ? null : resolveMappedSpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
         if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
@@ -682,12 +685,17 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // A manual assignment wins over the automatic tag match: it is the only way
     // for the user to resolve two tagged spools that are identical in
     // tray_info_idx and color, which the tag match alone cannot tell apart.
-    const mappedSpool = resolveMappedSpool(printer, amsId, slot, spools);
+    //
+    // Legacy mode skips this entirely. An assignment exists to tell the G-code
+    // booking which spool to charge, and legacy books nothing: it writes the
+    // weight straight onto the tag-connected spool. Offering it there would be
+    // a button that changes nothing.
+    const mappedSpool = LEGACY_MODE ? null : resolveMappedSpool(printer, amsId, slot, spools);
     if (mappedSpool) {
         existingSpool = mappedSpool;
         option = "Unassign Spool";
         enableButton = "true";
-    } else if (!found && option === "No actions available") {
+    } else if (!LEGACY_MODE && !found && option === "No actions available") {
         // Nothing to create or merge, and no tag link, so offer a manual assignment
         option = "Assign Spool";
         enableButton = "true";
@@ -761,8 +769,11 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         connectedViaTag: false,
         connectedViaMapping: !!mappedSpool,
         correctedWeight,
-        option: mappedSpool ? "Unassign Spool" : "Assign Spool",
-        enableButton: "true",
+        // Legacy mode offers nothing here. Its weight comes from the RFID
+        // percentage, which this spool does not report, so there is no action
+        // that would do anything.
+        option: LEGACY_MODE ? "No actions available" : (mappedSpool ? "Unassign Spool" : "Assign Spool"),
+        enableButton: LEGACY_MODE ? "false" : "true",
         printerName: printer.name,
         logFilePath: printer.logFilePath,
         slotState: "Loaded (3rd party)",
