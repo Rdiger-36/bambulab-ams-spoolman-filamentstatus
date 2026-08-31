@@ -46,6 +46,10 @@ test("a collapsing message does not swallow lines logged around it", async () =>
     assert.equal(payloads.length, count);
 });
 
+// This one covers the collapse itself, not the write queue: it is the only test
+// in this file that still passes when the read is moved back outside the queue,
+// because nothing else writes to the file while it runs. The three around it
+// fail there, which was measured rather than assumed.
 test("repeated collapsing messages stay a single line", async () => {
     const file = tmpLog("collapsed.log");
 
@@ -55,6 +59,28 @@ test("repeated collapsing messages stay a single line", async () => {
     const lines = readLines(file);
     assert.equal(lines.length, 1);
     assert.ok(lines[0].endsWith("paused until 49"), `unexpected last line: ${lines[0]}`);
+});
+
+test("a collapse does not swallow a line written by another level in the same burst", async () => {
+    // The collapse rewrites the whole file, so it competes with every other
+    // writer. Interleaving the three console levels is what a reconnect loop
+    // during an active print actually looks like.
+    const file = tmpLog("levels-collapse.log");
+    const count = 100;
+
+    for (let i = 0; i < count; i++) {
+        console.log("dev", file, `${COLLAPSING} paused until ${i}`);
+        console.error("dev", file, `boom ${i}`);
+        console.log("dev", file, `payload ${i}`);
+    }
+    await settle(file);
+
+    const lines = readLines(file);
+    assert.equal(lines.filter(l => l.includes("boom ")).length, count);
+    assert.equal(lines.filter(l => l.includes("payload ")).length, count);
+    // Every collapsing message but the last was followed by other writes, so
+    // each one keeps its own line rather than replacing an earlier one
+    assert.equal(lines.filter(l => l.includes(COLLAPSING)).length, count);
 });
 
 test("a collapsing message appends when it is not the last line", async () => {
