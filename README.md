@@ -72,11 +72,22 @@ Simply pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` s
 
 The architectures supported by this image are:
 
-| Architecture | Supported |
-| :----: | :----: |
-| x86-64 | ✅ |
-| arm64 | ✅ |
-| armhf | ✅ |
+| Docker platform | Also known as | Supported | Typical hardware |
+| :---- | :---- | :----: | :---- |
+| `linux/amd64` | x86-64, x64 | ✅ | PCs, servers, most NAS boxes |
+| `linux/arm64` | aarch64, arm64v8 | ✅ | Raspberry Pi 3 and newer on a 64 bit OS, Apple Silicon |
+| `linux/arm/v7` | armhf (Debian, Raspberry Pi OS), armv7 (Alpine) | ✅ | Raspberry Pi 2 and newer on a 32 bit OS, older ARM SBCs and NAS boxes |
+| `linux/arm/v6` | armhf (Alpine), armel | ❌ | Raspberry Pi 1, Pi Zero, Pi Zero W |
+
+A note on "armhf", because it means two different things. Debian and Raspberry
+Pi OS use it for 32 bit ARMv7, which is supported. Alpine uses it for ARMv6,
+which is not. Raspberry Pi OS additionally reports "armhf" on an ARMv6 Pi Zero,
+so the name alone does not tell you whether an image exists. The Docker platform
+in the first column is the one unambiguous identifier.
+
+If `docker pull` reports `no matching manifest for linux/arm/v6`, the device is
+an ARMv6 one from the last row. Those are not built: a Pi Zero has a single
+1 GHz core and 512 MB of RAM, which this service would not run well on.
 
 ### Supported Hardware
 
