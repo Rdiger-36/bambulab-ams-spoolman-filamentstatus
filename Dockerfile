@@ -1,5 +1,5 @@
 # Base Image
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Install time zone data and set the time zone
 RUN apk update && apk add --no-cache tzdata mosquitto-clients openssl jq

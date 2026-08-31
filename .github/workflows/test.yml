@@ -22,10 +22,11 @@ jobs:
       # One red version should not hide the result of the other.
       fail-fast: false
       matrix:
-        # 18 is what the Docker image ships (see Dockerfile), so it is the
-        # version that actually has to pass. 22 is the current LTS and gives
-        # early warning before the base image is bumped.
-        node: ['18', '22']
+        # 22 is what the Docker image ships (see Dockerfile), so it is the
+        # version that actually has to pass. 24 is early warning for the code
+        # itself; it cannot become the base image while linux/arm/v7 is a
+        # published platform, because node:24-alpine has no armv7 build.
+        node: ['22', '24']
 
     name: node ${{ matrix.node }}
 
