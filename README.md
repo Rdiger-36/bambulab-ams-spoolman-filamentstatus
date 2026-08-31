@@ -56,6 +56,7 @@ In the legacy tracking mode (`LEGACY_MODE=true`) the AMS Lite is not supported f
 - Lightweight Docker container for easy deployment
 - Web UI for manually merge or create Spools and Filaments with collected data
 - Automatic Mode for automatically merge or create Spools and Filaments with collected data
+- Settings page in the Web UI for the configuration and the printer list, no container restart needed
 
 ## Getting Started
 
@@ -145,6 +146,10 @@ The Hardware supported by this image are:
    | id         | Serial from Printer |
    | code       | AccessCode from Printer |
 
+   This file is optional. Start the container without it and add your printers
+   on the settings page of the Web UI instead, see [Settings](#settings). The
+   service writes the file itself from then on.
+
 2. Run the container:
    ```bash
    docker run -d \
@@ -182,6 +187,12 @@ The Hardware supported by this image are:
 
 ## Environment Variables
 
+Every variable below is also a field on the [settings page](#settings). A
+variable seeds its setting as long as the setting has never been saved in the
+Web UI. After the first save `printers/settings.json` owns the value and the
+variable is ignored, so that a value changed in the UI is not silently reverted
+by the container definition on the next start.
+
 | Variable             | Description                                   |
 |----------------------|-----------------------------------------------|
 | `SPOOLMAN_ENDPOINT`  | Provide Spoolman full endpoint (use http or https and optional subfolder) |
@@ -192,6 +203,9 @@ The Hardware supported by this image are:
 | `SET_LOCATION`       | Automatically sync the spool location in Spoolman with the AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected (default: "false") |
 | `LEGACY_MODE`        | Track spool weight from the AMS RFID remain % instead of the sliced G-code: "true" or "false" (default: "false"). See [Tracking modes](#tracking-modes) |
 | `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (default: false)|
+| `OFFLINE_CHECK_INTERVAL` | Time in ms between two reachability checks of a disconnected printer (default: 20000 ms, min. 20000, max. 3600000) |
+| `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
+| `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
 
 ## Usage
 
@@ -363,6 +377,31 @@ Spoolman Extra Field "tag" for Spool is set: false
 Create Extra Filed "tag" for Spools in Spoolman
 Extra Field "tag" successfully created!
 ```
+
+## Settings
+
+The **Settings** entry in the menu bar opens a page that holds everything the
+environment variables cover, plus the printer list.
+
+- **Printers**: add, edit and remove printers. A new printer connects right
+  away, a removed one is disconnected and its spool assignments are dropped.
+  The serial number cannot be changed, it keys the MQTT topic, the log file and
+  the assignments. The access code is stored on the server and never sent back
+  to the browser; leave the field empty while editing to keep the stored one.
+- **Spoolman connection, intervals and behaviour**: applied to the running
+  service as soon as they are saved. Changing the endpoint reconnects and runs
+  the vendor and extra field setup against the new instance.
+- **Legacy mode** is the one field that needs a restart, and the page says so.
+  The two tracking modes book consumption differently, so switching them under a
+  running print would book twice or not at all.
+
+Everything is stored in `printers/settings.json` next to `printers.json`, so it
+survives a container update as long as that volume is mounted.
+
+> [!IMPORTANT]
+> The Web UI has no authentication. It is meant for a trusted local network.
+> With the settings page it can now change the printer list and the Spoolman
+> endpoint, so do not expose the port to the internet.
 
 ## Web UI
 Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:

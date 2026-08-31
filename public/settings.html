@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="hide-footer">
+    <div id="menubar">
+        <button class="log-button" onclick="window.location.href='index.html'">AMS Dashboard</button>
+        <button id="dark-mode-toggle" class="dark-mode-button">
+            <img id="dark-mode-icon" src="https://img.icons8.com/ios-glyphs/30/moon-symbol.png" alt="Mode Toggle">
+        </button>
+    </div>
+
+    <h1>Settings</h1>
+
+    <div id="set-banner" class="set-banner"></div>
+
+    <div class="set-card">
+        <div class="set-card-head">
+            <h2>Printers</h2>
+            <button class="btn" id="add-printer">Add printer</button>
+        </div>
+        <p class="set-note">The access code is stored on the server and never sent back to the browser. Leave it empty while editing to keep the one already stored.</p>
+        <div id="printer-table"></div>
+    </div>
+
+    <form id="settings-form">
+        <div id="settings-groups"></div>
+        <div class="set-actions">
+            <button class="btn" type="submit" id="save-settings">Save settings</button>
+            <button class="btn" type="button" id="reload-settings">Discard changes</button>
+        </div>
+    </form>
+
+    <script src="settings.js"></script>
+
+    <dialog id="printer-dialog">
+        <h3 id="printer-dialog-title"></h3>
+        <div class="set-form" id="printer-dialog-fields"></div>
+        <p class="set-error" id="printer-dialog-error"></p>
+        <div class="button-container">
+            <button class="btn" id="printer-dialog-cancel" type="button">Cancel</button>
+            <button class="btn" id="printer-dialog-save" type="button">Save</button>
+        </div>
+    </dialog>
+
+    <dialog id="confirm-dialog">
+        <h3 id="confirm-dialog-title"></h3>
+        <div id="confirm-dialog-text"></div>
+        <div class="button-container">
+            <button class="btn" id="confirm-dialog-cancel" type="button">Cancel</button>
+            <button class="btn" id="confirm-dialog-ok" type="button">Delete</button>
+        </div>
+    </dialog>
+</body>
+</html>

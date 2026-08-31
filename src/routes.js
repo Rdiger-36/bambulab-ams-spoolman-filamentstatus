@@ -1,7 +1,10 @@
 import { createReadStream } from "fs";
 import mime from "mime-types";
 import path from "path";
-import { serverLogFilePath, PORT, version, SPOOLMAN_URL, SPOOLMAN_FQDN, MODE, MAX_RETRIES, LEGACY_MODE } from "./config.js";
+import { serverLogFilePath, version } from "./config.js";
+import { settings, spoolmanUrl, getSettingsView, updateSettings } from "./settings.js";
+import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
+import { restartSpoolmanConnection } from "./service.js";
 import { state } from "./state.js";
 import { tailFileLines } from "./logger.js";
 import {
@@ -19,8 +22,8 @@ import {
     createSpoolRecord,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey } from "./gcode.js";
-import { setupMqtt, broadcastSlotUpdate } from "./mqtt.js";
-import { getMappings, setMapping, clearMapping } from "./mappings.js";
+import { setupMqtt, broadcastSlotUpdate, broadcastSSE } from "./mqtt.js";
+import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /** Strips server-only fields from a UI spool before it goes out to a client. */
 function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
@@ -57,7 +60,7 @@ function resolveSpoolData({ printerId, amsId }, printers, res) {
  * @returns {boolean} true when the request was answered and the caller must stop
  */
 function rejectInLegacyMode(res) {
-    if (!LEGACY_MODE) return false;
+    if (!settings.LEGACY_MODE) return false;
     res.status(409).json({ ok: false, error: "Manual spool assignment is not available in legacy mode" });
     return true;
 }
@@ -87,11 +90,11 @@ export function registerRoutes(app, printers) {
             lastMqttAmsUpdate: printer.lastMqttAmsUpdate,
             PRINTER_ID: printer.id,
             printerName: printer.name,
-            MODE,
-            LEGACY_MODE,
-            SPOOLMAN_URL,
+            MODE: settings.MODE,
+            LEGACY_MODE: settings.LEGACY_MODE,
+            SPOOLMAN_URL: spoolmanUrl(),
             VERSION: version,
-            SPOOLMAN_FQDN,
+            SPOOLMAN_FQDN: settings.SPOOLMAN_FQDN,
             monitoringEnabled: printer.monitoringEnabled,
         });
     });
@@ -499,6 +502,133 @@ export function registerRoutes(app, printers) {
 
         res.json({ ok: true, removed: existed });
     });
+
+    // ---------------------------------------------------------------------
+    // Runtime configuration
+    //
+    // Everything that used to be an environment variable only. The values are
+    // stored in printers/settings.json and applied to the running process right
+    // away, except for the fields the schema marks as restart required.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/settings", (req, res) => {
+        res.json(getSettingsView());
+    });
+
+    app.put("/api/settings", (req, res) => {
+        const previousUrl = spoolmanUrl();
+
+        let result;
+        try {
+            result = updateSettings(req.body);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not write settings.json:", err?.message);
+            return res.status(500).json({ ok: false, error: err?.message || "Could not save the settings" });
+        }
+
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.errors.join(" / ") });
+
+        if (result.changed.length) {
+            console.log("Server", serverLogFilePath, `[Settings] Changed: ${result.changed.join(", ")}`);
+        }
+        // The interval is copied onto every printer object, so a change has to
+        // be pushed into the running ones.
+        if (result.changed.includes("UPDATE_INTERVAL")) syncPrinterIntervals();
+        if (spoolmanUrl() !== previousUrl) restartSpoolmanConnection();
+
+        const view = getSettingsView();
+        broadcastSSE({ type: "settings_update", values: view.values });
+
+        res.json({ ok: true, ...view, changed: result.changed, restartRequired: result.restartRequired });
+    });
+
+    // ---------------------------------------------------------------------
+    // Printer management
+    //
+    // The access code is never sent to a client. An update without a code keeps
+    // the stored one, which is how the Web UI edits a printer it cannot display
+    // the code of.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/printers/config", (req, res) => {
+        res.json(printers.map(publicPrinter));
+    });
+
+    app.post("/api/printers", (req, res) => {
+        const result = addPrinter(req.body);
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+
+        console.log("Server", serverLogFilePath, `[Printer] Added ${result.printer.name} (${result.printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        // Connect right away instead of waiting for the next monitor pass.
+        setupMqtt(result.printer);
+
+        res.json({ ok: true, printer: publicPrinter(result.printer) });
+    });
+
+    app.put("/api/printers/:printerId", (req, res) => {
+        const result = updatePrinter(req.params.printerId, req.body);
+        if (!result.ok) {
+            const status = result.error === "Printer not found" ? 404 : 400;
+            return res.status(status).json({ ok: false, error: result.error });
+        }
+
+        console.log(result.printer.name, result.printer.logFilePath, `[Printer] Updated ${result.printer.name} (${result.printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        if (result.reconnect) {
+            disconnectPrinter(result.printer);
+            // The cooldown in setupMqtt guards against retry storms, not against
+            // a deliberate reconnect, so clear it here.
+            result.printer.lastReconnectAttempt = 0;
+            result.printer.reconnectAttempts = 0;
+            if (result.printer.monitoringEnabled) setupMqtt(result.printer);
+        }
+
+        res.json({ ok: true, printer: publicPrinter(result.printer), reconnected: result.reconnect });
+    });
+
+    app.delete("/api/printers/:printerId", (req, res) => {
+        const printer = printers.find(p => p.id === req.params.printerId);
+        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+
+        printer.monitoringEnabled = false;
+        disconnectPrinter(printer);
+
+        const result = removePrinter(printer.id);
+        if (!result.ok) return res.status(404).json({ ok: false, error: result.error });
+
+        // The assignments describe slots of a printer that no longer exists.
+        clearPrinterMappings(printer.id);
+
+        console.log("Server", serverLogFilePath, `[Printer] Removed ${printer.name} (${printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        res.json({ ok: true, removed: printer.id });
+    });
+}
+
+/** The printer fields a client may see. The access code is deliberately not one of them. */
+function publicPrinter(printer) {
+    return {
+        id: printer.id,
+        name: printer.name,
+        ip: printer.ip,
+        hasCode: !!printer.code,
+        mqttStatus: printer.mqttStatus,
+        monitoringEnabled: printer.monitoringEnabled,
+    };
+}
+
+/** Closes the MQTT connection of a printer, if it has one. */
+function disconnectPrinter(printer) {
+    if (printer.mqttClient) {
+        printer.mqttClient.end();
+        printer.mqttClient = null;
+    }
+    printer.mqttRunning = false;
+    printer.mqttStatus = "Disconnected";
 }
 
 /** Parses a value into a finite number, or null when it is empty or invalid. */

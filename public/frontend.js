@@ -104,6 +104,13 @@ document.addEventListener("DOMContentLoaded", () => {
 			if (data.printer === current) {
 			    document.getElementById("monitoring-toggle").checked = data.enabled;
 			}
+	  } else if (data.type === "printers_update") {
+			// A printer was added, renamed or removed on the settings page
+			fetchPrinters();
+	  } else if (data.type === "settings_update") {
+			// The status card shows the operation mode and the tracking mode,
+			// so it has to be refetched when they change
+			if (currentPrinterId) loadPrinterData(currentPrinterId);
 	  }
 
     };
@@ -143,12 +150,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Automatically load the first printer
             if (printers.length > 0) {
+                 // Undo the empty state below, in case a printer was just added
+                 document.getElementById("status").style.display = "";
                  const lastSelectedPrinterId = sessionStorage.getItem("lastSelectedPrinterId");
                  if (lastSelectedPrinterId) {
                      loadPrinterData(lastSelectedPrinterId); // loading last printer
                  } else {
                      loadPrinterData(printers[0].id); // load first printer if theres no last used
                  }
+             } else {
+                 // A fresh install has no printers yet. Point at the page that
+                 // can add one instead of showing an empty dashboard.
+                 document.getElementById("status").style.display = "none";
+                 document.getElementById("spool-list").innerHTML =
+                     '<p style="text-align:center">No printers configured yet. Add one on the <a href="settings.html">settings page</a>.</p>';
              }
         } catch (error) {
             console.error("Error fetching printers:", error);

@@ -1,5 +1,6 @@
 import { promises as fsp } from "fs";
-import { DEBUG, serverLogFilePath } from "./config.js";
+import { serverLogFilePath } from "./config.js";
+import { settings } from "./settings.js";
 import { formatDateLog } from "./utils.js";
 
 const originalConsoleLog = console.log;
@@ -139,11 +140,11 @@ console.error = (device, logFilePath, ...args) => {
 };
 
 /**
- * Writes a debug line, but only when the DEBUG environment variable is "true".
+ * Writes a debug line, but only while debug logging is enabled in the settings.
  * Same signature as the console.log override.
  */
 console.debug = (device, logFilePath, ...args) => {
-    if (DEBUG === "true") {
+    if (settings.DEBUG) {
         const debugMessage = `[DEBUG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
         originalConsoleLog(debugMessage);
 

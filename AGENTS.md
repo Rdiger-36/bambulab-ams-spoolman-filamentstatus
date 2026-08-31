@@ -7,7 +7,7 @@ consumption per print, and serves a small web UI for the parts that need a
 human decision.
 
 Runs as a single container. No database: all persistent state is Spoolman plus
-two JSON files under `printers/`.
+three JSON files under `printers/`.
 
 ## Intent Layer
 
@@ -29,7 +29,7 @@ matter for them are below.
 | `src/` | All backend logic. See its AGENTS.md. |
 | `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. |
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
-| `printers/` | Runtime data, gitignored. `printers.json` is user-maintained (read-only for the service), `mappings.json` is written by the service. |
+| `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
 | `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), standalone `mqtt.js` probe. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
@@ -43,9 +43,11 @@ matter for them are below.
   `backend.js` does this first, on purpose. For output that must bypass the
   override, use the exported `originalConsoleLog` / `originalConsoleError`.
 - **ESM only.** `"type": "module"`; use `import`, not `require`.
-- **Never write `printers/printers.json`.** It is the user's config. Service
-  state belongs in `printers/mappings.json`, which is written atomically
-  (temp file plus rename).
+- **Every file under `printers/` is written through its owning module only**:
+  `printers.json` through `printers.js`, `settings.json` through `settings.js`,
+  `mappings.json` through `mappings.js`. All three write temp file plus rename,
+  so a crash mid-write cannot truncate them. Runtime state never reaches
+  `printers.json`; only id, code, ip and name are persisted.
 - **Never commit `printers/`, `logs/`, or `.env`.** They hold the printer access
   code and LAN addresses and are gitignored. Keep it that way.
 - **Two tracking modes, mutually exclusive.** Default tracks consumption from
@@ -54,8 +56,12 @@ matter for them are below.
 - **The version lives in two places:** `package.json` and `src/config.js`. The
   publish workflow compares the git tag against `package.json` and aborts on a
   mismatch, so bump both together.
-- **Configuration is environment variables only**, read once in `src/config.js`.
-  No other module may read `process.env`.
+- **Configuration lives in `src/settings.js`**, read as `settings.<KEY>` at the
+  point of use, never destructured into a module-level constant. The values
+  change at runtime through the settings API. `src/config.js` is the only module
+  that reads `process.env`, and it only exposes the raw values that seed
+  `settings.json` and `printers.json` on a first run. It also owns the paths,
+  the port and the version.
 
 ## Coding rules
 
@@ -150,6 +156,12 @@ Not punctuation, and therefore allowed:
 
 - Adding a frontend build step or framework to `public/`. It is deliberately
   dependency-free and served straight from disk.
+- Reading a setting into a constant at import time (`const { MODE } = settings`).
+  It freezes the value at startup and the settings page then appears to do
+  nothing.
+- Duplicating the settings schema in the frontend. `public/settings.js` renders
+  whatever `/api/settings` describes, so a new field only has to be added to
+  `SETTINGS_SCHEMA`.
 - Adding a direct dependency without putting it in `package.json`. The Docker
   image installs from `package.json` and `package-lock.json` only, so relying on
   a transitive package works locally and breaks in the container.

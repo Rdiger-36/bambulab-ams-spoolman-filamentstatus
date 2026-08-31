@@ -119,6 +119,22 @@ export function setMapping(printerId, amsId, spoolId, slot = null) {
 }
 
 /**
+ * Removes every assignment of a printer, used when the printer itself is
+ * deleted. Returns false when there was nothing to remove.
+ *
+ * @param {string} printerId - printer serial
+ * @returns {boolean} whether anything was removed
+ */
+export function clearPrinterMappings(printerId) {
+    const all = load();
+    if (!all[printerId]) return false;
+
+    delete all[printerId];
+    persist();
+    return true;
+}
+
+/**
  * Removes a slot assignment and persists the change. Returns false when there
  * was nothing to remove.
  */

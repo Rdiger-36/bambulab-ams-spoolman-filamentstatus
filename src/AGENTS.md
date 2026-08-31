@@ -14,9 +14,11 @@ or the Express app wiring itself (`../backend.js`).
 
 | File | Owns |
 |---|---|
-| `config.js` | Every environment variable, resolved once. The only module allowed to read `process.env`. Also derives `SPOOLMAN_URL` and the on-disk paths. |
+| `config.js` | The on-disk paths, the port, the version, and the raw environment values that seed the two config files. The only module allowed to read `process.env`. |
+| `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()` and the persistence of `printers/settings.json`. Must not import `logger.js`, which reads DEBUG from here. |
+| `service.js` | The startup sequence and the Spoolman reconnect that the settings API triggers when the endpoint changes. |
 | `logger.js` | The `console.*` overrides, the serialised per-file write queue, and `tailFileLines()` for the log viewer. |
-| `printers.js` | Loads `printers/printers.json` (or falls back to `PRINTER_*` env vars) and seeds the mutable per-printer runtime object. |
+| `printers.js` | Loads and writes `printers/printers.json` (or seeds it from the `PRINTER_*` env vars), seeds the mutable per-printer runtime object, and owns add, update and remove. |
 | `mqtt.js` | The engine. Connection lifecycle, message handling, slot processing, print-state tracking, consumption booking, SSE broadcast, monitor loops. |
 | `ams.js` | Pure functions over AMS payloads: normalisation, change detection, spool matching. No I/O. |
 | `gcode.js` | FTPS fetch of the sliced 3MF, `slice_info.config` parsing, consumption maths. |
@@ -54,6 +56,14 @@ reprocessing.
 
 - **`console.log/error/debug` take `(device, logFilePath, ...args)`.** Set up in
   `logger.js`; see the root AGENTS.md. Use `originalConsoleLog` to bypass.
+- **Settings are read at the point of use.** `settings.MODE`, never
+  `const { MODE } = settings`. The object is mutated in place by the settings
+  API, so a destructured copy silently keeps the startup value.
+- **The Spoolman base URL comes from `spoolmanUrl()`**, not from a constant. It
+  changes at runtime.
+- **`printers` is mutated in place.** `monitorPrinters()` iterates the same
+  array forever, which is what makes a printer added in the Web UI get picked
+  up. Never reassign the exported binding.
 - **All Spoolman HTTP goes through `spoolman.js`.** Do not `got()` a Spoolman URL
   from anywhere else.
 - **`slot.remain` is never mutated in place.** It is compared raw against the
@@ -86,9 +96,13 @@ reprocessing.
 
 ## Patterns
 
-**Adding an env var:** declare and coerce it in `config.js` (clamp ranges there,
-not at the use site), document it in the README table, and add it to the compose
-example.
+**Adding a setting:** add the field to `SETTINGS_SCHEMA` in `settings.js` with
+its type, default and range (clamps live there, not at the use site), read it as
+`settings.<KEY>` at the point of use, add the variable to `envSeed` in
+`config.js` when it should be seedable, and document it in the README table. The
+settings page picks it up on its own. Mark it `restartRequired` when the running
+process cannot adopt it, and handle the live application in the `PUT
+/api/settings` handler when it needs more than the new value being read.
 
 **Adding an HTTP route:** add it inside `registerRoutes()` in `routes.js`.
 Respond `{ ok: false, error }` with a 4xx/5xx for failures; the frontend's

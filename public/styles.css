@@ -703,3 +703,140 @@ body.dark-mode .footer {
 .footer a:hover {
   text-decoration: underline;
 }
+/* ---- Settings page ---- */
+.set-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  margin: 20px 0;
+}
+
+body.dark-mode .set-card {
+  background: #1f1f1f;
+  border-color: #3a3a3a;
+  box-shadow: none;
+}
+
+.set-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.set-card-head h2 {
+  margin: 0;
+  font-size: 1.05em;
+}
+
+.set-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px 18px;
+  margin-top: 14px;
+}
+
+.set-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.set-field-label {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  /* Keeps the inputs of a row aligned whether or not the label carries a pill */
+  min-height: 24px;
+}
+
+.set-field-label .pill {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+}
+
+.set-field input[type="text"],
+.set-field input[type="number"],
+.set-field input[type="password"],
+.set-field select {
+  padding: 6px 8px;
+  border: 1px solid #8886;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+}
+
+.set-field small {
+  opacity: 0.7;
+  font-size: 0.85em;
+  line-height: 1.35;
+}
+
+.set-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.set-actions {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0 40px;
+}
+
+.set-row-actions {
+  display: flex;
+  gap: 8px;
+  border: none;
+}
+
+.set-note {
+  font-size: 0.85em;
+  opacity: 0.75;
+  margin: 10px 0 0;
+}
+
+.set-error {
+  color: #b3261e;
+  font-size: 0.88em;
+  margin: 10px 0 0;
+}
+
+body.dark-mode .set-error { color: #f08a82; }
+.set-error:empty { display: none; }
+
+.set-banner {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 16px 0;
+  font-size: 0.92em;
+}
+
+.set-banner:empty { display: none; }
+.set-banner-ok   { background: #e3f6e9; color: #1e7e44; }
+.set-banner-warn { background: #fdf0db; color: #9a6a00; }
+.set-banner-bad  { background: #fbe4e4; color: #b3261e; }
+
+body.dark-mode .set-banner-ok   { background: #14331f; color: #5fd089; }
+body.dark-mode .set-banner-warn { background: #34290f; color: #e0b65f; }
+body.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
+
+#printer-dialog .set-form,
+#printer-dialog {
+  min-width: min(520px, 80vw);
+}
+
+/* Links outside the footer and the menus, currently the pointer to the
+   settings page shown on an empty dashboard. */
+#spool-list a { color: #1c6fd6; }
+body.dark-mode #spool-list a { color: #6fb0ec; }

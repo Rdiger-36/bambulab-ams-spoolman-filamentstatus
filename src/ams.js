@@ -1,4 +1,4 @@
-import { NEVER_MERGE_IF_TAG } from "./config.js";
+import { settings } from "./settings.js";
 
 /**
  * Normalises the raw `print.ams.ams` payload so the rest of the pipeline sees
@@ -235,7 +235,7 @@ export function findMatchingInternalFilament(externalFilament, internalFilaments
  *
  * Among those candidates, one is accepted when its weight is within 15 % of
  * what the AMS reports, or when it is empty, or when it was never used. With
- * NEVER_MERGE_IF_TAG set, a spool that already carries any tag is skipped
+ * the "never merge a tagged spool" setting on, a spool that already carries any tag is skipped
  * outright.
  *
  * @param {object} amsSpool - a normalised AMS slot
@@ -275,7 +275,7 @@ export function findMergeableSpool(amsSpool, allSpools) {
             spoolmanSpool.remaining_weight <= upperTolerance;
         const hasTag = tag && tag !== "" && tag !== '""';
 
-        if (NEVER_MERGE_IF_TAG && hasTag) return false;
+        if (settings.NEVER_MERGE_IF_TAG && hasTag) return false;
 
         const neverUsed = spoolmanSpool.used_weight === 0 || spoolmanSpool.used_weight == null;
 
