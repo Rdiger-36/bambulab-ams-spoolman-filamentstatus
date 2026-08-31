@@ -1,7 +1,31 @@
 import got from "got";
 import { SPOOLMAN_URL, serverLogFilePath } from "./config.js";
 import { state } from "./state.js";
+import { correctRemainInt } from "./ams.js";
 
+/**
+ * Derives the used weight a newly created Spoolman spool should start at.
+ *
+ * The AMS RFID chip reports the real remaining percentage of an already
+ * partially used spool. New spools should be created reflecting that, not as
+ * if they were brand new. Otherwise a spool found at e.g. 32% remaining would
+ * be created at 100% (used_weight 0) and immediately drift out of sync.
+ *
+ * @param {object} slot - a normalised AMS slot
+ * @returns {number} grams already consumed, never negative
+ */
+function usedWeightFromSlot(slot) {
+    const remainPct = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
+    if (!Number.isFinite(remainPct)) return 0;
+    const remainingWeight = Math.round((remainPct / 100) * slot.tray_weight);
+    return Math.max(0, Math.round(slot.tray_weight - remainingWeight));
+}
+
+/**
+ * Fetches all spools. Updates the connection status as a side effect and
+ * returns an empty list on failure, so a Spoolman outage pauses processing
+ * instead of crashing the service.
+ */
 export async function getSpoolmanSpools() {
     try {
         const response = await got(`${SPOOLMAN_URL}/api/v1/spool`);
@@ -14,6 +38,7 @@ export async function getSpoolmanSpools() {
     }
 }
 
+/** Fetches the filaments created in this Spoolman instance, empty on failure. */
 export async function getSpoolmanInternalFilaments() {
     try {
         const response = await got(`${SPOOLMAN_URL}/api/v1/filament`);
@@ -25,6 +50,7 @@ export async function getSpoolmanInternalFilaments() {
     }
 }
 
+/** Fetches the SpoolmanDB filament catalogue, empty on failure. */
 export async function getSpoolmanExternalFilaments() {
     try {
         const response = await got(`${SPOOLMAN_URL}/api/v1/external/filament`);
@@ -36,6 +62,82 @@ export async function getSpoolmanExternalFilaments() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Lookups and creation used by the "new spool" dialog for 3rd party spools.
+// Those spools carry no RFID tag, so nothing about them can be derived: the
+// data has to be entered once, and these endpoints feed the dialog's dropdowns.
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches and parses a Spoolman endpoint, rethrowing on failure.
+ *
+ * Unlike the list getters above, these lookups back an interactive dialog, so a
+ * failure has to surface to the user rather than quietly yield an empty list.
+ *
+ * @param {string} path - path below the Spoolman base URL
+ * @param {string} what - noun used in the error message
+ */
+async function getJson(path, what) {
+    try {
+        const response = await got(`${SPOOLMAN_URL}${path}`);
+        return JSON.parse(response.body);
+    } catch (error) {
+        console.error("Server", serverLogFilePath, `Error fetching ${what} from Spoolman:`, error.message);
+        throw error;
+    }
+}
+
+/** Fetches the vendors known to this Spoolman instance. */
+export const getSpoolmanVendors = () => getJson("/api/v1/vendor", "vendors");
+
+/** Fetches the locations known to this Spoolman instance. */
+export const getSpoolmanLocations = () => getJson("/api/v1/location", "locations");
+
+/** Fetches the materials already in use in this Spoolman instance. */
+export const getSpoolmanMaterials = () => getJson("/api/v1/material", "materials");
+
+/**
+ * Fetches the known material catalogue, which also carries density and
+ * temperatures. Density is required when creating a filament and cannot be read
+ * off the spool, so this is what the dialog prefills it from.
+ */
+export const getSpoolmanExternalMaterials = () => getJson("/api/v1/external/material", "external materials");
+
+/** Creates a vendor by name and returns the created record. */
+export async function createNamedVendor(name) {
+    const response = await got.post(`${SPOOLMAN_URL}/api/v1/vendor`, {
+        json: { name },
+        responseType: "json",
+    });
+    return response.body;
+}
+
+/** Creates a filament from an already built payload and returns the record. */
+export async function createFilament(payload) {
+    const response = await got.post(`${SPOOLMAN_URL}/api/v1/filament`, {
+        json: payload,
+        responseType: "json",
+    });
+    return response.body;
+}
+
+/** Creates a spool from an already built payload and returns the record. */
+export async function createSpoolRecord(payload) {
+    const response = await got.post(`${SPOOLMAN_URL}/api/v1/spool`, {
+        json: payload,
+        responseType: "json",
+    });
+    return response.body;
+}
+
+/**
+ * Makes sure the "Bambu Lab" vendor exists and caches its id in shared state.
+ *
+ * Runs once at startup. Every filament this service creates is attached to that
+ * vendor, so without it nothing can be created at all.
+ *
+ * @returns {Promise<boolean>} whether the vendor is available
+ */
 export async function checkAndSetVendor() {
     console.log("Server", serverLogFilePath, "Checking Vendors...");
     try {
@@ -63,6 +165,7 @@ export async function checkAndSetVendor() {
     }
 }
 
+/** Creates the "Bambu Lab" vendor and stores its id in shared state. */
 async function createVendor() {
     console.log("Server", serverLogFilePath, 'Creating Vendor "Bambu Lab"...');
     try {
@@ -92,6 +195,15 @@ async function createVendor() {
     }
 }
 
+/**
+ * Makes sure the spool extra field "tag" exists in Spoolman.
+ *
+ * That field holds the slot's tray_uuid and is the only link between a physical
+ * Bambu Lab spool and its Spoolman record, so the service cannot work without
+ * it. Runs once at startup.
+ *
+ * @returns {Promise<boolean>} whether the field is available
+ */
 export async function checkAndSetExtraField() {
     console.log("Server", serverLogFilePath, 'Checking Extra Field "tag"...');
     try {
@@ -112,6 +224,7 @@ export async function checkAndSetExtraField() {
     }
 }
 
+/** Creates the spool extra field "tag" in Spoolman. */
 async function createExtraField() {
     console.log("Server", serverLogFilePath, 'Create Extra Field "tag" for Spools in Spoolman');
     try {
@@ -131,10 +244,20 @@ async function createExtraField() {
     }
 }
 
+/**
+ * Creates a spool for an AMS slot whose filament already exists in Spoolman,
+ * tagged with the slot's tray_uuid so it is recognised from then on.
+ *
+ * Failures are logged, not thrown: one slot that cannot be created must not
+ * abort the remaining slots of the same AMS update.
+ *
+ * @param {object} spoolData - the UI spool, carrying slot and matched filament
+ */
 export async function createSpool(spoolData) {
     const postData = {
         filament_id: Number(spoolData.matchingInternalFilament.id),
         initial_weight: Number(spoolData.slot.tray_weight),
+        used_weight: usedWeightFromSlot(spoolData.slot),
         first_used: Date.now(),
         extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
     };
@@ -153,32 +276,56 @@ export async function createSpool(spoolData) {
     }
 }
 
+/**
+ * Builds the Spoolman filament payload for a matched SpoolmanDB entry.
+ *
+ * Every value is read rather than assumed: weight and spool_weight used to be
+ * hardcoded to 1000/250, which mislabelled everything not on a 1 kg spool.
+ *
+ * The filament describes the product, so both weights are the catalogue values.
+ * A physical spool may well deviate from them. Bambu Lab sample spools are not
+ * sold separately and the Support for PLA sample reports 250 g against a 500 g
+ * catalogue entry, but that belongs on the spool as initial_weight, not on the
+ * filament shared by every spool of that product.
+ *
+ * spool_type, finish, pattern, translucent and glow are not part of Spoolman's
+ * FilamentParameters (verified against the 0.26.1 OpenAPI schema) and were
+ * discarded on arrival, so they are no longer sent.
+ */
+export function buildFilamentPayload(spoolData) {
+    const external = spoolData.matchingExternalFilament;
+
+    return {
+        name: external.name,
+        material: spoolData.slot.tray_sub_brands,
+        density: external.density,
+        diameter: external.diameter,
+        spool_weight: external.spool_weight,
+        weight: external.weight,
+        settings_extruder_temp: external.extruder_temp,
+        settings_bed_temp: external.bed_temp,
+        color_hex: external.color_hex,
+        external_id: external.id,
+        multi_color_hexes: external.color_hexes ? external.color_hexes.join(",") : "",
+        multi_color_direction: external.multi_color_direction,
+        vendor_id: state.vendorID,
+    };
+}
+
+/**
+ * Creates both the filament and the spool for an AMS slot, for the case where
+ * the catalogue entry matched but no filament exists in Spoolman yet.
+ *
+ * The spool is only attempted once the filament came back with an id. As in
+ * createSpool, failures are logged rather than thrown.
+ *
+ * @param {object} spoolData - the UI spool, carrying slot and catalogue entry
+ */
 export async function createFilamentAndSpool(spoolData) {
     let filamentId;
 
     try {
-        const filamentPayload = {
-            name: spoolData.matchingExternalFilament.name,
-            material: spoolData.slot.tray_sub_brands,
-            density: spoolData.matchingExternalFilament.density,
-            diameter: spoolData.matchingExternalFilament.diameter,
-            spool_weight: 250,
-            weight: 1000,
-            settings_extruder_temp: spoolData.matchingExternalFilament.extruder_temp,
-            settings_bed_temp: spoolData.matchingExternalFilament.bed_temp,
-            color_hex: spoolData.matchingExternalFilament.color_hex,
-            external_id: spoolData.matchingExternalFilament.id,
-            spool_type: spoolData.matchingExternalFilament.spool_type,
-            multi_color_hexes: spoolData.matchingExternalFilament.color_hexes
-                ? spoolData.matchingExternalFilament.color_hexes.join(",")
-                : "",
-            finish: spoolData.matchingExternalFilament.finish,
-            multi_color_direction: spoolData.matchingExternalFilament.multi_color_direction,
-            pattern: spoolData.matchingExternalFilament.pattern,
-            translucent: spoolData.matchingExternalFilament.translucent,
-            glow: spoolData.matchingExternalFilament.glow,
-            vendor_id: state.vendorID,
-        };
+        const filamentPayload = buildFilamentPayload(spoolData);
 
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${SPOOLMAN_URL}/api/v1/filament`);
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(filamentPayload));
@@ -199,7 +346,8 @@ export async function createFilamentAndSpool(spoolData) {
         try {
             const spoolPayload = {
                 filament_id: filamentId,
-                initial_weight: spoolData.slot.tray_weight,
+                initial_weight: Number(spoolData.slot.tray_weight),
+                used_weight: usedWeightFromSlot(spoolData.slot),
                 first_used: Date.now(),
                 extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
             };
@@ -218,6 +366,12 @@ export async function createFilamentAndSpool(spoolData) {
     }
 }
 
+/**
+ * Connects an existing untagged Spoolman spool to an AMS slot by patching the
+ * slot's tray_uuid into its extra.tag. Nothing else about the spool is touched.
+ *
+ * @param {object} spoolData - the UI spool, carrying slot and mergeableSpool
+ */
 export async function mergeSpool(spoolData) {
     const postData = { extra: { tag: `\"${spoolData.slot.tray_uuid}\"` } };
 
@@ -235,12 +389,49 @@ export async function mergeSpool(spoolData) {
     }
 }
 
+/**
+ * Sets a spool's remaining weight directly. This is the legacy mode write path,
+ * where the weight comes from the AMS RFID remain percentage.
+ *
+ * @param {number} spoolId - Spoolman spool id
+ * @param {number} remainingWeight - grams left on the spool
+ * @param {string} lastUsed - ISO timestamp
+ * @param {string|null} location - AMS slot label, only sent when SET_LOCATION is on
+ */
 export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed, location = null) {
     const payload = { remaining_weight: remainingWeight, last_used: lastUsed };
     if (location !== null) payload.location = location;
     return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: payload });
 }
 
+/** Sets a spool's location, or clears it when passed an empty string. */
 export async function patchSpoolLocation(spoolId, location) {
     return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { location } });
+}
+
+/**
+ * Books consumed filament against a spool. This is the G-code mode write path:
+ * Spoolman subtracts the grams itself, so concurrent bookings cannot overwrite
+ * each other the way a computed remaining weight would.
+ *
+ * @param {number} spoolId - Spoolman spool id
+ * @param {number} usedGrams - grams consumed by the finished print
+ * @param {string} lastUsed - ISO timestamp, patched separately
+ */
+export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
+    const result = await got.put(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}/use`, {
+        json: { use_weight: usedGrams },
+    });
+
+    // The /use endpoint only accepts use_weight and use_length. A last_used sent
+    // along with them is silently dropped, so the timestamp has to be patched
+    // separately. Failing to stamp it must not lose the booking, which already
+    // succeeded above.
+    try {
+        await got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { last_used: lastUsed } });
+    } catch (error) {
+        console.error("Server", serverLogFilePath, `Booked consumption for spool ${spoolId}, but could not set last_used:`, error.message);
+    }
+
+    return result;
 }

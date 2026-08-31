@@ -1,4 +1,47 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0-dev
+   - New Features:
+      - Filament consumption is now tracked from the sliced G-code instead of the AMS RFID remain percentage
+         - While a print runs, the sliced .gcode.3mf is downloaded from the printer via FTPS (port 990, same access code as MQTT) and the needed grams per filament are read from Metadata/slice_info.config
+         - On FINISH the full amount is booked onto the matching Spoolman spool; on FAILED/CANCEL the amount is scaled to the layers that were actually printed
+         - This works for 3rd party spools without an RFID chip as well, which the old remain-percentage tracking could never cover
+      - Manual spool assignment: an AMS slot can be linked to a Spoolman spool from the Web UI, either by picking an existing spool or by creating filament and spool directly in the dialog
+         - The creation form is pre-filled with what the AMS reports (material, colour) and fills density and temperatures from Spoolman's material catalogue
+         - Manufacturer, material and location are pick-or-type; a value that does not exist yet is created on save
+         - The new spool is linked to the slot immediately, no separate assignment step
+         - Required for 3rd party spools, which carry no RFID tag and therefore no extra.tag link in Spoolman
+         - Also resolves two loaded spools that are identical in material and color, which the automatic tag match cannot tell apart
+         - The assignment is dropped automatically as soon as a different filament is detected in that slot
+         - Stored in printers/mappings.json
+      - New ENV LEGACY_MODE: keeps the previous behaviour of writing the AMS RFID remain percentage to Spoolman (default: "false")
+      - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
+
+   - Bugfixes:
+      - Fix: LEGACY_MODE did not switch off the G-code tracking
+         - The sliced file was downloaded on every print and consumption was booked via PUT /spool/{id}/use, on top of the remain-percentage PATCH that legacy mode is supposed to be
+         - The booking was then overwritten again by the next AMS update, so it mostly wasted requests, but it could stick if the spool was removed right after the print
+      - Fix: the log lost most of its lines while the service was running
+         - Messages that collapse into the previous line (e.g. "No new AMS Data or changes in Spoolman found.") rewrite the whole file. The file was read outside the write queue, so everything appended between that read and the write was overwritten by the stale snapshot
+         - console.error and console.debug appended outside the queue as well and could be dropped the same way
+         - A reproduction interleaving 300 ordinary lines with a collapsing one kept 1 of 300 before the fix and all 300 after
+      - Fix: MODE="auto" silently behaved like manual mode, because only the exact value "automatic" was recognised
+         - "auto" is now accepted as a shorthand, and any unrecognised value is reported at startup instead of quietly falling back to manual
+      - Fix: on a fresh Spoolman with no spools yet, the very first spool created was never detected as a change
+         - The change-detection baseline was re-seeded from the current fetch while it was empty, so the new spool was compared against itself and the slot kept offering "Create Spool" although it was already linked
+      - Fix: new filaments were always created with weight 1000g and spool_weight 250g regardless of the actual product
+         - Both values now come from the matched SpoolmanDB entry, so e.g. Support for PLA is created as the 500g product it is
+         - A physical spool may deviate from the product (the Support for PLA sample reports 250g on its RFID chip); that stays on the spool as initial_weight and does not change the filament shared by every spool of that type
+         - spool_type, finish, pattern, translucent and glow are no longer sent, since Spoolman does not accept them and discarded them on arrival
+      - Fix: last_used was not set when booking consumption, because PUT /spool/{id}/use accepts only use_weight and use_length and drops anything else
+      - Fix: support and accessory material (tray_type suffix "-S", e.g. "PLA-S") had its remaining percentage rescaled to a 1kg basis, although it is already reported relative to its real spool size
+      - Fix: spools were compared by list position instead of by ID, so a reordered Spoolman response looked like a content change on every update
+      - Fix: the AMS remain value was overwritten in place during processing, which desynced the change detection for every spool that does not weigh 1000g and made the AMS data look changed on every single message
+      - Fix: MQTT reconnects were scheduled both by the connection handler and the monitor loop, which made the actual retry cadence unpredictable
+      - Fix: after creating or merging a spool the Web UI stayed on the pending action until some unrelated change triggered a reprocess
+      - Fix: action buttons were no longer disabled while Spoolman is unreachable
+      - Spoolman spool and filament lists are no longer refetched for every AMS slot, only after a slot actually created or merged something
+-----------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------
 Version 1.2.1
    - Bugfixes:
       - Fix: 3rd party spools (no RFID chip) with tray_weight=0 were incorrectly displayed as "Empty" instead of "Loaded (3rd party)"

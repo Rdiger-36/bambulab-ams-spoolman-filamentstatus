@@ -11,6 +11,23 @@ import {
 } from "./config.js";
 import { formatDateLog } from "./utils.js";
 
+/**
+ * Reads `printers/printers.json` and turns each entry into the mutable runtime
+ * object every other module works with. The file itself is never written back.
+ *
+ * Every entry needs id, code, ip and name; a single invalid entry rejects the
+ * whole file, because a partially loaded printer list is harder to diagnose
+ * than none at all. On any failure the PRINTER_ID, PRINTER_CODE and PRINTER_IP
+ * environment variables are tried as a single printer fallback, which is how
+ * the Home Assistant add-on and the simplest Docker setups are configured.
+ *
+ * The fields added here beyond the user's config are runtime state: connection
+ * status, the update interval bookkeeping, and the print consumption tracking
+ * that `handlePrintStateChange` in `mqtt.js` advances.
+ *
+ * @returns {object[]|undefined} the printer list, or undefined when neither
+ *   source yielded a usable configuration
+ */
 export function loadPrintersConfig() {
     const date = new Date();
 
@@ -35,6 +52,13 @@ export function loadPrintersConfig() {
             lastUpdateTime: date,
             first_run: true,
             monitoringEnabled: true,
+            // print consumption tracking
+            currentGcodeState: "IDLE",
+            currentJobName: null,
+            currentSliceInfo: null,
+            currentLayerNum: 0,
+            consumptionBooked: false,
+            sliceFetchDone: false,
         }));
     } catch (error) {
         console.error("Server", serverLogFilePath, "Error loading printers configuration:", error.message);
@@ -53,6 +77,13 @@ export function loadPrintersConfig() {
                 lastUpdateTime: date,
                 first_run: true,
                 monitoringEnabled: true,
+                // print consumption tracking
+                currentGcodeState: "IDLE",
+                currentJobName: null,
+                currentSliceInfo: null,
+                currentLayerNum: 0,
+                consumptionBooked: false,
+                sliceFetchDone: false,
             }];
         } else {
             console.error("Server", serverLogFilePath, "No valid printers found!");

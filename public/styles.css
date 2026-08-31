@@ -14,14 +14,335 @@ h1 {
   margin: 20px 0;
 }
 
-#status p {
-  font-size: 16px;
+/* ---- Status card ---- */
+.status-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.status-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.status-head .monitoring-align {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 18px;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.status-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+.status-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  word-break: break-word;
+}
+
+/* ---- Status pills / badges ---- */
+.pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.pill-ok    { background: #e3f6e9; color: #1e7e44; }
+.pill-bad   { background: #fbe4e4; color: #b3261e; }
+.pill-gcode { background: #e3f0fb; color: #1c5fa8; }
+.pill-legacy{ background: #fdf0db; color: #9a6a00; }
+
+/* ---- Dark mode ---- */
+body.dark-mode .status-card {
+  background: #1e1e1e;
+  border-color: #3a3a3a;
+  box-shadow: none;
+}
+body.dark-mode .status-head { border-bottom-color: #333; }
+body.dark-mode .status-label { color: #999; }
+body.dark-mode .status-value { color: #f1f1f1; }
+body.dark-mode .pill-ok    { background: #14331f; color: #5fd089; }
+body.dark-mode .pill-bad   { background: #3a1b1a; color: #f08a82; }
+body.dark-mode .pill-gcode { background: #16293c; color: #6fb0ec; }
+body.dark-mode .pill-legacy{ background: #34290f; color: #e0b65f; }
+
+/* ---- G-code dashboard inline indicators (dark-mode readable) ---- */
+.gc-link     { color: #1c6fd6; text-decoration: none; }
+.gc-link:hover { text-decoration: underline; }
+.gc-ok       { color: #1e7e44; font-weight: 600; }
+.gc-bad      { color: #b3261e; font-weight: 600; }
+.gc-warn     { color: #9a6a00; }
+.gc-muted    { opacity: 0.6; }
+.gc-required { color: #b3261e; }
+
+body.dark-mode .gc-link     { color: #6fb0ec; }
+body.dark-mode .gc-ok       { color: #5fd089; }
+body.dark-mode .gc-bad      { color: #f08a82; }
+body.dark-mode .gc-warn     { color: #e0b65f; }
+body.dark-mode .gc-required { color: #f08a82; }
+
+/* ---- G-code print card ---- */
+.gc-card {
+  border: 1px solid #8884;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.gc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gc-card-note { margin-left: auto; opacity: 0.7; }
+
+/* Print state badge. Colors follow the .pill light/dark pairs above so the
+   badge stays readable in both themes. */
+.gc-state {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  font-weight: 600;
+  background: #ececec;
+  color: #444;
+}
+.gc-state-running { background: #e3f6e9; color: #1e7e44; }
+.gc-state-done    { background: #e3f0fb; color: #1c5fa8; }
+.gc-state-error   { background: #fbe4e4; color: #b3261e; }
+.gc-state-paused  { background: #fdf0db; color: #9a6a00; }
+
+body.dark-mode .gc-state         { background: #2b2b2b; color: #c9c9c9; }
+body.dark-mode .gc-state-running { background: #14331f; color: #5fd089; }
+body.dark-mode .gc-state-done    { background: #16293c; color: #6fb0ec; }
+body.dark-mode .gc-state-error   { background: #3a1b1a; color: #f08a82; }
+body.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
+
+/* ---- Layer progress ---- */
+.gc-progress { margin-top: 10px; }
+.gc-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+.gc-progress-track {
+  height: 8px;
+  background: #8883;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+.gc-progress-bar {
+  height: 100%;
+  background: #1e7e44;
+}
+body.dark-mode .gc-progress-bar { background: #5fd089; }
+
+/* ---- Spool assignment / creation dialog ---- */
+.sp-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+  border-bottom: 1px solid #8884;
+}
+.sp-tab {
+  border: none;
+  background: none;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.92em;
+  color: inherit;
+  opacity: 0.6;
+  border-bottom: 2px solid transparent;
+}
+.sp-tab-active {
+  opacity: 1;
+  font-weight: 600;
+  border-bottom-color: #1c6fd6;
+}
+body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
+
+/* The dialog is capped in height, so the form scrolls rather than the page */
+.sp-scroll {
+  max-height: 46vh;
+  overflow-y: auto;
+  text-align: left;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px 14px;
+  padding-right: 6px;
+}
+.sp-section {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  font-size: 0.9em;
+  opacity: 0.75;
+  margin-top: 6px;
+  border-bottom: 1px solid #8883;
+  padding-bottom: 3px;
+}
+.sp-wide, .sp-note, #sp-error { grid-column: 1 / -1; }
+.sp-note { font-size: 0.82em; margin: 6px 0 0; }
+#sp-error:empty { display: none; }
+
+/* #sp-filament-fields spans the grid and repeats it, so its inputs line up
+   with the spool fields below instead of forming a second, narrower column. */
+#sp-filament-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px 14px;
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.86em;
+}
+.sp-field > span { opacity: 0.75; }
+.sp-field input,
+.sp-field select {
+  padding: 5px 7px;
+  border: 1px solid #8886;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+}
+.sp-field small:empty { display: none; }
+
+.sp-colour { display: flex; gap: 6px; align-items: center; }
+.sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
+.sp-colour input:not([type="color"]) { flex: 1; text-transform: uppercase; }
+
+.sp-pick { display: block; padding: 4px 0; cursor: pointer; }
+.sp-scroll > .sp-pick { grid-column: 1 / -1; }
+
+/* ---- Colour swatch shared by spool rows and the "required" list ---- */
+.gc-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #888;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 5px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
+}
+
+/* Keep content clear of the fixed footer so the last table isn't overlapped */
+body.show-footer #spool-list {
+  margin-bottom: 80px;
+}
+
+/* ---- Responsive tables: stack each row as a card on small screens ---- */
+@media (max-width: 760px) {
+  /* Both the classic AMS table and the G-code table share .spool-table */
+  .spool-table thead {
+    /* hide the header row, labels come from data-label per cell */
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .spool-table,
+  .spool-table tbody,
+  .spool-table tr,
+  .spool-table td {
+    display: block;
+    width: 100% !important;       /* override JS column-sync inline widths */
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+
+  .spool-table {
+    margin-top: 16px;
+    /* drop the desktop card frame. Each row is its own card on mobile.
+       !important beats the desktop .spool-table rules defined later in source. */
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  .spool-table tr {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .spool-table td {
+    border: none;
+    border-bottom: 1px solid #eee;
+    padding: 9px 12px;
+    text-align: left !important;
+  }
+  .spool-table td:last-child { border-bottom: none; }
+
+  /* Per-cell label above the value (robust for multi-line cell content) */
+  .spool-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #888;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  /* Make the action button comfortably tappable */
+  .spool-table td[data-label="Action"] button {
+    min-height: 38px;
+    padding: 6px 14px;
+  }
+
+  /* Dark mode card borders */
+  body.dark-mode .spool-table tr { border-color: #444; background: #2a2a2a; }
+  body.dark-mode .spool-table td { border-bottom-color: #3a3a3a; }
+  body.dark-mode .spool-table td::before { color: #999; }
 }
 
 table th, table td {
@@ -40,6 +361,59 @@ table th {
 table td.color-cell {
   background-color: transparent !important;
   color: inherit !important;
+}
+
+/* ---- Card-styled spool tables (desktop) ---- */
+.spool-table {
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.spool-table th,
+.spool-table td {
+  border: none;
+  border-bottom: 1px solid #eee;
+}
+
+.spool-table thead th {
+  background: #f7f7f7;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+  font-weight: 600;
+}
+
+.spool-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.spool-table tbody tr:hover td {
+  background: #f6f9fc;
+}
+
+/* Dark mode */
+body.dark-mode .spool-table {
+  background: #1e1e1e;
+  border-color: #3a3a3a;
+  box-shadow: none;
+}
+body.dark-mode .spool-table th,
+body.dark-mode .spool-table td {
+  border-bottom-color: #333;
+  background: transparent;
+}
+body.dark-mode .spool-table thead th {
+  background: #2a2a2a;
+  color: #aaa;
+}
+body.dark-mode .spool-table tbody tr:hover td {
+  background: #262626;
 }
 
 
@@ -273,12 +647,6 @@ input:checked + .slider {
 
 input:checked + .slider:before {
   transform: translateX(26px);
-}
-
-.status-row-split {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
 }
 
 /* rechter Bereich Monitoring */
