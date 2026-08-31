@@ -47,6 +47,11 @@ Recorded so the next session does not redo it. On 2026-08-31 the image was
 built and run on an Apple Silicon host against a fake Spoolman and a local
 mosquitto with a self signed certificate, standing in for the printer:
 
+- The FTPS download path works on basic-ftp 6.2.1: implicit TLS against a
+  self signed certificate, `downloadTo` on the `/cache/<job>.gcode.3mf`
+  candidate, extraction of `Metadata/slice_info.config` and parsing, and a
+  missing file falling through both candidate paths to null. Only the hardcoded
+  port 990 was not exercised, because binding it needs root.
 - The reworked G-code table renders correctly at 1280 px and at 375 px, with
   no horizontal overflow and the mobile card labels intact. Rendering it also
   surfaced a pre-existing defect, now fixed: a 3rd party spool showed
