@@ -14,7 +14,7 @@ or the Express app wiring itself (`../backend.js`).
 
 | File | Owns |
 |---|---|
-| `config.js` | The on-disk paths, the port, the version, and the raw environment values that seed the two config files. The only module allowed to read `process.env`. |
+| `config.js` | The on-disk paths (overridable with `DATA_DIR` and `LOG_DIR`), the port, the version, and the raw environment values that seed the two config files. The only module allowed to read `process.env`. |
 | `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()`, the frozen `legacyMode()` and the persistence of `printers/settings.json`, including its schema version and write counter. Must not import `logger.js`, which reads DEBUG from here. |
 | `service.js` | The startup sequence and the Spoolman reconnect that the settings API triggers when the endpoint changes. |
 | `logger.js` | The `console.*` overrides, the serialised per-file write queue, and `tailFileLines()` for the log viewer. |

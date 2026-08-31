@@ -1,7 +1,7 @@
 import fs from "fs-extra";
 import path from "path";
 import "./logger.js"; // ensure console overrides are active
-import { configPath, serverLogFilePath, envPrinterSeed, __rootDir } from "./config.js";
+import { configPath, serverLogFilePath, envPrinterSeed, logsDir } from "./config.js";
 import { settings } from "./settings.js";
 import { formatDateLog } from "./utils.js";
 
@@ -25,7 +25,7 @@ function createRuntimePrinter(entry) {
         code: entry.code,
         ip: entry.ip,
         name: entry.name,
-        logFilePath: path.join(__rootDir, "logs", `${entry.id}.log`),
+        logFilePath: path.join(logsDir, `${entry.id}.log`),
         mqttStatus: "Disconnected",
         spoolmanStatus: "Disconnected",
         mqttRunning: false,

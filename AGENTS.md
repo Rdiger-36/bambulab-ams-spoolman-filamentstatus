@@ -145,7 +145,11 @@ Not punctuation, and therefore allowed:
 - Tests: `npm test` (`node --test "test/*.test.js"`). No test framework beyond
   the Node built-in, no mocking library; tests call pure functions directly.
   Anything touching MQTT, FTPS or Spoolman HTTP is not unit-tested, so keep new
-  logic extractable into a pure function.
+  logic extractable into a pure function. The HTTP API is covered end to end in
+  `test/routes.test.js`, through `test/helpers/app.js`, which registers the
+  routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
+  temporary directory. Those two variables are read once at import time, so a
+  test that needs them must set them before the first import.
 - There is no linter, formatter or type checker configured. Match the
   surrounding style: 4-space indent in `src/`, double quotes, semicolons.
 - Comments in this codebase explain why, usually pointing at the bug the line

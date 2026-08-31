@@ -206,6 +206,7 @@ by the container definition on the next start.
 | `OFFLINE_CHECK_INTERVAL` | Time in ms between two reachability checks of a disconnected printer (default: 20000 ms, min. 20000, max. 3600000) |
 | `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
 | `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
+| `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live, and where the log files are written. Default to `/app/printers` and `/app/logs` in the container, which is what the volumes in the examples above mount. Only set these when you cannot mount those paths |
 
 ## Usage
 

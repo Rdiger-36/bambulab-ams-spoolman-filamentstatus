@@ -172,10 +172,11 @@ harmless one where the other writes or deletes. A focus trap was unnecessary,
 
 ### Large, half a day and up
 
-- [ ] **No HTTP test harness.** Only pure functions are covered. The settings
-  PUT, the printer CRUD and the validation of both connection tests have no
-  test. Starting the Express app on port 0 and driving it with the built in
-  `fetch` needs no new dependency.
+Done on 2026-08-31: the HTTP API has a harness. `test/helpers/app.js` registers
+the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
+temporary directory, so the settings PUT, the printer CRUD and the validation of
+both connection tests are covered without touching an installation.
+
 - [ ] **Restarting from the UI** only works when the process may exit and the
   container is restarted for it, which needs `restart: unless-stopped`. Without
   that policy the user is left with a dead service. Prefer naming the restart

@@ -7,12 +7,23 @@ config();
 const __filename = fileURLToPath(import.meta.url);
 export const __rootDir = path.dirname(path.dirname(__filename));
 
-export const serverLogFilePath = path.join(__rootDir, "logs", "server.log");
-export const configPath = path.resolve(__rootDir, "printers", "printers.json");
+// Where the persistent files and the logs live. The container mounts both, so
+// they are overridable separately. Tests point them at a temporary directory,
+// which is the only way to exercise the write paths without touching a real
+// installation.
+export const dataDir = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : path.join(__rootDir, "printers");
+export const logsDir = process.env.LOG_DIR
+    ? path.resolve(process.env.LOG_DIR)
+    : path.join(__rootDir, "logs");
+
+export const serverLogFilePath = path.join(logsDir, "server.log");
+export const configPath = path.join(dataDir, "printers.json");
 // Manual AMS slot -> Spoolman spool assignments, written by the service itself.
-export const mappingsPath = path.resolve(__rootDir, "printers", "mappings.json");
+export const mappingsPath = path.join(dataDir, "mappings.json");
 // Runtime configuration edited through the Web UI, see settings.js.
-export const settingsPath = path.resolve(__rootDir, "printers", "settings.json");
+export const settingsPath = path.join(dataDir, "settings.json");
 
 export const version = "1.3.0-dev";
 export const PORT = 4000;
