@@ -34,7 +34,7 @@ Spool weight is tracked from the sliced G-code by default, which works for 3rd p
 
 In the legacy tracking mode (`LEGACY_MODE=true`) the AMS Lite is not supported for updating Spools on Spoolman, because it only reports 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)). It can still be used to Create Spools and Filaments on Spoolman and connect their serials with it.
 
-### Note: Developing a G-code method to accurately measure consumption and support for third-party spools! ###
+### Tracking modes at a glance
 <table>
 <tr>
 <td align="center"><b>MQTT Mode (Old)</b></td>
