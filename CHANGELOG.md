@@ -28,6 +28,7 @@ Version 1.3.0-dev
          - Compact settings layout: three cards, toggles instead of checkboxes, restyled buttons and printer table, and a sticky save bar that stays disabled until something is edited
          - Fields an ordinary install never touches are collapsed: Spoolman host, port, subfolder and public URL, plus the reconnect interval, the retry limit and debug logging
          - The Spoolman card shows the URL the service actually talks to, subfolder included
+         - Removing a printer, or changing its address or access code, asks first while a print is running. The consumption of a running job is booked when it ends, so dropping the connection before that would lose it. A rename is unaffected, and legacy mode does not ask because it writes the weight on every AMS update
          - settings.json carries a schema version and a write counter. Two open tabs can no longer overwrite each other silently, the second save is refused with a note. The flat file written by the first version is still read
          - The dashboard shares the same style: buttons, the dialog tables and the "required but not loaded" list use the same light table and button styles, identical in light and dark mode
       - Connection test in the Web UI, for Spoolman and for a printer while adding or editing it

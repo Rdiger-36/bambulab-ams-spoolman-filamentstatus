@@ -161,11 +161,10 @@ Done on 2026-08-31: the spool assignment dialog follows the settings form now,
 same field labels, inputs, focus colour and section headers, with the picker as
 selectable rows. `settings.json` carries a schema version, a migration hook and
 a write counter, and a save against a state somebody else replaced is answered
-with a 409 instead of overwriting it.
+with a 409 instead of overwriting it. Removing a printer or changing its
+address or access code is refused with a 409 while a print is running, and the
+Web UI asks before repeating it with `force`.
 
-- [ ] **Nothing guards a running print.** Deleting a printer, or changing its
-  address or access code, drops the booking of the job in flight without
-  warning. Answer 409 unless the request confirms it, and say so in the dialog.
 - [ ] **The menu is mouse and touch only.** No `aria-expanded`, no arrow keys,
   no keyboard path into a submenu; the dialogs have neither autofocus nor a
   focus trap.

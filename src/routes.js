@@ -23,7 +23,7 @@ import {
     checkSpoolmanHealth,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, testFtpsConnection } from "./gcode.js";
-import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection } from "./mqtt.js";
+import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /** Strips server-only fields from a UI spool before it goes out to a client. */
@@ -579,6 +579,17 @@ export function registerRoutes(app, printers) {
     });
 
     app.put("/api/printers/:printerId", (req, res) => {
+        const printer = printers.find(p => p.id === req.params.printerId);
+        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+
+        // Only an address or credential change drops the connection, a rename
+        // does not, so only that needs the print in flight to be confirmed.
+        const changesConnection = (req.body?.ip?.trim() && req.body.ip.trim() !== printer.ip)
+            || !!req.body?.code?.trim();
+        if (changesConnection && printBlocks(printer, req.body)) {
+            return respondPrintInFlight(res, printer, "Changing the address or the access code reconnects the printer");
+        }
+
         const result = updatePrinter(req.params.printerId, req.body);
         if (!result.ok) {
             const status = result.error === "Printer not found" ? 404 : 400;
@@ -603,6 +614,10 @@ export function registerRoutes(app, printers) {
     app.delete("/api/printers/:printerId", (req, res) => {
         const printer = printers.find(p => p.id === req.params.printerId);
         if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+
+        if (printBlocks(printer, req.body)) {
+            return respondPrintInFlight(res, printer, "Removing the printer disconnects it");
+        }
 
         printer.monitoringEnabled = false;
         disconnectPrinter(printer);
@@ -664,6 +679,33 @@ export function registerRoutes(app, printers) {
         console.log("Server", serverLogFilePath, `[Test] ${target}: MQTT ${mqttResult.ok ? "ok" : `failed (${mqttResult.detail})`}, FTPS ${ftpsResult.ok ? "ok" : `failed (${ftpsResult.detail})`}`);
 
         res.json({ ok: mqttResult.ok && ftpsResult.ok, mqtt: mqttResult, ftps: ftpsResult });
+    });
+}
+
+/**
+ * Whether a request has to be confirmed because the printer is mid print.
+ *
+ * The consumption of a running job is booked when it reaches a terminal state,
+ * from data collected while it ran. Dropping the connection before that loses
+ * the booking. Legacy mode writes the weight on every AMS update instead, so
+ * there is nothing in flight to lose there.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} body - the request body, which may carry `force`
+ * @returns {boolean} true when the caller has to confirm first
+ */
+function printBlocks(printer, body) {
+    if (body?.force === true) return false;
+    if (legacyMode()) return false;
+    return ACTIVE_STATES.has(printer.currentGcodeState);
+}
+
+/** Answers a request that would interrupt a running print. */
+function respondPrintInFlight(res, printer, what) {
+    res.status(409).json({
+        ok: false,
+        printInFlight: true,
+        error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}, and the consumption of the running job is booked only when it ends, so it would be lost.`,
     });
 }
 

@@ -387,6 +387,9 @@ printer from another page opens it on the dashboard.
 
 - **Printers**: add, edit and remove printers. A new printer connects right
   away, a removed one is disconnected and its spool assignments are dropped.
+  Removing a printer, or changing its address or access code, asks first while
+  a print is running: the consumption of a running job is booked when it ends,
+  so dropping the connection before that loses it.
   The serial number cannot be changed, it keys the MQTT topic, the log file and
   the assignments. The access code is stored on the server and never sent back
   to the browser; leave the field empty while editing to keep the stored one.

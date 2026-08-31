@@ -39,7 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("add-printer").addEventListener("click", () => openPrinterDialog(null));
     document.getElementById("printer-dialog-cancel").addEventListener("click", () => closeDialog("printer-dialog"));
     document.getElementById("printer-dialog-test").addEventListener("click", testPrinterConnection);
-    document.getElementById("confirm-dialog-cancel").addEventListener("click", () => closeDialog("confirm-dialog"));
 
     window.addEventListener("beforeunload", event => {
         if (!formDirty) return;
@@ -71,6 +70,7 @@ async function fetchJson(url, options) {
     if (!res.ok) {
         const error = new Error(body.error || `HTTP ${res.status}`);
         error.conflict = !!body.conflict;
+        error.printInFlight = !!body.printInFlight;
         throw error;
     }
 
@@ -461,12 +461,13 @@ function openPrinterDialog(printer) {
     dialog.showModal();
 }
 
-async function savePrinter(printer) {
+async function savePrinter(printer, force = false) {
     const error = document.getElementById("printer-dialog-error");
     const payload = {
         name: document.getElementById("printer-name").value,
         ip: document.getElementById("printer-ip").value,
         code: document.getElementById("printer-code").value,
+        force,
     };
 
     try {
@@ -480,30 +481,94 @@ async function savePrinter(printer) {
         closeDialog("printer-dialog");
         loadPrinters();
     } catch (err) {
+        if (err.printInFlight) {
+            // The dialog would sit on top of the confirmation, so it goes first
+            // and comes back if the change is not carried out after all.
+            closeDialog("printer-dialog");
+            const done = await confirmWhilePrinting(err, () => savePrinter(printer, true));
+            if (!done) document.getElementById("printer-dialog").showModal();
+            return;
+        }
         error.textContent = err.message;
     }
 }
 
+/**
+ * Opens the confirmation dialog and resolves with what the user picked.
+ *
+ * @param {{title: string, html: string, okLabel?: string}} options
+ * @returns {Promise<boolean>} whether the action was confirmed
+ */
+function confirmAction({ title, html, okLabel = "Delete" }) {
+    const dialog = document.getElementById("confirm-dialog");
+    const ok = document.getElementById("confirm-dialog-ok");
+    const cancel = document.getElementById("confirm-dialog-cancel");
+
+    document.getElementById("confirm-dialog-title").textContent = title;
+    document.getElementById("confirm-dialog-text").innerHTML = html;
+    ok.textContent = okLabel;
+
+    return new Promise(resolve => {
+        const finish = (result) => {
+            ok.onclick = null;
+            cancel.onclick = null;
+            dialog.close();
+            resolve(result);
+        };
+        ok.onclick = () => finish(true);
+        cancel.onclick = () => finish(false);
+        dialog.showModal();
+    });
+}
+
+/**
+ * Asks whether an action that would interrupt a running print should go ahead
+ * anyway, and repeats it with `force` when it should.
+ *
+ * @param {Error} err - the rejected request, carrying the reason from the server
+ * @param {function(): Promise} retry - the same request with force set
+ * @returns {Promise<boolean>} whether the action was carried out
+ */
+async function confirmWhilePrinting(err, retry) {
+    const confirmed = await confirmAction({
+        title: "A print is running",
+        html: `<p>${escapeHtml(err.message)}</p>
+               <p class="set-note">Waiting until the print has finished keeps the booking.</p>`,
+        okLabel: "Do it anyway",
+    });
+
+    if (!confirmed) return false;
+    await retry();
+    return true;
+}
+
 function confirmDeletePrinter(printer) {
-    document.getElementById("confirm-dialog-title").textContent = `Delete ${printer.name}?`;
-    document.getElementById("confirm-dialog-text").innerHTML =
-        `<p>The printer is disconnected and removed from the configuration.
-            Its spool assignments are dropped as well. The log file is kept.</p>
-         <p class="set-note">Spools already created in Spoolman are not touched.</p>`;
+    confirmAction({
+        title: `Delete ${printer.name}?`,
+        html: `<p>The printer is disconnected and removed from the configuration.
+                  Its spool assignments are dropped as well. The log file is kept.</p>
+               <p class="set-note">Spools already created in Spoolman are not touched.</p>`,
+    }).then(confirmed => confirmed && deletePrinter(printer, false));
+}
 
-    document.getElementById("confirm-dialog-ok").onclick = async () => {
-        try {
-            await fetchJson(`./api/printers/${encodeURIComponent(printer.id)}`, { method: "DELETE" });
-            showBanner(`Removed ${printer.name}.`, "ok");
-            closeDialog("confirm-dialog");
-            loadPrinters();
-        } catch (err) {
-            showBanner(`Could not remove the printer: ${err.message}`, "bad");
-            closeDialog("confirm-dialog");
+async function deletePrinter(printer, force) {
+    const url = `./api/printers/${encodeURIComponent(printer.id)}`;
+
+    try {
+        await fetchJson(url, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ force }),
+        });
+        showBanner(`Removed ${printer.name}.`, "ok");
+        loadPrinters();
+    } catch (err) {
+        if (err.printInFlight) {
+            await confirmWhilePrinting(err, () => deletePrinter(printer, true));
+            return;
         }
-    };
-
-    document.getElementById("confirm-dialog").showModal();
+        showBanner(`Could not remove the printer: ${err.message}`, "bad");
+    }
 }
 
 function closeDialog(id) {

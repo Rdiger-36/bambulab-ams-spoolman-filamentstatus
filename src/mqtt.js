@@ -61,7 +61,7 @@ export function broadcastSlotUpdate(printerId, spool) {
 // Print states that signal the end of a print job
 const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
 // Print states that indicate an active or paused job
-const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
+export const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
 
 /**
  * Tracks gcode_state transitions and triggers filament consumption tracking.
