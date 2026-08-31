@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/github/v/release/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=version&color=blue" alt="version" />
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20armhf-lightgrey?style=flat-square&color=orange" alt="platform" />
+  <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platform" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" alt="license" />
   <img src="https://img.shields.io/badge/maintained-yes-brightgreen?style=flat-square" alt="maintained" />
 </p>
@@ -72,11 +72,22 @@ Simply pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` s
 
 The architectures supported by this image are:
 
-| Architecture | Supported |
-| :----: | :----: |
-| x86-64 | ✅ |
-| arm64 | ✅ |
-| armhf | ✅ |
+| Docker platform | Also known as | Supported | Typical hardware |
+| :---- | :---- | :----: | :---- |
+| `linux/amd64` | x86-64, x64 | ✅ | PCs, servers, most NAS boxes |
+| `linux/arm64` | aarch64, arm64v8 | ✅ | Raspberry Pi 3 and newer on a 64 bit OS, Apple Silicon |
+| `linux/arm/v7` | armhf (Debian, Raspberry Pi OS), armv7 (Alpine) | ✅ | Raspberry Pi 2 and newer on a 32 bit OS, older ARM SBCs and NAS boxes |
+| `linux/arm/v6` | armhf (Alpine), armel | ❌ | Raspberry Pi 1, Pi Zero, Pi Zero W |
+
+A note on "armhf", because it means two different things. Debian and Raspberry
+Pi OS use it for 32 bit ARMv7, which is supported. Alpine uses it for ARMv6,
+which is not. Raspberry Pi OS additionally reports "armhf" on an ARMv6 Pi Zero,
+so the name alone does not tell you whether an image exists. The Docker platform
+in the first column is the one unambiguous identifier.
+
+If `docker pull` reports `no matching manifest for linux/arm/v6`, the device is
+an ARMv6 one from the last row. Those are not built: a Pi Zero has a single
+1 GHz core and 512 MB of RAM, which this service would not run well on.
 
 ### Supported Hardware
 
@@ -268,7 +279,9 @@ Requirements: LAN access to the printer on port 990 (FTPS) with the printer's ac
 
 The behaviour of earlier versions: the remaining weight is read from the AMS RFID chip's remain percentage on every MQTT update and written to Spoolman. Original Bambu Lab spools only, and the AMS Lite is not supported (see [Attention](#-attention-)).
 
-In this mode G-code tracking is switched off completely, with no FTPS download and no consumption booking, and the Web UI shows the classic AMS table instead of the print dashboard. Manually assigning a spool to a slot has no effect on the weight either, since it only feeds the G-code booking.
+In this mode G-code tracking is switched off completely, with no FTPS download and no consumption booking, and the Web UI shows the classic AMS table instead of the print dashboard.
+
+3rd party spools are not supported here. They carry no RFID chip, so they report no remain percentage, and this mode has nothing else to work from. Such a slot is shown as loaded but offers no action, exactly as it did before G-code tracking existed. Manual assignment is unavailable for the same reason: it exists to tell the G-code booking which spool to charge, and this mode books nothing. Assignments already saved are left on disk untouched and take effect again as soon as G-code tracking is back on.
 
 ### Mode:
 There are two modes you can run this container: automatic and manual

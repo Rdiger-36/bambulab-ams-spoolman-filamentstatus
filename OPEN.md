@@ -13,31 +13,83 @@ rediscovering. Anything finished comes out of this file.
 None of this was exercised on a real printer during the rebuild. It works in
 theory or in tests. Ordered by how likely a user is to hit it.
 
-- [ ] **Merge path.** `findMergeableSpool()` in `src/ams.js` was never triggered
-  in any test run, and has no unit test either. It matters for anyone who
-  already keeps untagged spools in Spoolman and then inserts a matching Bambu
-  spool. Reproducing it needs a Spoolman spool with an empty `extra.tag` whose
-  material and colour match a loaded spool, at a remaining weight within 15 % of
-  what the AMS reports.
-- [ ] **Legacy mode.** `LEGACY_MODE=true` now skips the print handler entirely.
-  Verified by reading the code, not by running it. A test run should show
-  `Updated Spool-ID N => ...` lines and no `[Print]` lines at all.
-- [ ] **Partial booking.** `calcPartialConsumption()` is unit tested against real
-  slice files, but the live path from a cancelled print has only ever run once,
-  in June, booking 0.08 g. A real abort halfway through a multi colour print
-  would confirm the layer proportions end to end.
-- [ ] **Third party spools reporting a per-filament `tray_info_idx`.** The
-  payload from issue #47 (`P478b216`, all zero `tray_uuid`, empty
-  `tray_sub_brands`) is classified correctly as `Loaded (3rd party)`, checked by
-  running the JSON from the issue through `processData()`. Nobody has run the
-  full assign and book flow on such a printer. Feedback was requested from
-  @tecbeat and @buzzkc.
-- [ ] **AMS Lite and multi printer setups.** Everything was tested on a single
-  P2S with two AMS units. The AMS Lite was never in scope for G-code tracking;
-  the README only documents its legacy mode limitation.
-- [ ] **The G-code table in the Web UI.** Its column labels were reworked
-  (`On spool / total`, `Needed`, `After print`) without rendering the page, since
-  that needs a running Spoolman and a live print. Syntax checked only.
+
+- [ ] **Booking a print as it actually finishes.** Everything up to the booking
+  was exercised on the P2S: the slice fetch, the consumption maths and the spool
+  matching. What has never run is `handlePrintStateChange()` reaching a terminal
+  state on a live job and calling `useSpoolWeight()`. Starting a small print and
+  letting it finish, then cancelling one halfway, closes this and the partial
+  booking with it.
+- [ ] **AMS Lite.** Everything was tested on a P2S with two AMS units. The AMS
+  Lite was never in scope for G-code tracking; the README only documents its
+  legacy mode limitation.
+- [ ] **A second printer.** Multiple AMS units on one printer work (A0 to A3 and
+  B0 to B3 were addressed correctly). Two printers at once was never run.
+
+## Verified against the printer
+
+On 2026-08-31 the image was run against the real P2S on the LAN, pointed at a
+seeded fake Spoolman so nothing in the real instance was touched. In manual mode
+no write reached Spoolman at all, which was checked rather than assumed.
+
+- **The merge path fired for the first time.** With one untagged Spoolman spool
+  matching A0 in material, colour and remaining weight, the log showed
+  `Found mergeable Spool => Spoolman Spool ID: 42` and the slot offered
+  `Merge Spool`.
+- **Two 3rd party spools were loaded**, both classified `Loaded (3rd party)`
+  and offering `Assign Spool`. Assigning one persisted a mapping with the
+  fingerprint `PLA|F98C36`, and the slot flipped to `Unassign Spool` carrying
+  the assigned spool's weight.
+- **`fetchSliceInfo()` works against the printer**, over FTPS on port 990,
+  including a job name with an umlaut. It returned 2 filaments across 169
+  layers, with non contiguous filament ids, and `calcPartialConsumption()` at
+  layer 0 produced 0.09 g, matching the layer ranges in the file.
+- **Legacy mode behaves as intended.** With `LEGACY_MODE=true` there was not a
+  single `[Print]` line, and the only write was
+  `PATCH /api/v1/spool/<id> {"remaining_weight":270}`, derived from the AMS
+  reporting 27 % of a 1 kg spool.
+- **Reconnect works.** Cutting the container off the network produced
+  `Printer ... is unreachable. Next try in 20 second(s)`, and the monitor loop
+  brought the connection back on its own one interval later.
+
+Two observations that correct what is written below:
+
+- **`state` 27 exists** and is not in the list of values recorded so far.
+- **`state` 11 is not proof of a read Bambu tag.** A chipless spool with an all
+  zero `tray_uuid` reported 11 as well, so the value says the slot is loaded,
+  not that it was identified.
+
+Also seen: both 3rd party spools report `tray_info_idx` `GFL99`, the generic
+profile, which is exactly the collision described under the automatic creation
+gap below. They differ only in colour. And they report `remain` as `-1`, which
+`processData()` clamps to 0.
+
+## Verified in a container
+
+Recorded so the next session does not redo it. On 2026-08-31 the image was
+built and run on an Apple Silicon host against a fake Spoolman and a local
+mosquitto with a self signed certificate, standing in for the printer:
+
+- The FTPS download path works on basic-ftp 6.2.1: implicit TLS against a
+  self signed certificate, `downloadTo` on the `/cache/<job>.gcode.3mf`
+  candidate, extraction of `Metadata/slice_info.config` and parsing, and a
+  missing file falling through both candidate paths to null. Only the hardcoded
+  port 990 was not exercised, because binding it needs root.
+- The reworked G-code table renders correctly at 1280 px and at 375 px, with
+  no horizontal overflow and the mobile card labels intact. Rendering it also
+  surfaced a pre-existing defect, now fixed: a 3rd party spool showed
+  `NaNg / 0g` in the weight column.
+- The image runs Node 22.23.2, with `mqtt` 5.15.2, `got` 16.0.0 and
+  `adm-zip` 0.6.0 installed and no `async-mqtt`.
+- Startup completes: Spoolman health, vendor and extra field checks all pass
+  over `got` 16, and the Web UI and API answer on port 4000.
+- `mqtt` v5 connects over TLS and subscribes, logging `MQTT client connected`.
+- A published AMS report is processed end to end. A tagged Bambu slot is
+  classified as `Loaded (Bambu Lab)` and logged as
+  `[A0] PLA Basic 000000FF (63%)`, while an empty slot with `state` 0 stays
+  `Empty`, and `/api/spools/<id>` reflects both.
+
+None of this involved real hardware, so it says nothing about the items above.
 
 ## Before the next official release
 
@@ -58,8 +110,43 @@ Tag behaviour, after the hardening in `c053561`:
 Publishing from a branch is rejected outright, so the "Run workflow" button can
 no longer overwrite `:latest` with whatever is on `main`.
 
+## Deadline: armv7 and Node 22
+
+Node 22 entered maintenance on 2025-10-21 and reaches end of life on
+**2027-04-30**. It is also the last Node that exists on 32 bit ARM at all, so
+those two facts are the same deadline for this project.
+
+Checked on 2026-08-31, against the Node release schedule, the download index,
+the Docker library manifests, the unofficial builds index and Alpine's own
+package:
+
+| | armv7 |
+|---|---|
+| Node 22 (EOL 2027-04-30) | yes, official binaries and `node:22-alpine` |
+| Node 23 (EOL) | yes, but not an LTS |
+| Node 24, 25, 26 | **none**, upstream stopped building armv7l |
+| unofficial-builds.nodejs.org | armv6 only for 22, nothing for 24 and later |
+| Alpine's own `nodejs` package, armhf | 22.23.2, so no way forward either |
+
+So there is no supported path to Node 24 or later on 32 bit ARM. When Node 22
+goes end of life the choice is:
+
+- [ ] Decide before 2027-04-30: drop `linux/arm/v7` from the publish matrix and
+  leave 32 bit users on the last image built for them, or keep shipping on an
+  end of life Node with no security fixes. There is no third option, so this is
+  a decision rather than a task.
+
+A 64 bit OS sidesteps it entirely. A Raspberry Pi 3B and newer are all 64 bit
+capable, and `linux/arm64` stays supported.
+
 ## Code quality
 
+- [ ] **`/api/print` omits `connectedViaMapping`.** Its `loadedSpools`
+  projection in `src/routes.js` reports `connectedViaTag` but not the manual
+  assignment, so the endpoint cannot answer "will this slot be booked" on its
+  own. The frontend is unaffected, because the G-code table reads `/api/spools`
+  and only takes `fullConsumption` from here, so this is an inconsistency in a
+  diagnostic endpoint rather than a live defect.
 - [ ] **`slotFingerprint()`** in `src/mappings.js` keys on `tray_type|colour`.
   Where the printer reports a per-filament `tray_info_idx` (the issue #47 case)
   that would be the sharper key and would notice a spool swap between two same
@@ -72,11 +159,12 @@ no longer overwrite `:latest` with whatever is on `main`.
 - [ ] **Spool payload construction is duplicated** between `createSpool()` and
   `createFilamentAndSpool()` in `src/spoolman.js`. Only the filament payload was
   extracted, into `buildFilamentPayload()`.
-- [ ] **Tray `state` values are observed, not documented.** 0 empty, 11 a read
-  Bambu tag, and 3, 10 and 20 all seen for loaded but unidentified.
-  `slotIsOccupied()` treats anything non zero as occupied, which is a heuristic:
-  firmware reporting a transient non zero state on an empty slot would show a
-  phantom spool until it settles.
+- [ ] **Tray `state` values are observed, not documented.** 0 empty, and 3, 10,
+  11, 20 and 27 all seen while loaded. 11 was once assumed to mean a read Bambu
+  tag, but a chipless spool reports it too, so the value only says something is
+  in the slot. `slotIsOccupied()` treats anything non zero as occupied, which is
+  a heuristic: firmware reporting a transient non zero state on an empty slot
+  would show a phantom spool until it settles.
 
 ## Documentation
 

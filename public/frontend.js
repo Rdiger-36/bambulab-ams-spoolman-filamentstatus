@@ -1065,7 +1065,10 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // percentage).
 	    const sp = amsSpool.existingSpool;
 	    let onSpool = amsSpool.correctedWeight ?? null;
-	    let totalSpool = slot.tray_weight ?? null;
+	    // tray_weight arrives from MQTT as a string, so a weightless 3rd party
+	    // spool reports "0", which is truthy. Left as-is it passed the guard
+	    // below, divided by zero in the remain% fallback and rendered "NaNg".
+	    let totalSpool = Number(slot.tray_weight) || null;
 	    if ((amsSpool.connectedViaTag || amsSpool.connectedViaMapping) && sp && sp.remaining_weight != null) {
 	        onSpool = Math.round(sp.remaining_weight);
 	        if (sp.initial_weight != null) totalSpool = Math.round(sp.initial_weight);

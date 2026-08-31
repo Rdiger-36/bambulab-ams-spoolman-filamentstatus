@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import AdmZip from "adm-zip";
 
 import {
     parseSliceInfo,
@@ -15,12 +16,14 @@ import {
 // Real Metadata/slice_info.config files, pulled off a P2S over FTPS:
 //   four_colours        4 filaments in one AMS, two sharing the generic GFL99
 //                       profile and told apart only by colour
-//   sparse_filament_ids 2 filaments across two AMS units, ids 1 and 6 — the
+//   sparse_filament_ids 2 filaments across two AMS units, ids 1 and 6. The
 //                       project keeps its unused entries, so ids are not
 //                       contiguous and id-1 is what indexes the layer lists
 //   split_layer_ranges  a filament that prints, stops, and comes back later
-const fixture = (name) => parseSliceInfo(fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", `${name}.config`), "utf-8"));
+const fixturePath = (name) =>
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", `${name}.config`);
+const fixtureText = (name) => fs.readFileSync(fixturePath(name), "utf-8");
+const fixture = (name) => parseSliceInfo(fixtureText(name));
 
 const fourColours = fixture("four_colours");
 const sparseIds   = fixture("sparse_filament_ids");
@@ -99,4 +102,29 @@ test("partial consumption falls back to overall progress without layer data", ()
     // 43 of 85 layers -> a bit over half of every filament
     const part = calcPartialConsumption(noRanges, 42);
     assert.equal(part["GFA00|000000"].grams, 2.91); // 5.76 * 43/85
+});
+
+// The zip half of fetchSliceInfo has no coverage of its own, because the
+// function is coupled to the FTPS download and only its parsing half can be
+// reached directly. These two pin the contract the code relies on, so a future
+// adm-zip bump cannot break entry lookup unnoticed.
+test("the slice config survives a zip round trip", () => {
+    const archive = new AdmZip();
+    archive.addFile("Metadata/slice_info.config", Buffer.from(fixtureText("four_colours"), "utf-8"));
+    archive.addFile("3D/3dmodel.model", Buffer.from("<model/>", "utf-8"));
+
+    const entry = new AdmZip(archive.toBuffer()).getEntry("Metadata/slice_info.config");
+    assert.ok(entry, "Metadata/slice_info.config should be found in the archive");
+
+    const info = parseSliceInfo(entry.getData().toString("utf8"));
+    assert.equal(info.filaments.length, 4);
+    assert.equal(info.totalLayers, 84);
+});
+
+test("a 3MF without slice info yields no entry", () => {
+    // fetchSliceInfo returns null on this rather than throwing
+    const archive = new AdmZip();
+    archive.addFile("3D/3dmodel.model", Buffer.from("<model/>", "utf-8"));
+
+    assert.equal(new AdmZip(archive.toBuffer()).getEntry("Metadata/slice_info.config"), null);
 });

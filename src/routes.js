@@ -46,6 +46,23 @@ function resolveSpoolData({ printerId, amsId }, printers, res) {
 }
 
 /**
+ * Rejects the manual assignment endpoints while legacy mode is on.
+ *
+ * Assignments exist to tell the G-code booking which physical spool to charge.
+ * Legacy mode books nothing, it writes the weight straight onto the spool the
+ * RFID tag already identifies, so an assignment there would change nothing. The
+ * UI hides these actions, and this stops a direct call from creating a mapping
+ * that would silently take effect on the next mode switch.
+ *
+ * @returns {boolean} true when the request was answered and the caller must stop
+ */
+function rejectInLegacyMode(res) {
+    if (!LEGACY_MODE) return false;
+    res.status(409).json({ ok: false, error: "Manual spool assignment is not available in legacy mode" });
+    return true;
+}
+
+/**
  * Registers every HTTP route on the Express app.
  *
  * The API falls into four groups: read-only status and spool data for the
@@ -348,6 +365,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.put("/api/mappings/:printerId/:amsId", async (req, res) => {
+        if (rejectInLegacyMode(res)) return;
+
         const { printerId, amsId } = req.params;
         const printer = printers.find(p => p.id === printerId);
         if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
@@ -399,6 +418,8 @@ export function registerRoutes(app, printers) {
     // the slot to it in one step, so the user does not have to assign it
     // separately afterwards. Creates the filament too when none is picked.
     app.post("/api/thirdparty/spool/:printerId/:amsId", async (req, res) => {
+        if (rejectInLegacyMode(res)) return;
+
         const { printerId, amsId } = req.params;
         const printer = printers.find(p => p.id === printerId);
         if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
@@ -464,6 +485,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.delete("/api/mappings/:printerId/:amsId", (req, res) => {
+        if (rejectInLegacyMode(res)) return;
+
         const { printerId, amsId } = req.params;
         const printer = printers.find(p => p.id === printerId);
         if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });

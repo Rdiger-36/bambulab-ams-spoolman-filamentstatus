@@ -42,6 +42,10 @@ converted to a weight and PATCHed onto the spool. The print handler is skipped
 entirely (`mqtt.js`, in `handleMqttMessage`). The AMS Lite reports only 0 % or
 100 %, so it is unusable here.
 
+Legacy mode also has no 3rd party support and no manual assignment. Both exist
+only to serve the G-code booking, which does not run here, so a chipless slot is
+read-only and the mapping endpoints answer 409.
+
 Consequence: in G-code mode the `remain` field is deliberately stripped before
 change detection, so a drifting RFID percentage does not trigger endless
 reprocessing.
@@ -61,6 +65,11 @@ reprocessing.
 - **An unidentified spool looks exactly like an empty slot** in every field
   except `state`. `slotIsOccupied()` is the only correct test; a slot with
   `tray_uuid === "N/A"` is not automatically empty.
+- **Manual assignment is a G-code mode feature.** `LEGACY_MODE` gates it in
+  three places: the 3rd party branch and the Bambu fallback in `processSlot`,
+  and `rejectInLegacyMode()` on the mutating routes. A new entry point has to
+  gate it too, or a direct API call creates a mapping that silently takes effect
+  on the next mode switch.
 - **A consumption booking requires a known physical spool**, either
   `connectedViaTag` (Spoolman `extra.tag` == the slot's `tray_uuid`) or
   `connectedViaMapping` (explicit user assignment). Type/colour similarity alone
