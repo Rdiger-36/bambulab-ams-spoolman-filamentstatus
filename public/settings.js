@@ -5,9 +5,11 @@
 // Order and headline of the field groups. The group key comes from the schema,
 // the fields the schema marks as advanced go into the collapsed part.
 const GROUPS = [
-    { key: "spoolman",  title: "Spoolman connection", advancedLabel: "Host, port, subfolder and public URL" },
-    { key: "tracking",  title: "Tracking" },
-    { key: "behaviour", title: "Behaviour", advancedLabel: "Reconnect, retries and logging" },
+    { key: "spoolman", title: "Spoolman connection", advancedLabel: "Host, port, subfolder and public URL" },
+    { key: "tracking", title: "Tracking" },
+    { key: "sync",     title: "Synchronisation" },
+    { key: "printer",  title: "Printer connection" },
+    { key: "logging",  title: "Logging" },
 ];
 
 let fields = [];

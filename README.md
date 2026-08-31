@@ -410,11 +410,10 @@ printer from another page opens it on the dashboard.
 - **Spoolman connection**: only the endpoint is shown, host, port, subfolder
   and the public URL sit in a collapsed section below it. The line under the
   field says which URL the service actually talks to, subfolder included.
-- **Tracking and behaviour**: applied to the running service as soon as they are
-  saved. Changing the endpoint reconnects and runs the vendor and extra field
-  setup against the new instance. Everything an ordinary install never touches,
-  the reconnect interval, the retry limit and debug logging, is collapsed as
-  well.
+- **Tracking, synchronisation, printer connection and logging**: one card each,
+  applied to the running service as soon as they are saved. Changing the
+  endpoint reconnects and runs the vendor and extra field setup against the new
+  instance.
 - **Legacy mode** is the one field that needs a restart. The value is saved
   right away, but the running service keeps the mode it started with, and the
   page keeps saying so, with a "Restart now" next to it, until the service is

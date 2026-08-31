@@ -157,6 +157,13 @@ differs from the schema default now carries a "default" link back to it.
 
 ### Medium, one to three hours
 
+- [ ] **The log page only reads the current file.** Since the logs rotate, the
+  history sits in `<name>.log.1` and further. The viewer should read backwards
+  across them when the current file holds fewer lines than asked for, and the
+  download should hand out the rotated ones too, most likely as one archive.
+  The button was renamed from "Download complete logs" to "Download this log
+  file" in the meantime, so it no longer promises what it does not deliver.
+
 Done on 2026-08-31: the spool assignment dialog follows the settings form now,
 same field labels, inputs, focus colour and section headers, with the picker as
 selectable rows. `settings.json` carries a schema version, a migration hook and
