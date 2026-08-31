@@ -32,7 +32,7 @@ const readLines = (file) => fs.readFileSync(file, "utf8").split("\n").filter(Boo
 test("a collapsing message does not swallow lines logged around it", async () => {
     // The collapse rewrites the whole file. It used to snapshot the file outside
     // the write queue, so everything appended between that read and the write was
-    // lost — in practice almost the entire log.
+    // lost, in practice almost the entire log.
     const file = tmpLog("interleaved.log");
     const count = 200;
 
