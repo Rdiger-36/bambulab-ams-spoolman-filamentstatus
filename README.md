@@ -415,6 +415,13 @@ printer from another page opens it on the dashboard.
   consumption differently, so switching one into a running process would book a
   print in flight twice or not at all.
 
+- **Restart service**, in its own card at the bottom. It ends the process so
+  that Docker or the Home Assistant supervisor starts it again, which is what
+  the `restart: unless-stopped` in the compose example above is for. Without a
+  restart policy the service stays down and has to be started by hand, and the
+  page says so before it asks. The page waits for the service to come back and
+  reloads itself, or tells you when it does not.
+
 Everything is stored in `printers/settings.json` next to `printers.json`, so it
 survives a container update as long as that volume is mounted.
 

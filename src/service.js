@@ -102,3 +102,42 @@ export function restartSpoolmanConnection() {
 
     bootstrapSpoolman();
 }
+
+/**
+ * Ends the process so that whatever supervises the container starts it again.
+ *
+ * There is no way to restart from the inside: the settings that need one are
+ * read at startup, and re-reading them in place is exactly what the frozen
+ * tracking mode exists to prevent. Exiting only works when something restarts
+ * the service, `restart: unless-stopped` in the compose example or the Home
+ * Assistant add-on supervisor. Without that the service stays down, which is
+ * why the Web UI says so before asking.
+ *
+ * The exit is delayed so the HTTP response still reaches the browser, and the
+ * MQTT connections are closed first so the printers do not keep a session that
+ * nobody is reading.
+ *
+ * @param {object} [options]
+ * @param {number} [options.delay] - milliseconds before the process ends
+ * @param {function(number): void} [options.exit] - injected for the test, which
+ *   must not take the test runner down with it
+ * @returns {Promise<void>} resolves once the exit has been triggered
+ */
+export function restartService({ delay = 300, exit = code => process.exit(code) } = {}) {
+    console.log("Server", serverLogFilePath, "Restart requested through the Web UI, ending the process...");
+
+    for (const printer of printers) {
+        if (printer.mqttClient) {
+            printer.mqttClient.end(true);
+            printer.mqttClient = null;
+        }
+        printer.mqttRunning = false;
+    }
+
+    return new Promise(resolve => {
+        setTimeout(() => {
+            exit(0);
+            resolve();
+        }, delay);
+    });
+}

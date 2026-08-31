@@ -4,7 +4,7 @@ import path from "path";
 import { serverLogFilePath, version } from "./config.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode } from "./settings.js";
 import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
-import { restartSpoolmanConnection } from "./service.js";
+import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { tailFileLines } from "./logger.js";
 import {
@@ -632,6 +632,13 @@ export function registerRoutes(app, printers) {
         broadcastSSE({ type: "printers_update" });
 
         res.json({ ok: true, removed: printer.id });
+    });
+
+    // Ends the process. Only useful when something restarts the container, so
+    // the Web UI states that before it asks.
+    app.post("/api/restart", (req, res) => {
+        res.json({ ok: true });
+        restartService();
     });
 
     // ---------------------------------------------------------------------

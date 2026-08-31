@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("settings-form").addEventListener("submit", saveSettings);
     document.getElementById("reload-settings").addEventListener("click", () => loadSettings(true));
     document.getElementById("add-printer").addEventListener("click", () => openPrinterDialog(null));
+    document.getElementById("restart-service").addEventListener("click", confirmRestart);
     document.getElementById("printer-dialog-cancel").addEventListener("click", () => closeDialog("printer-dialog"));
     document.getElementById("printer-dialog-test").addEventListener("click", testPrinterConnection);
 
@@ -141,7 +142,61 @@ function applyView(view) {
  * next reload.
  */
 function showRestartNotice() {
-    if (restartPending) showBanner(RESTART_MESSAGE, "warn");
+    if (!restartPending) return;
+
+    showBanner(RESTART_MESSAGE, "warn");
+    // Straight from the notice, rather than sending the user looking for the
+    // button further down the page.
+    const action = document.createElement("button");
+    action.className = "btn btn-small";
+    action.type = "button";
+    action.textContent = "Restart now";
+    action.addEventListener("click", confirmRestart);
+    document.getElementById("set-banner").append(" ", action);
+}
+
+/* ---- Restarting the service ---- */
+
+async function confirmRestart() {
+    const confirmed = await confirmAction({
+        title: "Restart the service?",
+        html: `<p>The process ends and has to be started again by Docker or the Home Assistant supervisor.</p>
+               <p class="set-note">When the container is not set to restart, for example with
+                  <code>restart: unless-stopped</code>, it stays down and has to be started by hand.
+                  A running print keeps printing, but the consumption of that job is not booked.</p>`,
+        okLabel: "Restart",
+    });
+
+    if (!confirmed) return;
+
+    try {
+        await sendJson("./api/restart", "POST", {});
+        showBanner("Restarting, waiting for the service to come back...", "warn");
+        waitForService();
+    } catch (err) {
+        showBanner(`Could not restart: ${err.message}`, "bad");
+    }
+}
+
+/**
+ * Polls until the service answers again and reloads the page.
+ *
+ * A service that does not come back is the whole risk of the restart button, so
+ * the wait ends with a message that says what to look at rather than spinning
+ * forever.
+ */
+function waitForService(deadline = Date.now() + 60000) {
+    setTimeout(async () => {
+        try {
+            const response = await fetch("./api/printers", { cache: "no-store" });
+            if (response.ok) return window.location.reload();
+        } catch {
+            // still down, keep waiting
+        }
+
+        if (Date.now() < deadline) return waitForService(deadline);
+        showBanner("The service has not come back. Check whether the container is set to restart.", "bad");
+    }, 1500);
 }
 
 function renderSettings() {

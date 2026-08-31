@@ -30,6 +30,16 @@
             <div id="printer-table"></div>
         </div>
 
+        <div class="set-card">
+            <div class="set-card-head">
+                <h2>Service</h2>
+                <button class="btn" id="restart-service">Restart service</button>
+            </div>
+            <p class="set-note">Ends the process so that Docker or the Home Assistant supervisor starts it again.
+               This only works when the container is set to restart, for example with
+               <code>restart: unless-stopped</code>. Without that the service stays down and has to be started by hand.</p>
+        </div>
+
         <form id="settings-form">
             <div id="settings-groups"></div>
             <div class="set-actions">

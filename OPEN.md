@@ -175,12 +175,11 @@ harmless one where the other writes or deletes. A focus trap was unnecessary,
 Done on 2026-08-31: the HTTP API has a harness. `test/helpers/app.js` registers
 the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
 temporary directory, so the settings PUT, the printer CRUD and the validation of
-both connection tests are covered without touching an installation.
+both connection tests are covered without touching an installation. The service
+can also be restarted from the settings page: the process ends and the container
+supervisor starts it again, the page waits for it and reloads, and it says up
+front that this needs a restart policy.
 
-- [ ] **Restarting from the UI** only works when the process may exit and the
-  container is restarted for it, which needs `restart: unless-stopped`. Without
-  that policy the user is left with a dead service. Prefer naming the restart
-  step in the banner instead.
 
 Rejected: encrypting the access code at rest. Without a key store the key ships
 in the same image, so it is obfuscation. The documentation note above is the
