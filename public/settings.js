@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("reload-settings").addEventListener("click", () => loadSettings(true));
     document.getElementById("add-printer").addEventListener("click", () => openPrinterDialog(null));
     document.getElementById("printer-dialog-cancel").addEventListener("click", () => closeDialog("printer-dialog"));
+    document.getElementById("printer-dialog-test").addEventListener("click", testPrinterConnection);
     document.getElementById("confirm-dialog-cancel").addEventListener("click", () => closeDialog("confirm-dialog"));
 
     window.addEventListener("beforeunload", event => {
@@ -131,7 +132,7 @@ function renderSettings() {
         card.innerHTML = `
             <div class="set-card-head"><h2>${escapeHtml(group.title)}</h2></div>
             <div class="set-form">${main.map(renderField).join("")}</div>
-            ${group.key === "spoolman" ? renderEffectiveUrl() : ""}
+            ${group.key === "spoolman" ? renderEffectiveUrl() + renderSpoolmanTest() : ""}
             ${advanced.length ? `
                 <details class="set-advanced">
                     <summary>${escapeHtml(group.advancedLabel || "Advanced")}</summary>
@@ -143,6 +144,84 @@ function renderSettings() {
     container.querySelectorAll("input, select").forEach(input => {
         input.addEventListener("input", () => setDirty(true));
     });
+
+    document.getElementById("test-spoolman")?.addEventListener("click", testSpoolmanConnection);
+}
+
+/* ---- Connection tests ---- */
+
+function renderSpoolmanTest() {
+    return `<div class="set-test-row">
+                <button class="btn btn-small" type="button" id="test-spoolman">Test connection</button>
+                <span class="set-test-result" id="test-spoolman-result"></span>
+            </div>`;
+}
+
+/**
+ * One check result as a pill plus, when there is one, the reason next to it.
+ * A warning means the connection came up but could not be fully confirmed, so
+ * it gets its own colour rather than being sold as a clean result.
+ */
+function testPill(label, result) {
+    const kind = !result.ok ? "pill-bad" : result.warning ? "pill-legacy" : "pill-ok";
+    const state = !result.ok ? "failed" : result.warning ? "unconfirmed" : "reachable";
+    const message = result.ok ? result.warning : result.error;
+    const reason = message ? ` <span class="set-test-reason">${escapeHtml(message)}</span>` : "";
+
+    return `<span class="pill ${kind}">${escapeHtml(label)} ${state}</span>${reason}`;
+}
+
+/**
+ * Tries the Spoolman address currently in the form, not the stored one, so a
+ * new endpoint can be verified before it is saved.
+ */
+async function testSpoolmanConnection() {
+    const button = document.getElementById("test-spoolman");
+    const output = document.getElementById("test-spoolman-result");
+    button.disabled = true;
+    output.textContent = "Testing...";
+
+    try {
+        const payload = {};
+        for (const key of ["SPOOLMAN_ENDPOINT", "SPOOLMAN_IP", "SPOOLMAN_PORT", "SPOOLMAN_SUBFOLDER"]) {
+            payload[key] = document.getElementById(`set-${key}`)?.value ?? "";
+        }
+
+        const result = await sendJson("./api/test/spoolman", "POST", payload);
+        output.innerHTML = `${testPill("Spoolman", result)}
+            ${result.url ? `<span class="set-test-reason">${escapeHtml(result.url)}</span>` : ""}`;
+    } catch (err) {
+        output.innerHTML = testPill("Spoolman", { ok: false, error: err.message });
+    } finally {
+        button.disabled = false;
+    }
+}
+
+/**
+ * Tries both connections a printer needs: MQTT for the AMS data and FTPS for
+ * the sliced file the consumption is read from. An empty access code means the
+ * stored one is used, which is how an edit without retyping it is tested.
+ */
+async function testPrinterConnection() {
+    const button = document.getElementById("printer-dialog-test");
+    const output = document.getElementById("printer-test-result");
+    button.disabled = true;
+    output.textContent = "Testing...";
+
+    try {
+        const result = await sendJson("./api/test/printer", "POST", {
+            id: document.getElementById("printer-id").value,
+            ip: document.getElementById("printer-ip").value,
+            code: document.getElementById("printer-code").value,
+        });
+
+        output.innerHTML = `<div>${testPill("MQTT", result.mqtt)}</div>
+                            <div>${testPill("FTPS", result.ftps)}</div>`;
+    } catch (err) {
+        output.innerHTML = `<span class="set-test-reason set-test-failed">${escapeHtml(err.message)}</span>`;
+    } finally {
+        button.disabled = false;
+    }
 }
 
 /**
@@ -299,6 +378,7 @@ function openPrinterDialog(printer) {
 
     document.getElementById("printer-dialog-title").textContent = editing ? `Edit ${printer.name}` : "Add printer";
     document.getElementById("printer-dialog-error").textContent = "";
+    document.getElementById("printer-test-result").textContent = "";
     document.getElementById("printer-dialog-fields").innerHTML = `
         <div class="set-field">
             <label class="set-field-label" for="printer-name"><span>Name</span></label>

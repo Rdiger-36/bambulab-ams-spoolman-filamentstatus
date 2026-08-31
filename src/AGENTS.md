@@ -66,6 +66,14 @@ reprocessing.
   up. Never reassign the exported binding.
 - **All Spoolman HTTP goes through `spoolman.js`.** Do not `got()` a Spoolman URL
   from anywhere else.
+- **Every FTPS connection gets its own `secureOptions` object**, built by
+  `bambuTlsOptions()`. basic-ftp writes the host into the object it is handed,
+  and for implicit TLS that stored host wins over the one passed to `access()`,
+  so a shared constant sends every later connection to the printer that used it
+  first.
+- **A connection test never disturbs the live connection.** `testMqttConnection`
+  opens its own client and force closes it; it must not touch
+  `printer.mqttClient`.
 - **`slot.remain` is never mutated in place.** It is compared raw against the
   next MQTT message in `extractComparableTrayData()`; normalise into a local
   (`correctRemainInt`) instead. Mutating it desyncs change detection forever for

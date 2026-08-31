@@ -2,7 +2,7 @@ import { createReadStream } from "fs";
 import mime from "mime-types";
 import path from "path";
 import { serverLogFilePath, version } from "./config.js";
-import { settings, spoolmanUrl, getSettingsView, updateSettings } from "./settings.js";
+import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting } from "./settings.js";
 import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
 import { restartSpoolmanConnection } from "./service.js";
 import { state } from "./state.js";
@@ -20,9 +20,10 @@ import {
     createNamedVendor,
     createFilament,
     createSpoolRecord,
+    checkSpoolmanHealth,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey } from "./gcode.js";
-import { setupMqtt, broadcastSlotUpdate, broadcastSSE } from "./mqtt.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, testFtpsConnection } from "./gcode.js";
+import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /** Strips server-only fields from a UI spool before it goes out to a client. */
@@ -606,6 +607,53 @@ export function registerRoutes(app, printers) {
         broadcastSSE({ type: "printers_update" });
 
         res.json({ ok: true, removed: printer.id });
+    });
+
+    // ---------------------------------------------------------------------
+    // Connection tests
+    //
+    // Both take the values from the form rather than the stored ones, so a
+    // setting can be tried before it is saved. Nothing is written here.
+    // ---------------------------------------------------------------------
+
+    app.post("/api/test/spoolman", async (req, res) => {
+        const candidate = {};
+        for (const key of ["SPOOLMAN_ENDPOINT", "SPOOLMAN_IP", "SPOOLMAN_PORT", "SPOOLMAN_SUBFOLDER"]) {
+            const result = coerceSetting(key, req.body?.[key]);
+            if (result.error) return res.status(400).json({ ok: false, error: result.error });
+            candidate[key] = result.value;
+        }
+
+        const url = buildSpoolmanUrl(candidate);
+        const health = await checkSpoolmanHealth(url);
+
+        res.json({ ...health, url });
+    });
+
+    app.post("/api/test/printer", async (req, res) => {
+        const id = String(req.body?.id || "").trim().toUpperCase();
+        const ip = String(req.body?.ip || "").trim();
+        // The Web UI never receives the stored access code, so an empty one in
+        // an edit means "test the code that is already stored".
+        const known = printers.find(p => p.id === id);
+        const code = String(req.body?.code || "").trim() || known?.code || "";
+
+        if (!id) return res.status(400).json({ ok: false, error: "Serial number is required" });
+        if (!ip) return res.status(400).json({ ok: false, error: "Address is required" });
+        if (!code) return res.status(400).json({ ok: false, error: "Access code is required" });
+
+        // Both checks are independent, and a printer that fails one usually
+        // fails the other, so waiting for them one after another only doubles
+        // the time until the user sees the result.
+        const [mqttResult, ftpsResult] = await Promise.all([
+            testMqttConnection({ id, ip, code }),
+            testFtpsConnection({ ip, code }),
+        ]);
+
+        const target = known ? known.name : id;
+        console.log("Server", serverLogFilePath, `[Test] ${target}: MQTT ${mqttResult.ok ? "ok" : `failed (${mqttResult.detail})`}, FTPS ${ftpsResult.ok ? "ok" : `failed (${ftpsResult.detail})`}`);
+
+        res.json({ ok: mqttResult.ok && ftpsResult.ok, mqtt: mqttResult, ftps: ftpsResult });
     });
 }
 

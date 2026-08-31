@@ -318,6 +318,33 @@ function loadSettings() {
 loadSettings();
 
 /**
+ * Builds the Spoolman base URL from a set of values.
+ *
+ * Takes the values explicitly so the settings page can test an endpoint before
+ * it is saved. The endpoint wins over host and port; a subfolder is appended to
+ * whichever of the two produced the base.
+ *
+ * @param {object} values - SPOOLMAN_ENDPOINT, SPOOLMAN_IP, SPOOLMAN_PORT and
+ *   SPOOLMAN_SUBFOLDER, in the shape the schema defines
+ * @returns {string} the base URL, or an empty string when nothing is configured
+ */
+export function buildSpoolmanUrl(values = {}) {
+    let base = "";
+    if (values.SPOOLMAN_ENDPOINT) {
+        base = values.SPOOLMAN_ENDPOINT;
+    } else if (values.SPOOLMAN_IP) {
+        base = values.SPOOLMAN_PORT
+            ? `http://${values.SPOOLMAN_IP}:${values.SPOOLMAN_PORT}`
+            : `http://${values.SPOOLMAN_IP}`;
+    }
+
+    base = String(base).trim().replace(/\/+$/, "");
+    if (!base) return "";
+
+    return values.SPOOLMAN_SUBFOLDER ? `${base}${values.SPOOLMAN_SUBFOLDER}` : base;
+}
+
+/**
  * The Spoolman base URL the HTTP client talks to.
  *
  * Read through this function rather than a constant, because the endpoint can
@@ -326,19 +353,7 @@ loadSettings();
  * @returns {string} the base URL, or an empty string when nothing is configured
  */
 export function spoolmanUrl() {
-    let base = "";
-    if (settings.SPOOLMAN_ENDPOINT) {
-        base = settings.SPOOLMAN_ENDPOINT;
-    } else if (settings.SPOOLMAN_IP) {
-        base = settings.SPOOLMAN_PORT
-            ? `http://${settings.SPOOLMAN_IP}:${settings.SPOOLMAN_PORT}`
-            : `http://${settings.SPOOLMAN_IP}`;
-    }
-
-    base = base.replace(/\/+$/, "");
-    if (!base) return "";
-
-    return settings.SPOOLMAN_SUBFOLDER ? `${base}${settings.SPOOLMAN_SUBFOLDER}` : base;
+    return buildSpoolmanUrl(settings);
 }
 
 /** The current settings plus the metadata the Web UI needs to render them. */

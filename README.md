@@ -390,6 +390,13 @@ printer from another page opens it on the dashboard.
   The serial number cannot be changed, it keys the MQTT topic, the log file and
   the assignments. The access code is stored on the server and never sent back
   to the browser; leave the field empty while editing to keep the stored one.
+- **Test connection**, in the printer dialog and under the Spoolman endpoint.
+  The printer test checks both connections the service needs: MQTT on port 8883
+  for the AMS data, and FTPS on port 990 for the sliced file the consumption is
+  read from. It waits for a report on the topic of the serial number, so a
+  serial that does not belong to that address is reported as unconfirmed
+  instead of passing. Both tests use the values in the form, so an address can
+  be verified before it is saved.
 - **Spoolman connection**: only the endpoint is shown, host, port, subfolder
   and the public URL sit in a collapsed section below it. The line under the
   field says which URL the service actually talks to, subfolder included.

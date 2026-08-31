@@ -897,6 +897,88 @@ export async function setupMqtt(printer) {
 }
 
 /**
+ * Checks whether a printer accepts an MQTT connection and actually reports on
+ * the topic of the configured serial number, without touching the connection
+ * the monitor loop maintains.
+ *
+ * Uses its own short lived client, so a printer that is already being monitored
+ * keeps running while the test is made. Subscribing alone proves nothing: the
+ * printer accepts a subscription to any topic, including the one of a serial
+ * number that is not its own. Only an arriving report does, which is why the
+ * test waits for one. A connection without a report is reported as a warning
+ * rather than a failure, because a printer really can stay silent for a moment.
+ *
+ * @param {{id: string, ip: string, code: string}} printer - what to try
+ * @param {number} [timeout] - milliseconds before the connection is given up
+ * @param {number} [listenTimeout] - milliseconds to wait for the first report
+ * @returns {Promise<{ok: boolean, error?: string, warning?: string, detail?: string}>}
+ */
+export async function testMqttConnection(printer, timeout = 8000, listenTimeout = 6000) {
+    let client = null;
+
+    try {
+        client = await mqtt.connectAsync(`tls://bblp:${printer.code}@${printer.ip}:8883`, {
+            rejectUnauthorized: false,
+            connectTimeout: timeout,
+            reconnectPeriod: 0,
+        });
+
+        const topic = `device/${printer.id}/report`;
+        await client.subscribeAsync(topic);
+
+        const reported = await waitForFirstMessage(client, listenTimeout);
+        if (reported) return { ok: true };
+
+        return {
+            ok: true,
+            warning: `Connected, but nothing arrived on ${topic}. Check the serial number if this stays empty.`,
+        };
+    } catch (err) {
+        const detail = err?.message || String(err);
+        return { ok: false, error: describeMqttError(err), detail };
+    } finally {
+        // force close, the test must not linger as a second session
+        client?.end(true);
+    }
+}
+
+/**
+ * Resolves true on the first message the client receives, false when the wait
+ * runs out. Always removes its listener, so the client can be closed cleanly.
+ *
+ * @returns {Promise<boolean>} whether a message arrived in time
+ */
+function waitForFirstMessage(client, timeout) {
+    return new Promise(resolve => {
+        const done = (result) => {
+            clearTimeout(timer);
+            client.removeListener("message", onMessage);
+            resolve(result);
+        };
+        const onMessage = () => done(true);
+        const timer = setTimeout(() => done(false), timeout);
+
+        client.on("message", onMessage);
+    });
+}
+
+/**
+ * Turns an MQTT failure into something a user can act on. A rejected access
+ * code and an unreachable address both surface as a connection error, but they
+ * need completely different fixes.
+ */
+function describeMqttError(err) {
+    const message = err?.message || String(err);
+
+    if (/Not authorized|Bad username or password|code: [45]/.test(message)) return "The printer rejected the access code";
+    if (/ECONNREFUSED/.test(message)) return "Port 8883 refused the connection";
+    if (/ETIMEDOUT|timeout|Timeout/.test(message)) return "No answer on port 8883 within the timeout. Is LAN mode enabled?";
+    if (/EHOSTUNREACH|ENETUNREACH|ENOTFOUND|EAI_AGAIN/.test(message)) return "The address cannot be reached";
+
+    return message;
+}
+
+/**
  * Runs forever, reconnecting printers that are reachable but not connected.
  *
  * This is the single retry driver for MQTT. On every offline check interval each

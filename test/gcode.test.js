@@ -11,6 +11,7 @@ import {
     calcPartialConsumption,
     normColor,
     consumptionKey,
+    bambuTlsOptions,
 } from "../src/gcode.js";
 
 // Real Metadata/slice_info.config files, pulled off a P2S over FTPS:
@@ -127,4 +128,18 @@ test("a 3MF without slice info yields no entry", () => {
     archive.addFile("3D/3dmodel.model", Buffer.from("<model/>", "utf-8"));
 
     assert.equal(new AdmZip(archive.toBuffer()).getEntry("Metadata/slice_info.config"), null);
+});
+
+test("every FTPS connection gets its own TLS options object", () => {
+    // basic-ftp writes the host into the object it is handed, and for implicit
+    // TLS that stored host wins over the one passed to access(). Sharing one
+    // object sent every later connection to the printer that used it first.
+    const first = bambuTlsOptions();
+    const second = bambuTlsOptions();
+
+    assert.notEqual(first, second);
+    assert.deepEqual(first, { rejectUnauthorized: false });
+
+    first.host = "192.0.2.1";
+    assert.equal(second.host, undefined);
 });

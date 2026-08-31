@@ -436,3 +436,31 @@ export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
 
     return result;
 }
+
+/**
+ * Single health check against a Spoolman URL, used by the connection test on
+ * the settings page. Takes the URL explicitly so an endpoint can be tried
+ * before it is saved.
+ *
+ * @param {string} url - base URL to check
+ * @param {number} [timeout] - milliseconds before the request is given up
+ * @returns {Promise<{ok: boolean, status?: string, error?: string}>}
+ */
+export async function checkSpoolmanHealth(url, timeout = 5000) {
+    if (!url) return { ok: false, error: "No endpoint configured" };
+
+    try {
+        const response = await got(`${url}/api/v1/health`, { timeout: { request: timeout }, retry: { limit: 0 } });
+        const health = JSON.parse(response.body);
+
+        if (health.status === "healthy") return { ok: true, status: health.status };
+        return { ok: false, error: `Spoolman reports status "${health.status}"` };
+    } catch (err) {
+        const message = err?.message || String(err);
+        if (/ECONNREFUSED/.test(message)) return { ok: false, error: "The connection was refused" };
+        if (/ETIMEDOUT|timeout/i.test(message)) return { ok: false, error: "No answer within the timeout" };
+        if (/ENOTFOUND|EAI_AGAIN/.test(message)) return { ok: false, error: "The host name cannot be resolved" };
+        if (/404/.test(message)) return { ok: false, error: "Reachable, but there is no Spoolman API at this address" };
+        return { ok: false, error: message };
+    }
+}

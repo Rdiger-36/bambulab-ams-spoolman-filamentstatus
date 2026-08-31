@@ -27,9 +27,15 @@ Version 1.3.0-dev
          - Compact settings layout: three cards, toggles instead of checkboxes, restyled buttons and printer table, and a sticky save bar that stays disabled until something is edited
          - Fields an ordinary install never touches are collapsed: Spoolman host, port, subfolder and public URL, plus the reconnect interval, the retry limit and debug logging
          - The Spoolman card shows the URL the service actually talks to, subfolder included
+      - Connection test in the Web UI, for Spoolman and for a printer while adding or editing it
+         - The printer test checks MQTT on port 8883 and FTPS on port 990, in parallel, and separates a rejected access code from an unreachable address
+         - It waits for a report on device/<serial>/report, because the printer accepts a subscription to any topic: a serial number that does not belong to that address is reported as unconfirmed instead of passing
+         - Both tests use the values currently in the form, so an address can be verified before it is saved. An empty access code tests the stored one
       - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
 
    - Bugfixes:
+      - Fix: with more than one printer, every FTPS connection after the first one went to the printer that connected first
+         - basic-ftp writes the host into the secureOptions object it is handed, and for implicit TLS that stored host wins over the host passed to access(). The options were a shared module constant, so the sliced file of printer B was fetched from printer A, or failed with printer A's error
       - Fix: LEGACY_MODE did not switch off the G-code tracking
          - The sliced file was downloaded on every print and consumption was booked via PUT /spool/{id}/use, on top of the remain-percentage PATCH that legacy mode is supposed to be
          - The booking was then overwritten again by the next AMS update, so it mostly wasted requests, but it could stick if the spool was removed right after the print

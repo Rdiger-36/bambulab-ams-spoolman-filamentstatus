@@ -1136,6 +1136,41 @@ body.dark-mode .set-actions {
   opacity: 0.7;
 }
 
+/* ---- Connection test ---- */
+.set-test-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.set-test-result {
+  font-size: 0.84em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.set-test-result:empty { display: none; }
+
+.set-test-result .pill {
+  font-size: 0.72rem;
+  padding: 1px 8px;
+}
+
+.set-test-reason {
+  opacity: 0.75;
+  margin-left: 6px;
+}
+
+.set-test-failed { color: #b3261e; opacity: 1; }
+body.dark-mode .set-test-failed { color: #f08a82; }
+
+#printer-test-result {
+  margin-top: 12px;
+}
+
 /* ---- Notes, errors, banner ---- */
 .set-note {
   font-size: 0.83em;
