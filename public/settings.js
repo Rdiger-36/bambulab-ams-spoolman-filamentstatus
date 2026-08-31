@@ -371,14 +371,14 @@ function renderHeaderField(field) {
 
     return `<div class="set-head-field">
                 <label for="${id}">${escapeHtml(field.label)}</label>
-                <span class="set-info" tabindex="0" role="note"
-                      aria-label="${escapeHtml(field.description)}"
-                      data-tip="${escapeHtml(field.description)}">i</span>
                 ${reset}
                 <label class="set-switch" for="${id}">
                     <input type="checkbox" id="${id}" ${values[field.key] ? "checked" : ""}>
                     <span class="set-switch-track"></span>
                 </label>
+                <span class="set-info" tabindex="0" role="note"
+                      aria-label="${escapeHtml(field.description)}"
+                      data-tip="${escapeHtml(field.description)}">i</span>
             </div>`;
 }
 
