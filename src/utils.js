@@ -54,7 +54,7 @@ export function formatInterval(ms) {
  * @param {number|string|null} slotID - slot id within the unit, null for none
  * @returns {string} the slot label
  */
-export async function convertAMSandSlot(amsID, slotID) {
+export function convertAMSandSlot(amsID, slotID) {
     amsID = Number(amsID);
     const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
 

@@ -469,7 +469,7 @@ async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevB
  *   caller its cached lists are stale and have to be refetched
  */
 async function processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime) {
-    const amsId = await convertAMSandSlot(ams.id, slot.id);
+    const amsId = convertAMSandSlot(ams.id, slot.id);
     const validSlot = Object.keys(slot).length > 6;
 
     if (!validSlot) {
