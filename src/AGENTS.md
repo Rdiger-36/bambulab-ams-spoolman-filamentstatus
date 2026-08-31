@@ -18,7 +18,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()`, the frozen `legacyMode()` and the persistence of `printers/settings.json`, including its schema version and write counter. Must not import `logger.js`, which reads DEBUG from here. |
 | `service.js` | The startup sequence, the Spoolman reconnect that the settings API triggers when the endpoint changes, and `restartService()`, which ends the process with the restart exit code. |
 | `supervisor.js` | The decision `entrypoint.js` makes when the service ends, and the exit code it looks for. Deliberately free of imports so it can be tested without spawning a process. |
-| `logger.js` | The `console.*` overrides, the serialised per-file write queue, and `tailFileLines()` for the log viewer. |
+| `logger.js` | The `console.*` overrides, the serialised per-file write queue, `tailFileLines()` for the log viewer and the size based rotation of the log files. |
 | `printers.js` | Loads and writes `printers/printers.json` (or seeds it from the `PRINTER_*` env vars), seeds the mutable per-printer runtime object, and owns add, update and remove. |
 | `mqtt.js` | The engine. Connection lifecycle, message handling, slot processing, print-state tracking, consumption booking, SSE broadcast, monitor loops. |
 | `ams.js` | Pure functions over AMS payloads: normalisation, change detection, spool matching. No I/O. |
@@ -106,6 +106,10 @@ reprocessing.
   matching, the assignment is dropped rather than booked onto the wrong spool.
 - **`mappings.json` is written temp-file-then-rename**, so a crash mid-write
   cannot truncate it.
+- **Log rotation runs inside the write queue of its file.** A rename between two
+  queued appends would send the lines in between to the rotated file, or to one
+  nobody reads any more. `rotateLogFile()` queues; the append path calls the
+  unqueued `rotateNow()` because it is already inside the queue.
 - **Reconnects are driven only by `monitorPrinters()`.** The MQTT `close` and
   `error` handlers must not reschedule themselves. Two independent retry paths
   used to race.

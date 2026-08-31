@@ -1,6 +1,6 @@
 import fs from "fs-extra";
 import path from "path";
-import { trimLogFile } from "./logger.js"; // importing it also activates the console overrides
+import { rotateLogFile } from "./logger.js"; // importing it also activates the console overrides
 import { configPath, serverLogFilePath, envPrinterSeed, logsDir } from "./config.js";
 import { settings } from "./settings.js";
 import { formatDateLog } from "./utils.js";
@@ -167,17 +167,17 @@ export function savePrinters(list = printers) {
 }
 
 /**
- * Creates the log file of a printer, or trims it when it has grown too large.
+ * Creates the log file of a printer, or rotates it when it has grown too large.
  *
- * Nothing ever truncated these files: they are created once and appended to
- * from then on. Called on every start, so the trim happens as often as the
- * server log's does.
+ * Nothing ever truncated these files: they were created once and appended to
+ * from then on. Called on every start, and the append path checks the size
+ * while the service runs.
  *
  * @param {object} printer - the runtime printer object
  */
 export function ensurePrinterLogFile(printer) {
     if (fs.existsSync(printer.logFilePath)) {
-        trimLogFile(printer.logFilePath);
+        rotateLogFile(printer.logFilePath);
         return;
     }
 

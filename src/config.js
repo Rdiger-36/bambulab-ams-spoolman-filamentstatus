@@ -50,6 +50,9 @@ export const envSeed = {
     NEVER_MERGE_IF_TAG: process.env.NEVER_MERGE_IF_TAG,
     SET_LOCATION: process.env.SET_LOCATION,
     DEBUG: process.env.DEBUG,
+    LOG_MAX_SIZE_MB: process.env.LOG_MAX_SIZE_MB,
+    LOG_KEEP_SERVER: process.env.LOG_KEEP_SERVER,
+    LOG_KEEP_PRINTER: process.env.LOG_KEEP_PRINTER,
 };
 
 // Single printer fallback, used by the Home Assistant add-on and the simplest

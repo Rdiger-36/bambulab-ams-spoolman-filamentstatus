@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import { flushLogs, trimLogFile } from "../src/logger.js";
+import { flushLogs, rotateLogFile } from "../src/logger.js";
 
 // Flushing once only awaits what is queued at that moment. Yielding to the event
 // loop in between catches a write that was still being scheduled, so the test
@@ -85,26 +85,54 @@ test("errors and debug output share the queue with everything else", async () =>
     assert.equal(errors.length, 100);
 });
 
-test("a log file past the limit is trimmed to its last lines", async () => {
+test("a log file past the limit is rotated and the history shifts along", async () => {
     // Nothing truncates these files, they are only appended to, so this is what
     // keeps a long running installation from filling its volume.
-    const file = tmpLog("trim.log");
-    const lines = Array.from({ length: 5000 }, (_, i) => `line ${i}`);
-    fs.writeFileSync(file, lines.join("\n") + "\n");
+    const file = tmpLog("rotate.log");
+    fs.writeFileSync(file, "first round\n".repeat(200));
 
-    await trimLogFile(file, 1024, 100);
+    assert.equal(await rotateLogFile(file, { maxBytes: 100, keep: 2 }), true);
+    assert.equal(fs.readFileSync(file, "utf8"), "");
+    assert.equal(readLines(`${file}.1`)[0], "first round");
 
-    const kept = readLines(file);
-    assert.equal(kept.length, 100);
-    assert.equal(kept.at(-1), "line 4999");
-    assert.equal(kept[0], "line 4900");
+    fs.writeFileSync(file, "second round\n".repeat(200));
+    await rotateLogFile(file, { maxBytes: 100, keep: 2 });
+
+    assert.equal(readLines(`${file}.1`)[0], "second round");
+    assert.equal(readLines(`${file}.2`)[0], "first round");
+
+    // The third round pushes the oldest one out
+    fs.writeFileSync(file, "third round\n".repeat(200));
+    await rotateLogFile(file, { maxBytes: 100, keep: 2 });
+
+    assert.equal(readLines(`${file}.1`)[0], "third round");
+    assert.equal(readLines(`${file}.2`)[0], "second round");
+    assert.equal(fs.existsSync(`${file}.3`), false);
+});
+
+test("keeping nothing starts the file over without a history", async () => {
+    const file = tmpLog("nokeep.log");
+    fs.writeFileSync(file, "gone\n".repeat(200));
+
+    assert.equal(await rotateLogFile(file, { maxBytes: 100, keep: 0 }), true);
+
+    assert.equal(fs.readFileSync(file, "utf8"), "");
+    assert.equal(fs.existsSync(`${file}.1`), false);
 });
 
 test("a log file below the limit is left alone", async () => {
     const file = tmpLog("small.log");
     fs.writeFileSync(file, "one\ntwo\n");
 
-    await trimLogFile(file, 1024, 100);
+    assert.equal(await rotateLogFile(file, { maxBytes: 1024, keep: 2 }), false);
 
     assert.equal(fs.readFileSync(file, "utf8"), "one\ntwo\n");
+    assert.equal(fs.existsSync(`${file}.1`), false);
+});
+
+test("a missing log file is not an error", async () => {
+    const file = tmpLog("gone.log");
+    fs.rmSync(file);
+
+    assert.equal(await rotateLogFile(file, { maxBytes: 1, keep: 2 }), false);
 });

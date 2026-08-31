@@ -5,7 +5,7 @@ import fs from "fs-extra";
 
 import "./src/logger.js"; // must be first, sets up console overrides
 import { PORT, serverLogFilePath, version } from "./src/config.js";
-import { trimLogFile } from "./src/logger.js";
+import { rotateLogFile } from "./src/logger.js";
 import { printers } from "./src/printers.js";
 import { registerRoutes } from "./src/routes.js";
 import { startService } from "./src/service.js";
@@ -28,8 +28,8 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log("Server", serverLogFilePath, "Setting up configuration...");
 
     // Append rather than replace, so a restart does not take the lines with it
-    // that explain why it happened. Trimmed when it has grown too large.
-    trimLogFile(serverLogFilePath).finally(() => {
+    // that explain why it happened. Rotated when it has grown too large.
+    rotateLogFile(serverLogFilePath).finally(() => {
         fs.appendFile(serverLogFilePath, `Log started at: ${formatDateLog(new Date())}\n`, err => {
             if (err) {
                 process.stderr.write(`Failed to write the log file: ${err.message}\n`);

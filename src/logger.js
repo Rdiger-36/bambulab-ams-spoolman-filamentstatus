@@ -32,9 +32,27 @@ function enqueueTask(filePath, taskFn) {
     });
 }
 
+// Bytes appended per file since the last size check. Stat'ing on every line
+// would mean a syscall per log message, so the size is only looked at once
+// enough has been written for it to matter.
+const __bytesSinceCheck = new Map();
+const SIZE_CHECK_INTERVAL_BYTES = 64 * 1024;
+
 /** Appends content to a log file through that file's write queue. */
 function enqueueAppend(filePath, content) {
-    return enqueueTask(filePath, () => fsp.appendFile(filePath, content));
+    return enqueueTask(filePath, async () => {
+        await fsp.appendFile(filePath, content);
+
+        const pending = (__bytesSinceCheck.get(filePath) || 0) + Buffer.byteLength(content);
+        if (pending < SIZE_CHECK_INTERVAL_BYTES) {
+            __bytesSinceCheck.set(filePath, pending);
+            return;
+        }
+
+        __bytesSinceCheck.set(filePath, 0);
+        // Already inside the queue, so this must not queue itself again
+        await rotateNow(filePath, maxLogBytes(), keepFor(filePath));
+    });
 }
 
 /**
@@ -212,29 +230,69 @@ export function flushLogs(filePath) {
 
 export { originalConsoleLog, originalConsoleError };
 
+/** The size a log file may reach before it is rotated. */
+function maxLogBytes() {
+    return settings.LOG_MAX_SIZE_MB * 1024 * 1024;
+}
+
+/** How many old files are kept next to this one. */
+function keepFor(filePath) {
+    return filePath === serverLogFilePath ? settings.LOG_KEEP_SERVER : settings.LOG_KEEP_PRINTER;
+}
+
 /**
- * Trims a log file to its last lines when it has grown past a limit.
+ * Rotates a log file when it has grown past the configured size.
  *
- * The server log used to be truncated on every start, which was the only thing
- * keeping it small. Since it is appended to now, so that a restart does not
- * take the lines with it, this is what keeps it from growing forever.
+ * `server.log` becomes `server.log.1`, the previous `.1` becomes `.2` and so on
+ * until the configured number is reached; the oldest one is deleted. Keeping
+ * zero files starts the current one over instead, which is the same thing
+ * without the history.
+ *
+ * Goes through the write queue of that file, because a rename between two
+ * queued appends would send the lines in between to the rotated file, or to a
+ * file nobody reads any more.
  *
  * @param {string} filePath - the log file
- * @param {number} [maxBytes] - size above which the file is trimmed
- * @param {number} [keepLines] - how many lines to keep when trimming
+ * @param {object} [options] - overrides for the test
+ * @returns {Promise<boolean>} whether it was rotated
  */
-export async function trimLogFile(filePath, maxBytes = 1024 * 1024, keepLines = 2000) {
+export function rotateLogFile(filePath, { maxBytes, keep } = {}) {
+    return enqueueTask(filePath, () => rotateNow(
+        filePath,
+        maxBytes ?? maxLogBytes(),
+        keep ?? keepFor(filePath),
+    ));
+}
+
+/** The rotation itself. Only ever called from inside a file's write queue. */
+async function rotateNow(filePath, maxBytes, keep) {
     try {
         const stat = await fsp.stat(filePath);
-        if (stat.size <= maxBytes) return;
-
-        const lines = await tailFileLines(filePath, keepLines);
-        await fsp.writeFile(filePath, lines.join("\n") + "\n");
+        if (stat.size <= maxBytes) return false;
     } catch (err) {
-        // A missing file is the normal first run case, everything else is not
-        // worth taking the start down for.
-        if (err.code !== "ENOENT") {
-            originalConsoleError(`[ERROR] Could not trim ${filePath}: ${err.message}`);
+        // A missing file is the normal first run case
+        if (err.code === "ENOENT") return false;
+        originalConsoleError(`[ERROR] Could not check the size of ${filePath}: ${err.message}`);
+        return false;
+    }
+
+    try {
+        if (keep <= 0) {
+            await fsp.writeFile(filePath, "");
+            return true;
         }
+
+        await fsp.rm(`${filePath}.${keep}`, { force: true });
+        for (let i = keep - 1; i >= 1; i--) {
+            // Most of these do not exist yet while the history is filling up
+            await fsp.rename(`${filePath}.${i}`, `${filePath}.${i + 1}`).catch(() => {});
+        }
+
+        await fsp.rename(filePath, `${filePath}.1`);
+        await fsp.writeFile(filePath, "");
+        return true;
+    } catch (err) {
+        originalConsoleError(`[ERROR] Could not rotate ${filePath}: ${err.message}`);
+        return false;
     }
 }

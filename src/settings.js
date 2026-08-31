@@ -133,6 +133,36 @@ export const SETTINGS_SCHEMA = {
         label: "Debug logging",
         description: "Writes verbose debug lines into the log files.",
     },
+    LOG_MAX_SIZE_MB: {
+        type: "integer",
+        default: 1,
+        min: 1,
+        max: 100,
+        group: "behaviour",
+        advanced: true,
+        label: "Log file size (MB)",
+        description: "Size a log file may reach before it is rotated. The current file is renamed and an empty one takes its place.",
+    },
+    LOG_KEEP_SERVER: {
+        type: "integer",
+        default: 2,
+        min: 0,
+        max: 20,
+        group: "behaviour",
+        advanced: true,
+        label: "Kept server logs",
+        description: "How many rotated server logs to keep next to the current one. 0 starts the current one over instead of keeping history.",
+    },
+    LOG_KEEP_PRINTER: {
+        type: "integer",
+        default: 2,
+        min: 0,
+        max: 20,
+        group: "behaviour",
+        advanced: true,
+        label: "Kept printer logs",
+        description: "How many rotated logs to keep per printer. Every printer has its own file, so this multiplies with the number of printers.",
+    },
 };
 
 /** Problems seen while loading the settings file, logged by backend.js. */

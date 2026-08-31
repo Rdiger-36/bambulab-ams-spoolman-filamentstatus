@@ -209,6 +209,8 @@ by the container definition on the next start.
 | `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
 | `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
 | `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live, and where the log files are written. Default to `/app/printers` and `/app/logs` in the container, which is what the volumes in the examples above mount. Only set these when you cannot mount those paths |
+| `LOG_MAX_SIZE_MB` | Size a log file may reach before it is rotated (default: 1 MB, max 100). The current file is renamed to `<name>.log.1` and an empty one takes its place |
+| `LOG_KEEP_SERVER`, `LOG_KEEP_PRINTER` | How many rotated files to keep, for the server log and per printer (default: 2 each, max 20). 0 starts the current file over instead of keeping a history. Every printer has its own file, so the printer value multiplies with the number of printers |
 | `TZ`           | Time zone of the container, for example `Europe/Berlin`. The log timestamps follow it. Without it the container runs on UTC, so the logs are offset against the clock of the machine reading them |
 | `SUPERVISOR`   | Set to "false" to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |
 
