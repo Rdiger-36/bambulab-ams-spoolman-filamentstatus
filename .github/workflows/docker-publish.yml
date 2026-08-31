@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
 
           # Only a tag may publish. A manual run sits on a branch, where
-          # GITHUB_REF_NAME is the branch name — that was treated as a version
+          # GITHUB_REF_NAME is the branch name, which was treated as a version
           # and moved :latest to whatever happened to be on that branch.
           if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
             echo "::error::This workflow publishes from a tag only (got ${GITHUB_REF_TYPE} '${GITHUB_REF_NAME}'). Push a vX.Y.Z tag instead."
@@ -78,6 +78,10 @@ jobs:
           echo "Publishing: ${TAGS}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          # Build time for the OCI created label. The repository's updated_at
+          # was used here, which is when the repo last changed, not when this
+          # image was built.
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
@@ -92,6 +96,6 @@ jobs:
             org.opencontainers.image.version=${{ steps.tags.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
