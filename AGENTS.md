@@ -24,7 +24,8 @@ matter for them are below.
 
 | Path | Role |
 |---|---|
-| `entrypoint.js` | Container entrypoint. Global error handlers, signal handling, then dynamic-imports `backend.js`. Never put application logic here. |
+| `entrypoint.js` | Container entrypoint and supervisor. Forks `starting.js`, starts it again on the restart exit code, passes every other code on, forwards SIGTERM/SIGINT and waits for the child. `SUPERVISOR=false` runs the service in this process instead. Never put application logic here. |
+| `starting.js` | The service process. Global error handlers, signal handling, then dynamic-imports `backend.js`. Forked by `entrypoint.js`, so the handlers live where the application does. |
 | `backend.js` | Express app, static hosting, startup sequence: Spoolman health, vendor and extra-field bootstrap, printer log files, monitor loops. |
 | `src/` | All backend logic. See its AGENTS.md. |
 | `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `menu.js` renders the menu bar and owns the dark mode button for every page, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. |
@@ -53,6 +54,11 @@ matter for them are below.
 - **Two tracking modes, mutually exclusive.** Default tracks consumption from
   the sliced G-code; `LEGACY_MODE=true` derives weight from the AMS RFID remain
   percentage. New behaviour must pick a side, because running both double-books.
+- **A requested restart is an exit code, not a signal.** `restartService()`
+  ends the process with `RESTART_EXIT_CODE` (75) and the supervisor starts it
+  again. Only that code restarts; everything else is passed on so a crash stays
+  a crash and the container restart policy stays in charge of it. Letting both
+  layers restart on a crash nests two loops.
 - **The version lives in two places:** `package.json` and `src/config.js`. The
   publish workflow compares the git tag against `package.json` and aborts on a
   mismatch, so bump both together.
@@ -120,7 +126,8 @@ Not punctuation, and therefore allowed:
   overridden `console.log/error/debug`. `originalConsoleLog` and
   `originalConsoleError` belong to `src/logger.js` and to the few places that
   must not recurse into the logger; `process.stdout.write` belongs to
-  `entrypoint.js` only. No leftover debug logging.
+  `entrypoint.js` and `starting.js` only, which both run before the overrides
+  exist. No leftover debug logging.
 - **Shared mutable state goes through `src/state.js`**, per-printer state onto
   the printer object created in `src/printers.js`. Never introduce a new
   module-level mutable global, and never keep state in a route handler or in a

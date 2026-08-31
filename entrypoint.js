@@ -1,17 +1,31 @@
 /**
- * Entrypoint for backend.js
+ * Container entrypoint and supervisor for starting.js
  *
  * Purpose:
- *  - Catches all global Node.js errors (including unhandled Promise rejections)
- *  - Sends all output to stdout/stderr → visible in `docker logs`
+ *  - Runs the service (starting.js) as a child process and starts it again when
+ *    it asks for a restart, which is what the restart button in the Web UI does
+ *  - Passes every other exit code on, so a crash keeps meaning a crash and the
+ *    Docker restart policy stays in charge of it
+ *  - Forwards SIGTERM / SIGINT to the service and waits for it, so `docker stop`
+ *    ends in a clean shutdown rather than in a SIGKILL after the grace period
  *  - Clearly prefixes all messages with "[Entrypoint]" for easy identification
- *  - Starts backend.js safely
- *  - Handles SIGTERM / SIGINT (Docker stop or Ctrl+C)
- *  - Logs exit codes when the process ends
+ *
+ * Set SUPERVISOR=false to run the service inside this process instead, without
+ * the second Node process. Restarting from the Web UI then depends on the
+ * container being restarted from the outside, which the UI says.
+ *
+ * Never put application logic here. It belongs in backend.js and src/.
  */
 
 import path from "path";
 import { fileURLToPath } from "url";
+import { fork } from "child_process";
+
+import { RESTART_EXIT_CODE, shouldRestart } from "./src/supervisor.js";
+
+// How long the service may take to shut down before it is killed. Below the ten
+// seconds Docker waits after SIGTERM, so the kill still happens in here.
+const SHUTDOWN_TIMEOUT_MS = 8000;
 
 // ---------------------------------------------------------
 // Logging Utilities
@@ -27,61 +41,91 @@ function logError(label, err) {
   process.stderr.write(`[Entrypoint] [${timestamp}] [${label}] ${details}\n`);
 }
 
-// ---------------------------------------------------------
-// Global Error Handling
-// ---------------------------------------------------------
-process.on("uncaughtException", (err) => {
-  logError("UNCAUGHT EXCEPTION", err);
-  process.exit(1); // crash visibly so Docker logs show the reason
-});
-
-process.on("unhandledRejection", (reason) => {
-  logError("UNHANDLED REJECTION", reason);
-  process.exit(1);
-});
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const servicePath = path.join(__dirname, "starting.js");
 
 // ---------------------------------------------------------
-// Graceful Shutdown for Docker Stop / Ctrl+C
+// Supervised mode
 // ---------------------------------------------------------
-process.on("SIGTERM", () => {
-  logInfo("SIGTERM received – shutting down backend...");
-  process.exit(0);
-});
+function supervise() {
+  const restarts = [];
+  let child = null;
+  let stopping = false;
 
-process.on("SIGINT", () => {
-  logInfo("SIGINT (Ctrl+C) received – shutting down backend...");
-  process.exit(0);
-});
+  const start = () => {
+    // SUPERVISED tells the service that a restart really brings it back, so the
+    // Web UI can say what will happen rather than list conditions.
+    child = fork(servicePath, [], {
+      stdio: "inherit",
+      env: { ...process.env, SUPERVISED: "1" },
+    });
 
-process.on("exit", (code) => {
-  logInfo(`Node process exited with code ${code}`);
-});
+    child.on("exit", (code, signal) => {
+      child = null;
+
+      if (stopping) {
+        logInfo("Service stopped.");
+        process.exit(0);
+      }
+
+      // A signalled exit reports no code. It was not requested through the
+      // restart code, so it is passed on like any other unexpected end.
+      const status = code === null ? 1 : code;
+      const decision = shouldRestart(status, restarts);
+
+      if (!decision.restart) {
+        logInfo(`Service ended (${signal ? `signal ${signal}` : `code ${status}`}), ${decision.reason}.`);
+        process.exit(status);
+      }
+
+      restarts.push(Date.now());
+      logInfo(`Service asked for a restart, starting it again (${restarts.length}).`);
+      start();
+    });
+
+    child.on("error", (err) => logError("SERVICE ERROR", err));
+  };
+
+  for (const signal of ["SIGTERM", "SIGINT"]) {
+    process.on(signal, () => {
+      if (stopping) return;
+      stopping = true;
+      logInfo(`${signal} received – stopping the service...`);
+
+      if (!child) process.exit(0);
+
+      child.kill(signal);
+      // Docker sends SIGKILL after its grace period anyway; doing it here first
+      // keeps the shutdown inside this process where it can be logged.
+      setTimeout(() => {
+        if (child) {
+          logInfo("Service did not stop in time, killing it.");
+          child.kill("SIGKILL");
+        }
+      }, SHUTDOWN_TIMEOUT_MS).unref();
+    });
+  }
+
+  logInfo(`Supervising ${path.basename(servicePath)}, restart exit code is ${RESTART_EXIT_CODE}.`);
+  start();
+}
 
 // ---------------------------------------------------------
-// Start Backend
+// Single process mode
 // ---------------------------------------------------------
-(async () => {
+async function runInProcess() {
+  logInfo("SUPERVISOR=false, running the service in this process.");
+
   try {
-    logInfo("Starting backend.js ...");
-
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const backendPath = path.join(__dirname, "backend.js");
-
-    // Dynamic import so startup errors can be caught
-    const module = await import(backendPath);
-
-    logInfo("backend.js imported successfully.");
-
-    // If backend.js exports a default() function, execute it
-    if (module?.default && typeof module.default === "function") {
-      logInfo("Executing backend.js default() function...");
-      await module.default();
-      logInfo("backend.js default() function finished.");
-    }
-
-    logInfo("Backend is now running and waiting for events...");
+    await import(servicePath);
   } catch (err) {
     logError("STARTUP ERROR", err);
     process.exit(1);
   }
-})();
+}
+
+if (process.env.SUPERVISOR === "false") {
+  runInProcess();
+} else {
+  supervise();
+}

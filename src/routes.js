@@ -634,9 +634,15 @@ export function registerRoutes(app, printers) {
         res.json({ ok: true, removed: printer.id });
     });
 
-    // Ends the process. Only useful when something restarts the container, so
-    // the Web UI states that before it asks.
+    // Ends the process so it is started again. The consumption of a running job
+    // is booked when it ends, and that state lives in memory, so a restart mid
+    // print has to be confirmed the same way a reconnect does.
     app.post("/api/restart", (req, res) => {
+        const printing = printers.find(printer => printBlocks(printer, req.body));
+        if (printing) {
+            return respondPrintInFlight(res, printing, "Restarting ends the process");
+        }
+
         res.json({ ok: true });
         restartService();
     });

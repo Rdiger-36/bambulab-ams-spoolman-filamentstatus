@@ -24,6 +24,9 @@ let spoolmanUrl = "";
 let revision = 0;
 // True while a saved value waits for the next start of the service
 let restartPending = false;
+// True when a supervisor starts the service again by itself, so the page can
+// say what will happen instead of listing conditions
+let supervised = false;
 let printers = [];
 // Set once an input was touched. Blocks the save button while nothing changed,
 // keeps a settings update pushed over SSE from overwriting what is being typed,
@@ -132,6 +135,8 @@ function applyView(view) {
     spoolmanUrl = view.spoolmanUrl;
     restartPending = view.restartPending;
     revision = view.revision;
+    supervised = view.supervised;
+    renderRestartNote();
     renderSettings();
     setDirty(false);
 }
@@ -157,23 +162,44 @@ function showRestartNotice() {
 
 /* ---- Restarting the service ---- */
 
+/** The service card says what a restart will actually do on this installation. */
+function renderRestartNote() {
+    const note = document.getElementById("restart-note");
+    if (!note) return;
+
+    note.textContent = supervised
+        ? "Ends the service and starts it again. This takes a few seconds, the page waits for it and reloads itself."
+        : "Ends the process so that Docker or the Home Assistant supervisor starts it again. This only works when the container is set to restart, for example with restart: unless-stopped. Without that the service stays down and has to be started by hand.";
+}
+
 async function confirmRestart() {
+    const warning = supervised
+        ? `<p class="set-note">A running print keeps printing, but the consumption of that job is not booked.</p>`
+        : `<p class="set-note">When the container is not set to restart, for example with
+              <code>restart: unless-stopped</code>, it stays down and has to be started by hand.
+              A running print keeps printing, but the consumption of that job is not booked.</p>`;
+
     const confirmed = await confirmAction({
         title: "Restart the service?",
-        html: `<p>The process ends and has to be started again by Docker or the Home Assistant supervisor.</p>
-               <p class="set-note">When the container is not set to restart, for example with
-                  <code>restart: unless-stopped</code>, it stays down and has to be started by hand.
-                  A running print keeps printing, but the consumption of that job is not booked.</p>`,
+        html: `<p>${supervised
+            ? "The service ends and is started again right away."
+            : "The process ends and has to be started again by Docker or the Home Assistant supervisor."}</p>${warning}`,
         okLabel: "Restart",
     });
 
-    if (!confirmed) return;
+    if (confirmed) restartNow(false);
+}
 
+async function restartNow(force) {
     try {
-        await sendJson("./api/restart", "POST", {});
+        await sendJson("./api/restart", "POST", { force });
         showBanner("Restarting, waiting for the service to come back...", "warn");
         waitForService();
     } catch (err) {
+        if (err.printInFlight) {
+            await confirmWhilePrinting(err, () => restartNow(true));
+            return;
+        }
         showBanner(`Could not restart: ${err.message}`, "bad");
     }
 }

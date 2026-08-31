@@ -14,6 +14,7 @@ fs.ensureDirSync(process.env.DATA_DIR);
 fs.ensureDirSync(process.env.LOG_DIR);
 
 const { restartService } = await import("../src/service.js");
+const { RESTART_EXIT_CODE } = await import("../src/supervisor.js");
 const { printers, addPrinter } = await import("../src/printers.js");
 
 test("restarting closes the MQTT connections and ends the process", async () => {
@@ -30,7 +31,9 @@ test("restarting closes the MQTT connections and ends the process", async () => 
     assert.equal(ended, true);
     assert.equal(printers[0].mqttClient, null);
     assert.equal(printers[0].mqttRunning, false);
-    assert.equal(exitCode, 0);
+    // The supervisor restarts on exactly this code, and it is non zero so a
+    // container without the supervisor is restarted by its own policy.
+    assert.equal(exitCode, RESTART_EXIT_CODE);
 
     fs.removeSync(dir);
 });

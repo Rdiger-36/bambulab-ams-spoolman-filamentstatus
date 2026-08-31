@@ -25,6 +25,10 @@ export const mappingsPath = path.join(dataDir, "mappings.json");
 // Runtime configuration edited through the Web UI, see settings.js.
 export const settingsPath = path.join(dataDir, "settings.json");
 
+// Set by the supervisor in entrypoint.js. Tells the Web UI whether a restart
+// brings the service back on its own or depends on the container policy.
+export const supervised = process.env.SUPERVISED === "1";
+
 export const version = "1.3.0-dev";
 export const PORT = 4000;
 export const RECONNECT_INTERVAL = 60000;

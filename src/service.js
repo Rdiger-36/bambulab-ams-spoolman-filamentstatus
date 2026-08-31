@@ -1,4 +1,5 @@
 import { serverLogFilePath } from "./config.js";
+import { RESTART_EXIT_CODE } from "./supervisor.js";
 import { settingsLoadIssues, spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { printers, ensurePrinterLogFile } from "./printers.js";
@@ -104,14 +105,13 @@ export function restartSpoolmanConnection() {
 }
 
 /**
- * Ends the process so that whatever supervises the container starts it again.
+ * Ends the process so that whatever runs it starts it again.
  *
  * There is no way to restart from the inside: the settings that need one are
  * read at startup, and re-reading them in place is exactly what the frozen
- * tracking mode exists to prevent. Exiting only works when something restarts
- * the service, `restart: unless-stopped` in the compose example or the Home
- * Assistant add-on supervisor. Without that the service stays down, which is
- * why the Web UI says so before asking.
+ * tracking mode exists to prevent. The exit code asks the supervisor in
+ * `entrypoint.js` for a restart. It is also non zero, so a container running
+ * without that supervisor is restarted by its own policy.
  *
  * The exit is delayed so the HTTP response still reaches the browser, and the
  * MQTT connections are closed first so the printers do not keep a session that
@@ -136,7 +136,7 @@ export function restartService({ delay = 300, exit = code => process.exit(code) 
 
     return new Promise(resolve => {
         setTimeout(() => {
-            exit(0);
+            exit(RESTART_EXIT_CODE);
             resolve();
         }, delay);
     });

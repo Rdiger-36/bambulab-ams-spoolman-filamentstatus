@@ -207,6 +207,7 @@ by the container definition on the next start.
 | `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
 | `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
 | `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live, and where the log files are written. Default to `/app/printers` and `/app/logs` in the container, which is what the volumes in the examples above mount. Only set these when you cannot mount those paths |
+| `SUPERVISOR`   | Set to "false" to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |
 
 ## Usage
 
@@ -415,12 +416,12 @@ printer from another page opens it on the dashboard.
   consumption differently, so switching one into a running process would book a
   print in flight twice or not at all.
 
-- **Restart service**, in its own card at the bottom. It ends the process so
-  that Docker or the Home Assistant supervisor starts it again, which is what
-  the `restart: unless-stopped` in the compose example above is for. Without a
-  restart policy the service stays down and has to be started by hand, and the
-  page says so before it asks. The page waits for the service to come back and
-  reloads itself, or tells you when it does not.
+- **Restart service**, in its own card at the bottom. The container runs a small
+  supervisor that starts the service again by itself, so this works whether or
+  not the container has a restart policy. The page waits for the service to come
+  back and reloads itself, or tells you when it does not. While a print is
+  running it asks first, because the consumption of that job is booked only when
+  it ends.
 
 Everything is stored in `printers/settings.json` next to `printers.json`, so it
 survives a container update as long as that volume is mounted.

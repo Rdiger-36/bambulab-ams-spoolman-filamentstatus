@@ -1,6 +1,6 @@
 import fs from "fs-extra";
 import path from "path";
-import { settingsPath, envSeed } from "./config.js";
+import { settingsPath, envSeed, supervised } from "./config.js";
 
 /**
  * Runtime configuration, persisted to `printers/settings.json`.
@@ -463,6 +463,8 @@ export function getSettingsView() {
         // Sent back with the next save, so a state somebody else has already
         // replaced is not overwritten silently.
         revision: storedRevision,
+        // Whether a restart brings the service back on its own
+        supervised,
     };
 }
 

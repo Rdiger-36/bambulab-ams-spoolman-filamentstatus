@@ -211,3 +211,30 @@ export function flushLogs(filePath) {
 }
 
 export { originalConsoleLog, originalConsoleError };
+
+/**
+ * Trims a log file to its last lines when it has grown past a limit.
+ *
+ * The server log used to be truncated on every start, which was the only thing
+ * keeping it small. Since it is appended to now, so that a restart does not
+ * take the lines with it, this is what keeps it from growing forever.
+ *
+ * @param {string} filePath - the log file
+ * @param {number} [maxBytes] - size above which the file is trimmed
+ * @param {number} [keepLines] - how many lines to keep when trimming
+ */
+export async function trimLogFile(filePath, maxBytes = 1024 * 1024, keepLines = 2000) {
+    try {
+        const stat = await fsp.stat(filePath);
+        if (stat.size <= maxBytes) return;
+
+        const lines = await tailFileLines(filePath, keepLines);
+        await fsp.writeFile(filePath, lines.join("\n") + "\n");
+    } catch (err) {
+        // A missing file is the normal first run case, everything else is not
+        // worth taking the start down for.
+        if (err.code !== "ENOENT") {
+            originalConsoleError(`[ERROR] Could not trim ${filePath}: ${err.message}`);
+        }
+    }
+}
