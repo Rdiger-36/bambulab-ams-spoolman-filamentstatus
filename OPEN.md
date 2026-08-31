@@ -252,11 +252,6 @@ that line can be drawn.
 **Third party spools report no weight**, so full and remaining weight are typed
 in once per spool. Nothing to be done about it, but it surprises people.
 
-**Printer log files grow without a bound.** They are only created when missing
-and appended to from then on. The server log is trimmed past 1 MB
-(`trimLogFile()`), the per printer ones are not, because nothing truncates them
-today either and the fix is the same call in `ensurePrinterLogFile()`.
-
 **The Web UI has no access protection**, decided on 2026-08-31 after the
 settings page landed. It can change the printer list and the Spoolman endpoint,
 so the service belongs in a trusted local network and its port must not be

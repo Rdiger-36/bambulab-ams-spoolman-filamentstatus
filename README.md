@@ -156,6 +156,7 @@ The Hardware supported by this image are:
      -e SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>] \
      -e UPDATE_INTERVAL=120000 \
      -e MODE=automatic \
+     -e TZ=Europe/Berlin \
      -p 4000:4000 \
      -v /path/to/your/config/printers:/app/printers \
      -v /path/to/your/config/logs:/app/logs \
@@ -179,6 +180,7 @@ The Hardware supported by this image are:
         - SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>]
         - UPDATE_INTERVAL=120000
         - MODE=automatic
+        - TZ=Europe/Berlin
       volumes:
         - /path/to/your/config/printers:/app/printers
         - /path/to/your/config/logs:/app/logs
@@ -207,6 +209,7 @@ by the container definition on the next start.
 | `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
 | `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
 | `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live, and where the log files are written. Default to `/app/printers` and `/app/logs` in the container, which is what the volumes in the examples above mount. Only set these when you cannot mount those paths |
+| `TZ`           | Time zone of the container, for example `Europe/Berlin`. The log timestamps follow it. Without it the container runs on UTC, so the logs are offset against the clock of the machine reading them |
 | `SUPERVISOR`   | Set to "false" to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |
 
 ## Usage

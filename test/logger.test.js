@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import { flushLogs } from "../src/logger.js";
+import { flushLogs, trimLogFile } from "../src/logger.js";
 
 // Flushing once only awaits what is queued at that moment. Yielding to the event
 // loop in between catches a write that was still being scheduled, so the test
@@ -83,4 +83,28 @@ test("errors and debug output share the queue with everything else", async () =>
 
     const errors = readLines(file).filter(l => l.includes("boom "));
     assert.equal(errors.length, 100);
+});
+
+test("a log file past the limit is trimmed to its last lines", async () => {
+    // Nothing truncates these files, they are only appended to, so this is what
+    // keeps a long running installation from filling its volume.
+    const file = tmpLog("trim.log");
+    const lines = Array.from({ length: 5000 }, (_, i) => `line ${i}`);
+    fs.writeFileSync(file, lines.join("\n") + "\n");
+
+    await trimLogFile(file, 1024, 100);
+
+    const kept = readLines(file);
+    assert.equal(kept.length, 100);
+    assert.equal(kept.at(-1), "line 4999");
+    assert.equal(kept[0], "line 4900");
+});
+
+test("a log file below the limit is left alone", async () => {
+    const file = tmpLog("small.log");
+    fs.writeFileSync(file, "one\ntwo\n");
+
+    await trimLogFile(file, 1024, 100);
+
+    assert.equal(fs.readFileSync(file, "utf8"), "one\ntwo\n");
 });

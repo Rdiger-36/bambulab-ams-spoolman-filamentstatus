@@ -1,6 +1,6 @@
 import fs from "fs-extra";
 import path from "path";
-import "./logger.js"; // ensure console overrides are active
+import { trimLogFile } from "./logger.js"; // importing it also activates the console overrides
 import { configPath, serverLogFilePath, envPrinterSeed, logsDir } from "./config.js";
 import { settings } from "./settings.js";
 import { formatDateLog } from "./utils.js";
@@ -167,12 +167,19 @@ export function savePrinters(list = printers) {
 }
 
 /**
- * Creates the log file of a printer when it does not exist yet.
+ * Creates the log file of a printer, or trims it when it has grown too large.
+ *
+ * Nothing ever truncated these files: they are created once and appended to
+ * from then on. Called on every start, so the trim happens as often as the
+ * server log's does.
  *
  * @param {object} printer - the runtime printer object
  */
 export function ensurePrinterLogFile(printer) {
-    if (fs.existsSync(printer.logFilePath)) return;
+    if (fs.existsSync(printer.logFilePath)) {
+        trimLogFile(printer.logFilePath);
+        return;
+    }
 
     fs.writeFile(printer.logFilePath, `Log started at: ${formatDateLog(new Date())}\n`, err => {
         if (err) {
