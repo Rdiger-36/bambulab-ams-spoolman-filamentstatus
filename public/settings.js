@@ -132,12 +132,13 @@ function renderSettings() {
         card.innerHTML = `
             <div class="set-card-head"><h2>${escapeHtml(group.title)}</h2></div>
             <div class="set-form">${main.map(renderField).join("")}</div>
-            ${group.key === "spoolman" ? renderEffectiveUrl() + renderSpoolmanTest() : ""}
+            ${group.key === "spoolman" ? renderEffectiveUrl() : ""}
             ${advanced.length ? `
                 <details class="set-advanced">
                     <summary>${escapeHtml(group.advancedLabel || "Advanced")}</summary>
                     <div class="set-form">${advanced.map(renderField).join("")}</div>
-                </details>` : ""}`;
+                </details>` : ""}
+            ${group.key === "spoolman" ? renderSpoolmanTest() : ""}`;
         container.appendChild(card);
     }
 
@@ -173,7 +174,8 @@ function testPill(label, result) {
 
 /**
  * Tries the Spoolman address currently in the form, not the stored one, so a
- * new endpoint can be verified before it is saved.
+ * new endpoint can be verified before it is saved. The host and port from the
+ * collapsed section count too, which is why the button sits below it.
  */
 async function testSpoolmanConnection() {
     const button = document.getElementById("test-spoolman");

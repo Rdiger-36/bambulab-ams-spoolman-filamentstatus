@@ -1030,11 +1030,22 @@ body.dark-mode .set-switch-track { background-color: #555; }
 .set-table tbody tr:hover td { background: #8881; }
 .set-table td:first-child { font-weight: 600; }
 
+/* The global dark table rules set all four borders and a lighter table
+   background, which would draw a full grid on a panel of its own. Reset both so
+   dark looks exactly like light: row separators on the card background. */
+body.dark-mode .set-table {
+  background: transparent;
+}
+
 body.dark-mode .set-table th,
 body.dark-mode .set-table td {
   background: transparent;
-  border-bottom: 1px solid #8883;
+  border: none;
+  /* Same separator as in light mode, on purpose */
+  border-bottom: 1px solid #8882;
 }
+
+body.dark-mode .set-table tbody tr:last-child td { border-bottom: none; }
 
 .set-mono {
   font-family: monospace;
@@ -1042,11 +1053,15 @@ body.dark-mode .set-table td {
   opacity: 0.85;
 }
 
+/* Stays a normal table cell. As a flex container it sized itself to its
+   buttons and its separator ended up a couple of pixels above the rest. */
 .set-row-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-  border-bottom: 1px solid #8882;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.set-row-actions .btn + .btn {
+  margin-left: 6px;
 }
 
 /* ---- Buttons, scoped to this page so the dashboard keeps its own look ---- */
@@ -1137,12 +1152,15 @@ body.dark-mode .set-actions {
 }
 
 /* ---- Connection test ---- */
+/* Sits below the collapsed section, because the host and port in there are
+   part of what is tested. Stretching the row keeps the result chip exactly as
+   tall as the button next to it. */
 .set-test-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .set-test-result {
@@ -1155,8 +1173,23 @@ body.dark-mode .set-actions {
 .set-test-result:empty { display: none; }
 
 .set-test-result .pill {
-  font-size: 0.72rem;
-  padding: 1px 8px;
+  font-size: 0.74rem;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* One line: chip first, reason behind it */
+.set-test-row .set-test-result {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.set-test-row .set-test-reason {
+  display: flex;
+  align-items: center;
+  margin-left: 0;
 }
 
 .set-test-reason {
