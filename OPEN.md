@@ -139,6 +139,63 @@ goes end of life the choice is:
 A 64 bit OS sidesteps it entirely. A Raspberry Pi 3B and newer are all 64 bit
 capable, and `linux/arm64` stays supported.
 
+## Settings GUI, follow up work
+
+The settings page and the printer management landed on
+`feat/settings-ui-and-printer-management`. What follows are the gaps that were
+knowingly left open, grouped by effort. Effort is implementation plus test, no
+review.
+
+### Small, under an hour each
+
+Done on 2026-08-31: the tracking mode is frozen at startup and read through
+`legacyMode()`, the restart notice names the actual step and stays on the page
+until the service is restarted, both documentation gaps are covered in the
+README, and the printer dialog was checked at 375 px.
+
+- [ ] **No way back to a default.** After the first save `settings.json` owns
+  every field. A small "default" link next to a field whose value differs from
+  the schema default is enough; the default already ships in `/api/settings`.
+
+### Medium, one to three hours
+
+- [ ] **`settings.json` carries no version.** A key renamed in a later release
+  would be ignored without a word. A version field plus one migration hook now
+  costs almost nothing.
+- [ ] **Two tabs overwrite each other.** Last write wins, silently. With the
+  version field above, the PUT can carry the version it read and be answered
+  with a 409.
+- [ ] **Nothing guards a running print.** Deleting a printer, or changing its
+  address or access code, drops the booking of the job in flight without
+  warning. Answer 409 unless the request confirms it, and say so in the dialog.
+- [ ] **The assignment dialog is the last surface in the old style.** Its 21
+  `sp-*` rules predate the shared `.data-table`, `.set-field` and button styles.
+  It is also the dialog with the most fields, so screenshots before and after.
+- [ ] **The menu is mouse and touch only.** No `aria-expanded`, no arrow keys,
+  no keyboard path into a submenu; the dialogs have neither autofocus nor a
+  focus trap.
+
+### Large, half a day and up
+
+- [ ] **Decide on access protection.** The Web UI has never had any, but it can
+  now change the printer list and the Spoolman endpoint. Two steps, either one
+  is a decision rather than a task: `CONFIG_UI=false` to hide the page and block
+  the mutating routes, about an hour, or an `ADMIN_TOKEN` with a login and
+  middleware, three to four hours including docs and the compose example. This
+  decision rewrites the documentation task above, so make it first.
+- [ ] **No HTTP test harness.** Only pure functions are covered. The settings
+  PUT, the printer CRUD and the validation of both connection tests have no
+  test. Starting the Express app on port 0 and driving it with the built in
+  `fetch` needs no new dependency.
+- [ ] **Restarting from the UI** only works when the process may exit and the
+  container is restarted for it, which needs `restart: unless-stopped`. Without
+  that policy the user is left with a dead service. Prefer naming the restart
+  step in the banner instead.
+
+Rejected: encrypting the access code at rest. Without a key store the key ships
+in the same image, so it is obfuscation. The documentation note above is the
+honest version.
+
 ## Code quality
 
 - [ ] **`/api/print` omits `connectedViaMapping`.** Its `loadedSpools`

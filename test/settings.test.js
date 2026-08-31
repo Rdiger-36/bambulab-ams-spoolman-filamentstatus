@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveMode, coerceSetting, resolveSettings, describeSources } from "../src/settings.js";
+import { resolveMode, coerceSetting, resolveSettings, describeSources, settings, legacyMode, legacyModeNeedsRestart } from "../src/settings.js";
 
 test('resolveMode accepts "automatic"', () => {
     assert.deepEqual(resolveMode("automatic"), { raw: "automatic", mode: "automatic", valid: true });
@@ -85,4 +85,24 @@ test("describeSources names where each value came from", () => {
     assert.equal(sources.MODE, "file");
     assert.equal(sources.DEBUG, "environment");
     assert.equal(sources.SET_LOCATION, "default");
+});
+
+test("the tracking mode is frozen at startup", () => {
+    // The two tracking modes book consumption differently, so switching one
+    // into a running process would book a print in flight twice or not at all.
+    // Saving changes what is stored; only a restart changes what is running.
+    const running = legacyMode();
+    const stored = settings.LEGACY_MODE;
+
+    try {
+        settings.LEGACY_MODE = !stored;
+
+        assert.equal(legacyMode(), running);
+        assert.equal(legacyModeNeedsRestart(), true);
+
+        settings.LEGACY_MODE = running;
+        assert.equal(legacyModeNeedsRestart(), false);
+    } finally {
+        settings.LEGACY_MODE = stored;
+    }
 });

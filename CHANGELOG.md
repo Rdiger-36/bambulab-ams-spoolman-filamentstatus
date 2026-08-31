@@ -16,7 +16,7 @@ Version 1.3.0-dev
       - New ENV LEGACY_MODE: keeps the previous behaviour of writing the AMS RFID remain percentage to Spoolman (default: "false")
       - Settings page in the Web UI: everything that used to be an environment variable can now be changed in the browser, plus the printer list
          - Stored in printers/settings.json, applied to the running service without a restart (Spoolman endpoint, operation mode, intervals, retries, location and merge behaviour, debug logging)
-         - Legacy mode is the one field that still needs a restart, because the two tracking modes book consumption differently; the page says so when it is changed
+         - Legacy mode is the one field that still needs a restart: the value is saved right away, but the running service keeps the mode it started with, because the two tracking modes book consumption differently and a switch under a running print would book it twice or not at all. The page keeps saying so, with the actual restart step, until the service is restarted
          - Environment variables now only seed a setting that has never been saved. After the first save the file owns the value, so a change made in the UI is not reverted by the container definition on the next start
          - Printers can be added, edited and removed in the UI. A new printer connects right away, a removed one is disconnected and its spool assignments are dropped
          - The access code is stored on the server and never sent back to the browser; an edit without a code keeps the stored one

@@ -405,9 +405,11 @@ printer from another page opens it on the dashboard.
   setup against the new instance. Everything an ordinary install never touches,
   the reconnect interval, the retry limit and debug logging, is collapsed as
   well.
-- **Legacy mode** is the one field that needs a restart, and the page says so.
-  The two tracking modes book consumption differently, so switching them under a
-  running print would book twice or not at all.
+- **Legacy mode** is the one field that needs a restart. The value is saved
+  right away, but the running service keeps the mode it started with, and the
+  page says so until the service is restarted. The two tracking modes book
+  consumption differently, so switching one into a running process would book a
+  print in flight twice or not at all.
 
 Everything is stored in `printers/settings.json` next to `printers.json`, so it
 survives a container update as long as that volume is mounted.
@@ -415,7 +417,16 @@ survives a container update as long as that volume is mounted.
 > [!IMPORTANT]
 > The Web UI has no authentication. It is meant for a trusted local network.
 > With the settings page it can now change the printer list and the Spoolman
-> endpoint, so do not expose the port to the internet.
+> endpoint, so do not expose the port to the internet. The access code of a
+> printer is stored in plain text in `printers/printers.json`, the same as
+> before, and is never sent back to the browser.
+
+> [!NOTE]
+> **Home Assistant add-on users:** the add-on passes its options as environment
+> variables, and those only seed a setting that has never been saved. As soon as
+> you save on the settings page, `printers/settings.json` owns the values and
+> changing an add-on option has no effect any more. Either configure through the
+> add-on options or through the settings page, not both.
 
 ## Web UI
 Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:

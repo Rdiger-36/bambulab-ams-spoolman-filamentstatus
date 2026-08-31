@@ -2,7 +2,7 @@ import mqtt from "mqtt";
 import got from "got";
 import * as net from "node:net";
 import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
-import { settings, spoolmanUrl } from "./settings.js";
+import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
 import { sleep, formatDate, formatInterval, convertAMSandSlot } from "./utils.js";
@@ -290,7 +290,7 @@ async function handleMqttMessage(printer, topic, message) {
             // the G-code tracking must stay out of it entirely. Running both
             // would download the sliced file on every print and book consumption
             // that the next AMS update then overwrites again.
-            if (!settings.LEGACY_MODE && data?.print?.gcode_state) {
+            if (!legacyMode() && data?.print?.gcode_state) {
                 await handlePrintStateChange(printer, data.print);
             }
 
@@ -330,7 +330,7 @@ async function handleMqttMessage(printer, topic, message) {
                         // In G-code mode the AMS remain % is irrelevant (weight is
                         // tracked from the slice), so don't let it trigger reprocessing
                         // and log output. Only react to real identity/weight changes.
-                        const stripRemain = (d) => settings.LEGACY_MODE ? d
+                        const stripRemain = (d) => legacyMode() ? d
                             : d.map(a => ({ ...a, tray: a.tray.map(({ remain, ...t }) => t) }));
                         const trayDataChanged =
                             JSON.stringify(stripRemain(newTrayData)) !== JSON.stringify(stripRemain(lastTrayData));
@@ -494,7 +494,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         // Legacy mode has no use for one: it takes the weight from the RFID
         // percentage, which a chipless spool does not report, so the slot stays
         // read-only exactly as it was before assignments existed.
-        const mappedSpool = settings.LEGACY_MODE ? null : resolveMappedSpool(printer, amsId, slot, spools);
+        const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
         if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
@@ -549,7 +549,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
                 existingSpool = spool;
 
-                if (settings.LEGACY_MODE) {
+                if (legacyMode()) {
                     // Legacy: derive remaining weight from the AMS RFID remain %
                     if (!slotChanged) {
                         console.debug(printer.name, printer.logFilePath, " No change for connected spool; skipping PATCH");
@@ -681,12 +681,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // booking which spool to charge, and legacy books nothing: it writes the
     // weight straight onto the tag-connected spool. Offering it there would be
     // a button that changes nothing.
-    const mappedSpool = settings.LEGACY_MODE ? null : resolveMappedSpool(printer, amsId, slot, spools);
+    const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
     if (mappedSpool) {
         existingSpool = mappedSpool;
         option = "Unassign Spool";
         enableButton = "true";
-    } else if (!settings.LEGACY_MODE && !found && option === "No actions available") {
+    } else if (!legacyMode() && !found && option === "No actions available") {
         // Nothing to create or merge, and no tag link, so offer a manual assignment
         option = "Assign Spool";
         enableButton = "true";
@@ -763,8 +763,8 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // Legacy mode offers nothing here. Its weight comes from the RFID
         // percentage, which this spool does not report, so there is no action
         // that would do anything.
-        option: settings.LEGACY_MODE ? "No actions available" : (mappedSpool ? "Unassign Spool" : "Assign Spool"),
-        enableButton: settings.LEGACY_MODE ? "false" : "true",
+        option: legacyMode() ? "No actions available" : (mappedSpool ? "Unassign Spool" : "Assign Spool"),
+        enableButton: legacyMode() ? "false" : "true",
         printerName: printer.name,
         logFilePath: printer.logFilePath,
         slotState: "Loaded (3rd party)",

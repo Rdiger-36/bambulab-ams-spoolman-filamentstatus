@@ -2,7 +2,7 @@ import { createReadStream } from "fs";
 import mime from "mime-types";
 import path from "path";
 import { serverLogFilePath, version } from "./config.js";
-import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting } from "./settings.js";
+import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode } from "./settings.js";
 import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
 import { restartSpoolmanConnection } from "./service.js";
 import { state } from "./state.js";
@@ -61,7 +61,7 @@ function resolveSpoolData({ printerId, amsId }, printers, res) {
  * @returns {boolean} true when the request was answered and the caller must stop
  */
 function rejectInLegacyMode(res) {
-    if (!settings.LEGACY_MODE) return false;
+    if (!legacyMode()) return false;
     res.status(409).json({ ok: false, error: "Manual spool assignment is not available in legacy mode" });
     return true;
 }
@@ -92,7 +92,7 @@ export function registerRoutes(app, printers) {
             PRINTER_ID: printer.id,
             printerName: printer.name,
             MODE: settings.MODE,
-            LEGACY_MODE: settings.LEGACY_MODE,
+            LEGACY_MODE: legacyMode(),
             SPOOLMAN_URL: spoolmanUrl(),
             VERSION: version,
             SPOOLMAN_FQDN: settings.SPOOLMAN_FQDN,

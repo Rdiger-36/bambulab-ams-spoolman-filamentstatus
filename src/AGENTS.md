@@ -32,14 +32,14 @@ or the Express app wiring itself (`../backend.js`).
 
 This is the single most important distinction in the codebase.
 
-**G-code tracking (default, `LEGACY_MODE=false`)**: on `gcode_state` reaching
+**G-code tracking (default, `legacyMode() === false`)**: on `gcode_state` reaching
 `RUNNING`, `fetchSliceInfo()` pulls `Metadata/slice_info.config` out of the
 sliced `.gcode.3mf` over FTPS. On a terminal state the consumed grams are
 computed (`calcFullConsumption` for `FINISH`, `calcPartialConsumption` for
 `FAILED`/`CANCEL`) and booked via Spoolman's `/use` endpoint. Works for spools
 without an RFID chip.
 
-**Legacy tracking (`LEGACY_MODE=true`)**: the AMS `remain` percentage is
+**Legacy tracking (`legacyMode() === true`)**: the AMS `remain` percentage is
 converted to a weight and PATCHed onto the spool. The print handler is skipped
 entirely (`mqtt.js`, in `handleMqttMessage`). The AMS Lite reports only 0 % or
 100 %, so it is unusable here.
@@ -59,6 +59,11 @@ reprocessing.
 - **Settings are read at the point of use.** `settings.MODE`, never
   `const { MODE } = settings`. The object is mutated in place by the settings
   API, so a destructured copy silently keeps the startup value.
+- **The tracking mode is the exception: read it through `legacyMode()`**, which
+  returns the value frozen at startup. `settings.LEGACY_MODE` is only what is
+  stored and what the settings page shows. Reading the live value would switch
+  the mode under a print in flight, and the two modes book differently, so it
+  would book twice or not at all.
 - **The Spoolman base URL comes from `spoolmanUrl()`**, not from a constant. It
   changes at runtime.
 - **`printers` is mutated in place.** `monitorPrinters()` iterates the same
@@ -83,7 +88,7 @@ reprocessing.
 - **An unidentified spool looks exactly like an empty slot** in every field
   except `state`. `slotIsOccupied()` is the only correct test; a slot with
   `tray_uuid === "N/A"` is not automatically empty.
-- **Manual assignment is a G-code mode feature.** `LEGACY_MODE` gates it in
+- **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to
   gate it too, or a direct API call creates a mapping that silently takes effect

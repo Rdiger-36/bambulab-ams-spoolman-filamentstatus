@@ -4,6 +4,11 @@
 
 // Order and headline of the field groups. The group key comes from the schema,
 // the fields the schema marks as advanced go into the collapsed part.
+// Named once, because the notice appears both after a save and on every load
+// while the stored value differs from the running one.
+const RESTART_MESSAGE = "Legacy mode was changed. Restart the service to apply it: "
+    + "restart the container (docker restart <container>) or the Home Assistant add-on.";
+
 const GROUPS = [
     { key: "spoolman",  title: "Spoolman connection", advancedLabel: "Host, port, subfolder and public URL" },
     { key: "tracking",  title: "Tracking" },
@@ -14,6 +19,8 @@ let fields = [];
 let values = {};
 let sources = {};
 let spoolmanUrl = "";
+// True while a saved value waits for the next start of the service
+let restartPending = false;
 let printers = [];
 // Set once an input was touched. Blocks the save button while nothing changed,
 // keeps a settings update pushed over SSE from overwriting what is being typed,
@@ -101,6 +108,7 @@ async function loadSettings(userRequested = false) {
     try {
         applyView(await fetchJson("./api/settings"));
         if (userRequested) clearBanner();
+        showRestartNotice();
     } catch (err) {
         showBanner(`Could not load the settings: ${err.message}`, "bad");
     }
@@ -112,8 +120,18 @@ function applyView(view) {
     values = view.values;
     sources = view.sources;
     spoolmanUrl = view.spoolmanUrl;
+    restartPending = view.restartPending;
     renderSettings();
     setDirty(false);
+}
+
+/**
+ * A stored value that only takes effect on the next start keeps its notice on
+ * the page, rather than showing it once after the save and losing it on the
+ * next reload.
+ */
+function showRestartNotice() {
+    if (restartPending) showBanner(RESTART_MESSAGE, "warn");
 }
 
 function renderSettings() {
@@ -301,11 +319,8 @@ async function saveSettings(event) {
         const result = await sendJson("./api/settings", "PUT", collectSettings());
         applyView(result);
 
-        if (result.restartRequired.length) {
-            const names = result.restartRequired
-                .map(key => fields.find(field => field.key === key)?.label ?? key)
-                .join(", ");
-            showBanner(`Saved. Restart the service to apply: ${names}.`, "warn");
+        if (restartPending) {
+            showRestartNotice();
         } else if (result.changed.length) {
             showBanner("Saved and applied.", "ok");
         } else {

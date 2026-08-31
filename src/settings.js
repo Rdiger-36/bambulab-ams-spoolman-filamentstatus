@@ -318,6 +318,28 @@ function loadSettings() {
 loadSettings();
 
 /**
+ * The tracking mode this process runs in, frozen at startup.
+ *
+ * The two tracking modes are mutually exclusive and book consumption
+ * differently, so switching while a print is in flight would book it twice or
+ * not at all. `settings.LEGACY_MODE` therefore only holds what is stored and
+ * what the settings page shows; everything that decides how a report is
+ * processed reads this instead, and the stored value takes effect on the next
+ * start. That is what the schema means by `restartRequired`.
+ */
+const bootLegacyMode = settings.LEGACY_MODE;
+
+/** Whether this process is tracking through the AMS RFID remain percentage. */
+export function legacyMode() {
+    return bootLegacyMode;
+}
+
+/** Whether the stored tracking mode differs from the one this process started with. */
+export function legacyModeNeedsRestart() {
+    return settings.LEGACY_MODE !== bootLegacyMode;
+}
+
+/**
  * Builds the Spoolman base URL from a set of values.
  *
  * Takes the values explicitly so the settings page can test an endpoint before
@@ -375,6 +397,9 @@ export function getSettingsView() {
             advanced: !!field.advanced,
         })),
         spoolmanUrl: spoolmanUrl(),
+        // Set while a stored value waits for the next start, so the page can
+        // keep saying so instead of showing it once after the save.
+        restartPending: legacyModeNeedsRestart(),
     };
 }
 
