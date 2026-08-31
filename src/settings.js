@@ -277,7 +277,56 @@ export function describeSources(stored = {}, env = {}) {
     return sources;
 }
 
+/**
+ * The shape version of `settings.json`. Bump it when a stored key is renamed or
+ * its meaning changes, and handle the old value in `migrateStored()`.
+ */
+export const SETTINGS_SCHEMA_VERSION = 1;
+
 let storedSettings = {};
+// Counts writes. The settings page sends back the revision it read, so a save
+// against a state somebody else has already replaced is refused rather than
+// silently overwriting it.
+let storedRevision = 0;
+
+/**
+ * Reads the two shapes the file can have.
+ *
+ * The first version stored the values flat at the top level. Everything since
+ * wraps them, so the file can carry its schema version and the write counter.
+ * Existing installs have the flat file on disk and there is no migration step,
+ * so the read side stays tolerant of it.
+ *
+ * @param {object} parsed - the parsed file contents
+ * @returns {{values: object, revision: number, schemaVersion: number}}
+ */
+export function parseStoredFile(parsed) {
+    if (parsed && typeof parsed.values === "object" && parsed.values !== null && !Array.isArray(parsed.values)) {
+        return {
+            values: parsed.values,
+            revision: Number.isInteger(parsed.revision) ? parsed.revision : 0,
+            schemaVersion: Number.isInteger(parsed.schemaVersion) ? parsed.schemaVersion : SETTINGS_SCHEMA_VERSION,
+        };
+    }
+
+    return { values: parsed ?? {}, revision: 0, schemaVersion: 0 };
+}
+
+/**
+ * Brings a stored set of values up to the current schema version.
+ *
+ * Nothing to do yet: version 0 is the flat file, whose keys are the same. This
+ * is the place for a rename, so that an old file does not lose the value
+ * silently.
+ *
+ * @param {object} values - the stored values
+ * @param {number} schemaVersion - the version they were written with
+ * @returns {object} the values in the current shape
+ */
+export function migrateStored(values, schemaVersion) {
+    if (schemaVersion >= SETTINGS_SCHEMA_VERSION) return values;
+    return values;
+}
 
 /** Reads the settings file, treating a missing or unreadable file as empty. */
 function readStoredSettings() {
@@ -286,7 +335,10 @@ function readStoredSettings() {
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
             throw new Error("settings.json must contain an object");
         }
-        return parsed;
+
+        const file = parseStoredFile(parsed);
+        storedRevision = file.revision;
+        return migrateStored(file.values, file.schemaVersion);
     } catch (err) {
         if (err.code !== "ENOENT") {
             settingsLoadIssues.push(`Could not read settings.json, falling back to environment and defaults: ${err.message}`);
@@ -298,8 +350,14 @@ function readStoredSettings() {
 /** Writes the settings file atomically, so a crash mid write cannot truncate it. */
 function persist() {
     const tmp = `${settingsPath}.tmp`;
+    const payload = {
+        schemaVersion: SETTINGS_SCHEMA_VERSION,
+        revision: storedRevision,
+        values: storedSettings,
+    };
+
     fs.ensureDirSync(path.dirname(settingsPath));
-    fs.writeFileSync(tmp, JSON.stringify(storedSettings, null, 4));
+    fs.writeFileSync(tmp, JSON.stringify(payload, null, 4));
     fs.renameSync(tmp, settingsPath);
 }
 
@@ -402,6 +460,9 @@ export function getSettingsView() {
         // Set while a stored value waits for the next start, so the page can
         // keep saying so instead of showing it once after the save.
         restartPending: legacyModeNeedsRestart(),
+        // Sent back with the next save, so a state somebody else has already
+        // replaced is not overwritten silently.
+        revision: storedRevision,
     };
 }
 
@@ -412,11 +473,22 @@ export function getSettingsView() {
  * leaves the running configuration untouched instead of applying half of it.
  *
  * @param {object} patch - the fields to change
- * @returns {{ok: true, changed: string[], restartRequired: string[]}|{ok: false, errors: string[]}}
+ * @param {number} [expectedRevision] - the revision the caller last read. When
+ *   it no longer matches, the update is refused rather than overwriting what
+ *   somebody else saved in the meantime. Omit it to skip the check.
+ * @returns {{ok: true, changed: string[], restartRequired: string[]}|{ok: false, errors: string[], conflict?: boolean}}
  */
-export function updateSettings(patch) {
+export function updateSettings(patch, expectedRevision) {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) {
         return { ok: false, errors: ["Request body must be an object"] };
+    }
+
+    if (Number.isInteger(expectedRevision) && expectedRevision !== storedRevision) {
+        return {
+            ok: false,
+            conflict: true,
+            errors: ["The settings were changed somewhere else in the meantime"],
+        };
     }
 
     const errors = [];
@@ -437,6 +509,7 @@ export function updateSettings(patch) {
 
     Object.assign(settings, accepted);
     storedSettings = { ...settings };
+    storedRevision += 1;
     persist();
 
     return {

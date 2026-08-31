@@ -19,6 +19,9 @@ let fields = [];
 let values = {};
 let sources = {};
 let spoolmanUrl = "";
+// Revision of the settings this page last read, sent back with a save so a
+// state somebody else replaced is not overwritten
+let revision = 0;
 // True while a saved value waits for the next start of the service
 let restartPending = false;
 let printers = [];
@@ -64,7 +67,13 @@ document.addEventListener("DOMContentLoaded", () => {
 async function fetchJson(url, options) {
     const res = await fetch(url, options);
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+
+    if (!res.ok) {
+        const error = new Error(body.error || `HTTP ${res.status}`);
+        error.conflict = !!body.conflict;
+        throw error;
+    }
+
     return body;
 }
 
@@ -121,6 +130,7 @@ function applyView(view) {
     sources = view.sources;
     spoolmanUrl = view.spoolmanUrl;
     restartPending = view.restartPending;
+    revision = view.revision;
     renderSettings();
     setDirty(false);
 }
@@ -342,7 +352,7 @@ async function saveSettings(event) {
     button.disabled = true;
 
     try {
-        const result = await sendJson("./api/settings", "PUT", collectSettings());
+        const result = await sendJson("./api/settings", "PUT", { revision, values: collectSettings() });
         applyView(result);
 
         if (restartPending) {
@@ -353,7 +363,9 @@ async function saveSettings(event) {
             showBanner("Nothing changed.", "ok");
         }
     } catch (err) {
-        showBanner(`Could not save: ${err.message}`, "bad");
+        showBanner(err.conflict
+            ? "The settings were changed somewhere else in the meantime. Discard changes to load them, then apply yours again."
+            : `Could not save: ${err.message}`, "bad");
         button.disabled = false;
     }
 }

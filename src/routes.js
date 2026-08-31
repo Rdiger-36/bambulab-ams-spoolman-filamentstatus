@@ -519,15 +519,25 @@ export function registerRoutes(app, printers) {
     app.put("/api/settings", (req, res) => {
         const previousUrl = spoolmanUrl();
 
+        // Two accepted shapes: the bare field map, and the same map wrapped with
+        // the revision the caller read, which is what the settings page sends so
+        // that a save against a replaced state is refused.
+        const wrapped = req.body && typeof req.body.values === "object" && req.body.values !== null;
+        const patch = wrapped ? req.body.values : req.body;
+        const expectedRevision = wrapped ? req.body.revision : undefined;
+
         let result;
         try {
-            result = updateSettings(req.body);
+            result = updateSettings(patch, expectedRevision);
         } catch (err) {
             console.error("Server", serverLogFilePath, "Could not write settings.json:", err?.message);
             return res.status(500).json({ ok: false, error: err?.message || "Could not save the settings" });
         }
 
-        if (!result.ok) return res.status(400).json({ ok: false, error: result.errors.join(" / ") });
+        if (!result.ok) {
+            const status = result.conflict ? 409 : 400;
+            return res.status(status).json({ ok: false, error: result.errors.join(" / "), conflict: !!result.conflict });
+        }
 
         if (result.changed.length) {
             console.log("Server", serverLogFilePath, `[Settings] Changed: ${result.changed.join(", ")}`);

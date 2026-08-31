@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveMode, coerceSetting, resolveSettings, describeSources, settings, legacyMode, legacyModeNeedsRestart } from "../src/settings.js";
+import { resolveMode, coerceSetting, resolveSettings, describeSources, settings, legacyMode, legacyModeNeedsRestart, parseStoredFile, SETTINGS_SCHEMA_VERSION } from "../src/settings.js";
 
 test('resolveMode accepts "automatic"', () => {
     assert.deepEqual(resolveMode("automatic"), { raw: "automatic", mode: "automatic", valid: true });
@@ -105,4 +105,28 @@ test("the tracking mode is frozen at startup", () => {
     } finally {
         settings.LEGACY_MODE = stored;
     }
+});
+
+test("the wrapped settings file is read with its revision", () => {
+    const file = parseStoredFile({ schemaVersion: 1, revision: 7, values: { MAX_RETRIES: 3 } });
+
+    assert.deepEqual(file.values, { MAX_RETRIES: 3 });
+    assert.equal(file.revision, 7);
+    assert.equal(file.schemaVersion, 1);
+});
+
+test("the first flat settings file is still read", () => {
+    // Installs from the first version have the values at the top level and no
+    // version at all. Losing them would reset the whole configuration.
+    const file = parseStoredFile({ MAX_RETRIES: 3, MODE: "automatic" });
+
+    assert.deepEqual(file.values, { MAX_RETRIES: 3, MODE: "automatic" });
+    assert.equal(file.revision, 0);
+    assert.equal(file.schemaVersion, 0);
+});
+
+test("a wrapped file without a revision starts counting at zero", () => {
+    const file = parseStoredFile({ schemaVersion: SETTINGS_SCHEMA_VERSION, values: {} });
+
+    assert.equal(file.revision, 0);
 });

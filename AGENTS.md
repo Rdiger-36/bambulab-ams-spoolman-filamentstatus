@@ -136,7 +136,9 @@ Not punctuation, and therefore allowed:
   to change detection and silently never reaches the UI.
 - **When changing the shape of `mappings.json`**, keep the read side tolerant of
   the old shape. Existing installs have the file on disk and there is no
-  migration step.
+  migration step. `settings.json` carries a `schemaVersion` for exactly this
+  reason: bump it and handle the old value in `migrateStored()`. Its first
+  version had no wrapper at all and is still read.
 
 ## Working on this repo
 

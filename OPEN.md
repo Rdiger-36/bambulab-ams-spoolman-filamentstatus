@@ -159,14 +159,10 @@ differs from the schema default now carries a "default" link back to it.
 
 Done on 2026-08-31: the spool assignment dialog follows the settings form now,
 same field labels, inputs, focus colour and section headers, with the picker as
-selectable rows.
+selectable rows. `settings.json` carries a schema version, a migration hook and
+a write counter, and a save against a state somebody else replaced is answered
+with a 409 instead of overwriting it.
 
-- [ ] **`settings.json` carries no version.** A key renamed in a later release
-  would be ignored without a word. A version field plus one migration hook now
-  costs almost nothing.
-- [ ] **Two tabs overwrite each other.** Last write wins, silently. With the
-  version field above, the PUT can carry the version it read and be answered
-  with a 409.
 - [ ] **Nothing guards a running print.** Deleting a printer, or changing its
   address or access code, drops the booking of the job in flight without
   warning. Answer 409 unless the request confirms it, and say so in the dialog.

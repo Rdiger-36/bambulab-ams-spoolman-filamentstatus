@@ -15,7 +15,7 @@ or the Express app wiring itself (`../backend.js`).
 | File | Owns |
 |---|---|
 | `config.js` | The on-disk paths, the port, the version, and the raw environment values that seed the two config files. The only module allowed to read `process.env`. |
-| `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()` and the persistence of `printers/settings.json`. Must not import `logger.js`, which reads DEBUG from here. |
+| `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()`, the frozen `legacyMode()` and the persistence of `printers/settings.json`, including its schema version and write counter. Must not import `logger.js`, which reads DEBUG from here. |
 | `service.js` | The startup sequence and the Spoolman reconnect that the settings API triggers when the endpoint changes. |
 | `logger.js` | The `console.*` overrides, the serialised per-file write queue, and `tailFileLines()` for the log viewer. |
 | `printers.js` | Loads and writes `printers/printers.json` (or seeds it from the `PRINTER_*` env vars), seeds the mutable per-printer runtime object, and owns add, update and remove. |
@@ -66,6 +66,10 @@ reprocessing.
   would book twice or not at all.
 - **The Spoolman base URL comes from `spoolmanUrl()`**, not from a constant. It
   changes at runtime.
+- **A settings write bumps a revision.** The settings page sends back the
+  revision it read and a mismatch is answered with 409, so two open tabs cannot
+  overwrite each other silently. `PUT /api/settings` accepts the bare field map
+  too, which skips the check.
 - **`printers` is mutated in place.** `monitorPrinters()` iterates the same
   array forever, which is what makes a printer added in the Web UI get picked
   up. Never reassign the exported binding.
