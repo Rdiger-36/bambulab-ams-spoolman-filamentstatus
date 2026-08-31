@@ -754,7 +754,29 @@ body.dark-mode .submenu.open > .submenu-label {
 }
 
 .submenu-label {
+  /* A button, so it can be reached and opened with the keyboard */
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.88em;
+  text-align: left;
   cursor: pointer;
+}
+
+.dropdown-button:focus-visible,
+.submenu-label:focus-visible,
+.dropdown-content a:focus-visible,
+.submenu-content a:focus-visible {
+  outline: 2px solid #1c6fd6;
+  outline-offset: -2px;
+}
+
+body.dark-mode .dropdown-button:focus-visible,
+body.dark-mode .submenu-label:focus-visible,
+body.dark-mode .dropdown-content a:focus-visible,
+body.dark-mode .submenu-content a:focus-visible {
+  outline-color: #6fb0ec;
 }
 
 .submenu-label::after {

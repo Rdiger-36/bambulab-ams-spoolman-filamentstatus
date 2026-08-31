@@ -459,6 +459,8 @@ function openPrinterDialog(printer) {
 
     document.getElementById("printer-dialog-save").onclick = () => savePrinter(printer);
     dialog.showModal();
+    // Straight into the first field, rather than on whatever the dialog focuses
+    document.getElementById("printer-name").focus();
 }
 
 async function savePrinter(printer, force = false) {
@@ -518,6 +520,8 @@ function confirmAction({ title, html, okLabel = "Delete" }) {
         ok.onclick = () => finish(true);
         cancel.onclick = () => finish(false);
         dialog.showModal();
+        // The harmless choice takes the focus, not the one that deletes
+        cancel.focus();
     });
 }
 

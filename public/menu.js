@@ -33,16 +33,16 @@ function renderMenubar() {
 
     root.innerHTML = `
         <div class="dropdown">
-            <button class="dropdown-button" type="button">Menu</button>
+            <button class="dropdown-button" type="button" aria-haspopup="true" aria-expanded="false">Menu</button>
             <div class="dropdown-content">
                 <a href="index.html">Dashboard</a>
                 <div class="submenu">
-                    <span class="submenu-label">Printers</span>
+                    <button type="button" class="submenu-label" aria-haspopup="true" aria-expanded="false">Printers</button>
                     <div class="submenu-content" id="menu-printers"></div>
                 </div>
                 <a href="settings.html">Settings</a>
                 <div class="submenu">
-                    <span class="submenu-label">Logs</span>
+                    <button type="button" class="submenu-label" aria-haspopup="true" aria-expanded="false">Logs</button>
                     <div class="submenu-content">
                         <a href="#" id="menu-printer-logs">Printer Logs</a>
                         <a href="#" id="menu-server-logs">Server Logs</a>
@@ -77,11 +77,20 @@ function renderMenubar() {
  */
 function setupMenuToggles(root) {
     const dropdown = root.querySelector(".dropdown");
+    const button = root.querySelector(".dropdown-button");
 
-    root.querySelector(".dropdown-button").addEventListener("click", event => {
+    button.addEventListener("click", event => {
         event.stopPropagation();
-        dropdown.classList.toggle("open");
+        setOpen(dropdown, button, !dropdown.classList.contains("open"));
         if (!dropdown.classList.contains("open")) closeSubmenus(root);
+    });
+
+    // Opens the menu and steps into it, the usual behaviour of a menu button
+    button.addEventListener("keydown", event => {
+        if (event.key !== "ArrowDown") return;
+        event.preventDefault();
+        setOpen(dropdown, button, true);
+        root.querySelector(".dropdown-content a, .dropdown-content .submenu-label")?.focus();
     });
 
     for (const label of root.querySelectorAll(".submenu-label")) {
@@ -90,7 +99,7 @@ function setupMenuToggles(root) {
             const submenu = label.parentElement;
             const wasOpen = submenu.classList.contains("open");
             closeSubmenus(root);
-            submenu.classList.toggle("open", !wasOpen);
+            setOpen(submenu, label, !wasOpen);
         });
     }
 
@@ -105,18 +114,30 @@ function setupMenuToggles(root) {
     });
 
     document.addEventListener("keydown", event => {
-        if (event.key === "Escape") closeMenu(root);
+        if (event.key !== "Escape") return;
+        // Only take the focus back when it is inside the menu, so Escape in a
+        // dialog is not answered by the menu bar.
+        const inside = root.contains(document.activeElement);
+        closeMenu(root);
+        if (inside) button.focus();
     });
 }
 
+/** Opens or closes one menu level and keeps its control's aria state in sync. */
+function setOpen(container, control, open) {
+    container.classList.toggle("open", open);
+    control.setAttribute("aria-expanded", String(open));
+}
+
 function closeSubmenus(root) {
-    for (const submenu of root.querySelectorAll(".submenu.open")) {
-        submenu.classList.remove("open");
+    for (const submenu of root.querySelectorAll(".submenu")) {
+        setOpen(submenu, submenu.querySelector(".submenu-label"), false);
     }
 }
 
 function closeMenu(root) {
-    root.querySelector(".dropdown")?.classList.remove("open");
+    const dropdown = root.querySelector(".dropdown");
+    if (dropdown) setOpen(dropdown, dropdown.querySelector(".dropdown-button"), false);
     closeSubmenus(root);
 }
 

@@ -163,11 +163,12 @@ selectable rows. `settings.json` carries a schema version, a migration hook and
 a write counter, and a save against a state somebody else replaced is answered
 with a 409 instead of overwriting it. Removing a printer or changing its
 address or access code is refused with a 409 while a print is running, and the
-Web UI asks before repeating it with `force`.
+Web UI asks before repeating it with `force`. The menu is keyboard operable
+(`aria-expanded`, submenu labels are buttons, ArrowDown opens, Escape closes
+and hands the focus back) and every dialog focuses a sensible control, the
+harmless one where the other writes or deletes. A focus trap was unnecessary,
+`showModal()` traps focus by itself.
 
-- [ ] **The menu is mouse and touch only.** No `aria-expanded`, no arrow keys,
-  no keyboard path into a submenu; the dialogs have neither autofocus nor a
-  focus trap.
 
 ### Large, half a day and up
 

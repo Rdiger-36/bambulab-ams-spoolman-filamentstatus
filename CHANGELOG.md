@@ -23,7 +23,8 @@ Version 1.3.0-dev
          - printers.json is written by the service now (atomically, temp file plus rename) and no longer has to exist before the first start
       - Reworked menu bar: one menu with the dashboard, a printer submenu, the settings and a log submenu, identical on every page, with the dark and light mode button on the right
          - Picking a printer from the log or settings page opens it on the dashboard
-         - The menu opens on hover and on click, closes on a click outside or Escape, and stays reachable on a touch screen
+         - The menu opens on hover and on click, closes on a click outside or Escape, and stays reachable on a touch screen and by keyboard: the submenu entries are buttons, ArrowDown opens the menu, Escape closes it and hands the focus back
+         - Dialogs open with the focus on a sensible control, the harmless one wherever the other writes or deletes
          - The dashboard points at the settings page while no printer is configured
          - Compact settings layout: three cards, toggles instead of checkboxes, restyled buttons and printer table, and a sticky save bar that stays disabled until something is edited
          - Fields an ordinary install never touches are collapsed: Spoolman host, port, subfolder and public URL, plus the reconnect interval, the retry limit and debug logging

@@ -1218,6 +1218,8 @@ document.addEventListener("DOMContentLoaded", () => {
         
         closeDialog.onclick = () => dialog.close();
         dialog.showModal();
+        // The harmless choice takes the focus, not the one that writes to Spoolman
+        closeDialog.focus();
     }
 
     // Send the selected action to the backend
