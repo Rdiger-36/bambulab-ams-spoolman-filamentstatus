@@ -151,13 +151,15 @@ review.
 Done on 2026-08-31: the tracking mode is frozen at startup and read through
 `legacyMode()`, the restart notice names the actual step and stays on the page
 until the service is restarted, both documentation gaps are covered in the
-README, and the printer dialog was checked at 375 px.
+README, the printer dialog was checked at 375 px, and a field whose value
+differs from the schema default now carries a "default" link back to it.
 
-- [ ] **No way back to a default.** After the first save `settings.json` owns
-  every field. A small "default" link next to a field whose value differs from
-  the schema default is enough; the default already ships in `/api/settings`.
 
 ### Medium, one to three hours
+
+Done on 2026-08-31: the spool assignment dialog follows the settings form now,
+same field labels, inputs, focus colour and section headers, with the picker as
+selectable rows.
 
 - [ ] **`settings.json` carries no version.** A key renamed in a later release
   would be ignored without a word. A version field plus one migration hook now
@@ -168,21 +170,12 @@ README, and the printer dialog was checked at 375 px.
 - [ ] **Nothing guards a running print.** Deleting a printer, or changing its
   address or access code, drops the booking of the job in flight without
   warning. Answer 409 unless the request confirms it, and say so in the dialog.
-- [ ] **The assignment dialog is the last surface in the old style.** Its 21
-  `sp-*` rules predate the shared `.data-table`, `.set-field` and button styles.
-  It is also the dialog with the most fields, so screenshots before and after.
 - [ ] **The menu is mouse and touch only.** No `aria-expanded`, no arrow keys,
   no keyboard path into a submenu; the dialogs have neither autofocus nor a
   focus trap.
 
 ### Large, half a day and up
 
-- [ ] **Decide on access protection.** The Web UI has never had any, but it can
-  now change the printer list and the Spoolman endpoint. Two steps, either one
-  is a decision rather than a task: `CONFIG_UI=false` to hide the page and block
-  the mutating routes, about an hour, or an `ADMIN_TOKEN` with a login and
-  middleware, three to four hours including docs and the compose example. This
-  decision rewrites the documentation task above, so make it first.
 - [ ] **No HTTP test harness.** Only pure functions are covered. The settings
   PUT, the printer CRUD and the validation of both connection tests have no
   test. Starting the Express app on port 0 and driving it with the built in
@@ -262,3 +255,10 @@ that line can be drawn.
 
 **Third party spools report no weight**, so full and remaining weight are typed
 in once per spool. Nothing to be done about it, but it surprises people.
+
+**The Web UI has no access protection**, decided on 2026-08-31 after the
+settings page landed. It can change the printer list and the Spoolman endpoint,
+so the service belongs in a trusted local network and its port must not be
+exposed. Both alternatives were weighed and rejected for now: a `CONFIG_UI=false`
+switch that hides the page and blocks the mutating routes, and an `ADMIN_TOKEN`
+with a login in front of them. The README carries the warning instead.

@@ -390,6 +390,8 @@ export function getSettingsView() {
             label: field.label,
             description: field.description,
             options: field.options ?? null,
+            // Lets the page offer a way back to the documented value
+            default: field.default ?? null,
             min: field.min ?? null,
             max: field.max ?? null,
             restartRequired: !!field.restartRequired,

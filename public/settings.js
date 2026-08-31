@@ -164,6 +164,10 @@ function renderSettings() {
         input.addEventListener("input", () => setDirty(true));
     });
 
+    container.querySelectorAll("[data-reset]").forEach(button => {
+        button.addEventListener("click", () => resetField(button.dataset.reset));
+    });
+
     document.getElementById("test-spoolman")?.addEventListener("click", testSpoolmanConnection);
 }
 
@@ -282,6 +286,9 @@ function renderField(field) {
     const badges = [
         field.restartRequired ? `<span class="pill pill-legacy">restart required</span>` : "",
         sources[field.key] === "environment" ? `<span class="pill pill-gcode">from the environment</span>` : "",
+        // Once saved, the file owns every field, so this is the only way back to
+        // the documented value.
+        isDefault(field) ? "" : `<button type="button" class="set-reset" data-reset="${field.key}">default</button>`,
     ].join("");
 
     // A checkbox reads better next to its label than under it, so it sits in
@@ -293,6 +300,25 @@ function renderField(field) {
                 ${input}
                 <small>${escapeHtml(field.description)}</small>
             </div>`;
+}
+
+/** Whether a field currently holds the value the schema documents as default. */
+function isDefault(field) {
+    const value = values[field.key];
+    return value === field.default || (value === null && field.default === null);
+}
+
+/** Puts the schema default into a field without touching the rest of the form. */
+function resetField(key) {
+    const field = fields.find(f => f.key === key);
+    const input = document.getElementById(`set-${key}`);
+    if (!field || !input) return;
+
+    if (field.type === "boolean") input.checked = !!field.default;
+    else input.value = field.default ?? "";
+
+    document.querySelector(`[data-reset="${key}"]`)?.remove();
+    setDirty(true);
 }
 
 /** Reads every field back out of the form, in the type the backend expects. */
