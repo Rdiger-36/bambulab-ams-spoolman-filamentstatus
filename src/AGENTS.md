@@ -100,9 +100,10 @@ reprocessing.
 its type, default and range (clamps live there, not at the use site), read it as
 `settings.<KEY>` at the point of use, add the variable to `envSeed` in
 `config.js` when it should be seedable, and document it in the README table. The
-settings page picks it up on its own. Mark it `restartRequired` when the running
-process cannot adopt it, and handle the live application in the `PUT
-/api/settings` handler when it needs more than the new value being read.
+settings page picks it up on its own; `group` decides which card it lands in and
+`advanced` puts it into that card's collapsed section. Mark it `restartRequired`
+when the running process cannot adopt it, and handle the live application in the
+`PUT /api/settings` handler when it needs more than the new value being read.
 
 **Adding an HTTP route:** add it inside `registerRoutes()` in `routes.js`.
 Respond `{ ok: false, error }` with a 4xx/5xx for failures; the frontend's

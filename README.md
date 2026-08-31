@@ -390,9 +390,14 @@ printer from another page opens it on the dashboard.
   The serial number cannot be changed, it keys the MQTT topic, the log file and
   the assignments. The access code is stored on the server and never sent back
   to the browser; leave the field empty while editing to keep the stored one.
-- **Spoolman connection, intervals and behaviour**: applied to the running
-  service as soon as they are saved. Changing the endpoint reconnects and runs
-  the vendor and extra field setup against the new instance.
+- **Spoolman connection**: only the endpoint is shown, host, port, subfolder
+  and the public URL sit in a collapsed section below it. The line under the
+  field says which URL the service actually talks to, subfolder included.
+- **Tracking and behaviour**: applied to the running service as soon as they are
+  saved. Changing the endpoint reconnects and runs the vendor and extra field
+  setup against the new instance. Everything an ordinary install never touches,
+  the reconnect interval, the retry limit and debug logging, is collapsed as
+  well.
 - **Legacy mode** is the one field that needs a restart, and the page says so.
   The two tracking modes book consumption differently, so switching them under a
   running print would book twice or not at all.

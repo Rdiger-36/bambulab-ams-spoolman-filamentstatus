@@ -789,13 +789,38 @@ body.dark-mode .footer {
   text-decoration: underline;
 }
 /* ---- Settings page ---- */
+.set-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 6px;
+}
+
+.set-page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 4px;
+}
+
+.set-page-head h1 {
+  text-align: left;
+  font-size: 1.5em;
+  margin: 0;
+}
+
+.set-page-note {
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+
 .set-card {
   border: 1px solid #e0e0e0;
   border-radius: 10px;
   background: #fff;
-  padding: 14px 18px;
+  padding: 12px 16px 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  margin: 20px 0;
+  margin: 14px 0;
 }
 
 body.dark-mode .set-card {
@@ -810,25 +835,28 @@ body.dark-mode .set-card {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #8882;
 }
 
 .set-card-head h2 {
   margin: 0;
-  font-size: 1.05em;
+  font-size: 1em;
 }
 
 .set-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px 18px;
-  margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px 20px;
+  margin-top: 12px;
 }
 
 .set-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.9em;
+  gap: 3px;
+  font-size: 0.88em;
+  min-width: 0;
 }
 
 .set-field-label {
@@ -838,21 +866,22 @@ body.dark-mode .set-card {
   gap: 6px;
   flex-wrap: wrap;
   /* Keeps the inputs of a row aligned whether or not the label carries a pill */
-  min-height: 24px;
+  min-height: 22px;
 }
 
 .set-field-label .pill {
-  font-size: 0.72rem;
-  padding: 2px 8px;
+  font-size: 0.7rem;
+  padding: 1px 7px;
+  font-weight: 600;
 }
 
 .set-field input[type="text"],
 .set-field input[type="number"],
 .set-field input[type="password"],
 .set-field select {
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 1px solid #8886;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -860,36 +889,273 @@ body.dark-mode .set-card {
   min-width: 0;
 }
 
+.set-field input:disabled {
+  opacity: 0.6;
+  background: #8881;
+  cursor: not-allowed;
+}
+
+.set-field input:focus,
+.set-field select:focus {
+  outline: none;
+  border-color: #1c6fd6;
+}
+
+body.dark-mode .set-field input:focus,
+body.dark-mode .set-field select:focus {
+  border-color: #6fb0ec;
+}
+
 .set-field small {
   opacity: 0.7;
-  font-size: 0.85em;
-  line-height: 1.35;
+  font-size: 0.84em;
+  line-height: 1.3;
 }
 
-.set-check {
+/* A toggle reads better next to its label than under it */
+.set-field-toggle {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+
+.set-field-toggle .set-field-label { grid-column: 1; }
+.set-field-toggle .set-switch { grid-column: 2; grid-row: 1 / span 2; }
+.set-field-toggle small { grid-column: 1; }
+
+/* Small variant of the monitoring switch */
+.set-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+  flex: none;
+}
+
+.set-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.set-switch-track {
+  position: absolute;
+  inset: 0;
+  background-color: #bbb;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.set-switch-track::before {
+  content: "";
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  top: 3px;
+  background-color: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.set-switch input:checked + .set-switch-track { background-color: #2ea35c; }
+.set-switch input:checked + .set-switch-track::before { transform: translateX(18px); }
+body.dark-mode .set-switch-track { background-color: #555; }
+
+/* ---- Collapsed part of a group ---- */
+.set-advanced {
+  margin-top: 12px;
+  border-top: 1px solid #8882;
+  padding-top: 8px;
+}
+
+.set-advanced > summary {
+  cursor: pointer;
+  font-size: 0.84em;
+  font-weight: 600;
+  opacity: 0.75;
+  list-style: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: 6px;
 }
 
-.set-actions {
-  display: flex;
-  gap: 12px;
-  margin: 20px 0 40px;
+.set-advanced > summary::-webkit-details-marker { display: none; }
+
+.set-advanced > summary::before {
+  content: "\203A";
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.set-advanced[open] > summary::before { transform: rotate(90deg); }
+.set-advanced > summary:hover { opacity: 1; }
+
+/* ---- Printer table ---- */
+/* Scrolls inside the card on a narrow screen instead of widening the page */
+#printer-table {
+  overflow-x: auto;
+}
+
+.set-table {
+  min-width: 520px;
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 0;
+  font-size: 0.9em;
+}
+
+.set-table th,
+.set-table td {
+  border: none;
+  border-bottom: 1px solid #8882;
+  padding: 7px 10px;
+  text-align: left;
+  background: transparent;
+}
+
+.set-table th {
+  background: transparent;
+  color: inherit;
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  padding-bottom: 5px;
+}
+
+.set-table tbody tr:last-child td { border-bottom: none; }
+.set-table tbody tr:hover td { background: #8881; }
+.set-table td:first-child { font-weight: 600; }
+
+body.dark-mode .set-table th,
+body.dark-mode .set-table td {
+  background: transparent;
+  border-bottom: 1px solid #8883;
+}
+
+.set-mono {
+  font-family: monospace;
+  font-size: 0.95em;
+  opacity: 0.85;
 }
 
 .set-row-actions {
   display: flex;
-  gap: 8px;
-  border: none;
+  gap: 6px;
+  justify-content: flex-end;
+  border-bottom: 1px solid #8882;
 }
 
+/* ---- Buttons, scoped to this page so the dashboard keeps its own look ---- */
+body.settings-page .btn {
+  padding: 6px 14px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  font-size: 0.88em;
+  transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
+}
+
+body.settings-page .btn:hover:not(:disabled) { background: #eee; }
+
+body.settings-page .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+body.settings-page .btn-small {
+  padding: 3px 10px;
+  font-size: 0.82em;
+}
+
+body.settings-page .btn-primary {
+  background: #1c6fd6;
+  border-color: #1c6fd6;
+  color: #fff;
+  font-weight: 600;
+}
+
+body.settings-page .btn-primary:hover:not(:disabled) { background: #1559ad; }
+
+body.settings-page .btn-danger {
+  color: #b3261e;
+  border-color: #d9a5a1;
+}
+
+body.settings-page .btn-danger:hover:not(:disabled) { background: #fbe4e4; }
+
+body.dark-mode.settings-page .btn {
+  background: #2c2c2c;
+  border-color: #4a4a4a;
+  color: #f1f1f1;
+}
+
+body.dark-mode.settings-page .btn:hover:not(:disabled) { background: #3a3a3a; }
+
+body.dark-mode.settings-page .btn-primary {
+  background: #2f6fc4;
+  border-color: #2f6fc4;
+  color: #fff;
+}
+
+body.dark-mode.settings-page .btn-primary:hover:not(:disabled) { background: #26599e; }
+
+body.dark-mode.settings-page .btn-danger {
+  color: #f08a82;
+  border-color: #6b3a36;
+  background: #2c2c2c;
+}
+
+body.dark-mode.settings-page .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
+
+/* ---- Action bar ---- */
+.set-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 16px;
+  background: #f4f4f4;
+  border-top: 1px solid #8882;
+  /* Lifts the bar off the card it scrolls over */
+  box-shadow: 0 -6px 10px -6px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-mode .set-actions {
+  background: #1e1e1e;
+}
+
+.set-actions-hint {
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+
+/* ---- Notes, errors, banner ---- */
 .set-note {
-  font-size: 0.85em;
+  font-size: 0.83em;
   opacity: 0.75;
   margin: 10px 0 0;
 }
+
+.set-note code {
+  font-size: 0.95em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #8881;
+}
+
+.set-note-warn {
+  color: #9a6a00;
+  opacity: 1;
+}
+
+body.dark-mode .set-note-warn { color: #e0b65f; }
 
 .set-error {
   color: #b3261e;
@@ -902,9 +1168,9 @@ body.dark-mode .set-error { color: #f08a82; }
 
 .set-banner {
   border-radius: 8px;
-  padding: 10px 14px;
-  margin: 16px 0;
-  font-size: 0.92em;
+  padding: 9px 14px;
+  margin: 12px 0;
+  font-size: 0.9em;
 }
 
 .set-banner:empty { display: none; }
@@ -916,9 +1182,8 @@ body.dark-mode .set-banner-ok   { background: #14331f; color: #5fd089; }
 body.dark-mode .set-banner-warn { background: #34290f; color: #e0b65f; }
 body.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
 
-#printer-dialog .set-form,
 #printer-dialog {
-  min-width: min(520px, 80vw);
+  min-width: min(560px, 86vw);
 }
 
 /* Links outside the footer and the menus, currently the pointer to the

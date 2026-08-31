@@ -19,9 +19,12 @@ import { settingsPath, envSeed } from "./config.js";
  */
 
 /**
- * Field definitions. `restartRequired` marks a setting the running process
- * cannot adopt safely; the UI shows it and the value is stored but only takes
- * effect on the next start.
+ * Field definitions.
+ *
+ * `restartRequired` marks a setting the running process cannot adopt safely;
+ * the UI shows it and the value is stored but only takes effect on the next
+ * start. `advanced` moves a field into the collapsed part of its group, for
+ * everything an ordinary install never touches.
  */
 export const SETTINGS_SCHEMA = {
     SPOOLMAN_ENDPOINT: {
@@ -35,6 +38,7 @@ export const SETTINGS_SCHEMA = {
         type: "string",
         default: null,
         group: "spoolman",
+        advanced: true,
         label: "Spoolman host",
         description: "Host name or IP of the Spoolman instance. Only used when no endpoint is set.",
     },
@@ -42,6 +46,7 @@ export const SETTINGS_SCHEMA = {
         type: "string",
         default: null,
         group: "spoolman",
+        advanced: true,
         label: "Spoolman port",
         description: "Port of the Spoolman instance. Only used when no endpoint is set.",
     },
@@ -49,6 +54,7 @@ export const SETTINGS_SCHEMA = {
         type: "string",
         default: null,
         group: "spoolman",
+        advanced: true,
         label: "Spoolman subfolder",
         description: "Path prefix when Spoolman runs behind a reverse proxy, for example /spoolman.",
     },
@@ -56,6 +62,7 @@ export const SETTINGS_SCHEMA = {
         type: "string",
         default: null,
         group: "spoolman",
+        advanced: true,
         label: "Spoolman public URL",
         description: "Address the Web UI links to. Set this when the browser reaches Spoolman under a different name than this service does.",
     },
@@ -80,34 +87,9 @@ export const SETTINGS_SCHEMA = {
         default: 120000,
         min: 5000,
         max: 300000,
-        group: "intervals",
+        group: "behaviour",
         label: "AMS update interval",
         description: "Milliseconds between two processed AMS reports per printer.",
-    },
-    OFFLINE_CHECK_INTERVAL: {
-        type: "integer",
-        default: 20000,
-        min: 20000,
-        max: 3600000,
-        group: "intervals",
-        label: "Offline check interval",
-        description: "Milliseconds between two reachability checks of a disconnected printer.",
-    },
-    MAX_RETRIES: {
-        type: "integer",
-        default: 0,
-        min: 0,
-        max: 1000,
-        group: "intervals",
-        label: "Max connection retries",
-        description: "Failed connection attempts before monitoring is disabled for a printer. 0 retries forever.",
-    },
-    NEVER_MERGE_IF_TAG: {
-        type: "boolean",
-        default: false,
-        group: "behaviour",
-        label: "Never merge a tagged spool",
-        description: "Skips any Spoolman spool that already carries a tag when looking for a merge candidate.",
     },
     SET_LOCATION: {
         type: "boolean",
@@ -116,10 +98,38 @@ export const SETTINGS_SCHEMA = {
         label: "Write AMS slot as location",
         description: "Stores printer name and AMS slot as the location of the spool in Spoolman.",
     },
+    NEVER_MERGE_IF_TAG: {
+        type: "boolean",
+        default: false,
+        group: "behaviour",
+        label: "Never merge a tagged spool",
+        description: "Skips any Spoolman spool that already carries a tag when looking for a merge candidate.",
+    },
+    OFFLINE_CHECK_INTERVAL: {
+        type: "integer",
+        default: 20000,
+        min: 20000,
+        max: 3600000,
+        group: "behaviour",
+        advanced: true,
+        label: "Offline check interval",
+        description: "Milliseconds between two reachability checks of a disconnected printer.",
+    },
+    MAX_RETRIES: {
+        type: "integer",
+        default: 0,
+        min: 0,
+        max: 1000,
+        group: "behaviour",
+        advanced: true,
+        label: "Max connection retries",
+        description: "Failed connection attempts before monitoring is disabled for a printer. 0 retries forever.",
+    },
     DEBUG: {
         type: "boolean",
         default: false,
         group: "behaviour",
+        advanced: true,
         label: "Debug logging",
         description: "Writes verbose debug lines into the log files.",
     },
@@ -346,6 +356,8 @@ export function getSettingsView() {
             min: field.min ?? null,
             max: field.max ?? null,
             restartRequired: !!field.restartRequired,
+            // Rendered inside the collapsed part of its group
+            advanced: !!field.advanced,
         })),
         spoolmanUrl: spoolmanUrl(),
     };
