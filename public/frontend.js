@@ -1009,7 +1009,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	            <th style="text-align:left">Spool</th>
 	            <th style="text-align:right">On spool</th>
 	            <th style="text-align:right">Needed</th>
-	            <th style="text-align:right">Rest</th>
+	            <th style="text-align:right">After print</th>
 	            <th>Action</th>
 	        </tr></thead>`;
 	        const tbody = document.createElement("tbody");
@@ -1076,13 +1076,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	        onSpool = Math.round((pct / 100) * totalSpool);
 	    }
 
-	    let neededCell = "—";
-	    let restCell   = "—";
+	    let neededCell     = "—";
+	    let afterPrintCell = "—";
 	    if (needed > 0) {
-	        neededCell = `${needed}g${used ? `<br><span class="gc-muted" style="font-size:0.8em">used: ${used}g</span>` : ""}`;
+	        neededCell = `${needed}g${used ? `<br><span class="gc-muted" style="font-size:0.8em">printed: ${used}g</span>` : ""}`;
 	        if (onSpool != null) {
-	            const rest = Math.round((onSpool - needed) * 100) / 100;
-	            restCell = `<span class="${rest < 0 ? "gc-bad" : "gc-ok"}">${rest}g</span>`;
+	            const afterPrint = Math.round((onSpool - needed) * 100) / 100;
+	            afterPrintCell = `<span class="${afterPrint < 0 ? "gc-bad" : "gc-ok"}">${afterPrint}g</span>`;
 	        }
 	    }
 
@@ -1096,7 +1096,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        <td data-label="Spool" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
 	        <td data-label="On spool" style="text-align:right">${onSpoolCell}</td>
 	        <td data-label="Needed" style="text-align:right">${neededCell}</td>
-	        <td data-label="Rest" style="text-align:right">${restCell}</td>
+	        <td data-label="After print" style="text-align:right">${afterPrintCell}</td>
 	    `;
 
 	    const tdBtn = document.createElement("td");
