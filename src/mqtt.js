@@ -99,13 +99,13 @@ async function handlePrintStateChange(printer, print) {
         printer.sliceFetchDone = true;
         printer.currentJobName = jobName;
 
-        console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}" — fetching slice info via FTPS...`);
+        console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
         try {
             printer.currentSliceInfo = await fetchSliceInfo(printer, jobName);
             if (printer.currentSliceInfo) {
                 console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
             } else {
-                console.log(printer.name, printer.logFilePath, "[Print] slice_info.config not found in 3MF — consumption tracking unavailable for this print");
+                console.log(printer.name, printer.logFilePath, "[Print] slice_info.config not found in 3MF, consumption tracking unavailable for this print");
             }
         } catch (err) {
             console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);
@@ -120,7 +120,7 @@ async function handlePrintStateChange(printer, print) {
         printer.consumptionBooked = true;
 
         if (!printer.currentSliceInfo) {
-            console.log(printer.name, printer.logFilePath, `[Print] ${newState} — no slice info cached, skipping consumption tracking`);
+            console.log(printer.name, printer.logFilePath, `[Print] ${newState}, no slice info cached, skipping consumption tracking`);
             return;
         }
 
@@ -128,7 +128,7 @@ async function handlePrintStateChange(printer, print) {
             ? calcFullConsumption(printer.currentSliceInfo)
             : calcPartialConsumption(printer.currentSliceInfo, layerNum);
 
-        console.log(printer.name, printer.logFilePath, `[Print] ${newState} — booking filament consumption:`, JSON.stringify(consumption));
+        console.log(printer.name, printer.logFilePath, `[Print] ${newState}, booking filament consumption:`, JSON.stringify(consumption));
         await bookConsumption(printer, consumption);
     }
 }
@@ -142,11 +142,11 @@ async function handlePrintStateChange(printer, print) {
  * candidates that merely match by type are never touched.
  *
  * Slots are matched to slice filaments in three stages, most specific first:
- *   1. tray_info_idx + color  — exact material profile, separates e.g. PLA Black
- *                               from PLA Jade White despite a shared profile
- *   2. material type + color  — for 3rd-party spools, which report no usable
- *                               tray_info_idx
- *   3. tray_info_idx alone    — colors did not line up but the profile is unique
+ *   1. tray_info_idx + color: exact material profile, separates e.g. PLA Black
+ *                             from PLA Jade White despite a shared profile
+ *   2. material type + color: for 3rd-party spools, which report no usable
+ *                             tray_info_idx
+ *   3. tray_info_idx alone:   colors did not line up but the profile is unique
  *
  * Within a stage, manually assigned spools win over tag-connected ones: an
  * assignment is the user explicitly resolving what the automatic match cannot,
@@ -182,7 +182,7 @@ async function bookConsumption(printer, consumption) {
     }
 
     if (!candidates.length) {
-        console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools — nothing to book");
+        console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools, nothing to book");
         return;
     }
 
@@ -206,7 +206,7 @@ async function bookConsumption(printer, consumption) {
         }
 
         if (!matches.length) {
-            console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}) — skipping ${grams}g (assign the spool in the Web UI to track it)`);
+            console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}), skipping ${grams}g (assign the spool in the Web UI to track it)`);
             continue;
         }
 
@@ -216,7 +216,7 @@ async function bookConsumption(printer, consumption) {
         if (mapped.length) matches = mapped;
 
         if (matches.length > 1) {
-            console.warn(printer.name, printer.logFilePath, `[Print] ${matches.length} spools are indistinguishable for ${idx} ${type} (${color}) — booking the full ${grams}g to spool ${matches[0].id} (${matches[0].amsId}); assign the spools manually in the Web UI to split correctly`);
+            console.warn(printer.name, printer.logFilePath, `[Print] ${matches.length} spools are indistinguishable for ${idx} ${type} (${color}), booking the full ${grams}g to spool ${matches[0].id} (${matches[0].amsId}); assign the spools manually in the Web UI to split correctly`);
         }
 
         const { id: spoolId } = matches[0];
@@ -256,7 +256,7 @@ async function handleMqttMessage(printer, topic, message) {
             }
 
             // Legacy mode derives the weight from the RFID remain percentage, so
-            // the G-code tracking must stay out of it entirely — running both
+            // the G-code tracking must stay out of it entirely. Running both
             // would download the sliced file on every print and book consumption
             // that the next AMS update then overwrites again.
             if (!LEGACY_MODE && data?.print?.gcode_state) {
@@ -285,7 +285,7 @@ async function handleMqttMessage(printer, topic, message) {
                         // Seed the baseline on the very first pass only. Testing for an
                         // empty array here re-seeded it on every pass for as long as
                         // Spoolman held no spools, so the first spool ever created was
-                        // compared against itself and never registered as a change —
+                        // compared against itself and never registered as a change,
                         // exactly what happens on a fresh Spoolman install.
                         if (state.lastSpoolData === null) state.lastSpoolData = spools;
 
@@ -298,7 +298,7 @@ async function handleMqttMessage(printer, topic, message) {
                         const lastTrayData = extractComparableTrayData(printer.lastAmsData || []);
                         // In G-code mode the AMS remain % is irrelevant (weight is
                         // tracked from the slice), so don't let it trigger reprocessing
-                        // and log output — only react to real identity/weight changes.
+                        // and log output. Only react to real identity/weight changes.
                         const stripRemain = (d) => LEGACY_MODE ? d
                             : d.map(a => ({ ...a, tray: a.tray.map(({ remain, ...t }) => t) }));
                         const trayDataChanged =
@@ -323,7 +323,7 @@ async function handleMqttMessage(printer, topic, message) {
                                     const mutated = await processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime);
 
                                     // Only refetch when this slot actually created/merged a
-                                    // spool or filament in Spoolman — otherwise the cached
+                                    // spool or filament in Spoolman. Otherwise the cached
                                     // lists from the top of this AMS update are still valid,
                                     // avoiding redundant HTTP calls for every slot.
                                     if (mutated) {
@@ -418,7 +418,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         return false;
     }
 
-    // Reached by anything the printer could not identify — including a slot whose
+    // Reached by anything the printer could not identify, including a slot whose
     // only sign of life is `state`, which the empty branch above no longer takes.
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
@@ -511,7 +511,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 } else {
                     // Default: weight is tracked from the sliced G-code on print
                     // completion (see handlePrintStateChange). Here we only log /
-                    // sync location on real identity changes — not on remain ticks.
+                    // sync location on real identity changes, not on remain ticks.
                     if (meaningfulChange) {
                         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} [[ ${slot.tray_uuid} ]] => Spool-ID ${spool.id} (G-code mode)`);
 
@@ -585,7 +585,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         if (!automatic) enableButton = "true";
         printer.lastUpdateTime = new Date();
 
-        // A create/merge just happened — look the spool back up right away so
+        // A create/merge just happened, so look the spool back up right away so
         // the UI reflects the real connection immediately. Without this, the
         // overview would stay on the pending "Create Spool" state until some
         // unrelated change happens to trigger reprocessing of this slot (the
@@ -616,7 +616,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         option = "Unassign Spool";
         enableButton = "true";
     } else if (!found && option === "No actions available") {
-        // Nothing to create or merge, and no tag link — offer a manual assignment
+        // Nothing to create or merge, and no tag link, so offer a manual assignment
         option = "Assign Spool";
         enableButton = "true";
     }
@@ -677,7 +677,7 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         matchingInternalFilament: null,
         matchingExternalFilament: null,
         existingSpool: mappedSpool,
-        // Never true for a chipless spool — the link comes from the manual
+        // Never true for a chipless spool. The link comes from the manual
         // assignment below, not from an RFID tag.
         connectedViaTag: false,
         connectedViaMapping: !!mappedSpool,
@@ -694,7 +694,7 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
 /**
  * Looks up the manually assigned Spoolman spool for a slot. Returns null when
  * nothing is assigned, when the assignment went stale (different filament in
- * the slot now — getMapping drops it), or when the assigned spool no longer
+ * the slot now, getMapping drops it), or when the assigned spool no longer
  * exists in Spoolman.
  */
 function resolveMappedSpool(printer, amsId, slot, spools) {
@@ -757,13 +757,13 @@ export async function setupMqtt(printer) {
             printer.mqttRunning = false;
             printer.mqttClient = null;
 
-            // No self-rescheduling here — monitorPrinters() is the single
+            // No self-rescheduling here. monitorPrinters() is the single
             // place driving reconnect attempts (polls every OFFLINE_CHECK_INTERVAL
             // and calls setupMqtt() again once mqttRunning is false). Having
             // both this handler and that loop independently retry used to
             // race and made the actual retry cadence hard to reason about.
             if (printer.monitoringEnabled) {
-                console.log(printer.name, printer.logFilePath, ` Connection closed — will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
+                console.log(printer.name, printer.logFilePath, ` Connection closed, will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
             }
         });
 
@@ -792,9 +792,9 @@ export async function setupMqtt(printer) {
             return;
         }
 
-        // No self-rescheduling here either — see the comment in the "close"
+        // No self-rescheduling here either, see the comment in the "close"
         // handler above. monitorPrinters() will retry within OFFLINE_CHECK_INTERVAL.
-        console.log(printer.name, printer.logFilePath, ` Connection failed — will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
+        console.log(printer.name, printer.logFilePath, ` Connection failed, will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
     }
 }
 

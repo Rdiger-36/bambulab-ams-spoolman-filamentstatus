@@ -13,7 +13,7 @@ const BAMBU_TLS = { rejectUnauthorized: false };
  * immediately after extraction.
  *
  * BambuLab printers run vsftpd with implicit TLS on port 990, login bblp /
- * <access code>. The actual sliced files live in /cache/<job>.gcode.3mf — the
+ * <access code>. The actual sliced files live in /cache/<job>.gcode.3mf. The
  * MQTT `gcode_file` field (e.g. /data/Metadata/plate_1.gcode) is an internal
  * path that is NOT exposed over FTP, so we resolve via the job name instead.
  *
@@ -112,7 +112,7 @@ export function calcFullConsumption(sliceInfo) {
  * restricted to certain layers (e.g. a different top color) the estimate is
  * more accurate.
  *
- * Purge is scaled proportionally as part of used_g — not perfectly accurate
+ * Purge is scaled proportionally as part of used_g. Not perfectly accurate
  * (purge happens discretely at tool changes) but a solid best-effort estimate
  * without parsing the full multi-MB G-code.
  *
@@ -160,7 +160,7 @@ export function calcPartialConsumption(sliceInfo, upToLayer) {
  * Builds candidate FTPS paths for the sliced 3MF from a MQTT job name.
  *
  * gcode_file from MQTT can be:
- *   /data/Metadata/plate_1.gcode  (internal path — strip to base name)
+ *   /data/Metadata/plate_1.gcode  (internal path, strip to base name)
  *   My Print.gcode.3mf
  *   My Print
  * The real file is /cache/<name>.gcode.3mf, sometimes also in the FTP root.

@@ -278,7 +278,7 @@ body.show-footer #spool-list {
 @media (max-width: 760px) {
   /* Both the classic AMS table and the G-code table share .spool-table */
   .spool-table thead {
-    /* hide the header row — labels come from data-label per cell */
+    /* hide the header row, labels come from data-label per cell */
     position: absolute;
     width: 1px; height: 1px;
     overflow: hidden;
@@ -297,7 +297,7 @@ body.show-footer #spool-list {
 
   .spool-table {
     margin-top: 16px;
-    /* drop the desktop card frame — each row is its own card on mobile.
+    /* drop the desktop card frame. Each row is its own card on mobile.
        !important beats the desktop .spool-table rules defined later in source. */
     border: none !important;
     border-radius: 0 !important;

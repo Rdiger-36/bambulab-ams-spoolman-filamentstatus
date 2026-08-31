@@ -5,7 +5,7 @@ import { correctRemainInt } from "./ams.js";
 
 // The AMS RFID chip reports the real remaining percentage of an already
 // partially-used spool. New spools should be created reflecting that, not as
-// if they were brand new — otherwise a spool found at e.g. 32% remaining
+// if they were brand new. Otherwise a spool found at e.g. 32% remaining
 // would be created at 100% (used_weight 0) and immediately drift out of sync.
 function usedWeightFromSlot(slot) {
     const remainPct = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
@@ -50,7 +50,7 @@ export async function getSpoolmanExternalFilaments() {
 
 // ---------------------------------------------------------------------------
 // Lookups and creation used by the "new spool" dialog for 3rd party spools.
-// Those spools carry no RFID tag, so nothing about them can be derived — the
+// Those spools carry no RFID tag, so nothing about them can be derived: the
 // data has to be entered once, and these endpoints feed the dialog's dropdowns.
 // ---------------------------------------------------------------------------
 
@@ -68,8 +68,8 @@ export const getSpoolmanVendors = () => getJson("/api/v1/vendor", "vendors");
 export const getSpoolmanLocations = () => getJson("/api/v1/location", "locations");
 // Materials already in use in this Spoolman instance
 export const getSpoolmanMaterials = () => getJson("/api/v1/material", "materials");
-// The known material catalogue, which also carries density and temperatures —
-// density is required when creating a filament and cannot be read off the spool.
+// The known material catalogue, which also carries density and temperatures.
+// Density is required when creating a filament and cannot be read off the spool.
 export const getSpoolmanExternalMaterials = () => getJson("/api/v1/external/material", "external materials");
 
 export async function createNamedVendor(name) {
@@ -221,9 +221,9 @@ export async function createSpool(spoolData) {
  * hardcoded to 1000/250, which mislabelled everything not on a 1 kg spool.
  *
  * The filament describes the product, so both weights are the catalogue values.
- * A physical spool may well deviate from them — Bambu Lab sample spools are not
+ * A physical spool may well deviate from them. Bambu Lab sample spools are not
  * sold separately and the Support for PLA sample reports 250 g against a 500 g
- * catalogue entry — but that belongs on the spool as initial_weight, not on the
+ * catalogue entry, but that belongs on the spool as initial_weight, not on the
  * filament shared by every spool of that product.
  *
  * spool_type, finish, pattern, translucent and glow are not part of Spoolman's
@@ -327,7 +327,7 @@ export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
         json: { use_weight: usedGrams },
     });
 
-    // The /use endpoint only accepts use_weight and use_length — a last_used sent
+    // The /use endpoint only accepts use_weight and use_length. A last_used sent
     // along with them is silently dropped, so the timestamp has to be patched
     // separately. Failing to stamp it must not lose the booking, which already
     // succeeded above.

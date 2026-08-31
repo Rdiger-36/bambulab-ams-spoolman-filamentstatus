@@ -56,7 +56,7 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
 
     // Support/accessory material (tray_type suffix "-S", e.g. "PLA-S") is sold
     // and measured at its real spool size, not estimated on a 1kg basis like
-    // regular color filament <1kg — so its remain% is already relative to the
+    // regular color filament <1kg, so its remain% is already relative to the
     // actual tray_weight and must not be rescaled.
     const isSupportMaterial = typeof trayType === "string" && trayType.endsWith("-S");
 
@@ -73,9 +73,10 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
 /**
  * Whether the AMS reports something physically sitting in the slot.
  *
- * A slot holding a spool the printer cannot identify — no RFID chip, or one it
- * failed to read — comes through with the same sparse payload as an empty slot:
- * tray_uuid "N/A", no tray_type, tray_weight 0. The only field that separates
+ * A slot holding a spool the printer cannot identify, whether because it has
+ * no RFID chip or because reading it failed, comes through with the same
+ * sparse payload as an empty slot: tray_uuid "N/A", no tray_type,
+ * tray_weight 0. The only field that separates
  * them is `state`, which is 0 for an empty slot and non-zero once something is
  * loaded (11 for a fully read Bambu Lab spool, other values while the printer
  * has filament but no identification for it).

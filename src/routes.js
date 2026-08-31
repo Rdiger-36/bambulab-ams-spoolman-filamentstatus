@@ -226,7 +226,7 @@ export function registerRoutes(app, printers) {
             try {
                 sliceInfo = await fetchSliceInfo(printer, jobName);
             } catch (err) {
-                // non-fatal — surface the error in the response
+                // non-fatal, surface the error in the response
                 return res.json({
                     gcodeState: state,
                     jobName,
@@ -484,7 +484,7 @@ function applyMappingToUiSpool(printer, uiSpool, spool) {
     uiSpool.connectedViaMapping  = !!spool;
     uiSpool.option               = spool ? "Unassign Spool" : "Assign Spool";
     uiSpool.enableButton         = "true";
-    // correctedWeight came from the assigned spool, so it has to go with it —
+    // correctedWeight came from the assigned spool, so it has to go with it.
     // 3rd-party slots report tray_weight 0 and have no weight of their own.
     uiSpool.correctedWeight      = spool?.remaining_weight ?? null;
 

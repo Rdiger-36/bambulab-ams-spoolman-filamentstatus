@@ -447,7 +447,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    };
 	    for (const t of tabs) t.addEventListener("click", () => selectMode(t.dataset.mode));
 
-	    // Nothing to assign yet on a fresh Spoolman — start on the form instead of
+	    // Nothing to assign yet on a fresh Spoolman, so start on the form instead of
 	    // an empty picker.
 	    selectMode(spools.length ? "assign" : "create");
 	}
@@ -457,7 +457,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    actionButton.disabled = true;
 
 	    if (!spools.length) {
-	        pane.innerHTML = `<p class="gc-muted">No spools in Spoolman yet — use "Create new spool".</p>`;
+	        pane.innerHTML = `<p class="gc-muted">No spools in Spoolman yet. Use "Create new spool".</p>`;
 	        return;
 	    }
 
@@ -505,7 +505,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	            <label class="sp-field sp-wide">
 	                <span>Use filament</span>
 	                <select id="sp-filament">
-	                    <option value="">— Create a new filament —</option>
+	                    <option value="">+ Create a new filament</option>
 	                    ${filamentOptions}
 	                </select>
 	            </label>
@@ -597,7 +597,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        const known = (lookups.externalMaterials || []).find(m => m.material.toLowerCase() === value);
 	        const hint = $("sp-material-hint");
 	        if (!known) {
-	            hint.textContent = value ? "Not a known material — enter density yourself" : "";
+	            hint.textContent = value ? "Not a known material, enter density yourself" : "";
 	            return;
 	        }
 	        hint.textContent = `Defaults from ${known.material}`;
@@ -613,7 +613,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    $("sp-vendor").addEventListener("input", () => {
 	        const value = $("sp-vendor").value.trim();
 	        $("sp-vendor-hint").textContent = value && !vendorNames.has(value.toLowerCase())
-	            ? "New manufacturer — will be created"
+	            ? "New manufacturer, will be created"
 	            : "";
 	    });
 
@@ -782,15 +782,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	        ? `<a class="gc-link" href="${spoolmanBaseUrl}/spool/show/${amsSpool.existingSpool.id}" target="_blank">Spoolman #${amsSpool.existingSpool.id}</a>`
 	        : `<span class="gc-muted">not linked</span>`;
 
-	    // Tag/booking status is G-code-consumption semantics — only shown there.
+	    // Tag/booking status is G-code-consumption semantics, so only shown there.
 	    let booking = "";
 	    if (!isEmpty && ctx?.showBooking) {
 	        if (amsSpool.connectedViaMapping) {
-	            booking = ` · <span class="gc-ok" title="Manually assigned to a Spoolman spool — consumption is booked onto it">● assigned</span>`;
+	            booking = ` · <span class="gc-ok" title="Manually assigned to a Spoolman spool, consumption is booked onto it">● assigned</span>`;
 	        } else if (amsSpool.connectedViaTag) {
-	            booking = ` · <span class="gc-ok" title="Physically connected via Spoolman extra.tag — consumption is booked automatically">● tag-linked</span>`;
+	            booking = ` · <span class="gc-ok" title="Physically connected via Spoolman extra.tag, consumption is booked automatically">● tag-linked</span>`;
 	        } else {
-	            booking = ` · <span class="gc-warn" title="No extra.tag link — consumption can't be booked automatically; assign a Spoolman spool to track it">● not tracked</span>`;
+	            booking = ` · <span class="gc-warn" title="No extra.tag link, consumption cannot be booked automatically; assign a Spoolman spool to track it">● not tracked</span>`;
 	        }
 	    }
 
@@ -798,7 +798,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // only applies while the slot still relies on the automatic match.
 	    const key = consumptionKeyJS(slot.tray_info_idx, slot.tray_color);
 	    const ambiguous = (!isEmpty && !amsSpool.connectedViaMapping && ctx?.keyCount && ctx.keyCount[key] > 1)
-	        ? ` <span class="gc-warn" title="Another loaded spool is identical (same type AND color) — consumption can't be split automatically; assign the spools manually to split correctly">⚠</span>`
+	        ? ` <span class="gc-warn" title="Another loaded spool is identical (same type AND color), consumption cannot be split automatically; assign the spools manually to split correctly">⚠</span>`
 	        : "";
 
 	    return `
@@ -816,7 +816,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    let correctedRemain = amsSpool.correctedRemain ?? amsSpool.slot.remain;
 	    let totalWeight = amsSpool.slot.tray_weight;
 
-	    // In G-code mode the AMS RFID remain % is not tracked — show the actual
+	    // In G-code mode the AMS RFID remain % is not tracked, so show the actual
 	    // Spoolman remaining weight/percentage of the tag-connected spool instead.
 	    const sp = amsSpool.existingSpool;
 	    if (!legacyMode && (amsSpool.connectedViaTag || amsSpool.connectedViaMapping) && sp && sp.remaining_weight != null) {
@@ -899,7 +899,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return `${idx || "?"}|${normColorJS(color)}`;
 	}
 
-	// Mirrors materialKey in src/mqtt.js — the fallback identity used for spools
+	// Mirrors materialKey in src/mqtt.js, the fallback identity used for spools
 	// without a usable tray_info_idx (i.e. 3rd-party spools).
 	function materialKeyJS(type, color) {
 	    return `${type || "?"}|${normColorJS(color)}`;
@@ -939,7 +939,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        }
 
 	        // Align column widths across all AMS tables (each column to its widest
-	        // cell) so AMS A / AMS B / … line up uniformly. 5 columns: 0..4 —
+	        // cell) so AMS A / AMS B / … line up uniformly. 5 columns: 0..4,
 	        // unlike the classic table the action column has to be included here,
 	        // otherwise the table shrinks to its content width and squeezes the
 	        // Spool column into a narrow wrapped block.
@@ -977,7 +977,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        </div>`;
 	    }
 	    // The backend reports why consumption data is missing (e.g. the FTPS
-	    // download failed); without this the table would just show "—" with no
+	    // download failed); without this the table would just show a placeholder with no
 	    // explanation.
 	    if (printData.error) {
 	        html += `<p class="gc-required" style="margin:10px 0 0">${printData.error}</p>`;
@@ -986,7 +986,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return card;
 	}
 
-	// Build one table per AMS unit — like the classic view: normal AMS up to 4
+	// Build one table per AMS unit, like the classic view: normal AMS up to 4
 	// slots per table, AMS HT a single slot per table. The generic `table`
 	// margin gives a clear gap between units.
 	function buildGcodeSpoolTables(spools, printData) {
@@ -1039,7 +1039,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	}
 
 	// Looks up a slot's entry in a consumption map. Matches on the exact material
-	// profile first, then on material + color — 3rd-party spools report no usable
+	// profile first, then on material + color. 3rd-party spools report no usable
 	// tray_info_idx, mirroring the staged match in bookConsumption (src/mqtt.js).
 	function findConsumption(cons, slot) {
 	    const exact = cons[consumptionKeyJS(slot.tray_info_idx, slot.tray_color)];
@@ -1113,7 +1113,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    const loadedKeys = new Set(loaded.map(s => consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color)));
 	    // 3rd-party spools report no usable tray_info_idx, so they'd always look
-	    // "not loaded" by profile alone — fall back to material + color, the same
+	    // "not loaded" by profile alone, so fall back to material + color, the same
 	    // second-stage match the backend uses when booking.
 	    const loadedMaterials = new Set(loaded.map(s => materialKeyJS(s.slot?.tray_type, s.slot?.tray_color)));
 

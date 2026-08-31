@@ -76,7 +76,7 @@ function safeStringify(args) {
     }).join(" ");
 }
 
-// Override console.log — signature: (device, logFilePath, ...args)
+// Override console.log. Signature: (device, logFilePath, ...args)
 console.log = (device, logFilePath, ...args) => {
     const logMessage = `[LOG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleLog(logMessage);
@@ -91,7 +91,7 @@ console.log = (device, logFilePath, ...args) => {
     }
 };
 
-// Override console.error — signature: (device, logFilePath, ...args)
+// Override console.error. Signature: (device, logFilePath, ...args)
 console.error = (device, logFilePath, ...args) => {
     const errorMessage = `[ERROR] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleError(errorMessage);
@@ -100,7 +100,7 @@ console.error = (device, logFilePath, ...args) => {
     enqueueAppend(path, errorMessage + "\n");
 };
 
-// Override console.debug — signature: (device, logFilePath, ...args)
+// Override console.debug. Signature: (device, logFilePath, ...args)
 console.debug = (device, logFilePath, ...args) => {
     if (DEBUG === "true") {
         const debugMessage = `[DEBUG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
