@@ -179,7 +179,7 @@ diff to know what is in it.
 - **One menu bar** across all pages, `public/menu.js`, keyboard operable, and a
   shared visual language: `.data-table`, the button classes and the form fields
   are the same everywhere.
-- **Tests**: 89, including an HTTP harness (`test/helpers/app.js`) that registers
+- **Tests**: 95, including an HTTP harness (`test/helpers/app.js`) that registers
   the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
   temporary directory.
 
@@ -229,12 +229,6 @@ note that the code sits in plain text in `printers.json` is the honest version.
 
 ## Code quality
 
-- [ ] **`/api/print` omits `connectedViaMapping`.** Its `loadedSpools`
-  projection in `src/routes.js` reports `connectedViaTag` but not the manual
-  assignment, so the endpoint cannot answer "will this slot be booked" on its
-  own. The frontend is unaffected, because the G-code table reads `/api/spools`
-  and only takes `fullConsumption` from here, so this is an inconsistency in a
-  diagnostic endpoint rather than a live defect.
 - [ ] **`slotFingerprint()`** in `src/mappings.js` keys on `tray_type|colour`.
   Where the printer reports a per-filament `tray_info_idx` (the issue #47 case)
   that would be the sharper key and would notice a spool swap between two same

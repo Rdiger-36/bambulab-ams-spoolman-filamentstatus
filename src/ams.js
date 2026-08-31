@@ -1,4 +1,5 @@
 import { settings } from "./settings.js";
+import { toClientSpool } from "./uispool.js";
 
 /**
  * Normalises the raw `print.ams.ams` payload so the rest of the pipeline sees
@@ -340,10 +341,10 @@ export function shouldSendSlotUpdate(slot, isFirstRun) {
  * Whether anything the UI actually displays changed between two versions of a
  * slot, used to suppress redundant SSE broadcasts.
  *
- * The comparison is an explicit key list rather than a deep equality check,
- * because the slot object carries plenty of fields that tick without meaning
- * anything to the user. A new displayed field must be added to that list, or it
- * will never reach the UI on its own.
+ * Compares what the client is sent, not the runtime objects: `toClientSpool()`
+ * already drops everything the firmware reports without the UI showing it, so
+ * this needs no key list of its own. That list was the trap it replaces, a new
+ * displayed field that nobody added to it never reached the UI on its own.
  *
  * @param {object|undefined} next - the freshly built UI spool
  * @param {object|undefined} prev - the previous one for the same slot
@@ -351,13 +352,5 @@ export function shouldSendSlotUpdate(slot, isFirstRun) {
  */
 export function hasSpoolUiChanged(next, prev) {
     if (!next || !prev) return true;
-    const keys = [
-        "slot.tray_uuid", "slot.tray_weight", "slot.remain", "slot.tray_sub_brands",
-        "slot.tray_color", "slotState", "option", "enableButton",
-        "existingSpool.id", "matchingInternalFilament.id",
-        "matchingExternalFilament.id", "mergeableSpool.id", "error",
-    ];
-    const _get = (obj, path) =>
-        path.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : undefined), obj);
-    return keys.some(k => JSON.stringify(_get(next, k)) !== JSON.stringify(_get(prev, k)));
+    return JSON.stringify(toClientSpool(next)) !== JSON.stringify(toClientSpool(prev));
 }

@@ -26,6 +26,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
+| `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
 | `utils.js` | Date/interval formatting, `sleep`, AMS id → slot label (`A0`, `HT-A`). |
 
@@ -140,9 +141,10 @@ call it from `mqtt.js`. That is what makes it testable: `test/ams.test.js`
 covers exactly this seam.
 
 **Pushing something to the UI:** `broadcastSlotUpdate()` for a single slot,
-`broadcastSSE()` for status/refresh events. Both strip `logFilePath` and
-`printerName` via `sanitizeSpoolForClient()`. Keep server-only fields out of
-the client payload.
+`broadcastSSE()` for status/refresh events. A slot goes out through
+`toClientSpool()` in `uispool.js`, the one projection from the runtime object to
+the client payload, shared with `/api/spools` and `/api/print`. Add a field
+there when the UI needs it; anything not listed stays on the server.
 
 **Changing slot classification:** `processSlot()` in `mqtt.js` branches, in
 order: invalid slot → empty slot → 3rd party (unidentified) → Bambu Lab. The

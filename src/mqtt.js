@@ -32,11 +32,7 @@ import {
     shouldSendSlotUpdate,
     hasSpoolUiChanged,
 } from "./ams.js";
-
-/** Strips server-only fields from a UI spool before it goes out to a client. */
-function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
-    return rest;
-}
+import { toClientSpool } from "./uispool.js";
 
 /**
  * Sends an event to every connected SSE client. A payload that cannot be
@@ -55,7 +51,7 @@ export function broadcastSSE(data) {
 
 /** Pushes one slot's new state to the dashboard. */
 export function broadcastSlotUpdate(printerId, spool) {
-    broadcastSSE({ type: "slot_update", printer: printerId, spool: sanitizeSpoolForClient(spool) });
+    broadcastSSE({ type: "slot_update", printer: printerId, spool: toClientSpool(spool) });
 }
 
 // Print states that signal the end of a print job

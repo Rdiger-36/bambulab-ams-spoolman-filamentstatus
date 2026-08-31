@@ -138,9 +138,10 @@ Not punctuation, and therefore allowed:
   `printers/` from anywhere else.
 - **When changing the shape of the UI spool object**, update all of its builders
   in `src/mqtt.js` (`buildEmptySpool`, `buildThirdPartySpool` and the Bambu Lab
-  branch of `processSlot`), the key list in `hasSpoolUiChanged` in `src/ams.js`,
-  and the frontend that reads it. A field missing from that key list is invisible
-  to change detection and silently never reaches the UI.
+  branch of `processSlot`), `toClientSpool()` in `src/uispool.js`, and the
+  frontend that reads it. A field the projection does not carry never reaches a
+  client, and change detection does not see it either: `hasSpoolUiChanged()`
+  compares the projection.
 - **When changing the shape of `mappings.json`**, keep the read side tolerant of
   the old shape. Existing installs have the file on disk and there is no
   migration step. `settings.json` carries a `schemaVersion` for exactly this

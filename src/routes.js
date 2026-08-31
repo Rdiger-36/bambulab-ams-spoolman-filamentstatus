@@ -8,6 +8,7 @@ import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { tailLogLines, logFileSet } from "./logger.js";
+import { toClientSpool } from "./uispool.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -23,14 +24,9 @@ import {
     createSpoolRecord,
     checkSpoolmanHealth,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, testFtpsConnection } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection } from "./gcode.js";
 import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
-
-/** Strips server-only fields from a UI spool before it goes out to a client. */
-function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
-    return rest;
-}
 
 /**
  * Looks up the cached UI spool for a printer and slot, answering with a 404 and
@@ -104,7 +100,7 @@ export function registerRoutes(app, printers) {
     app.get("/api/spools/:printerId", (req, res) => {
         const printer = printers.find(p => p.id === req.params.printerId);
         if (!printer) return res.status(404).json({ error: "Printer not found" });
-        res.json((printer.spoolData || []).map(sanitizeSpoolForClient));
+        res.json((printer.spoolData || []).map(toClientSpool));
     });
 
     app.get("/api/printers", (req, res) => {
@@ -318,33 +314,11 @@ export function registerRoutes(app, printers) {
             }
         }
 
-        // Build loaded spool summary with readable names (same data the main
-        // menu uses: Spoolman filament name/material/vendor when linked, AMS
-        // slot data as fallback).
-        const loadedSpools = (printer.spoolData || []).map(s => {
-            const fil = s.existingSpool?.filament || null;
-            return {
-                amsId:          s.amsId,
-                vendor:         fil?.vendor?.name
-                                ?? s.matchingExternalFilament?.manufacturer
-                                ?? null,
-                material:       fil?.material
-                                ?? s.slot?.tray_type
-                                ?? null,
-                filamentName:   fil?.name
-                                ?? s.matchingExternalFilament?.name
-                                ?? s.slot?.tray_sub_brands
-                                ?? null,
-                color:          s.slot?.tray_color       ?? null,
-                tray_info_idx:  s.slot?.tray_info_idx    ?? null,
-                key:            consumptionKey(s.slot?.tray_info_idx, s.slot?.tray_color),
-                tray_uuid:      s.slot?.tray_uuid        ?? null,
-                spoolmanId:     s.existingSpool?.id       ?? null,
-                connectedViaTag: s.connectedViaTag        ?? false,
-                remainingWeight: s.correctedWeight        ?? null,
-                slotState:      s.slotState               ?? null,
-            };
-        });
+        // The same projection the dashboard gets, rather than a second one with
+        // its own field names. That second projection is why this endpoint used
+        // to report connectedViaTag but not connectedViaMapping, so it could not
+        // answer "will this slot be booked" on its own.
+        const loadedSpools = (printer.spoolData || []).map(toClientSpool);
 
         // fullConsumption = total grams the whole print needs per tray_info_idx
         // (used for the "needed" column). consumption = estimate at the current
