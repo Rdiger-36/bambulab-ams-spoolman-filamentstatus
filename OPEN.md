@@ -35,6 +35,18 @@ theory or in tests. Ordered by how likely a user is to hit it.
 - [ ] **AMS Lite and multi printer setups.** Everything was tested on a single
   P2S with two AMS units. The AMS Lite was never in scope for G-code tracking;
   the README only documents its legacy mode limitation.
+- [ ] **The MQTT connection after the move to `mqtt` v5.** `async-mqtt` was
+  abandoned in 2022 and pinned `mqtt` v4, which dragged in a vulnerable
+  `brace-expansion`. `src/mqtt.js` now uses `mqtt` v5 directly, with
+  `connectAsync` and `subscribeAsync`. Those two functions were confirmed to
+  exist on v5, but no test covers `src/mqtt.js` at all, so the connect,
+  subscribe and reconnect path has only ever been reasoned about. A single run
+  against a real printer settles it: the log should show `MQTT client connected`
+  followed by AMS updates.
+- [ ] **The Docker image on Node 22.** The base image moved from
+  `node:18-alpine`, which was below what `got` requires and is itself end of
+  life. Nothing about the app is version specific, and CI covers Node 22 and 24,
+  but the built image was never started.
 - [ ] **The G-code table in the Web UI.** Its column labels were reworked
   (`On spool / total`, `Needed`, `After print`) without rendering the page, since
   that needs a running Spoolman and a live print. Syntax checked only.

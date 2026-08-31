@@ -1,4 +1,4 @@
-import mqtt from "async-mqtt";
+import mqtt from "mqtt";
 import got from "got";
 import * as net from "node:net";
 import {
@@ -842,7 +842,7 @@ export async function setupMqtt(printer) {
         printer.isReconnecting = false;
 
         console.log(printer.name, printer.logFilePath, `MQTT client connected for Printer: ${printer.id}`);
-        await client.subscribe(`device/${printer.id}/report`);
+        await client.subscribeAsync(`device/${printer.id}/report`);
 
         client.on("message", (topic, message) => {
             handleMqttMessage(printer, topic, message);
