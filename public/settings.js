@@ -355,7 +355,7 @@ function renderPrinters() {
             </td>
         </tr>`).join("");
 
-    container.innerHTML = `<table class="set-table">
+    container.innerHTML = `<table class="data-table">
             <thead><tr><th>Name</th><th>Serial number</th><th>Address</th><th>MQTT</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
         </table>

@@ -1003,32 +1003,30 @@ body.dark-mode .set-switch-track { background-color: #555; }
 .set-advanced[open] > summary::before { transform: rotate(90deg); }
 .set-advanced > summary:hover { opacity: 1; }
 
-/* ---- Printer table ---- */
-/* Scrolls inside the card on a narrow screen instead of widening the page */
-#printer-table {
-  overflow-x: auto;
-}
-
-.set-table {
-  min-width: 520px;
+/* ---- Shared light table ----
+   Used by the printer list, the dashboard dialogs and the "required but not
+   loaded" list. Row separators only, no cell grid, no panel of its own, and
+   identical in both themes. */
+.data-table {
   width: 100%;
   border-collapse: collapse;
   margin: 12px 0 0;
   font-size: 0.9em;
+  background: transparent;
 }
 
-.set-table th,
-.set-table td {
+.data-table th,
+.data-table td {
   border: none;
   border-bottom: 1px solid #8882;
   padding: 7px 10px;
   text-align: left;
   background: transparent;
+  color: inherit;
 }
 
-.set-table th {
-  background: transparent;
-  color: inherit;
+/* Column headers. A th outside a thead is a row label and keeps its size. */
+.data-table thead th {
   font-size: 0.78em;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1036,26 +1034,61 @@ body.dark-mode .set-switch-track { background-color: #555; }
   padding-bottom: 5px;
 }
 
-.set-table tbody tr:last-child td { border-bottom: none; }
-.set-table tbody tr:hover td { background: #8881; }
-.set-table td:first-child { font-weight: 600; }
+.data-table th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.data-table tbody tr:last-child td,
+.data-table tbody tr:last-child th,
+.data-table tr:last-child td,
+.data-table tr:last-child th { border-bottom: none; }
+
+.data-table td:first-child { font-weight: 600; }
 
 /* The global dark table rules set all four borders and a lighter table
    background, which would draw a full grid on a panel of its own. Reset both so
-   dark looks exactly like light: row separators on the card background. */
-body.dark-mode .set-table {
+   dark looks exactly like light. */
+body.dark-mode .data-table {
   background: transparent;
 }
 
-body.dark-mode .set-table th,
-body.dark-mode .set-table td {
+body.dark-mode .data-table th,
+body.dark-mode .data-table td {
   background: transparent;
+  color: inherit;
   border: none;
   /* Same separator as in light mode, on purpose */
   border-bottom: 1px solid #8882;
 }
 
-body.dark-mode .set-table tbody tr:last-child td { border-bottom: none; }
+body.dark-mode .data-table tbody tr:last-child td,
+body.dark-mode .data-table tbody tr:last-child th,
+body.dark-mode .data-table tr:last-child td,
+body.dark-mode .data-table tr:last-child th { border-bottom: none; }
+
+/* The "required but not loaded" list sits inside the print card, so it stays
+   tighter than a table of its own. */
+.gc-required-table {
+  font-size: 0.86em;
+  margin-top: 6px;
+}
+
+.gc-required-table td { padding: 4px 0; }
+.gc-required-table td:first-child { font-weight: normal; }
+.gc-required-amount { text-align: right; white-space: nowrap; }
+
+/* ---- Printer table ---- */
+/* Scrolls inside the card on a narrow screen instead of widening the page */
+#printer-table {
+  overflow-x: auto;
+}
+
+#printer-table .data-table {
+  min-width: 520px;
+}
+
+#printer-table .data-table tbody tr:hover td { background: #8881; }
 
 .set-mono {
   font-family: monospace;
@@ -1074,8 +1107,8 @@ body.dark-mode .set-table tbody tr:last-child td { border-bottom: none; }
   margin-left: 6px;
 }
 
-/* ---- Buttons, scoped to this page so the dashboard keeps its own look ---- */
-body.settings-page .btn {
+/* ---- Buttons ---- */
+.btn {
   padding: 6px 14px;
   border: 1px solid #bbb;
   border-radius: 6px;
@@ -1086,57 +1119,57 @@ body.settings-page .btn {
   transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
 }
 
-body.settings-page .btn:hover:not(:disabled) { background: #eee; }
+.btn:hover:not(:disabled) { background: #eee; }
 
-body.settings-page .btn:disabled {
+.btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-body.settings-page .btn-small {
+.btn-small {
   padding: 3px 10px;
   font-size: 0.82em;
 }
 
-body.settings-page .btn-primary {
+.btn-primary {
   background: #1c6fd6;
   border-color: #1c6fd6;
   color: #fff;
   font-weight: 600;
 }
 
-body.settings-page .btn-primary:hover:not(:disabled) { background: #1559ad; }
+.btn-primary:hover:not(:disabled) { background: #1559ad; }
 
-body.settings-page .btn-danger {
+.btn-danger {
   color: #b3261e;
   border-color: #d9a5a1;
 }
 
-body.settings-page .btn-danger:hover:not(:disabled) { background: #fbe4e4; }
+.btn-danger:hover:not(:disabled) { background: #fbe4e4; }
 
-body.dark-mode.settings-page .btn {
+body.dark-mode .btn {
   background: #2c2c2c;
   border-color: #4a4a4a;
   color: #f1f1f1;
 }
 
-body.dark-mode.settings-page .btn:hover:not(:disabled) { background: #3a3a3a; }
+body.dark-mode .btn:hover:not(:disabled) { background: #3a3a3a; }
 
-body.dark-mode.settings-page .btn-primary {
+body.dark-mode .btn-primary {
   background: #2f6fc4;
   border-color: #2f6fc4;
   color: #fff;
 }
 
-body.dark-mode.settings-page .btn-primary:hover:not(:disabled) { background: #26599e; }
+body.dark-mode .btn-primary:hover:not(:disabled) { background: #26599e; }
 
-body.dark-mode.settings-page .btn-danger {
+body.dark-mode .btn-danger {
   color: #f08a82;
   border-color: #6b3a36;
   background: #2c2c2c;
 }
 
-body.dark-mode.settings-page .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
+body.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
 
 /* ---- Action bar ---- */
 .set-actions {

@@ -312,6 +312,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	function createActionButton(amsSpool) {
 	    const button = document.createElement("button");
 	    button.type = "button";
+	    button.className = "btn btn-small";
 	    button.disabled = true;
 	    setupButton(button, amsSpool);
 
@@ -1094,14 +1095,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    const wrap = document.createElement("div");
 	    let html = `<h4 class="gc-required" style="margin:16px 0 4px">Required but not loaded</h4>`;
-	    html += `<table style="width:100%;border-collapse:collapse;font-size:0.9em">`;
+	    html += `<table class="data-table gc-required-table">`;
 	    for (const e of missing) {
 	        const swatch = e.color
 	            ? `<span class="gc-swatch" style="background:#${normColorJS(e.color)}"></span>`
 	            : "";
 	        const label = e.type ? `${e.type} <code>${e.tray_info_idx}</code>` : `<code>${e.tray_info_idx}</code>`;
-	        html += `<tr><td style="padding:3px 0">${swatch}${label}</td>
-	            <td style="text-align:right">${e.grams}g needed</td></tr>`;
+	        html += `<tr><td>${swatch}${label}</td>
+	            <td class="gc-required-amount">${e.grams}g needed</td></tr>`;
 	    }
 	    html += `</table>`;
 	    wrap.innerHTML = html;
@@ -1133,7 +1134,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (button.textContent === "Create Spool") {
             return `
                 <p>Do you really want to create a Spool with the following stats in Spoolman?</p>
-                <table>
+                <table class="data-table">
                     <tr>
                         <th>AMS Spool:</th>
                         <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
@@ -1149,7 +1150,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             return `
                 <p>Do you really want to merge this Spool with an existing Spool in Spoolman?</p>
-                <table>
+                <table class="data-table">
                     <tr>
                         <th>AMS Spool:</th>
                         <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
@@ -1163,7 +1164,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (button.textContent === "Create Filament & Spool") {
             return `
                 <p>Do you really want to create a Spool and a new Filament with the following stats in Spoolman?</p>
-                <table>
+                <table class="data-table">
                     <tr>
                         <th>AMS Spool:</th>
                         <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>

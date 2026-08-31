@@ -27,6 +27,7 @@ Version 1.3.0-dev
          - Compact settings layout: three cards, toggles instead of checkboxes, restyled buttons and printer table, and a sticky save bar that stays disabled until something is edited
          - Fields an ordinary install never touches are collapsed: Spoolman host, port, subfolder and public URL, plus the reconnect interval, the retry limit and debug logging
          - The Spoolman card shows the URL the service actually talks to, subfolder included
+         - The dashboard shares the same style: buttons, the dialog tables and the "required but not loaded" list use the same light table and button styles, identical in light and dark mode
       - Connection test in the Web UI, for Spoolman and for a printer while adding or editing it
          - The printer test checks MQTT on port 8883 and FTPS on port 990, in parallel, and separates a rejected access code from an unreachable address
          - It waits for a report on device/<serial>/report, because the printer accepts a subscription to any topic: a serial number that does not belong to that address is reported as unconfirmed instead of passing
