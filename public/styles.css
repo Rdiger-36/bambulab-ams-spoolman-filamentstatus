@@ -599,7 +599,8 @@ body.dark-mode #menubar {
 }
 
 .dropdown-button:hover,
-.dropdown:hover .dropdown-button {
+.dropdown:hover .dropdown-button,
+.dropdown.open .dropdown-button {
   background: #eee;
 }
 
@@ -610,7 +611,8 @@ body.dark-mode .dropdown-button {
 }
 
 body.dark-mode .dropdown-button:hover,
-body.dark-mode .dropdown:hover .dropdown-button {
+body.dark-mode .dropdown:hover .dropdown-button,
+body.dark-mode .dropdown.open .dropdown-button {
   background: #3a3a3a;
 }
 
@@ -631,6 +633,17 @@ body.dark-mode .dropdown:hover .dropdown-button {
 .dropdown-content {
   top: calc(100% + 6px);
   left: 0;
+}
+
+/* Bridges the gap between the button and the panel. Without it the pointer
+   leaves the menu on the way down and the panel closes under the cursor. */
+.dropdown-content::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -7px;
+  height: 7px;
 }
 
 body.dark-mode .dropdown-content,
@@ -661,17 +674,20 @@ body.dark-mode .submenu-label {
 
 .dropdown-content a:hover,
 .submenu-content a:hover,
-.submenu:hover > .submenu-label {
+.submenu:hover > .submenu-label,
+.submenu.open > .submenu-label {
   background: #eee;
 }
 
 body.dark-mode .dropdown-content a:hover,
 body.dark-mode .submenu-content a:hover,
-body.dark-mode .submenu:hover > .submenu-label {
+body.dark-mode .submenu:hover > .submenu-label,
+body.dark-mode .submenu.open > .submenu-label {
   background: #3a3a3a;
 }
 
-.dropdown:hover .dropdown-content {
+.dropdown:hover > .dropdown-content,
+.dropdown.open > .dropdown-content {
   display: block;
 }
 
@@ -681,7 +697,7 @@ body.dark-mode .submenu:hover > .submenu-label {
 }
 
 .submenu-label {
-  cursor: default;
+  cursor: pointer;
 }
 
 .submenu-label::after {
@@ -706,7 +722,8 @@ body.dark-mode .submenu:hover > .submenu-label {
   z-index: 1001;
 }
 
-.submenu:hover > .submenu-content {
+.submenu:hover > .submenu-content,
+.submenu.open > .submenu-content {
   display: block;
 }
 

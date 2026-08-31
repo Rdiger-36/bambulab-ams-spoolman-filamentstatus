@@ -51,6 +51,8 @@ function renderMenubar() {
             </div>
         </div>`;
 
+    setupMenuToggles(root);
+
     document.getElementById("menu-server-logs").onclick = event => {
         event.preventDefault();
         window.location.href = "logs.html?name=server";
@@ -62,6 +64,60 @@ function renderMenubar() {
         if (!printer) return;
         window.location.href = `logs.html?serial=${encodeURIComponent(printer.id)}&name=${encodeURIComponent(printer.name)}`;
     };
+}
+
+/**
+ * Makes the menu work by click as well as by hover.
+ *
+ * Hover alone leaves the menu unusable on a touch screen, and it is easy to
+ * lose on the way to a submenu. A click opens and closes an entry, and the menu
+ * closes again on the next click outside it or on Escape.
+ *
+ * @param {HTMLElement} root - the container the menu was rendered into
+ */
+function setupMenuToggles(root) {
+    const dropdown = root.querySelector(".dropdown");
+
+    root.querySelector(".dropdown-button").addEventListener("click", event => {
+        event.stopPropagation();
+        dropdown.classList.toggle("open");
+        if (!dropdown.classList.contains("open")) closeSubmenus(root);
+    });
+
+    for (const label of root.querySelectorAll(".submenu-label")) {
+        label.addEventListener("click", event => {
+            event.stopPropagation();
+            const submenu = label.parentElement;
+            const wasOpen = submenu.classList.contains("open");
+            closeSubmenus(root);
+            submenu.classList.toggle("open", !wasOpen);
+        });
+    }
+
+    // A pick inside the menu closes it, so it does not stay open over the page
+    // that was just navigated to or switched in place.
+    root.addEventListener("click", event => {
+        if (event.target.closest("a")) closeMenu(root);
+    });
+
+    document.addEventListener("click", event => {
+        if (!event.target.closest("#menu-root")) closeMenu(root);
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeMenu(root);
+    });
+}
+
+function closeSubmenus(root) {
+    for (const submenu of root.querySelectorAll(".submenu.open")) {
+        submenu.classList.remove("open");
+    }
+}
+
+function closeMenu(root) {
+    root.querySelector(".dropdown")?.classList.remove("open");
+    closeSubmenus(root);
 }
 
 /** Reloads the printer list and rebuilds the entries that depend on it. */
