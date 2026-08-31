@@ -118,10 +118,25 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
  * A slot holding a spool the printer cannot identify, whether because it has
  * no RFID chip or because reading it failed, comes through with the same
  * sparse payload as an empty slot: tray_uuid "N/A", no tray_type,
- * tray_weight 0. The only field that separates
- * them is `state`, which is 0 for an empty slot and non-zero once something is
- * loaded (11 for a fully read Bambu Lab spool, other values while the printer
- * has filament but no identification for it).
+ * tray_weight 0. The only field that separates them is `state`.
+ *
+ * `state` is not documented by Bambu Lab, so what follows is what this project
+ * has actually seen on a P2S, not a specification:
+ *
+ * - `0` on an empty slot, in every observation so far.
+ * - `3`, `10`, `11`, `20` and `27` while a slot is loaded. Which one appears
+ *   varies, including between two reports about the same unchanged slot.
+ * - `11` was once read as proof of a Bambu Lab tag having been decoded. It is
+ *   not: a chipless spool with an all zero `tray_uuid` reports 11 as well, so
+ *   the value says something is in the slot, not that it was identified. Use
+ *   `tray_uuid` for that.
+ *
+ * Everything non zero is therefore treated as occupied, which is a heuristic in
+ * both directions: a value nobody has seen yet still reads as occupied, and
+ * firmware reporting a transient non zero state on an empty slot would show a
+ * phantom spool until it settles. It is the safer way round, because the
+ * opposite, an allow list of known values, would make a spool disappear from
+ * the UI the first time a firmware update invents a new one.
  *
  * Firmware that does not report `state` at all falls back to "not occupied", so
  * such slots keep being treated as empty rather than sprouting phantom spools.
