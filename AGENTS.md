@@ -1,0 +1,159 @@
+# bambulab-ams-spoolman-filamentstatus
+
+Node service that keeps a Bambu Lab AMS in sync with a [Spoolman](https://github.com/Donkie/Spoolman)
+instance. It listens to the printer's MQTT report topic, mirrors the loaded
+spools into Spoolman (create, merge, weight update), tracks filament
+consumption per print, and serves a small web UI for the parts that need a
+human decision.
+
+Runs as a single container. No database: all persistent state is Spoolman plus
+two JSON files under `printers/`.
+
+## Intent Layer
+
+**Before modifying code in a subdirectory, read its AGENTS.md first** to
+understand local patterns and invariants.
+
+- **Backend modules**: [`src/AGENTS.md`](src/AGENTS.md), covering MQTT ingest,
+  AMS matching logic, the Spoolman client, G-code consumption and HTTP/SSE routes
+
+`public/` (frontend) and `test/` have no node of their own; the rules that
+matter for them are below.
+
+## Layout
+
+| Path | Role |
+|---|---|
+| `entrypoint.js` | Container entrypoint. Global error handlers, signal handling, then dynamic-imports `backend.js`. Never put application logic here. |
+| `backend.js` | Express app, static hosting, startup sequence: Spoolman health, vendor and extra-field bootstrap, printer log files, monitor loops. |
+| `src/` | All backend logic. See its AGENTS.md. |
+| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. |
+| `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
+| `printers/` | Runtime data, gitignored. `printers.json` is user-maintained (read-only for the service), `mappings.json` is written by the service. |
+| `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
+| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), standalone `mqtt.js` probe. |
+| `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
+
+## Global invariants
+
+- **Console is overridden.** `src/logger.js` replaces `console.log/error/debug`
+  with the signature `(device, logFilePath, ...args)`. Every call site must pass
+  those two leading arguments; a plain `console.log("text")` writes garbage to a
+  file named `"text"`. Import `src/logger.js` before anything that logs;
+  `backend.js` does this first, on purpose. For output that must bypass the
+  override, use the exported `originalConsoleLog` / `originalConsoleError`.
+- **ESM only.** `"type": "module"`; use `import`, not `require`.
+- **Never write `printers/printers.json`.** It is the user's config. Service
+  state belongs in `printers/mappings.json`, which is written atomically
+  (temp file plus rename).
+- **Never commit `printers/`, `logs/`, or `.env`.** They hold the printer access
+  code and LAN addresses and are gitignored. Keep it that way.
+- **Two tracking modes, mutually exclusive.** Default tracks consumption from
+  the sliced G-code; `LEGACY_MODE=true` derives weight from the AMS RFID remain
+  percentage. New behaviour must pick a side, because running both double-books.
+- **The version lives in two places:** `package.json` and `src/config.js`. The
+  publish workflow compares the git tag against `package.json` and aborts on a
+  mismatch, so bump both together.
+- **Configuration is environment variables only**, read once in `src/config.js`.
+  No other module may read `process.env`.
+
+## Coding rules
+
+### Language
+
+- All identifiers (functions, variables, classes, constants) are named in
+  English.
+- All code comments, doc comments, commit messages and PR descriptions are
+  written in English.
+
+### Doc comments
+
+- Every function gets a JSDoc block (`/** ... */`) describing what it does.
+- Go into depth where it matters: complex logic, non-obvious behaviour, hardware
+  quirks. Keep it to one line for self-explanatory members. Do not over-comment.
+  Document parameters and return values only where they add something the
+  signature does not already say.
+- Inline comments (`//`) only when the WHY is non-obvious: a hidden constraint,
+  a workaround, a subtle invariant. Never restate what the code does.
+
+### Punctuation
+
+Never use a dash as punctuation, neither the em dash (`—`) nor a standalone
+hyphen (`-`). This covers UI strings, doc comments, inline comments, log
+messages, commit messages and PR titles and descriptions. Rephrase, or use a
+comma, colon or full stop.
+
+Not punctuation, and therefore allowed:
+
+- Hyphens inside compound words (`3rd-party`, `tag-linked`, `Co-Authored-By`).
+- The em dash as a visible "no value" placeholder in a table cell
+  (`public/frontend.js`).
+- The hyphen as a structural marker: JSDoc `@param name - description`
+  separators, bullet lists in block comments, and the ` - ` field separator in
+  the log line format in `src/logger.js`.
+
+### Git
+
+- Always create a new branch before making changes when the current branch is
+  `main`.
+- Name the branch after everything it ends up holding, not just its first
+  commit. Rename it when the scope grows.
+- Never open a pull request on your own. Commit, push, report the branch, and
+  wait. A PR may only be created once the user has given an explicit go-ahead
+  for that specific PR. A general permission is not a standing one; ask again
+  for the next.
+
+### Scope
+
+- GUI and design changes, and larger changes that touch many references, must be
+  discussed and approved before they are applied.
+
+### Structure
+
+- **No raw console output in committed code.** Everything goes through the
+  overridden `console.log/error/debug`. `originalConsoleLog` and
+  `originalConsoleError` belong to `src/logger.js` and to the few places that
+  must not recurse into the logger; `process.stdout.write` belongs to
+  `entrypoint.js` only. No leftover debug logging.
+- **Shared mutable state goes through `src/state.js`**, per-printer state onto
+  the printer object created in `src/printers.js`. Never introduce a new
+  module-level mutable global, and never keep state in a route handler or in a
+  frontend DOM node.
+- **External systems are reached only through their owning module**: Spoolman
+  through `src/spoolman.js`, the mapping file through `src/mappings.js`, printer
+  config through `src/printers.js`. Never call a Spoolman URL or read
+  `printers/` from anywhere else.
+- **When changing the shape of the UI spool object**, update all of its builders
+  in `src/mqtt.js` (`buildEmptySpool`, `buildThirdPartySpool` and the Bambu Lab
+  branch of `processSlot`), the key list in `hasSpoolUiChanged` in `src/ams.js`,
+  and the frontend that reads it. A field missing from that key list is invisible
+  to change detection and silently never reaches the UI.
+- **When changing the shape of `mappings.json`**, keep the read side tolerant of
+  the old shape. Existing installs have the file on disk and there is no
+  migration step.
+
+## Working on this repo
+
+- Tests: `npm test` (`node --test "test/*.test.js"`). No test framework beyond
+  the Node built-in, no mocking library; tests call pure functions directly.
+  Anything touching MQTT, FTPS or Spoolman HTTP is not unit-tested, so keep new
+  logic extractable into a pure function.
+- There is no linter, formatter or type checker configured. Match the
+  surrounding style: 4-space indent in `src/`, double quotes, semicolons.
+- Comments in this codebase explain why, usually pointing at the bug the line
+  prevents. Preserve them when editing nearby; they are the record of hardware
+  quirks that are otherwise invisible.
+- `OPEN.md` (untracked) carries the current known gaps and unverified paths.
+  Read it before assuming something is finished.
+
+## Anti-patterns
+
+- Adding a frontend build step or framework to `public/`. It is deliberately
+  dependency-free and served straight from disk.
+- Adding a direct dependency without putting it in `package.json`. The Docker
+  image installs from `package.json` and `package-lock.json` only, so relying on
+  a transitive package works locally and breaks in the container.
+- Blocking the MQTT message handler with long work. It is guarded by
+  `printer.blockMqttUpdates`, so anything slow silently drops incoming reports.
+- Booking consumption onto a spool that was matched only by material and colour.
+  A booking requires an RFID tag link or an explicit user assignment.
