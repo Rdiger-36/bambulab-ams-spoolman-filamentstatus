@@ -110,6 +110,35 @@ Tag behaviour, after the hardening in `c053561`:
 Publishing from a branch is rejected outright, so the "Run workflow" button can
 no longer overwrite `:latest` with whatever is on `main`.
 
+## Deadline: armv7 and Node 22
+
+Node 22 entered maintenance on 2025-10-21 and reaches end of life on
+**2027-04-30**. It is also the last Node that exists on 32 bit ARM at all, so
+those two facts are the same deadline for this project.
+
+Checked on 2026-08-31, against the Node release schedule, the download index,
+the Docker library manifests, the unofficial builds index and Alpine's own
+package:
+
+| | armv7 |
+|---|---|
+| Node 22 (EOL 2027-04-30) | yes, official binaries and `node:22-alpine` |
+| Node 23 (EOL) | yes, but not an LTS |
+| Node 24, 25, 26 | **none**, upstream stopped building armv7l |
+| unofficial-builds.nodejs.org | armv6 only for 22, nothing for 24 and later |
+| Alpine's own `nodejs` package, armhf | 22.23.2, so no way forward either |
+
+So there is no supported path to Node 24 or later on 32 bit ARM. When Node 22
+goes end of life the choice is:
+
+- [ ] Decide before 2027-04-30: drop `linux/arm/v7` from the publish matrix and
+  leave 32 bit users on the last image built for them, or keep shipping on an
+  end of life Node with no security fixes. There is no third option, so this is
+  a decision rather than a task.
+
+A 64 bit OS sidesteps it entirely. A Raspberry Pi 3B and newer are all 64 bit
+capable, and `linux/arm64` stays supported.
+
 ## Code quality
 
 - [ ] **`/api/print` omits `connectedViaMapping`.** Its `loadedSpools`
