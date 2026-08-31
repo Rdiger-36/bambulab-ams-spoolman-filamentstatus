@@ -1,27 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const toggleButton = document.getElementById("dark-mode-toggle");
-  const body = document.body;
-  const darkModeIcon = document.getElementById("dark-mode-icon");
   const logContainer = document.getElementById("logs");
   const logBox = document.getElementById("log-box");
   let logAPI;
   let userScrolling = false; // Variable to detect manual scrolling
 
-  const lightModeIcon = "https://img.icons8.com/ios-glyphs/30/moon-symbol.png";
-  const darkModeIconUrl = "https://img.icons8.com/color/48/sun--v1.png";
-
-  // Dark Mode Toggle
-  const darkModeEnabled = localStorage.getItem("dark-mode") === "true";
-  if (darkModeEnabled) {
-    body.classList.add("dark-mode");
-    darkModeIcon.src = darkModeIconUrl;
-  }
-
-  toggleButton.addEventListener("click", () => {
-    const isDarkMode = body.classList.toggle("dark-mode");
-    darkModeIcon.src = isDarkMode ? darkModeIconUrl : lightModeIcon;
-    localStorage.setItem("dark-mode", isDarkMode);
-  });
+  // Menu bar, including the dark mode button
+  initMenubar();
 
   // Query parameters
   function getQueryParam(param) {

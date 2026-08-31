@@ -380,8 +380,10 @@ Extra Field "tag" successfully created!
 
 ## Settings
 
-The **Settings** entry in the menu bar opens a page that holds everything the
-environment variables cover, plus the printer list.
+The **Settings** entry in the menu opens a page that holds everything the
+environment variables cover, plus the printer list. The same menu is on every
+page and carries the dashboard, the printer list and the log views; picking a
+printer from another page opens it on the dashboard.
 
 - **Printers**: add, edit and remove printers. A new printer connects right
   away, a removed one is disconnected and its spool assignments are dropped.
@@ -423,7 +425,7 @@ if you are runing this container in manual mode the filament and spool creation 
 ![Bildschirmfoto 2025-01-04 um 01 33 10](https://github.com/user-attachments/assets/85d9ab66-5afa-45a1-822e-e226c089bc78)
 
 
-Menubar for seletion Printers, Logs or change Dark-/Lightmode:
+Menubar with one menu holding the dashboard, the printers, the settings and the logs, and the dark and light mode button on the right:
 ![image](https://github.com/user-attachments/assets/c93c95bf-551b-459e-ae8b-b027b37b067d)
 
 Logs can be accessed over the Backend Logs Menubutton (it only display the logs of the selected Printer from the Main Menu):

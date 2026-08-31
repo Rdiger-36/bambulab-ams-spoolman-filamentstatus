@@ -27,7 +27,7 @@ matter for them are below.
 | `entrypoint.js` | Container entrypoint. Global error handlers, signal handling, then dynamic-imports `backend.js`. Never put application logic here. |
 | `backend.js` | Express app, static hosting, startup sequence: Spoolman health, vendor and extra-field bootstrap, printer log files, monitor loops. |
 | `src/` | All backend logic. See its AGENTS.md. |
-| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. |
+| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `menu.js` renders the menu bar and owns the dark mode button for every page, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. |
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
 | `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |

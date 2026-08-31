@@ -19,22 +19,8 @@ let printers = [];
 let formDirty = false;
 
 document.addEventListener("DOMContentLoaded", () => {
-    const body = document.body;
-    const toggleButton = document.getElementById("dark-mode-toggle");
-    const darkModeIcon = document.getElementById("dark-mode-icon");
-    const lightModeIcon = "https://img.icons8.com/ios-glyphs/30/moon-symbol.png";
-    const darkModeIconUrl = "https://img.icons8.com/color/48/sun--v1.png";
-
-    if (localStorage.getItem("dark-mode") === "true") {
-        body.classList.add("dark-mode");
-        darkModeIcon.src = darkModeIconUrl;
-    }
-
-    toggleButton.addEventListener("click", () => {
-        const isDarkMode = body.classList.toggle("dark-mode");
-        darkModeIcon.src = isDarkMode ? darkModeIconUrl : lightModeIcon;
-        localStorage.setItem("dark-mode", isDarkMode);
-    });
+    // Menu bar, including the dark mode button
+    initMenubar();
 
     document.getElementById("settings-form").addEventListener("submit", saveSettings);
     document.getElementById("reload-settings").addEventListener("click", () => loadSettings(true));
@@ -48,7 +34,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const eventSource = new EventSource("./api/events");
     eventSource.onmessage = event => {
         const data = JSON.parse(event.data);
-        if (data.type === "printers_update") loadPrinters();
+        if (data.type === "printers_update") {
+            loadPrinters();
+            // A renamed or removed printer changes the menu as well
+            refreshMenubarPrinters();
+        }
         if (data.type === "settings_update" && !formDirty) loadSettings();
     };
 });

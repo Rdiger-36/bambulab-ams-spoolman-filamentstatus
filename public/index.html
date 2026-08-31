@@ -8,23 +8,8 @@
 </head>
 <body class="show-footer">
   <div id="menubar">
-    <!-- Printer Dropdown -->
-    <div class="dropdown">
-      <button class="dropdown-button">Printers</button>
-      <div class="dropdown-content" id="printer-menu">
-        <!-- dynamic entries will be filled automatically -->
-      </div>
-    </div>
-    <div class="dropdown">
-      <button class="dropdown-button">Backend Logs</button>
-      <div class="dropdown-content" id="printer-menu">
-         <a id="log-button" onclick="redirectToLogs('printer')">Printer Logs</a>
-         <a id="log-button" onclick="redirectToLogs('server')">Server Logs</a>
-      </div>
-    </div>
-    <div class="dropdown">
-      <button class="dropdown-button" onclick="window.location.href='settings.html'">Settings</button>
-    </div>
+    <!-- Menu with the printer, settings and log entries, filled by menu.js -->
+    <div id="menu-root"></div>
     <!-- Dark Mode Button -->
     <button id="dark-mode-toggle">
         <img id="dark-mode-icon" src="https://img.icons8.com/ios-glyphs/30/moon-symbol.png" alt="Toggle Dark Mode">
@@ -81,6 +66,7 @@
       </div>
   </footer>
 
+  <script src="menu.js"></script>
   <script src="frontend.js"></script>
 
   <dialog id="info-dialog">

@@ -21,6 +21,9 @@ Version 1.3.0-dev
          - Printers can be added, edited and removed in the UI. A new printer connects right away, a removed one is disconnected and its spool assignments are dropped
          - The access code is stored on the server and never sent back to the browser; an edit without a code keeps the stored one
          - printers.json is written by the service now (atomically, temp file plus rename) and no longer has to exist before the first start
+      - Reworked menu bar: one menu with the dashboard, a printer submenu, the settings and a log submenu, identical on every page, with the dark and light mode button on the right
+         - Picking a printer from the log or settings page opens it on the dashboard
+         - The dashboard points at the settings page while no printer is configured
       - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
 
    - Bugfixes:

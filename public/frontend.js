@@ -31,42 +31,17 @@ function correctRemainIntJS(remainOn1kgBasis, trayWeight, trayType) {
 // Initialize the document once it has fully loaded
 document.addEventListener("DOMContentLoaded", () => {
     
-    const toggleButton = document.getElementById("dark-mode-toggle");
-    const body = document.body;
-    let darkModeEnabled = localStorage.getItem("dark-mode") === "true";
-    const lightModeIcon = "https://img.icons8.com/ios-glyphs/30/moon-symbol.png";
-    let darkModeIcon = document.getElementById("dark-mode-icon");
-    const darkModeIconUrl = "https://img.icons8.com/color/48/sun--v1.png";
-    
-    // Apply dark mode if it was previously enabled
-    if (darkModeEnabled) {
-        darkModeEnabled = body.classList.toggle("dark-mode");
-        darkModeIcon.src = darkModeEnabled ? darkModeIconUrl : lightModeIcon;
-        localStorage.setItem("dark-mode", darkModeEnabled);
-    }
-    
-    // Dynamically add transition after page load
-    // Add the transition class after a short delay to prevent the initial animation
-    setTimeout(() => {
-        body.classList.add("transition-enabled");
-    }, 100);
-    
-    // Handle dark mode toggle button clicks
-    if (toggleButton) {
-        toggleButton.addEventListener("click", () => {
-            darkModeEnabled = body.classList.toggle("dark-mode");
-            darkModeIcon.src = darkModeEnabled ? darkModeIconUrl : lightModeIcon;
-            localStorage.setItem("dark-mode", darkModeEnabled);
-        });
-    } else {
-        console.error('Button with ID "dark-mode-toggle" not found!');
-    }
-	
 	document.getElementById("monitoring-toggle").addEventListener("change", toggleMonitoring);
-    
-    // Fetch initial data and set up periodic updates
-    // Fetch and display printers dynamically
-    fetchPrinters();
+
+    // The menu bar owns the printer list and the dark mode button. Picking a
+    // printer switches the dashboard in place instead of navigating.
+    initMenubar({
+        onPrinters: showPrinters,
+        onPrinterSelect: printer => {
+            loadPrinterData(printer.id);
+            return true;
+        },
+    });
 
     // Set up Server-Sent Events (SSE) connection for real-time updates
     const eventSource = new EventSource('./api/events'); // Backend URL for events
@@ -97,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		    // Keep the G-code dashboard (print state / progress) live
 		    if (!legacyMode) scheduleGcodeRefresh();
 	    } else if (data.type === 'refresh' && data.printer === printerId) {
-		  fetchPrinters();
+		  refreshMenubarPrinters();
 		} else if (data.type === "monitoring_update") {
 			const current = document.getElementById("printer-serial").textContent;
 
@@ -106,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			}
 	  } else if (data.type === "printers_update") {
 			// A printer was added, renamed or removed on the settings page
-			fetchPrinters();
+			refreshMenubarPrinters();
 	  } else if (data.type === "settings_update") {
 			// The status card shows the operation mode and the tracking mode,
 			// so it has to be refetched when they change
@@ -126,49 +101,25 @@ document.addEventListener("DOMContentLoaded", () => {
         return dialog && dialog.open;
     }
     
-    // Fetch printers from the backend
-    async function fetchPrinters() {
-        try {
-            const response = await fetch("./api/printers");
-            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-
-            const printers = await response.json();
-            const printerMenu = document.getElementById("printer-menu");
-            printerMenu.innerHTML = ""; // Clear existing menu items
-
-            printers.forEach(printer => {
-              const menuItem = document.createElement("a"); // create menu entry
-              menuItem.textContent = printer.name;
-              menuItem.href = "#"; // set url for loading logs
-              menuItem.onclick = (event) => {
-                event.preventDefault();
-                loadPrinterData(printer.id);
-                sessionStorage.setItem("lastSelectedPrinterId", printer.id);
-              };
-              printerMenu.appendChild(menuItem);
-            });
-
-            // Automatically load the first printer
-            if (printers.length > 0) {
-                 // Undo the empty state below, in case a printer was just added
-                 document.getElementById("status").style.display = "";
-                 const lastSelectedPrinterId = sessionStorage.getItem("lastSelectedPrinterId");
-                 if (lastSelectedPrinterId) {
-                     loadPrinterData(lastSelectedPrinterId); // loading last printer
-                 } else {
-                     loadPrinterData(printers[0].id); // load first printer if theres no last used
-                 }
-             } else {
-                 // A fresh install has no printers yet. Point at the page that
-                 // can add one instead of showing an empty dashboard.
-                 document.getElementById("status").style.display = "none";
-                 document.getElementById("spool-list").innerHTML =
-                     '<p style="text-align:center">No printers configured yet. Add one on the <a href="settings.html">settings page</a>.</p>';
-             }
-        } catch (error) {
-            console.error("Error fetching printers:", error);
-            alert("Failed to load printers. Please check the backend.");
+    // Opens a printer whenever the menu bar has loaded or reloaded the list
+    function showPrinters(printers) {
+        if (!printers.length) {
+            // A fresh install has no printers yet. Point at the page that can
+            // add one instead of showing an empty dashboard.
+            document.getElementById("status").style.display = "none";
+            document.getElementById("spool-list").innerHTML =
+                '<p style="text-align:center">No printers configured yet. Add one on the <a href="settings.html">settings page</a>.</p>';
+            currentPrinterId = null;
+            return;
         }
+
+        // Undo the empty state above, in case a printer was just added
+        document.getElementById("status").style.display = "";
+
+        // The remembered printer may have been removed on the settings page
+        const lastSelectedPrinterId = sessionStorage.getItem("lastSelectedPrinterId");
+        const known = printers.some(printer => printer.id === lastSelectedPrinterId);
+        loadPrinterData(known ? lastSelectedPrinterId : printers[0].id);
     }
 
     // Fetch and display data for a specific printer
@@ -877,7 +828,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	                try { synchronizeSelectedColumns([0,1,2,3]); } catch (e) {}
 	            }
 	        } else {
-	            if (typeof fetchPrinters === 'function') fetchPrinters();
+	            if (currentPrinterId) loadPrinterData(currentPrinterId);
 	        }
 	    }
 	}
@@ -1431,19 +1382,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
     }
 });
-
-// redirect to log page on button click
-function redirectToLogs(type) {
-    if (type === "server") {
-        window.location.href = `logs.html?name=server`;
-    } else {
-        const printerSerial = document.getElementById('printer-serial').textContent.trim();
-        const encodedSerial = encodeURIComponent(printerSerial);
-        const printerName = document.getElementById('printer-name').textContent.trim();
-        const encodedName = encodeURIComponent(printerName);
-        window.location.href = `logs.html?serial=${encodedSerial}&name=${encodedName}`;
-    }
-}
 
 let currentPrinterId = null;
 
