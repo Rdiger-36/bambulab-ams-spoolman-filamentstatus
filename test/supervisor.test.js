@@ -44,8 +44,9 @@ function runSupervisor(env, { signalAfterMs } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ams-sup-"));
     fs.copySync(path.join(root, "entrypoint.js"), path.join(dir, "entrypoint.js"));
     fs.copySync(path.join(here, "fixtures", "exiting-service.js"), path.join(dir, "starting.js"));
-    fs.ensureDirSync(path.join(dir, "src"));
-    fs.copySync(path.join(root, "src", "supervisor.js"), path.join(dir, "src", "supervisor.js"));
+    // The whole src directory, so this does not break every time entrypoint.js
+    // imports one more module from it.
+    fs.copySync(path.join(root, "src"), path.join(dir, "src"));
 
     return new Promise(resolve => {
         const child = fork(path.join(dir, "entrypoint.js"), [], {

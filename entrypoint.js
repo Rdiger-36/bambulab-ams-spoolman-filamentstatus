@@ -19,9 +19,11 @@
 
 import path from "path";
 import { fileURLToPath } from "url";
+
 import { fork } from "child_process";
 
 import { RESTART_EXIT_CODE, shouldRestart } from "./src/supervisor.js";
+import { formatDateLog } from "./src/utils.js";
 
 // How long the service may take to shut down before it is killed. Below the ten
 // seconds Docker waits after SIGTERM, so the kill still happens in here.
@@ -31,14 +33,12 @@ const SHUTDOWN_TIMEOUT_MS = 8000;
 // Logging Utilities
 // ---------------------------------------------------------
 function logInfo(message) {
-  const timestamp = new Date().toISOString();
-  process.stdout.write(`[Entrypoint] [${timestamp}] ${message}\n`);
+  process.stdout.write(`[Entrypoint] [${formatDateLog(new Date())}] ${message}\n`);
 }
 
 function logError(label, err) {
-  const timestamp = new Date().toISOString();
   const details = err?.stack || err?.message || String(err);
-  process.stderr.write(`[Entrypoint] [${timestamp}] [${label}] ${details}\n`);
+  process.stderr.write(`[Entrypoint] [${formatDateLog(new Date())}] [${label}] ${details}\n`);
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

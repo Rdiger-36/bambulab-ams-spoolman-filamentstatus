@@ -16,18 +16,18 @@
 import path from "path";
 import { fileURLToPath } from "url";
 
+import { formatDateLog } from "./src/utils.js";
+
 // ---------------------------------------------------------
 // Logging Utilities
 // ---------------------------------------------------------
 function logInfo(message) {
-  const timestamp = new Date().toISOString();
-  process.stdout.write(`[Service] [${timestamp}] ${message}\n`);
+  process.stdout.write(`[Service] [${formatDateLog(new Date())}] ${message}\n`);
 }
 
 function logError(label, err) {
-  const timestamp = new Date().toISOString();
   const details = err?.stack || err?.message || String(err);
-  process.stderr.write(`[Service] [${timestamp}] [${label}] ${details}\n`);
+  process.stderr.write(`[Service] [${formatDateLog(new Date())}] [${label}] ${details}\n`);
 }
 
 // ---------------------------------------------------------
