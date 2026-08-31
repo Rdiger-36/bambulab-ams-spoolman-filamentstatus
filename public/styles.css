@@ -339,9 +339,11 @@ body.show-footer #spool-list {
     padding: 6px 14px;
   }
 
-  /* Dark mode card borders */
+  /* Dark mode card borders. The border is reset for the same reason as on the
+     desktop table: the generic dark rules would draw one around every cell. */
   body.dark-mode .spool-table tr { border-color: #444; background: #2a2a2a; }
-  body.dark-mode .spool-table td { border-bottom-color: #3a3a3a; }
+  body.dark-mode .spool-table td { border: none; border-bottom: 1px solid #3a3a3a; }
+  body.dark-mode .spool-table td:last-child { border-bottom: none; }
   body.dark-mode .spool-table td::before { color: #999; }
 }
 
@@ -403,10 +405,18 @@ body.dark-mode .spool-table {
   border-color: #3a3a3a;
   box-shadow: none;
 }
+/* The generic dark table rules set all four borders on every cell, which drew
+   a full grid over the card. Reset them so dark shows the same row separators
+   as light. */
 body.dark-mode .spool-table th,
 body.dark-mode .spool-table td {
-  border-bottom-color: #333;
+  border: none;
+  border-bottom: 1px solid #333;
   background: transparent;
+}
+
+body.dark-mode .spool-table tbody tr:last-child td {
+  border-bottom: none;
 }
 body.dark-mode .spool-table thead th {
   background: #2a2a2a;
