@@ -255,13 +255,7 @@ async function createExtraField() {
  * @param {object} spoolData - the UI spool, carrying slot and matched filament
  */
 export async function createSpool(spoolData) {
-    const postData = {
-        filament_id: Number(spoolData.matchingInternalFilament.id),
-        initial_weight: Number(spoolData.slot.tray_weight),
-        used_weight: usedWeightFromSlot(spoolData.slot),
-        first_used: Date.now(),
-        extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
-    };
+    const postData = buildSpoolPayload(spoolData, spoolData.matchingInternalFilament.id);
 
     console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
     console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
@@ -275,6 +269,28 @@ export async function createSpool(spoolData) {
         console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
         console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
     }
+}
+
+/**
+ * Builds the Spoolman spool payload for an AMS slot.
+ *
+ * Both creation paths send the same spool, they only differ in where the
+ * filament id comes from: an existing Spoolman filament, or one created moments
+ * earlier. The tag is the slot's tray_uuid, JSON encoded, because that is what
+ * later identifies this spool as the one in the slot.
+ *
+ * @param {object} spoolData - the UI spool, carrying the slot
+ * @param {number|string} filamentId - the Spoolman filament to attach it to
+ * @returns {object} the payload for POST /api/v1/spool
+ */
+export function buildSpoolPayload(spoolData, filamentId) {
+    return {
+        filament_id: Number(filamentId),
+        initial_weight: Number(spoolData.slot.tray_weight),
+        used_weight: usedWeightFromSlot(spoolData.slot),
+        first_used: Date.now(),
+        extra: { tag: `"${spoolData.slot.tray_uuid}"` },
+    };
 }
 
 /**
@@ -345,13 +361,7 @@ export async function createFilamentAndSpool(spoolData) {
 
     if (filamentId) {
         try {
-            const spoolPayload = {
-                filament_id: filamentId,
-                initial_weight: Number(spoolData.slot.tray_weight),
-                used_weight: usedWeightFromSlot(spoolData.slot),
-                first_used: Date.now(),
-                extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
-            };
+            const spoolPayload = buildSpoolPayload(spoolData, filamentId);
 
             console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
             console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
