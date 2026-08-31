@@ -179,7 +179,7 @@ diff to know what is in it.
 - **One menu bar** across all pages, `public/menu.js`, keyboard operable, and a
   shared visual language: `.data-table`, the button classes and the form fields
   are the same everywhere.
-- **Tests**: 95, including an HTTP harness (`test/helpers/app.js`) that registers
+- **Tests**: 105, including an HTTP harness (`test/helpers/app.js`) that registers
   the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
   temporary directory.
 
@@ -226,27 +226,6 @@ supervisor could do it, and that is deliberately not built.
 **Encrypting the access code at rest was rejected.** Without a key store the key
 ships in the same image, so it is obfuscation rather than protection. The README
 note that the code sits in plain text in `printers.json` is the honest version.
-
-## Code quality
-
-- [ ] **`slotFingerprint()`** in `src/mappings.js` keys on `tray_type|colour`.
-  Where the printer reports a per-filament `tray_info_idx` (the issue #47 case)
-  that would be the sharper key and would notice a spool swap between two same
-  material, same colour spools. Such a swap currently goes undetected and the old
-  assignment survives.
-- [ ] **Two logger tests do not catch what they describe.**
-  `test/logger.test.js` has four tests; with the read moved back outside the
-  write queue only two of them fail. The other two pass once the queue is given
-  time to drain, so they document the intent rather than guarding the defect.
-- [ ] **Spool payload construction is duplicated** between `createSpool()` and
-  `createFilamentAndSpool()` in `src/spoolman.js`. Only the filament payload was
-  extracted, into `buildFilamentPayload()`.
-- [ ] **Tray `state` values are observed, not documented.** 0 empty, and 3, 10,
-  11, 20 and 27 all seen while loaded. 11 was once assumed to mean a read Bambu
-  tag, but a chipless spool reports it too, so the value only says something is
-  in the slot. `slotIsOccupied()` treats anything non zero as occupied, which is
-  a heuristic: firmware reporting a transient non zero state on an empty slot
-  would show a phantom spool until it settles.
 
 ## Documentation
 
