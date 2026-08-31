@@ -1090,6 +1090,79 @@ body.dark-mode .set-field select:focus {
 .set-switch input:checked + .set-switch-track::before { transform: translateX(18px); }
 body.dark-mode .set-switch-track { background-color: #555; }
 
+/* ---- A switch that belongs to the whole card, in its header ---- */
+.set-head-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88em;
+  font-weight: 600;
+}
+
+.set-head-field label:not(.set-switch) {
+  cursor: pointer;
+}
+
+/* Carries the description the field grid would have shown underneath */
+.set-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  opacity: 0.55;
+  cursor: help;
+  position: relative;
+}
+
+.set-info:hover,
+.set-info:focus-visible {
+  opacity: 1;
+}
+
+/* Opens towards the page, the icon sits at the right edge of the card */
+.set-info::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -6px;
+  z-index: 1200;
+  width: max-content;
+  max-width: 280px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #2c2c2c;
+  color: #f1f1f1;
+  font: inherit;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 400;
+  font-family: Arial, sans-serif;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s;
+}
+
+.set-info:hover::after,
+.set-info:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+body.dark-mode .set-info::after {
+  background: #3a3a3a;
+}
+
 /* ---- Collapsed part of a group ---- */
 .set-advanced {
   margin-top: 12px;

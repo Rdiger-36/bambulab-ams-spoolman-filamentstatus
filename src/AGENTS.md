@@ -124,7 +124,9 @@ its type, default and range (clamps live there, not at the use site), read it as
 `config.js` when it should be seedable, and document it in the README table. The
 settings page picks it up on its own; `group` decides which card it lands in,
 and the card has to be listed in `GROUPS` in `public/settings.js`. `advanced`
-puts a field into that card's collapsed section. Mark it `restartRequired`
+puts a field into that card's collapsed section, `header` puts a switch into the
+card header with its description behind an info icon, for a field that belongs
+to the whole card rather than to a row of its own. Mark it `restartRequired`
 when the running process cannot adopt it, and handle the live application in the
 `PUT /api/settings` handler when it needs more than the new value being read.
 

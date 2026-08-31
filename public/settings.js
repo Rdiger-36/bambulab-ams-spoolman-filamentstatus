@@ -235,13 +235,17 @@ function renderSettings() {
         const groupFields = fields.filter(field => field.group === group.key);
         if (!groupFields.length) continue;
 
-        const main = groupFields.filter(field => !field.advanced);
-        const advanced = groupFields.filter(field => field.advanced);
+        const header = groupFields.filter(field => field.header);
+        const main = groupFields.filter(field => !field.advanced && !field.header);
+        const advanced = groupFields.filter(field => field.advanced && !field.header);
 
         const card = document.createElement("div");
         card.className = "set-card";
         card.innerHTML = `
-            <div class="set-card-head"><h2>${escapeHtml(group.title)}</h2></div>
+            <div class="set-card-head">
+                <h2>${escapeHtml(group.title)}</h2>
+                ${header.map(renderHeaderField).join("")}
+            </div>
             <div class="set-form">${main.map(renderField).join("")}</div>
             ${group.key === "spoolman" ? renderEffectiveUrl() : ""}
             ${advanced.length ? `
@@ -350,6 +354,32 @@ function renderEffectiveUrl() {
     return spoolmanUrl
         ? `<p class="set-note">Currently talking to <code>${escapeHtml(spoolmanUrl)}</code></p>`
         : `<p class="set-note set-note-warn">No endpoint configured, nothing is synchronised.</p>`;
+}
+
+/**
+ * A field that belongs to the whole card rather than to a row of its own.
+ *
+ * Only the label, the switch and an info icon carrying the description, so the
+ * card header stays a header. Everything else about it works as usual, the id
+ * is the same one the form is read back from.
+ */
+function renderHeaderField(field) {
+    const id = `set-${field.key}`;
+    const reset = isDefault(field)
+        ? ""
+        : `<button type="button" class="set-reset" data-reset="${field.key}">default</button>`;
+
+    return `<div class="set-head-field">
+                <label for="${id}">${escapeHtml(field.label)}</label>
+                <span class="set-info" tabindex="0" role="note"
+                      aria-label="${escapeHtml(field.description)}"
+                      data-tip="${escapeHtml(field.description)}">i</span>
+                ${reset}
+                <label class="set-switch" for="${id}">
+                    <input type="checkbox" id="${id}" ${values[field.key] ? "checked" : ""}>
+                    <span class="set-switch-track"></span>
+                </label>
+            </div>`;
 }
 
 /** Builds the input for one field, chosen by the type the schema reports. */

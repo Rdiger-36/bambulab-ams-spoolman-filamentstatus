@@ -127,6 +127,9 @@ export const SETTINGS_SCHEMA = {
         type: "boolean",
         default: false,
         group: "logging",
+        // Sits in the card header rather than the field grid: it is a switch for
+        // the whole card, and it leaves the three rotation settings a clean row.
+        header: true,
         label: "Debug logging",
         description: "Writes verbose debug lines into the log files.",
     },
@@ -479,6 +482,8 @@ export function getSettingsView() {
             restartRequired: !!field.restartRequired,
             // Rendered inside the collapsed part of its group
             advanced: !!field.advanced,
+            // Rendered in the card header instead of the field grid
+            header: !!field.header,
         })),
         spoolmanUrl: spoolmanUrl(),
         // Set while a stored value waits for the next start, so the page can
