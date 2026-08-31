@@ -22,10 +22,46 @@ let mappings = null;
 
 /**
  * Describes a slot's filament as precisely as the AMS allows for a chipless
- * spool: material type plus normalised color.
+ * spool: the filament profile the printer reports for the slot, its material
+ * type and the normalised colour.
+ *
+ * `tray_info_idx` is what makes this sharper than material and colour alone.
+ * Where the printer reports a per-filament profile, two spools that are
+ * identical in material and colour can still differ here, so swapping one for
+ * the other invalidates the assignment instead of booking onto the wrong spool.
+ * It is added to the material rather than replacing it: a P2S reports the
+ * generic `GFL99` for every 3rd party spool, so on its own it would not even
+ * tell PLA from PETG.
  */
 export function slotFingerprint(slot) {
+    return `${slot?.tray_info_idx || "?"}|${slot?.tray_type || "?"}|${normColor(slot?.tray_color)}`;
+}
+
+/**
+ * The fingerprint format written before the filament profile was part of it.
+ * Existing installs have these on disk and there is no migration step, so a
+ * stored one is still compared in its own format and rewritten on the next
+ * lookup that matches.
+ */
+function legacyFingerprint(slot) {
     return `${slot?.tray_type || "?"}|${normColor(slot?.tray_color)}`;
+}
+
+/**
+ * Whether a stored fingerprint still describes what is in the slot.
+ *
+ * @param {string|null} stored - the fingerprint saved with the assignment
+ * @param {object} slot - the AMS slot as it reads now
+ * @returns {{matches: boolean, legacy: boolean}} whether it matches, and
+ *   whether it did so only in the old two part format
+ */
+function fingerprintMatches(stored, slot) {
+    if (stored === slotFingerprint(slot)) return { matches: true, legacy: false };
+    // Two parts means it was written before the profile was included
+    if (stored.split("|").length === 2 && stored === legacyFingerprint(slot)) {
+        return { matches: true, legacy: true };
+    }
+    return { matches: false, legacy: false };
 }
 
 /**
@@ -85,10 +121,20 @@ export function getMapping(printerId, amsId, slot = null) {
     const entry = load()[printerId]?.[amsId];
     if (!entry) return null;
 
-    if (slot && entry.fingerprint && entry.fingerprint !== slotFingerprint(slot)) {
-        console.log("Server", serverLogFilePath, `[Mapping] ${printerId}/${amsId}: filament changed (${entry.fingerprint} -> ${slotFingerprint(slot)}), dropping assignment to spool ${entry.spoolId}`);
-        clearMapping(printerId, amsId);
-        return null;
+    if (slot && entry.fingerprint) {
+        const { matches, legacy } = fingerprintMatches(entry.fingerprint, slot);
+        if (!matches) {
+            console.log("Server", serverLogFilePath, `[Mapping] ${printerId}/${amsId}: filament changed (${entry.fingerprint} -> ${slotFingerprint(slot)}), dropping assignment to spool ${entry.spoolId}`);
+            clearMapping(printerId, amsId);
+            return null;
+        }
+
+        // Upgrade the stored format in place, so this comparison only has to
+        // fall back to the old one once per assignment
+        if (legacy) {
+            entry.fingerprint = slotFingerprint(slot);
+            persist();
+        }
     }
 
     return entry;
