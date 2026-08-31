@@ -522,17 +522,36 @@ body.dark-mode #logs {
   color: #ccc;
 }
 
+/* ---- Menu bar ----
+   Same card language as the panels below it: light surface, soft border,
+   rounded corners. The menu button and the entries follow the shared button
+   style so the whole header matches the rest of the UI. */
 #menubar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #ddd;
-  padding: 10px 20px;
-  transition: background-color 0.3s, color 0.3s;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 8px 12px;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+
+/* The settings page holds its content in a narrower column, so the bar lines
+   up with it instead of running wider than everything below it. */
+body.settings-page #menubar {
+  max-width: 1180px;
+  margin: 0 auto;
+  /* so the max width counts the padding and the bar lines up with the cards */
+  box-sizing: border-box;
 }
 
 body.dark-mode #menubar {
-  background-color: #333;
+  background: #1f1f1f;
+  border-color: #3a3a3a;
+  box-shadow: none;
   color: #f1f1f1;
 }
 
@@ -540,11 +559,19 @@ body.dark-mode #menubar {
   background: none;
   border: none;
   cursor: pointer;
+  border-radius: 8px;
+  padding: 5px;
+  line-height: 0;
+  transition: background-color 0.2s;
+}
+
+#dark-mode-toggle:hover {
+  background: #8881;
 }
 
 #dark-mode-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   transition: transform 0.3s ease;
 }
 
@@ -553,57 +580,95 @@ body.dark-mode #menubar {
 }
 
 .dropdown-button {
-  background-color: #f4f4f4;
+  background: #fff;
   color: #333;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px 12px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.88em;
   cursor: pointer;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.dropdown-button::after {
+  content: "\203A";
+  display: inline-block;
+  transform: rotate(90deg);
+  margin-left: 8px;
+  opacity: 0.6;
+}
+
+.dropdown-button:hover,
+.dropdown:hover .dropdown-button {
+  background: #eee;
 }
 
 body.dark-mode .dropdown-button {
-  background-color: #444;
+  background: #2c2c2c;
   color: #f1f1f1;
-  border: 1px solid #555;
+  border-color: #4a4a4a;
+}
+
+body.dark-mode .dropdown-button:hover,
+body.dark-mode .dropdown:hover .dropdown-button {
+  background: #3a3a3a;
+}
+
+/* ---- Menu panels ---- */
+.dropdown-content,
+.submenu-content {
+  display: none;
+  position: absolute;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  min-width: 170px;
+  z-index: 1000;
 }
 
 .dropdown-content {
-  display: none;
-  position: absolute;
-  top: 100%;
+  top: calc(100% + 6px);
   left: 0;
-  background-color: #f4f4f4;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  min-width: 150px;
-  z-index: 1000;
-  transition: background-color 0.3s, color 0.3s;
 }
 
-body.dark-mode .dropdown-content {
-  background-color: #444;
-  border: 1px solid #555;
+body.dark-mode .dropdown-content,
+body.dark-mode .submenu-content {
+  background: #262626;
+  border-color: #3a3a3a;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
-.dropdown-content a {
+.dropdown-content a,
+.submenu-content a,
+.submenu-label,
+.submenu-empty {
   display: block;
-  padding: 8px 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
   color: #333;
+  font-size: 0.88em;
   text-decoration: none;
-  transition: background-color 0.3s, color 0.3s;
+  white-space: nowrap;
 }
 
-body.dark-mode .dropdown-content a {
+body.dark-mode .dropdown-content a,
+body.dark-mode .submenu-content a,
+body.dark-mode .submenu-label {
   color: #f1f1f1;
 }
 
-.dropdown-content a:hover {
-  background-color: #ddd;
+.dropdown-content a:hover,
+.submenu-content a:hover,
+.submenu:hover > .submenu-label {
+  background: #eee;
 }
 
-body.dark-mode .dropdown-content a:hover {
-  background-color: #555;
+body.dark-mode .dropdown-content a:hover,
+body.dark-mode .submenu-content a:hover,
+body.dark-mode .submenu:hover > .submenu-label {
+  background: #3a3a3a;
 }
 
 .dropdown:hover .dropdown-content {
@@ -616,12 +681,7 @@ body.dark-mode .dropdown-content a:hover {
 }
 
 .submenu-label {
-  display: block;
-  padding: 8px 12px;
-  color: #333;
   cursor: default;
-  white-space: nowrap;
-  transition: background-color 0.3s, color 0.3s;
 }
 
 .submenu-label::after {
@@ -631,64 +691,19 @@ body.dark-mode .dropdown-content a:hover {
   opacity: 0.6;
 }
 
-body.dark-mode .submenu-label {
-  color: #f1f1f1;
+.submenu-empty {
+  opacity: 0.6;
+  cursor: default;
 }
 
-.submenu:hover > .submenu-label {
-  background-color: #ddd;
-}
-
-body.dark-mode .submenu:hover > .submenu-label {
-  background-color: #555;
-}
-
-/* Opens next to its parent entry. The 1px overlap keeps the pointer inside the
-   menu while moving across the border, which would close it otherwise. */
+/* Opens next to its parent entry. The overlap keeps the pointer inside the
+   menu while moving across the gap, which would close it otherwise. */
 .submenu-content {
-  display: none;
-  position: absolute;
-  top: -1px;
-  left: calc(100% - 1px);
-  background-color: #f4f4f4;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  min-width: 160px;
+  top: -5px;
+  left: calc(100% - 4px);
   max-height: 60vh;
   overflow-y: auto;
   z-index: 1001;
-}
-
-body.dark-mode .submenu-content {
-  background-color: #444;
-  border: 1px solid #555;
-}
-
-.submenu-content a {
-  display: block;
-  padding: 8px 12px;
-  color: #333;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-body.dark-mode .submenu-content a {
-  color: #f1f1f1;
-}
-
-.submenu-content a:hover {
-  background-color: #ddd;
-}
-
-body.dark-mode .submenu-content a:hover {
-  background-color: #555;
-}
-
-.submenu-empty {
-  display: block;
-  padding: 8px 12px;
-  opacity: 0.6;
-  white-space: nowrap;
 }
 
 .submenu:hover > .submenu-content {
@@ -753,20 +768,25 @@ input:checked + .slider:before {
 
 
 .log-button {
-  background-color: #f4f4f4;
+  background: #fff;
   color: #333;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px 12px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.88em;
   cursor: pointer;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
+.log-button:hover { background: #eee; }
+
 body.dark-mode .log-button {
-  background-color: #444;
+  background: #2c2c2c;
   color: #f1f1f1;
-  border: 1px solid #555;
+  border-color: #4a4a4a;
 }
+
+body.dark-mode .log-button:hover { background: #3a3a3a; }
 
 .footer {
   position: fixed;

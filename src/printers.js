@@ -69,6 +69,11 @@ export function validatePrinterEntry(entry, existing = [], ignoreId = null) {
     return null;
 }
 
+/** A printer entry without its access code, for log output. */
+function redactPrinter({ code, ...rest }) {
+    return rest;
+}
+
 /** Normalises an entry to the shape stored in printers.json. */
 export function normalizePrinterEntry(entry) {
     return {
@@ -107,7 +112,9 @@ export function loadPrintersConfig() {
         });
 
         entries = parsed.map(normalizePrinterEntry);
-        console.debug("Server", serverLogFilePath, "Printers loaded successfully:", entries);
+        // Never log the access code. The log files are downloadable from the Web
+        // UI and end up attached to bug reports.
+        console.debug("Server", serverLogFilePath, "Printers loaded successfully:", entries.map(redactPrinter));
     } catch (error) {
         if (error.code !== "ENOENT") {
             console.error("Server", serverLogFilePath, "Error loading printers configuration:", error.message);
