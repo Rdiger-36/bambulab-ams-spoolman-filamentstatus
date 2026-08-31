@@ -1007,7 +1007,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        table.className = "spool-table";
 	        table.innerHTML = `<thead><tr>
 	            <th style="text-align:left">Spool</th>
-	            <th style="text-align:right">On spool</th>
+	            <th style="text-align:right">On spool / total</th>
 	            <th style="text-align:right">Needed</th>
 	            <th style="text-align:right">After print</th>
 	            <th>Action</th>
@@ -1094,7 +1094,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    tr.innerHTML = `
 	        <td data-label="Spool" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
-	        <td data-label="On spool" style="text-align:right">${onSpoolCell}</td>
+	        <td data-label="On spool / total" style="text-align:right">${onSpoolCell}</td>
 	        <td data-label="Needed" style="text-align:right">${neededCell}</td>
 	        <td data-label="After print" style="text-align:right">${afterPrintCell}</td>
 	    `;
