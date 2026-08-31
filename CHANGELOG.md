@@ -14,9 +14,48 @@ Version 1.3.0-dev
          - The assignment is dropped automatically as soon as a different filament is detected in that slot
          - Stored in printers/mappings.json
       - New ENV LEGACY_MODE: keeps the previous behaviour of writing the AMS RFID remain percentage to Spoolman (default: "false")
+      - Settings page in the Web UI: everything that used to be an environment variable can now be changed in the browser, plus the printer list
+         - Stored in printers/settings.json, applied to the running service without a restart (Spoolman endpoint, operation mode, intervals, retries, location and merge behaviour, debug logging)
+         - The service can be restarted from the settings page, which is what legacy mode needs. entrypoint.js became a small supervisor: it runs the service (the new starting.js) as a child process and starts it again when it ends with the restart exit code, so the button works whether or not the container has a restart policy
+            - Every other exit code is passed on, so a crash still means a crash and the Docker restart policy stays in charge of it. Three restarts within a minute stop the supervisor rather than looping
+            - SIGTERM and SIGINT are forwarded to the service and waited for, so "docker stop" ends in a clean shutdown instead of a SIGKILL after the grace period
+            - New ENV SUPERVISOR=false runs everything in one process again, for machines where the second Node process is too much. The restart button then depends on the container policy and the page says so
+            - The page waits for the service to come back and reloads itself, and says what to look at when it does not. While a print is running it asks first
+         - Log files are rotated instead of growing forever: past the configured size the current file is renamed to <name>.log.1, the previous one to .2 and so on, and the oldest is dropped. Checked on every start and while the service runs
+            - New ENVs LOG_MAX_SIZE_MB (default 1), LOG_KEEP_SERVER and LOG_KEEP_PRINTER (default 2 each), all editable on the settings page. Keeping 0 files starts the current one over instead
+            - Nothing truncated the per printer files before, they were created once and appended to forever
+            - The log page reads across the rotated files: when the current one holds fewer lines than asked for, the rest is taken from <name>.log.1 and further, so the view no longer goes almost blank right after a rotation
+            - The download hands out the whole history as one zip as soon as a log has rotated, oldest file first and numbered; a log without a history is still handed out as a plain .log. The button says which of the two it is
+         - One projection for everything a client sees of an AMS slot: /api/spools, /api/print and the live slot updates now hand out the same shape, built in one place. /api/print reported whether a slot is tag-linked but not whether it was manually assigned, so it could not answer on its own whether consumption will be booked; that projection is gone
+            - The payload carries what the Web UI displays instead of the raw firmware report and whole Spoolman records, and change detection compares that payload, so a newly displayed field can no longer be left out of a hand-written list and silently never reach the UI
+         - A manual assignment now also survives, or fails, on the filament profile the printer reports for the slot: the fingerprint is tray_info_idx, material and colour instead of material and colour alone, so swapping two spools that differ only in profile drops the assignment instead of booking the next print onto the wrong spool. Assignments written before this keep working and are rewritten on the next lookup
+         - server.log is appended to instead of being replaced on every start, so a restart no longer takes the lines with it that explain why it happened.
+         - Legacy mode is the one field that still needs a restart: the value is saved right away, but the running service keeps the mode it started with, because the two tracking modes book consumption differently and a switch under a running print would book it twice or not at all. The page keeps saying so until the service is restarted, with a "Restart now" next to the notice; without the supervisor it names the manual step instead
+         - Environment variables now only seed a setting that has never been saved. After the first save the file owns the value, so a change made in the UI is not reverted by the container definition on the next start
+         - Printers can be added, edited and removed in the UI. A new printer connects right away, a removed one is disconnected and its spool assignments are dropped
+         - The access code is stored on the server and never sent back to the browser; an edit without a code keeps the stored one
+         - printers.json is written by the service now (atomically, temp file plus rename) and no longer has to exist before the first start
+      - Reworked menu bar: one menu with the dashboard, a printer submenu, the settings and a log submenu, identical on every page, with the dark and light mode button on the right
+         - Picking a printer from the log or settings page opens it on the dashboard
+         - The menu opens on hover and on click, closes on a click outside or Escape, and stays reachable on a touch screen and by keyboard: the submenu entries are buttons, ArrowDown opens the menu, Escape closes it and hands the focus back
+         - Dialogs open with the focus on a sensible control, the harmless one wherever the other writes or deletes
+         - The dashboard points at the settings page while no printer is configured
+         - Compact settings layout: three cards, toggles instead of checkboxes, restyled buttons and printer table, and a sticky save bar that stays disabled until something is edited
+         - Fields an ordinary install never touches are collapsed: Spoolman host, port, subfolder and public URL, plus the reconnect interval, the retry limit and debug logging
+         - The Spoolman card shows the URL the service actually talks to, subfolder included
+         - Removing a printer, or changing its address or access code, asks first while a print is running. The consumption of a running job is booked when it ends, so dropping the connection before that would lose it. A rename is unaffected, and legacy mode does not ask because it writes the weight on every AMS update
+         - settings.json carries a schema version and a write counter. Two open tabs can no longer overwrite each other silently, the second save is refused with a note. The flat file written by the first version is still read
+         - The dashboard shares the same style: buttons, the dialog tables and the "required but not loaded" list use the same light table and button styles, identical in light and dark mode
+      - New ENVs DATA_DIR and LOG_DIR to relocate the persistent files and the logs. They default to the paths the container already mounts, so nothing changes for an existing setup
+      - Connection test in the Web UI, for Spoolman and for a printer while adding or editing it
+         - The printer test checks MQTT on port 8883 and FTPS on port 990, in parallel, and separates a rejected access code from an unreachable address
+         - It waits for a report on device/<serial>/report, because the printer accepts a subscription to any topic: a serial number that does not belong to that address is reported as unconfirmed instead of passing
+         - Both tests use the values currently in the form, so an address can be verified before it is saved. An empty access code tests the stored one
       - Reworked Web UI: print-centric dashboard showing print state, layer progress and per-spool "on spool / needed / rest", plus a "required but not loaded" list
 
    - Bugfixes:
+      - Fix: with more than one printer, every FTPS connection after the first one went to the printer that connected first
+         - basic-ftp writes the host into the secureOptions object it is handed, and for implicit TLS that stored host wins over the host passed to access(). The options were a shared module constant, so the sliced file of printer B was fetched from printer A, or failed with printer A's error
       - Fix: LEGACY_MODE did not switch off the G-code tracking
          - The sliced file was downloaded on every print and consumption was booked via PUT /spool/{id}/use, on top of the remain-percentage PATCH that legacy mode is supposed to be
          - The booking was then overwritten again by the next AMS update, so it mostly wasted requests, but it could stick if the spool was removed right after the print

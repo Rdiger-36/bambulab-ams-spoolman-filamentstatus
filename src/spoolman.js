@@ -1,5 +1,6 @@
 import got from "got";
-import { SPOOLMAN_URL, serverLogFilePath } from "./config.js";
+import { serverLogFilePath } from "./config.js";
+import { spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { correctRemainInt } from "./ams.js";
 
@@ -28,7 +29,7 @@ function usedWeightFromSlot(slot) {
  */
 export async function getSpoolmanSpools() {
     try {
-        const response = await got(`${SPOOLMAN_URL}/api/v1/spool`);
+        const response = await got(`${spoolmanUrl()}/api/v1/spool`);
         state.spoolmanStatus = "Connected";
         return JSON.parse(response.body);
     } catch (error) {
@@ -41,7 +42,7 @@ export async function getSpoolmanSpools() {
 /** Fetches the filaments created in this Spoolman instance, empty on failure. */
 export async function getSpoolmanInternalFilaments() {
     try {
-        const response = await got(`${SPOOLMAN_URL}/api/v1/filament`);
+        const response = await got(`${spoolmanUrl()}/api/v1/filament`);
         return JSON.parse(response.body);
     } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error);
@@ -53,7 +54,7 @@ export async function getSpoolmanInternalFilaments() {
 /** Fetches the SpoolmanDB filament catalogue, empty on failure. */
 export async function getSpoolmanExternalFilaments() {
     try {
-        const response = await got(`${SPOOLMAN_URL}/api/v1/external/filament`);
+        const response = await got(`${spoolmanUrl()}/api/v1/external/filament`);
         return JSON.parse(response.body);
     } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching external filaments from Spoolman:", error);
@@ -79,7 +80,7 @@ export async function getSpoolmanExternalFilaments() {
  */
 async function getJson(path, what) {
     try {
-        const response = await got(`${SPOOLMAN_URL}${path}`);
+        const response = await got(`${spoolmanUrl()}${path}`);
         return JSON.parse(response.body);
     } catch (error) {
         console.error("Server", serverLogFilePath, `Error fetching ${what} from Spoolman:`, error.message);
@@ -105,7 +106,7 @@ export const getSpoolmanExternalMaterials = () => getJson("/api/v1/external/mate
 
 /** Creates a vendor by name and returns the created record. */
 export async function createNamedVendor(name) {
-    const response = await got.post(`${SPOOLMAN_URL}/api/v1/vendor`, {
+    const response = await got.post(`${spoolmanUrl()}/api/v1/vendor`, {
         json: { name },
         responseType: "json",
     });
@@ -114,7 +115,7 @@ export async function createNamedVendor(name) {
 
 /** Creates a filament from an already built payload and returns the record. */
 export async function createFilament(payload) {
-    const response = await got.post(`${SPOOLMAN_URL}/api/v1/filament`, {
+    const response = await got.post(`${spoolmanUrl()}/api/v1/filament`, {
         json: payload,
         responseType: "json",
     });
@@ -123,7 +124,7 @@ export async function createFilament(payload) {
 
 /** Creates a spool from an already built payload and returns the record. */
 export async function createSpoolRecord(payload) {
-    const response = await got.post(`${SPOOLMAN_URL}/api/v1/spool`, {
+    const response = await got.post(`${spoolmanUrl()}/api/v1/spool`, {
         json: payload,
         responseType: "json",
     });
@@ -141,7 +142,7 @@ export async function createSpoolRecord(payload) {
 export async function checkAndSetVendor() {
     console.log("Server", serverLogFilePath, "Checking Vendors...");
     try {
-        const response = await got(`${SPOOLMAN_URL}/api/v1/vendor`);
+        const response = await got(`${spoolmanUrl()}/api/v1/vendor`);
         const vendors = JSON.parse(response.body);
 
         for (const vendor of vendors) {
@@ -175,7 +176,7 @@ async function createVendor() {
             empty_spool_weight: 250,
         };
 
-        const manufacturerResponse = await got.post(`${SPOOLMAN_URL}/api/v1/vendor`, {
+        const manufacturerResponse = await got.post(`${spoolmanUrl()}/api/v1/vendor`, {
             json: manufacturerPayload,
             responseType: "json",
         });
@@ -207,7 +208,7 @@ async function createVendor() {
 export async function checkAndSetExtraField() {
     console.log("Server", serverLogFilePath, 'Checking Extra Field "tag"...');
     try {
-        const response = await got(`${SPOOLMAN_URL}/api/v1/field/spool`);
+        const response = await got(`${spoolmanUrl()}/api/v1/field/spool`);
         const fields = JSON.parse(response.body);
         const extraFieldExists = fields.some(f => f.name === "tag");
 
@@ -229,7 +230,7 @@ async function createExtraField() {
     console.log("Server", serverLogFilePath, 'Create Extra Field "tag" for Spools in Spoolman');
     try {
         const payload = { name: "tag", field_type: "text" };
-        await got.post(`${SPOOLMAN_URL}/api/v1/field/spool/tag`, {
+        await got.post(`${spoolmanUrl()}/api/v1/field/spool/tag`, {
             json: payload,
             responseType: "json",
         });
@@ -254,19 +255,13 @@ async function createExtraField() {
  * @param {object} spoolData - the UI spool, carrying slot and matched filament
  */
 export async function createSpool(spoolData) {
-    const postData = {
-        filament_id: Number(spoolData.matchingInternalFilament.id),
-        initial_weight: Number(spoolData.slot.tray_weight),
-        used_weight: usedWeightFromSlot(spoolData.slot),
-        first_used: Date.now(),
-        extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
-    };
+    const postData = buildSpoolPayload(spoolData, spoolData.matchingInternalFilament.id);
 
-    console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${SPOOLMAN_URL}/api/v1/spool`);
+    console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
     console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
 
     try {
-        await got.post(`${SPOOLMAN_URL}/api/v1/spool`, { json: postData });
+        await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
     } catch (error) {
         console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
@@ -274,6 +269,28 @@ export async function createSpool(spoolData) {
         console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
         console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
     }
+}
+
+/**
+ * Builds the Spoolman spool payload for an AMS slot.
+ *
+ * Both creation paths send the same spool, they only differ in where the
+ * filament id comes from: an existing Spoolman filament, or one created moments
+ * earlier. The tag is the slot's tray_uuid, JSON encoded, because that is what
+ * later identifies this spool as the one in the slot.
+ *
+ * @param {object} spoolData - the UI spool, carrying the slot
+ * @param {number|string} filamentId - the Spoolman filament to attach it to
+ * @returns {object} the payload for POST /api/v1/spool
+ */
+export function buildSpoolPayload(spoolData, filamentId) {
+    return {
+        filament_id: Number(filamentId),
+        initial_weight: Number(spoolData.slot.tray_weight),
+        used_weight: usedWeightFromSlot(spoolData.slot),
+        first_used: Date.now(),
+        extra: { tag: `"${spoolData.slot.tray_uuid}"` },
+    };
 }
 
 /**
@@ -327,10 +344,10 @@ export async function createFilamentAndSpool(spoolData) {
     try {
         const filamentPayload = buildFilamentPayload(spoolData);
 
-        console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${SPOOLMAN_URL}/api/v1/filament`);
+        console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/filament`);
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(filamentPayload));
 
-        const filamentResponse = await got.post(`${SPOOLMAN_URL}/api/v1/filament`, {
+        const filamentResponse = await got.post(`${spoolmanUrl()}/api/v1/filament`, {
             json: filamentPayload,
             responseType: "json",
         });
@@ -344,18 +361,12 @@ export async function createFilamentAndSpool(spoolData) {
 
     if (filamentId) {
         try {
-            const spoolPayload = {
-                filament_id: filamentId,
-                initial_weight: Number(spoolData.slot.tray_weight),
-                used_weight: usedWeightFromSlot(spoolData.slot),
-                first_used: Date.now(),
-                extra: { tag: `\"${spoolData.slot.tray_uuid}\"` },
-            };
+            const spoolPayload = buildSpoolPayload(spoolData, filamentId);
 
-            console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${SPOOLMAN_URL}/api/v1/spool`);
+            console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
             console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
 
-            await got.post(`${SPOOLMAN_URL}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
+            await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
             console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
         } catch (error) {
             console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
@@ -375,11 +386,11 @@ export async function createFilamentAndSpool(spoolData) {
 export async function mergeSpool(spoolData) {
     const postData = { extra: { tag: `\"${spoolData.slot.tray_uuid}\"` } };
 
-    console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending PATCH request to:", `${SPOOLMAN_URL}/api/v1/spool/${spoolData.mergeableSpool.id}`);
+    console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`);
     console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
 
     try {
-        await got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolData.mergeableSpool.id}`, { json: postData });
+        await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully merged with Spool-ID ${spoolData.mergeableSpool.id} => ${spoolData.mergeableSpool.filament.name}`);
     } catch (error) {
         console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
@@ -396,17 +407,17 @@ export async function mergeSpool(spoolData) {
  * @param {number} spoolId - Spoolman spool id
  * @param {number} remainingWeight - grams left on the spool
  * @param {string} lastUsed - ISO timestamp
- * @param {string|null} location - AMS slot label, only sent when SET_LOCATION is on
+ * @param {string|null} location - AMS slot label, only sent when the location setting is on
  */
 export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed, location = null) {
     const payload = { remaining_weight: remainingWeight, last_used: lastUsed };
     if (location !== null) payload.location = location;
-    return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: payload });
+    return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: payload });
 }
 
 /** Sets a spool's location, or clears it when passed an empty string. */
 export async function patchSpoolLocation(spoolId, location) {
-    return got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { location } });
+    return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: { location } });
 }
 
 /**
@@ -419,7 +430,7 @@ export async function patchSpoolLocation(spoolId, location) {
  * @param {string} lastUsed - ISO timestamp, patched separately
  */
 export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
-    const result = await got.put(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}/use`, {
+    const result = await got.put(`${spoolmanUrl()}/api/v1/spool/${spoolId}/use`, {
         json: { use_weight: usedGrams },
     });
 
@@ -428,10 +439,38 @@ export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
     // separately. Failing to stamp it must not lose the booking, which already
     // succeeded above.
     try {
-        await got.patch(`${SPOOLMAN_URL}/api/v1/spool/${spoolId}`, { json: { last_used: lastUsed } });
+        await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: { last_used: lastUsed } });
     } catch (error) {
         console.error("Server", serverLogFilePath, `Booked consumption for spool ${spoolId}, but could not set last_used:`, error.message);
     }
 
     return result;
+}
+
+/**
+ * Single health check against a Spoolman URL, used by the connection test on
+ * the settings page. Takes the URL explicitly so an endpoint can be tried
+ * before it is saved.
+ *
+ * @param {string} url - base URL to check
+ * @param {number} [timeout] - milliseconds before the request is given up
+ * @returns {Promise<{ok: boolean, status?: string, error?: string}>}
+ */
+export async function checkSpoolmanHealth(url, timeout = 5000) {
+    if (!url) return { ok: false, error: "No endpoint configured" };
+
+    try {
+        const response = await got(`${url}/api/v1/health`, { timeout: { request: timeout }, retry: { limit: 0 } });
+        const health = JSON.parse(response.body);
+
+        if (health.status === "healthy") return { ok: true, status: health.status };
+        return { ok: false, error: `Spoolman reports status "${health.status}"` };
+    } catch (err) {
+        const message = err?.message || String(err);
+        if (/ECONNREFUSED/.test(message)) return { ok: false, error: "The connection was refused" };
+        if (/ETIMEDOUT|timeout/i.test(message)) return { ok: false, error: "No answer within the timeout" };
+        if (/ENOTFOUND|EAI_AGAIN/.test(message)) return { ok: false, error: "The host name cannot be resolved" };
+        if (/404/.test(message)) return { ok: false, error: "Reachable, but there is no Spoolman API at this address" };
+        return { ok: false, error: message };
+    }
 }

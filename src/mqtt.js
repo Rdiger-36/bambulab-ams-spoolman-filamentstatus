@@ -1,17 +1,8 @@
 import mqtt from "mqtt";
 import got from "got";
 import * as net from "node:net";
-import {
-    SPOOLMAN_URL,
-    serverLogFilePath,
-    MODE,
-    MAX_RETRIES,
-    OFFLINE_CHECK_INTERVAL,
-    RECONNECT_INTERVAL,
-    UPDATE_INTERVAL,
-    SET_LOCATION,
-    LEGACY_MODE,
-} from "./config.js";
+import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
+import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
 import { sleep, formatDate, formatInterval, convertAMSandSlot } from "./utils.js";
@@ -41,17 +32,13 @@ import {
     shouldSendSlotUpdate,
     hasSpoolUiChanged,
 } from "./ams.js";
-
-/** Strips server-only fields from a UI spool before it goes out to a client. */
-function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
-    return rest;
-}
+import { toClientSpool } from "./uispool.js";
 
 /**
  * Sends an event to every connected SSE client. A payload that cannot be
  * serialised is dropped with a log line rather than taking the handler down.
  */
-function broadcastSSE(data) {
+export function broadcastSSE(data) {
     let payload;
     try {
         payload = `data: ${JSON.stringify(data)}\n\n`;
@@ -64,13 +51,13 @@ function broadcastSSE(data) {
 
 /** Pushes one slot's new state to the dashboard. */
 export function broadcastSlotUpdate(printerId, spool) {
-    broadcastSSE({ type: "slot_update", printer: printerId, spool: sanitizeSpoolForClient(spool) });
+    broadcastSSE({ type: "slot_update", printer: printerId, spool: toClientSpool(spool) });
 }
 
 // Print states that signal the end of a print job
 const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
 // Print states that indicate an active or paused job
-const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
+export const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
 
 /**
  * Tracks gcode_state transitions and triggers filament consumption tracking.
@@ -299,7 +286,7 @@ async function handleMqttMessage(printer, topic, message) {
             // the G-code tracking must stay out of it entirely. Running both
             // would download the sliced file on every print and book consumption
             // that the next AMS update then overwrites again.
-            if (!LEGACY_MODE && data?.print?.gcode_state) {
+            if (!legacyMode() && data?.print?.gcode_state) {
                 await handlePrintStateChange(printer, data.print);
             }
 
@@ -339,7 +326,7 @@ async function handleMqttMessage(printer, topic, message) {
                         // In G-code mode the AMS remain % is irrelevant (weight is
                         // tracked from the slice), so don't let it trigger reprocessing
                         // and log output. Only react to real identity/weight changes.
-                        const stripRemain = (d) => LEGACY_MODE ? d
+                        const stripRemain = (d) => legacyMode() ? d
                             : d.map(a => ({ ...a, tray: a.tray.map(({ remain, ...t }) => t) }));
                         const trayDataChanged =
                             JSON.stringify(stripRemain(newTrayData)) !== JSON.stringify(stripRemain(lastTrayData));
@@ -426,10 +413,10 @@ async function handleMqttMessage(printer, topic, message) {
 /**
  * Clears the Spoolman location of the spool that used to sit in this slot when
  * a different one is there now, so a removed spool does not keep claiming an
- * AMS slot as its location. No-op unless SET_LOCATION is on.
+ * AMS slot as its location. No-op unless the location setting is on.
  */
 async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevByAmsId) {
-    if (!SET_LOCATION) return;
+    if (!settings.SET_LOCATION) return;
     const prevSpoolId = prevByAmsId[amsId]?.existingSpool?.id ?? null;
     if (prevSpoolId && prevSpoolId !== currentSpoolId) {
         try {
@@ -503,7 +490,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         // Legacy mode has no use for one: it takes the weight from the RFID
         // percentage, which a chipless spool does not report, so the slot stays
         // read-only exactly as it was before assignments existed.
-        const mappedSpool = LEGACY_MODE ? null : resolveMappedSpool(printer, amsId, slot, spools);
+        const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
         if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
@@ -524,7 +511,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     let enableButton = "false";
     let error = false;
     let mutated = false;
-    const automatic = MODE === "automatic";
+    const automatic = settings.MODE === "automatic";
 
     matchingExternalFilament = findMatchingExternalFilament(slot, externalFilaments);
     matchingInternalFilament = findMatchingInternalFilament(matchingExternalFilament, internalFilaments);
@@ -558,7 +545,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
                 existingSpool = spool;
 
-                if (LEGACY_MODE) {
+                if (legacyMode()) {
                     // Legacy: derive remaining weight from the AMS RFID remain %
                     if (!slotChanged) {
                         console.debug(printer.name, printer.logFilePath, " No change for connected spool; skipping PATCH");
@@ -566,9 +553,9 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                     }
 
                     const remainingWeight = Math.round((currRemain / 100) * slot.tray_weight);
-                    const newLocation = SET_LOCATION ? `${printer.name} - ${amsId}` : null;
+                    const newLocation = settings.SET_LOCATION ? `${printer.name} - ${amsId}` : null;
 
-                    console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${SPOOLMAN_URL}/api/v1/spool/${spool.id}`);
+                    console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spool.id}`);
                     console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime, ...(newLocation && { location: newLocation }) }));
 
                     try {
@@ -590,7 +577,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                     if (meaningfulChange) {
                         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} [[ ${slot.tray_uuid} ]] => Spool-ID ${spool.id} (G-code mode)`);
 
-                        if (SET_LOCATION) {
+                        if (settings.SET_LOCATION) {
                             try {
                                 await patchSpoolLocation(spool.id, `${printer.name} - ${amsId}`);
                             } catch (err) {
@@ -690,12 +677,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // booking which spool to charge, and legacy books nothing: it writes the
     // weight straight onto the tag-connected spool. Offering it there would be
     // a button that changes nothing.
-    const mappedSpool = LEGACY_MODE ? null : resolveMappedSpool(printer, amsId, slot, spools);
+    const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
     if (mappedSpool) {
         existingSpool = mappedSpool;
         option = "Unassign Spool";
         enableButton = "true";
-    } else if (!LEGACY_MODE && !found && option === "No actions available") {
+    } else if (!legacyMode() && !found && option === "No actions available") {
         // Nothing to create or merge, and no tag link, so offer a manual assignment
         option = "Assign Spool";
         enableButton = "true";
@@ -772,8 +759,8 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // Legacy mode offers nothing here. Its weight comes from the RFID
         // percentage, which this spool does not report, so there is no action
         // that would do anything.
-        option: LEGACY_MODE ? "No actions available" : (mappedSpool ? "Unassign Spool" : "Assign Spool"),
-        enableButton: LEGACY_MODE ? "false" : "true",
+        option: legacyMode() ? "No actions available" : (mappedSpool ? "Unassign Spool" : "Assign Spool"),
+        enableButton: legacyMode() ? "false" : "true",
         printerName: printer.name,
         logFilePath: printer.logFilePath,
         slotState: "Loaded (3rd party)",
@@ -817,7 +804,7 @@ function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
  *
  * Guarded against concurrent and rapid retries: an attempt is skipped while one
  * is already running, while the connection is up, or within a 30 second
- * cooldown of the last attempt. With MAX_RETRIES set, repeated failures disable
+ * cooldown of the last attempt. With a retry limit set, repeated failures disable
  * monitoring for that printer instead of retrying forever.
  *
  * Neither the close nor the error handler reschedules itself. monitorPrinters
@@ -865,12 +852,12 @@ export async function setupMqtt(printer) {
             printer.mqttClient = null;
 
             // No self-rescheduling here. monitorPrinters() is the single
-            // place driving reconnect attempts (polls every OFFLINE_CHECK_INTERVAL
+            // place driving reconnect attempts (polls every offline check interval
             // and calls setupMqtt() again once mqttRunning is false). Having
             // both this handler and that loop independently retry used to
             // race and made the actual retry cadence hard to reason about.
             if (printer.monitoringEnabled) {
-                console.log(printer.name, printer.logFilePath, ` Connection closed, will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
+                console.log(printer.name, printer.logFilePath, ` Connection closed, will retry within ${formatInterval(settings.OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
             }
         });
 
@@ -890,8 +877,8 @@ export async function setupMqtt(printer) {
 
         console.error(printer.name, printer.logFilePath, `Error in setupMqtt for Printer: ${printer.id} - ${error.message}`);
 
-        if (MAX_RETRIES > 0 && printer.reconnectAttempts >= MAX_RETRIES) {
-            console.log(printer.name, printer.logFilePath, `Max retries (${MAX_RETRIES}) reached -> disabling monitoring!`);
+        if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
+            console.log(printer.name, printer.logFilePath, `Max retries (${settings.MAX_RETRIES}) reached -> disabling monitoring!`);
             printer.monitoringEnabled = false;
             broadcastSSE({ type: "monitoring_update", printer: printer.id, enabled: false });
             printer.mqttRunning = false;
@@ -900,15 +887,97 @@ export async function setupMqtt(printer) {
         }
 
         // No self-rescheduling here either, see the comment in the "close"
-        // handler above. monitorPrinters() will retry within OFFLINE_CHECK_INTERVAL.
-        console.log(printer.name, printer.logFilePath, ` Connection failed, will retry within ${formatInterval(OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
+        // handler above. monitorPrinters() will retry within the offline check interval.
+        console.log(printer.name, printer.logFilePath, ` Connection failed, will retry within ${formatInterval(settings.OFFLINE_CHECK_INTERVAL)} via the monitor loop...`);
     }
+}
+
+/**
+ * Checks whether a printer accepts an MQTT connection and actually reports on
+ * the topic of the configured serial number, without touching the connection
+ * the monitor loop maintains.
+ *
+ * Uses its own short lived client, so a printer that is already being monitored
+ * keeps running while the test is made. Subscribing alone proves nothing: the
+ * printer accepts a subscription to any topic, including the one of a serial
+ * number that is not its own. Only an arriving report does, which is why the
+ * test waits for one. A connection without a report is reported as a warning
+ * rather than a failure, because a printer really can stay silent for a moment.
+ *
+ * @param {{id: string, ip: string, code: string}} printer - what to try
+ * @param {number} [timeout] - milliseconds before the connection is given up
+ * @param {number} [listenTimeout] - milliseconds to wait for the first report
+ * @returns {Promise<{ok: boolean, error?: string, warning?: string, detail?: string}>}
+ */
+export async function testMqttConnection(printer, timeout = 8000, listenTimeout = 6000) {
+    let client = null;
+
+    try {
+        client = await mqtt.connectAsync(`tls://bblp:${printer.code}@${printer.ip}:8883`, {
+            rejectUnauthorized: false,
+            connectTimeout: timeout,
+            reconnectPeriod: 0,
+        });
+
+        const topic = `device/${printer.id}/report`;
+        await client.subscribeAsync(topic);
+
+        const reported = await waitForFirstMessage(client, listenTimeout);
+        if (reported) return { ok: true };
+
+        return {
+            ok: true,
+            warning: `Connected, but nothing arrived on ${topic}. Check the serial number if this stays empty.`,
+        };
+    } catch (err) {
+        const detail = err?.message || String(err);
+        return { ok: false, error: describeMqttError(err), detail };
+    } finally {
+        // force close, the test must not linger as a second session
+        client?.end(true);
+    }
+}
+
+/**
+ * Resolves true on the first message the client receives, false when the wait
+ * runs out. Always removes its listener, so the client can be closed cleanly.
+ *
+ * @returns {Promise<boolean>} whether a message arrived in time
+ */
+function waitForFirstMessage(client, timeout) {
+    return new Promise(resolve => {
+        const done = (result) => {
+            clearTimeout(timer);
+            client.removeListener("message", onMessage);
+            resolve(result);
+        };
+        const onMessage = () => done(true);
+        const timer = setTimeout(() => done(false), timeout);
+
+        client.on("message", onMessage);
+    });
+}
+
+/**
+ * Turns an MQTT failure into something a user can act on. A rejected access
+ * code and an unreachable address both surface as a connection error, but they
+ * need completely different fixes.
+ */
+function describeMqttError(err) {
+    const message = err?.message || String(err);
+
+    if (/Not authorized|Bad username or password|code: [45]/.test(message)) return "The printer rejected the access code";
+    if (/ECONNREFUSED/.test(message)) return "Port 8883 refused the connection";
+    if (/ETIMEDOUT|timeout|Timeout/.test(message)) return "No answer on port 8883 within the timeout. Is LAN mode enabled?";
+    if (/EHOSTUNREACH|ENETUNREACH|ENOTFOUND|EAI_AGAIN/.test(message)) return "The address cannot be reached";
+
+    return message;
 }
 
 /**
  * Runs forever, reconnecting printers that are reachable but not connected.
  *
- * This is the single retry driver for MQTT. Every OFFLINE_CHECK_INTERVAL each
+ * This is the single retry driver for MQTT. On every offline check interval each
  * enabled printer is probed with a plain TCP connect before setupMqtt is
  * attempted, so an unreachable printer costs one short timeout rather than a
  * hanging MQTT handshake. The whole loop idles while Spoolman is down, since
@@ -935,7 +1004,7 @@ export async function monitorPrinters(printers) {
 
                 if (isAlive) {
                     if (!printer.mqttRunning && !printer.isReconnecting) {
-                        if (MAX_RETRIES > 0 && printer.reconnectAttempts >= MAX_RETRIES) {
+                        if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
                             printer.monitoringEnabled = false;
                             printer.mqttRunning = false;
                             printer.mqttStatus = "Disabled";
@@ -946,13 +1015,13 @@ export async function monitorPrinters(printers) {
                         setupMqtt(printer);
                     }
                 } else {
-                    console.error(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is unreachable. Next try in ${formatInterval(OFFLINE_CHECK_INTERVAL)}...`);
+                    console.error(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is unreachable. Next try in ${formatInterval(settings.OFFLINE_CHECK_INTERVAL)}...`);
 
-                    if (MAX_RETRIES > 0 && printer.reconnectAttempts >= MAX_RETRIES) {
+                    if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
                         printer.monitoringEnabled = false;
                         printer.mqttRunning = false;
                         printer.mqttStatus = "Disabled";
-                        console.log(printer.name, printer.logFilePath, "Printer is unreachable and MAX_RETRIES exceeded → Monitoring disabled.");
+                        console.log(printer.name, printer.logFilePath, "Printer is unreachable and the retry limit is exceeded, monitoring disabled.");
                         continue;
                     }
                     printer.mqttStatus = "Disconnected";
@@ -962,7 +1031,7 @@ export async function monitorPrinters(printers) {
                 console.error(printer.name, printer.logFilePath, `Error monitoring Printer: ${printer.id} - ${error.message}`);
             }
         }
-        await sleep(OFFLINE_CHECK_INTERVAL);
+        await sleep(settings.OFFLINE_CHECK_INTERVAL);
     }
 }
 
@@ -975,7 +1044,7 @@ export async function monitorPrinters(printers) {
 export async function monitorSpoolman() {
     while (true) {
         try {
-            const spoolmanHealthApi = await got(`${SPOOLMAN_URL}/api/v1/health`);
+            const spoolmanHealthApi = await got(`${spoolmanUrl()}/api/v1/health`);
             const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
 
             if (spoolmanHealth.status === "healthy") {
@@ -1003,7 +1072,7 @@ export async function monitorSpoolman() {
 export async function monitorSpoolmanBackground() {
     while (true) {
         try {
-            const spoolmanHealthApi = await got(`${SPOOLMAN_URL}/api/v1/health`);
+            const spoolmanHealthApi = await got(`${spoolmanUrl()}/api/v1/health`);
             const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
 
             if (spoolmanHealth.status === "healthy") {

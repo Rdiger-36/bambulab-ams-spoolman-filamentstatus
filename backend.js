@@ -4,11 +4,11 @@ import path from "path";
 import fs from "fs-extra";
 
 import "./src/logger.js"; // must be first, sets up console overrides
-import { PORT, serverLogFilePath, __rootDir, version, SPOOLMAN_URL, MODE, MODE_RAW, MODE_IS_VALID } from "./src/config.js";
+import { PORT, serverLogFilePath, version } from "./src/config.js";
+import { rotateLogFile } from "./src/logger.js";
 import { printers } from "./src/printers.js";
-import { checkAndSetVendor, checkAndSetExtraField } from "./src/spoolman.js";
-import { monitorSpoolman, monitorSpoolmanBackground, monitorPrinters } from "./src/mqtt.js";
 import { registerRoutes } from "./src/routes.js";
+import { startService } from "./src/service.js";
 import { formatDateLog } from "./src/utils.js";
 
 const app = express();
@@ -23,56 +23,21 @@ app.get("/", (req, res) => {
 
 registerRoutes(app, printers);
 
-async function starting() {
-    console.log("Server", serverLogFilePath, "Starting service...");
-
-    if (!MODE_IS_VALID) {
-        console.error("Server", serverLogFilePath, `MODE "${MODE_RAW}" is not a valid value, falling back to "manual". Use "automatic" or "manual".`);
-    }
-    console.log("Server", serverLogFilePath, `Mode: ${MODE}`);
-
-    await monitorSpoolman();
-
-    if (!printers) {
-        console.error("Server", serverLogFilePath, "Error: no printers found in printers.json!");
-        return;
-    }
-
-    if (!(await checkAndSetVendor()) || !(await checkAndSetExtraField())) {
-        console.error("Server", serverLogFilePath, "Error: Vendor or Extra Field 'tag' could not be set!");
-        return;
-    }
-
-    console.log("Server", serverLogFilePath, `Backend running on http://localhost:${PORT}`);
-
-    for (const printer of printers) {
-        printer.logFilePath = path.join(__rootDir, "logs", `${printer.id}.log`);
-
-        if (!fs.existsSync(printer.logFilePath)) {
-            fs.writeFile(printer.logFilePath, `Log started at: ${formatDateLog(new Date())}\n`, err => {
-                if (err) {
-                    console.error(printer.name, printer.logFilePath, `Failed to create log file: ${err.message}`);
-                } else {
-                    console.log(printer.name, printer.logFilePath, "Log file created");
-                }
-            });
-        }
-    }
-
-    monitorPrinters(printers);
-    monitorSpoolmanBackground();
-}
-
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Server", serverLogFilePath, `Version: ${version}`);
     console.log("Server", serverLogFilePath, "Setting up configuration...");
 
-    // Create server log file
-    fs.writeFile(serverLogFilePath, `Log started at: ${formatDateLog(new Date())}\n`, err => {
-        if (err) {
-            process.stderr.write(`Failed to create log file: ${err.message}\n`);
-        }
+    // Append rather than replace, so a restart does not take the lines with it
+    // that explain why it happened. Rotated when it has grown too large.
+    rotateLogFile(serverLogFilePath).finally(() => {
+        fs.appendFile(serverLogFilePath, `Log started at: ${formatDateLog(new Date())}\n`, err => {
+            if (err) {
+                process.stderr.write(`Failed to write the log file: ${err.message}\n`);
+            }
+        });
     });
 
-    starting();
+    console.log("Server", serverLogFilePath, `Backend running on http://localhost:${PORT}`);
+
+    startService();
 });

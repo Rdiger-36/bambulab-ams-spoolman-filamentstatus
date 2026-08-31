@@ -7,7 +7,7 @@ consumption per print, and serves a small web UI for the parts that need a
 human decision.
 
 Runs as a single container. No database: all persistent state is Spoolman plus
-two JSON files under `printers/`.
+three JSON files under `printers/`.
 
 ## Intent Layer
 
@@ -24,12 +24,13 @@ matter for them are below.
 
 | Path | Role |
 |---|---|
-| `entrypoint.js` | Container entrypoint. Global error handlers, signal handling, then dynamic-imports `backend.js`. Never put application logic here. |
+| `entrypoint.js` | Container entrypoint and supervisor. Forks `starting.js`, starts it again on the restart exit code, passes every other code on, forwards SIGTERM/SIGINT and waits for the child. `SUPERVISOR=false` runs the service in this process instead. Never put application logic here. |
+| `starting.js` | The service process. Global error handlers, signal handling, then dynamic-imports `backend.js`. Forked by `entrypoint.js`, so the handlers live where the application does. |
 | `backend.js` | Express app, static hosting, startup sequence: Spoolman health, vendor and extra-field bootstrap, printer log files, monitor loops. |
 | `src/` | All backend logic. See its AGENTS.md. |
-| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. |
+| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `menu.js` renders the menu bar and owns the dark mode button for every page, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. |
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
-| `printers/` | Runtime data, gitignored. `printers.json` is user-maintained (read-only for the service), `mappings.json` is written by the service. |
+| `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
 | `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), standalone `mqtt.js` probe. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
@@ -43,19 +44,30 @@ matter for them are below.
   `backend.js` does this first, on purpose. For output that must bypass the
   override, use the exported `originalConsoleLog` / `originalConsoleError`.
 - **ESM only.** `"type": "module"`; use `import`, not `require`.
-- **Never write `printers/printers.json`.** It is the user's config. Service
-  state belongs in `printers/mappings.json`, which is written atomically
-  (temp file plus rename).
+- **Every file under `printers/` is written through its owning module only**:
+  `printers.json` through `printers.js`, `settings.json` through `settings.js`,
+  `mappings.json` through `mappings.js`. All three write temp file plus rename,
+  so a crash mid-write cannot truncate them. Runtime state never reaches
+  `printers.json`; only id, code, ip and name are persisted.
 - **Never commit `printers/`, `logs/`, or `.env`.** They hold the printer access
   code and LAN addresses and are gitignored. Keep it that way.
 - **Two tracking modes, mutually exclusive.** Default tracks consumption from
   the sliced G-code; `LEGACY_MODE=true` derives weight from the AMS RFID remain
   percentage. New behaviour must pick a side, because running both double-books.
+- **A requested restart is an exit code, not a signal.** `restartService()`
+  ends the process with `RESTART_EXIT_CODE` (75) and the supervisor starts it
+  again. Only that code restarts; everything else is passed on so a crash stays
+  a crash and the container restart policy stays in charge of it. Letting both
+  layers restart on a crash nests two loops.
 - **The version lives in two places:** `package.json` and `src/config.js`. The
   publish workflow compares the git tag against `package.json` and aborts on a
   mismatch, so bump both together.
-- **Configuration is environment variables only**, read once in `src/config.js`.
-  No other module may read `process.env`.
+- **Configuration lives in `src/settings.js`**, read as `settings.<KEY>` at the
+  point of use, never destructured into a module-level constant. The values
+  change at runtime through the settings API. `src/config.js` is the only module
+  that reads `process.env`, and it only exposes the raw values that seed
+  `settings.json` and `printers.json` on a first run. It also owns the paths,
+  the port and the version.
 
 ## Coding rules
 
@@ -114,7 +126,8 @@ Not punctuation, and therefore allowed:
   overridden `console.log/error/debug`. `originalConsoleLog` and
   `originalConsoleError` belong to `src/logger.js` and to the few places that
   must not recurse into the logger; `process.stdout.write` belongs to
-  `entrypoint.js` only. No leftover debug logging.
+  `entrypoint.js` and `starting.js` only, which both run before the overrides
+  exist. No leftover debug logging.
 - **Shared mutable state goes through `src/state.js`**, per-printer state onto
   the printer object created in `src/printers.js`. Never introduce a new
   module-level mutable global, and never keep state in a route handler or in a
@@ -125,19 +138,26 @@ Not punctuation, and therefore allowed:
   `printers/` from anywhere else.
 - **When changing the shape of the UI spool object**, update all of its builders
   in `src/mqtt.js` (`buildEmptySpool`, `buildThirdPartySpool` and the Bambu Lab
-  branch of `processSlot`), the key list in `hasSpoolUiChanged` in `src/ams.js`,
-  and the frontend that reads it. A field missing from that key list is invisible
-  to change detection and silently never reaches the UI.
+  branch of `processSlot`), `toClientSpool()` in `src/uispool.js`, and the
+  frontend that reads it. A field the projection does not carry never reaches a
+  client, and change detection does not see it either: `hasSpoolUiChanged()`
+  compares the projection.
 - **When changing the shape of `mappings.json`**, keep the read side tolerant of
   the old shape. Existing installs have the file on disk and there is no
-  migration step.
+  migration step. `settings.json` carries a `schemaVersion` for exactly this
+  reason: bump it and handle the old value in `migrateStored()`. Its first
+  version had no wrapper at all and is still read.
 
 ## Working on this repo
 
 - Tests: `npm test` (`node --test "test/*.test.js"`). No test framework beyond
   the Node built-in, no mocking library; tests call pure functions directly.
   Anything touching MQTT, FTPS or Spoolman HTTP is not unit-tested, so keep new
-  logic extractable into a pure function.
+  logic extractable into a pure function. The HTTP API is covered end to end in
+  `test/routes.test.js`, through `test/helpers/app.js`, which registers the
+  routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
+  temporary directory. Those two variables are read once at import time, so a
+  test that needs them must set them before the first import.
 - There is no linter, formatter or type checker configured. Match the
   surrounding style: 4-space indent in `src/`, double quotes, semicolons.
 - Comments in this codebase explain why, usually pointing at the bug the line
@@ -150,6 +170,12 @@ Not punctuation, and therefore allowed:
 
 - Adding a frontend build step or framework to `public/`. It is deliberately
   dependency-free and served straight from disk.
+- Reading a setting into a constant at import time (`const { MODE } = settings`).
+  It freezes the value at startup and the settings page then appears to do
+  nothing.
+- Duplicating the settings schema in the frontend. `public/settings.js` renders
+  whatever `/api/settings` describes, so a new field only has to be added to
+  `SETTINGS_SCHEMA`.
 - Adding a direct dependency without putting it in `package.json`. The Docker
   image installs from `package.json` and `package-lock.json` only, so relying on
   a transitive package works locally and breaks in the container.

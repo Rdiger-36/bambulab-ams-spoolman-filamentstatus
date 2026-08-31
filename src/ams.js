@@ -1,4 +1,5 @@
-import { NEVER_MERGE_IF_TAG } from "./config.js";
+import { settings } from "./settings.js";
+import { toClientSpool } from "./uispool.js";
 
 /**
  * Normalises the raw `print.ams.ams` payload so the rest of the pipeline sees
@@ -117,10 +118,25 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
  * A slot holding a spool the printer cannot identify, whether because it has
  * no RFID chip or because reading it failed, comes through with the same
  * sparse payload as an empty slot: tray_uuid "N/A", no tray_type,
- * tray_weight 0. The only field that separates
- * them is `state`, which is 0 for an empty slot and non-zero once something is
- * loaded (11 for a fully read Bambu Lab spool, other values while the printer
- * has filament but no identification for it).
+ * tray_weight 0. The only field that separates them is `state`.
+ *
+ * `state` is not documented by Bambu Lab, so what follows is what this project
+ * has actually seen on a P2S, not a specification:
+ *
+ * - `0` on an empty slot, in every observation so far.
+ * - `3`, `10`, `11`, `20` and `27` while a slot is loaded. Which one appears
+ *   varies, including between two reports about the same unchanged slot.
+ * - `11` was once read as proof of a Bambu Lab tag having been decoded. It is
+ *   not: a chipless spool with an all zero `tray_uuid` reports 11 as well, so
+ *   the value says something is in the slot, not that it was identified. Use
+ *   `tray_uuid` for that.
+ *
+ * Everything non zero is therefore treated as occupied, which is a heuristic in
+ * both directions: a value nobody has seen yet still reads as occupied, and
+ * firmware reporting a transient non zero state on an empty slot would show a
+ * phantom spool until it settles. It is the safer way round, because the
+ * opposite, an allow list of known values, would make a spool disappear from
+ * the UI the first time a firmware update invents a new one.
  *
  * Firmware that does not report `state` at all falls back to "not occupied", so
  * such slots keep being treated as empty rather than sprouting phantom spools.
@@ -235,7 +251,7 @@ export function findMatchingInternalFilament(externalFilament, internalFilaments
  *
  * Among those candidates, one is accepted when its weight is within 15 % of
  * what the AMS reports, or when it is empty, or when it was never used. With
- * NEVER_MERGE_IF_TAG set, a spool that already carries any tag is skipped
+ * the "never merge a tagged spool" setting on, a spool that already carries any tag is skipped
  * outright.
  *
  * @param {object} amsSpool - a normalised AMS slot
@@ -275,7 +291,7 @@ export function findMergeableSpool(amsSpool, allSpools) {
             spoolmanSpool.remaining_weight <= upperTolerance;
         const hasTag = tag && tag !== "" && tag !== '""';
 
-        if (NEVER_MERGE_IF_TAG && hasTag) return false;
+        if (settings.NEVER_MERGE_IF_TAG && hasTag) return false;
 
         const neverUsed = spoolmanSpool.used_weight === 0 || spoolmanSpool.used_weight == null;
 
@@ -340,10 +356,10 @@ export function shouldSendSlotUpdate(slot, isFirstRun) {
  * Whether anything the UI actually displays changed between two versions of a
  * slot, used to suppress redundant SSE broadcasts.
  *
- * The comparison is an explicit key list rather than a deep equality check,
- * because the slot object carries plenty of fields that tick without meaning
- * anything to the user. A new displayed field must be added to that list, or it
- * will never reach the UI on its own.
+ * Compares what the client is sent, not the runtime objects: `toClientSpool()`
+ * already drops everything the firmware reports without the UI showing it, so
+ * this needs no key list of its own. That list was the trap it replaces, a new
+ * displayed field that nobody added to it never reached the UI on its own.
  *
  * @param {object|undefined} next - the freshly built UI spool
  * @param {object|undefined} prev - the previous one for the same slot
@@ -351,13 +367,5 @@ export function shouldSendSlotUpdate(slot, isFirstRun) {
  */
 export function hasSpoolUiChanged(next, prev) {
     if (!next || !prev) return true;
-    const keys = [
-        "slot.tray_uuid", "slot.tray_weight", "slot.remain", "slot.tray_sub_brands",
-        "slot.tray_color", "slotState", "option", "enableButton",
-        "existingSpool.id", "matchingInternalFilament.id",
-        "matchingExternalFilament.id", "mergeableSpool.id", "error",
-    ];
-    const _get = (obj, path) =>
-        path.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : undefined), obj);
-    return keys.some(k => JSON.stringify(_get(next, k)) !== JSON.stringify(_get(prev, k)));
+    return JSON.stringify(toClientSpool(next)) !== JSON.stringify(toClientSpool(prev));
 }

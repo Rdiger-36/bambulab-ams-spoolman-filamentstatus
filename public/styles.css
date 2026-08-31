@@ -169,28 +169,39 @@ body.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
 }
 body.dark-mode .gc-progress-bar { background: #5fd089; }
 
-/* ---- Spool assignment / creation dialog ---- */
+/* ---- Spool assignment / creation dialog ----
+   Follows the settings page: bold field labels, the same input shape and the
+   same focus colour, so the two forms in this UI look like one. */
 .sp-tabs {
   display: flex;
-  gap: 6px;
-  margin: 10px 0;
-  border-bottom: 1px solid #8884;
+  gap: 4px;
+  margin: 12px 0;
+  border-bottom: 1px solid #8883;
 }
+
 .sp-tab {
   border: none;
   background: none;
   padding: 7px 12px;
   cursor: pointer;
-  font-size: 0.92em;
+  font-size: 0.9em;
   color: inherit;
   opacity: 0.6;
   border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  transition: background-color 0.2s, opacity 0.2s;
 }
-.sp-tab-active {
+
+.sp-tab:hover { opacity: 0.9; background: #8881; }
+
+.sp-tab-active,
+.sp-tab-active:hover {
   opacity: 1;
   font-weight: 600;
+  background: none;
   border-bottom-color: #1c6fd6;
 }
+
 body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
 
 /* The dialog is capped in height, so the form scrolls rather than the page */
@@ -200,20 +211,26 @@ body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
   text-align: left;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 8px 14px;
+  gap: 12px 18px;
   padding-right: 6px;
 }
+
 .sp-section {
   grid-column: 1 / -1;
+  font-size: 0.78em;
   font-weight: 600;
-  font-size: 0.9em;
-  opacity: 0.75;
-  margin-top: 6px;
-  border-bottom: 1px solid #8883;
-  padding-bottom: 3px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-top: 8px;
+  border-bottom: 1px solid #8882;
+  padding-bottom: 4px;
 }
+
+.sp-scroll > .sp-section:first-child { margin-top: 0; }
+
 .sp-wide, .sp-note, #sp-error { grid-column: 1 / -1; }
-.sp-note { font-size: 0.82em; margin: 6px 0 0; }
+.sp-note { font-size: 0.83em; opacity: 0.75; margin: 8px 0 0; }
 #sp-error:empty { display: none; }
 
 /* #sp-filament-fields spans the grid and repeats it, so its inputs line up
@@ -222,34 +239,74 @@ body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 8px 14px;
+  gap: 12px 18px;
 }
 
 .sp-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  font-size: 0.86em;
+  font-size: 0.88em;
+  min-width: 0;
 }
-.sp-field > span { opacity: 0.75; }
+
+.sp-field > span {
+  font-weight: 600;
+  min-height: 20px;
+}
+
 .sp-field input,
 .sp-field select {
-  padding: 5px 7px;
+  padding: 5px 8px;
   border: 1px solid #8886;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 0.95em;
   min-width: 0;
 }
+
+.sp-field input:focus,
+.sp-field select:focus {
+  outline: none;
+  border-color: #1c6fd6;
+}
+
+body.dark-mode .sp-field input:focus,
+body.dark-mode .sp-field select:focus {
+  border-color: #6fb0ec;
+}
+
+.sp-field small {
+  opacity: 0.7;
+  font-size: 0.84em;
+  line-height: 1.3;
+}
+
 .sp-field small:empty { display: none; }
 
 .sp-colour { display: flex; gap: 6px; align-items: center; }
 .sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
 .sp-colour input:not([type="color"]) { flex: 1; text-transform: uppercase; }
 
-.sp-pick { display: block; padding: 4px 0; cursor: pointer; }
+/* One pickable spool per row, so the whole row reacts rather than just the
+   radio button next to it. */
+.sp-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background-color 0.2s;
+}
+
+.sp-pick:hover { background: #8881; }
+.sp-pick:has(input:checked) { background: #e3f0fb; }
+body.dark-mode .sp-pick:has(input:checked) { background: #16293c; }
+
 .sp-scroll > .sp-pick { grid-column: 1 / -1; }
 
 /* ---- Colour swatch shared by spool rows and the "required" list ---- */
@@ -339,9 +396,11 @@ body.show-footer #spool-list {
     padding: 6px 14px;
   }
 
-  /* Dark mode card borders */
+  /* Dark mode card borders. The border is reset for the same reason as on the
+     desktop table: the generic dark rules would draw one around every cell. */
   body.dark-mode .spool-table tr { border-color: #444; background: #2a2a2a; }
-  body.dark-mode .spool-table td { border-bottom-color: #3a3a3a; }
+  body.dark-mode .spool-table td { border: none; border-bottom: 1px solid #3a3a3a; }
+  body.dark-mode .spool-table td:last-child { border-bottom: none; }
   body.dark-mode .spool-table td::before { color: #999; }
 }
 
@@ -403,10 +462,18 @@ body.dark-mode .spool-table {
   border-color: #3a3a3a;
   box-shadow: none;
 }
+/* The generic dark table rules set all four borders on every cell, which drew
+   a full grid over the card. Reset them so dark shows the same row separators
+   as light. */
 body.dark-mode .spool-table th,
 body.dark-mode .spool-table td {
-  border-bottom-color: #333;
+  border: none;
+  border-bottom: 1px solid #333;
   background: transparent;
+}
+
+body.dark-mode .spool-table tbody tr:last-child td {
+  border-bottom: none;
 }
 body.dark-mode .spool-table thead th {
   background: #2a2a2a;
@@ -512,17 +579,36 @@ body.dark-mode #logs {
   color: #ccc;
 }
 
+/* ---- Menu bar ----
+   Same card language as the panels below it: light surface, soft border,
+   rounded corners. The menu button and the entries follow the shared button
+   style so the whole header matches the rest of the UI. */
 #menubar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #ddd;
-  padding: 10px 20px;
-  transition: background-color 0.3s, color 0.3s;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 8px 12px;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+
+/* The settings page holds its content in a narrower column, so the bar lines
+   up with it instead of running wider than everything below it. */
+body.settings-page #menubar {
+  max-width: 1180px;
+  margin: 0 auto;
+  /* so the max width counts the padding and the bar lines up with the cards */
+  box-sizing: border-box;
 }
 
 body.dark-mode #menubar {
-  background-color: #333;
+  background: #1f1f1f;
+  border-color: #3a3a3a;
+  box-shadow: none;
   color: #f1f1f1;
 }
 
@@ -530,11 +616,19 @@ body.dark-mode #menubar {
   background: none;
   border: none;
   cursor: pointer;
+  border-radius: 8px;
+  padding: 5px;
+  line-height: 0;
+  transition: background-color 0.2s;
+}
+
+#dark-mode-toggle:hover {
+  background: #8881;
 }
 
 #dark-mode-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   transition: transform 0.3s ease;
 }
 
@@ -543,60 +637,172 @@ body.dark-mode #menubar {
 }
 
 .dropdown-button {
-  background-color: #f4f4f4;
+  background: #fff;
   color: #333;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px 12px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.88em;
   cursor: pointer;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.dropdown-button::after {
+  content: "\203A";
+  display: inline-block;
+  transform: rotate(90deg);
+  margin-left: 8px;
+  opacity: 0.6;
+}
+
+.dropdown-button:hover,
+.dropdown:hover .dropdown-button,
+.dropdown.open .dropdown-button {
+  background: #eee;
 }
 
 body.dark-mode .dropdown-button {
-  background-color: #444;
+  background: #2c2c2c;
   color: #f1f1f1;
-  border: 1px solid #555;
+  border-color: #4a4a4a;
+}
+
+body.dark-mode .dropdown-button:hover,
+body.dark-mode .dropdown:hover .dropdown-button,
+body.dark-mode .dropdown.open .dropdown-button {
+  background: #3a3a3a;
+}
+
+/* ---- Menu panels ---- */
+.dropdown-content,
+.submenu-content {
+  display: none;
+  position: absolute;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  min-width: 170px;
+  z-index: 1000;
 }
 
 .dropdown-content {
-  display: none;
-  position: absolute;
-  top: 100%;
+  top: calc(100% + 6px);
   left: 0;
-  background-color: #f4f4f4;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  min-width: 150px;
-  z-index: 1000;
-  transition: background-color 0.3s, color 0.3s;
 }
 
-body.dark-mode .dropdown-content {
-  background-color: #444;
-  border: 1px solid #555;
+/* Bridges the gap between the button and the panel. Without it the pointer
+   leaves the menu on the way down and the panel closes under the cursor. */
+.dropdown-content::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -7px;
+  height: 7px;
 }
 
-.dropdown-content a {
+body.dark-mode .dropdown-content,
+body.dark-mode .submenu-content {
+  background: #262626;
+  border-color: #3a3a3a;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.dropdown-content a,
+.submenu-content a,
+.submenu-label,
+.submenu-empty {
   display: block;
-  padding: 8px 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
   color: #333;
+  font-size: 0.88em;
   text-decoration: none;
-  transition: background-color 0.3s, color 0.3s;
+  white-space: nowrap;
 }
 
-body.dark-mode .dropdown-content a {
+body.dark-mode .dropdown-content a,
+body.dark-mode .submenu-content a,
+body.dark-mode .submenu-label {
   color: #f1f1f1;
 }
 
-.dropdown-content a:hover {
-  background-color: #ddd;
+.dropdown-content a:hover,
+.submenu-content a:hover,
+.submenu:hover > .submenu-label,
+.submenu.open > .submenu-label {
+  background: #eee;
 }
 
-body.dark-mode .dropdown-content a:hover {
-  background-color: #555;
+body.dark-mode .dropdown-content a:hover,
+body.dark-mode .submenu-content a:hover,
+body.dark-mode .submenu:hover > .submenu-label,
+body.dark-mode .submenu.open > .submenu-label {
+  background: #3a3a3a;
 }
 
-.dropdown:hover .dropdown-content {
+.dropdown:hover > .dropdown-content,
+.dropdown.open > .dropdown-content {
+  display: block;
+}
+
+/* ---- Nested menu entries (printers, logs) ---- */
+.submenu {
+  position: relative;
+}
+
+.submenu-label {
+  /* A button, so it can be reached and opened with the keyboard */
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.88em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown-button:focus-visible,
+.submenu-label:focus-visible,
+.dropdown-content a:focus-visible,
+.submenu-content a:focus-visible {
+  outline: 2px solid #1c6fd6;
+  outline-offset: -2px;
+}
+
+body.dark-mode .dropdown-button:focus-visible,
+body.dark-mode .submenu-label:focus-visible,
+body.dark-mode .dropdown-content a:focus-visible,
+body.dark-mode .submenu-content a:focus-visible {
+  outline-color: #6fb0ec;
+}
+
+.submenu-label::after {
+  content: "\203A";
+  float: right;
+  padding-left: 14px;
+  opacity: 0.6;
+}
+
+.submenu-empty {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Opens next to its parent entry. The overlap keeps the pointer inside the
+   menu while moving across the gap, which would close it otherwise. */
+.submenu-content {
+  top: -5px;
+  left: calc(100% - 4px);
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 1001;
+}
+
+.submenu:hover > .submenu-content,
+.submenu.open > .submenu-content {
   display: block;
 }
 
@@ -658,20 +864,25 @@ input:checked + .slider:before {
 
 
 .log-button {
-  background-color: #f4f4f4;
+  background: #fff;
   color: #333;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px 12px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.88em;
   cursor: pointer;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
+.log-button:hover { background: #eee; }
+
 body.dark-mode .log-button {
-  background-color: #444;
+  background: #2c2c2c;
   color: #f1f1f1;
-  border: 1px solid #555;
+  border-color: #4a4a4a;
 }
+
+body.dark-mode .log-button:hover { background: #3a3a3a; }
 
 .footer {
   position: fixed;
@@ -703,3 +914,597 @@ body.dark-mode .footer {
 .footer a:hover {
   text-decoration: underline;
 }
+/* ---- Settings page ---- */
+.set-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 6px;
+}
+
+.set-page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 4px;
+}
+
+.set-page-head h1 {
+  text-align: left;
+  font-size: 1.5em;
+  margin: 0;
+}
+
+.set-page-note {
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+
+.set-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px 16px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  margin: 14px 0;
+}
+
+body.dark-mode .set-card {
+  background: #1f1f1f;
+  border-color: #3a3a3a;
+  box-shadow: none;
+}
+
+.set-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #8882;
+}
+
+.set-card-head h2 {
+  margin: 0;
+  font-size: 1em;
+}
+
+.set-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px 20px;
+  margin-top: 12px;
+}
+
+.set-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.88em;
+  min-width: 0;
+}
+
+.set-field-label {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  /* Keeps the inputs of a row aligned whether or not the label carries a pill */
+  min-height: 22px;
+}
+
+.set-field-label .pill {
+  font-size: 0.7rem;
+  padding: 1px 7px;
+  font-weight: 600;
+}
+
+.set-field input[type="text"],
+.set-field input[type="number"],
+.set-field input[type="password"],
+.set-field select {
+  padding: 5px 8px;
+  border: 1px solid #8886;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+}
+
+.set-field input:disabled {
+  opacity: 0.6;
+  background: #8881;
+  cursor: not-allowed;
+}
+
+.set-field input:focus,
+.set-field select:focus {
+  outline: none;
+  border-color: #1c6fd6;
+}
+
+body.dark-mode .set-field input:focus,
+body.dark-mode .set-field select:focus {
+  border-color: #6fb0ec;
+}
+
+.set-field small {
+  opacity: 0.7;
+  font-size: 0.84em;
+  line-height: 1.3;
+}
+
+/* A toggle reads better next to its label than under it */
+.set-field-toggle {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+
+.set-field-toggle .set-field-label { grid-column: 1; }
+.set-field-toggle .set-switch { grid-column: 2; grid-row: 1 / span 2; }
+.set-field-toggle small { grid-column: 1; }
+
+/* Small variant of the monitoring switch */
+.set-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+  flex: none;
+}
+
+.set-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.set-switch-track {
+  position: absolute;
+  inset: 0;
+  background-color: #bbb;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.set-switch-track::before {
+  content: "";
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  top: 3px;
+  background-color: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.set-switch input:checked + .set-switch-track { background-color: #2ea35c; }
+.set-switch input:checked + .set-switch-track::before { transform: translateX(18px); }
+body.dark-mode .set-switch-track { background-color: #555; }
+
+/* ---- A switch that belongs to the whole card, in its header ---- */
+.set-head-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88em;
+  font-weight: 600;
+}
+
+.set-head-field label:not(.set-switch) {
+  cursor: pointer;
+}
+
+/* Carries the description the field grid would have shown underneath */
+.set-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  opacity: 0.55;
+  cursor: help;
+  position: relative;
+}
+
+.set-info:hover,
+.set-info:focus-visible {
+  opacity: 1;
+}
+
+/* Opens towards the page, the icon sits at the right edge of the card */
+.set-info::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -6px;
+  z-index: 1200;
+  width: max-content;
+  max-width: 280px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #2c2c2c;
+  color: #f1f1f1;
+  font: inherit;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 400;
+  font-family: Arial, sans-serif;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s;
+}
+
+.set-info:hover::after,
+.set-info:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+body.dark-mode .set-info::after {
+  background: #3a3a3a;
+}
+
+/* ---- Collapsed part of a group ---- */
+.set-advanced {
+  margin-top: 12px;
+  border-top: 1px solid #8882;
+  padding-top: 8px;
+}
+
+.set-advanced > summary {
+  cursor: pointer;
+  font-size: 0.84em;
+  font-weight: 600;
+  opacity: 0.75;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.set-advanced > summary::-webkit-details-marker { display: none; }
+
+.set-advanced > summary::before {
+  content: "\203A";
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.set-advanced[open] > summary::before { transform: rotate(90deg); }
+.set-advanced > summary:hover { opacity: 1; }
+
+/* ---- Shared light table ----
+   Used by the printer list, the dashboard dialogs and the "required but not
+   loaded" list. Row separators only, no cell grid, no panel of its own, and
+   identical in both themes. */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 0;
+  font-size: 0.9em;
+  background: transparent;
+}
+
+.data-table th,
+.data-table td {
+  border: none;
+  border-bottom: 1px solid #8882;
+  padding: 7px 10px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+}
+
+/* Column headers. A th outside a thead is a row label and keeps its size. */
+.data-table thead th {
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  padding-bottom: 5px;
+}
+
+.data-table th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.data-table tbody tr:last-child td,
+.data-table tbody tr:last-child th,
+.data-table tr:last-child td,
+.data-table tr:last-child th { border-bottom: none; }
+
+.data-table td:first-child { font-weight: 600; }
+
+/* The global dark table rules set all four borders and a lighter table
+   background, which would draw a full grid on a panel of its own. Reset both so
+   dark looks exactly like light. */
+body.dark-mode .data-table {
+  background: transparent;
+}
+
+body.dark-mode .data-table th,
+body.dark-mode .data-table td {
+  background: transparent;
+  color: inherit;
+  border: none;
+  /* Same separator as in light mode, on purpose */
+  border-bottom: 1px solid #8882;
+}
+
+body.dark-mode .data-table tbody tr:last-child td,
+body.dark-mode .data-table tbody tr:last-child th,
+body.dark-mode .data-table tr:last-child td,
+body.dark-mode .data-table tr:last-child th { border-bottom: none; }
+
+/* The "required but not loaded" list sits inside the print card, so it stays
+   tighter than a table of its own. */
+.gc-required-table {
+  font-size: 0.86em;
+  margin-top: 6px;
+}
+
+.gc-required-table td { padding: 4px 0; }
+.gc-required-table td:first-child { font-weight: normal; }
+.gc-required-amount { text-align: right; white-space: nowrap; }
+
+/* ---- Printer table ---- */
+/* Scrolls inside the card on a narrow screen instead of widening the page */
+#printer-table {
+  overflow-x: auto;
+}
+
+#printer-table .data-table {
+  min-width: 520px;
+}
+
+#printer-table .data-table tbody tr:hover td { background: #8881; }
+
+.set-mono {
+  font-family: monospace;
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+
+/* Stays a normal table cell. As a flex container it sized itself to its
+   buttons and its separator ended up a couple of pixels above the rest. */
+.set-row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.set-row-actions .btn + .btn {
+  margin-left: 6px;
+}
+
+/* Puts a field back to the value the schema documents. Reads as a link rather
+   than a button, it sits inside a field label. */
+.set-reset {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #1c6fd6;
+  opacity: 0.8;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.set-reset:hover { opacity: 1; }
+body.dark-mode .set-reset { color: #6fb0ec; }
+
+/* ---- Buttons ---- */
+.btn {
+  padding: 6px 14px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  font-size: 0.88em;
+  transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
+}
+
+.btn:hover:not(:disabled) { background: #eee; }
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-small {
+  padding: 3px 10px;
+  font-size: 0.82em;
+}
+
+.btn-primary {
+  background: #1c6fd6;
+  border-color: #1c6fd6;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) { background: #1559ad; }
+
+.btn-danger {
+  color: #b3261e;
+  border-color: #d9a5a1;
+}
+
+.btn-danger:hover:not(:disabled) { background: #fbe4e4; }
+
+body.dark-mode .btn {
+  background: #2c2c2c;
+  border-color: #4a4a4a;
+  color: #f1f1f1;
+}
+
+body.dark-mode .btn:hover:not(:disabled) { background: #3a3a3a; }
+
+body.dark-mode .btn-primary {
+  background: #2f6fc4;
+  border-color: #2f6fc4;
+  color: #fff;
+}
+
+body.dark-mode .btn-primary:hover:not(:disabled) { background: #26599e; }
+
+body.dark-mode .btn-danger {
+  color: #f08a82;
+  border-color: #6b3a36;
+  background: #2c2c2c;
+}
+
+body.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
+
+/* ---- Action bar ---- */
+.set-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 16px;
+  background: #f4f4f4;
+  border-top: 1px solid #8882;
+  /* Lifts the bar off the card it scrolls over */
+  box-shadow: 0 -6px 10px -6px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-mode .set-actions {
+  background: #1e1e1e;
+}
+
+.set-actions-hint {
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+
+/* ---- Connection test ---- */
+/* Sits below the collapsed section, because the host and port in there are
+   part of what is tested. Stretching the row keeps the result chip exactly as
+   tall as the button next to it. */
+.set-test-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.set-test-result {
+  font-size: 0.84em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.set-test-result:empty { display: none; }
+
+.set-test-result .pill {
+  font-size: 0.74rem;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* One line: chip first, reason behind it */
+.set-test-row .set-test-result {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.set-test-row .set-test-reason {
+  display: flex;
+  align-items: center;
+  margin-left: 0;
+}
+
+.set-test-reason {
+  opacity: 0.75;
+  margin-left: 6px;
+}
+
+.set-test-failed { color: #b3261e; opacity: 1; }
+body.dark-mode .set-test-failed { color: #f08a82; }
+
+#printer-test-result {
+  margin-top: 12px;
+}
+
+/* ---- Notes, errors, banner ---- */
+.set-note {
+  font-size: 0.83em;
+  opacity: 0.75;
+  margin: 10px 0 0;
+}
+
+.set-note code {
+  font-size: 0.95em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #8881;
+}
+
+.set-note-warn {
+  color: #9a6a00;
+  opacity: 1;
+}
+
+body.dark-mode .set-note-warn { color: #e0b65f; }
+
+.set-error {
+  color: #b3261e;
+  font-size: 0.88em;
+  margin: 10px 0 0;
+}
+
+body.dark-mode .set-error { color: #f08a82; }
+.set-error:empty { display: none; }
+
+.set-banner {
+  border-radius: 8px;
+  padding: 9px 14px;
+  margin: 12px 0;
+  font-size: 0.9em;
+}
+
+.set-banner:empty { display: none; }
+.set-banner-ok   { background: #e3f6e9; color: #1e7e44; }
+.set-banner-warn { background: #fdf0db; color: #9a6a00; }
+.set-banner-bad  { background: #fbe4e4; color: #b3261e; }
+
+body.dark-mode .set-banner-ok   { background: #14331f; color: #5fd089; }
+body.dark-mode .set-banner-warn { background: #34290f; color: #e0b65f; }
+body.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
+
+#printer-dialog {
+  min-width: min(560px, 86vw);
+}
+
+/* Links outside the footer and the menus, currently the pointer to the
+   settings page shown on an empty dashboard. */
+#spool-list a { color: #1c6fd6; }
+body.dark-mode #spool-list a { color: #6fb0ec; }

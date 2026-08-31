@@ -56,6 +56,7 @@ In the legacy tracking mode (`LEGACY_MODE=true`) the AMS Lite is not supported f
 - Lightweight Docker container for easy deployment
 - Web UI for manually merge or create Spools and Filaments with collected data
 - Automatic Mode for automatically merge or create Spools and Filaments with collected data
+- Settings page in the Web UI for the configuration and the printer list, no container restart needed
 
 ## Getting Started
 
@@ -145,12 +146,17 @@ The Hardware supported by this image are:
    | id         | Serial from Printer |
    | code       | AccessCode from Printer |
 
+   This file is optional. Start the container without it and add your printers
+   on the settings page of the Web UI instead, see [Settings](#settings). The
+   service writes the file itself from then on.
+
 2. Run the container:
    ```bash
    docker run -d \
      -e SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>] \
      -e UPDATE_INTERVAL=120000 \
      -e MODE=automatic \
+     -e TZ=Europe/Berlin \
      -p 4000:4000 \
      -v /path/to/your/config/printers:/app/printers \
      -v /path/to/your/config/logs:/app/logs \
@@ -174,6 +180,7 @@ The Hardware supported by this image are:
         - SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>]
         - UPDATE_INTERVAL=120000
         - MODE=automatic
+        - TZ=Europe/Berlin
       volumes:
         - /path/to/your/config/printers:/app/printers
         - /path/to/your/config/logs:/app/logs
@@ -181,6 +188,12 @@ The Hardware supported by this image are:
    ```
 
 ## Environment Variables
+
+Every variable below is also a field on the [settings page](#settings). A
+variable seeds its setting as long as the setting has never been saved in the
+Web UI. After the first save `printers/settings.json` owns the value and the
+variable is ignored, so that a value changed in the UI is not silently reverted
+by the container definition on the next start.
 
 | Variable             | Description                                   |
 |----------------------|-----------------------------------------------|
@@ -192,6 +205,14 @@ The Hardware supported by this image are:
 | `SET_LOCATION`       | Automatically sync the spool location in Spoolman with the AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected (default: "false") |
 | `LEGACY_MODE`        | Track spool weight from the AMS RFID remain % instead of the sliced G-code: "true" or "false" (default: "false"). See [Tracking modes](#tracking-modes) |
 | `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (default: false)|
+| `OFFLINE_CHECK_INTERVAL` | Time in ms between two reachability checks of a disconnected printer (default: 20000 ms, min. 20000, max. 3600000) |
+| `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
+| `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
+| `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live, and where the log files are written. Default to `/app/printers` and `/app/logs` in the container, which is what the volumes in the examples above mount. Only set these when you cannot mount those paths |
+| `LOG_MAX_SIZE_MB` | Size a log file may reach before it is rotated (default: 1 MB, max 100). The current file is renamed to `<name>.log.1` and an empty one takes its place |
+| `LOG_KEEP_SERVER`, `LOG_KEEP_PRINTER` | How many rotated files to keep, for the server log and per printer (default: 2 each, max 20). 0 starts the current file over instead of keeping a history. Every printer has its own file, so the printer value multiplies with the number of printers |
+| `TZ`           | Time zone of the container, for example `Europe/Berlin`. The log timestamps follow it. Without it the container runs on UTC, so the logs are offset against the clock of the machine reading them |
+| `SUPERVISOR`   | Set to "false" to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |
 
 ## Usage
 
@@ -364,6 +385,65 @@ Create Extra Filed "tag" for Spools in Spoolman
 Extra Field "tag" successfully created!
 ```
 
+## Settings
+
+The **Settings** entry in the menu opens a page that holds everything the
+environment variables cover, plus the printer list. The same menu is on every
+page and carries the dashboard, the printer list and the log views; picking a
+printer from another page opens it on the dashboard.
+
+- **Printers**: add, edit and remove printers. A new printer connects right
+  away, a removed one is disconnected and its spool assignments are dropped.
+  Removing a printer, or changing its address or access code, asks first while
+  a print is running: the consumption of a running job is booked when it ends,
+  so dropping the connection before that loses it.
+  The serial number cannot be changed, it keys the MQTT topic, the log file and
+  the assignments. The access code is stored on the server and never sent back
+  to the browser; leave the field empty while editing to keep the stored one.
+- **Test connection**, in the printer dialog and under the Spoolman endpoint.
+  The printer test checks both connections the service needs: MQTT on port 8883
+  for the AMS data, and FTPS on port 990 for the sliced file the consumption is
+  read from. It waits for a report on the topic of the serial number, so a
+  serial that does not belong to that address is reported as unconfirmed
+  instead of passing. Both tests use the values in the form, so an address can
+  be verified before it is saved.
+- **Spoolman connection**: only the endpoint is shown, host, port, subfolder
+  and the public URL sit in a collapsed section below it. The line under the
+  field says which URL the service actually talks to, subfolder included.
+- **Tracking, synchronisation, printer connection and logging**: one card each,
+  applied to the running service as soon as they are saved. Changing the
+  endpoint reconnects and runs the vendor and extra field setup against the new
+  instance.
+- **Legacy mode** is the one field that needs a restart. The value is saved
+  right away, but the running service keeps the mode it started with, and the
+  page keeps saying so, with a "Restart now" next to it, until the service is
+  restarted. The two tracking modes book consumption differently, so switching
+  one into a running process would book a print in flight twice or not at all.
+
+- **Restart service**, in its own card at the bottom. The container runs a small
+  supervisor that starts the service again by itself, so this works whether or
+  not the container has a restart policy. The page waits for the service to come
+  back and reloads itself, or tells you when it does not. While a print is
+  running it asks first, because the consumption of that job is booked only when
+  it ends.
+
+Everything is stored in `printers/settings.json` next to `printers.json`, so it
+survives a container update as long as that volume is mounted.
+
+> [!IMPORTANT]
+> The Web UI has no authentication. It is meant for a trusted local network.
+> With the settings page it can now change the printer list and the Spoolman
+> endpoint, so do not expose the port to the internet. The access code of a
+> printer is stored in plain text in `printers/printers.json`, the same as
+> before, and is never sent back to the browser.
+
+> [!NOTE]
+> **Home Assistant add-on users:** the add-on passes its options as environment
+> variables, and those only seed a setting that has never been saved. As soon as
+> you save on the settings page, `printers/settings.json` owns the values and
+> changing an add-on option has no effect any more. Either configure through the
+> add-on options or through the settings page, not both.
+
 ## Web UI
 Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:
 ![Dashboard](https://github.com/user-attachments/assets/9e77a5c6-d3a8-4a77-996c-5af866b32824)
@@ -384,7 +464,7 @@ if you are runing this container in manual mode the filament and spool creation 
 ![Bildschirmfoto 2025-01-04 um 01 33 10](https://github.com/user-attachments/assets/85d9ab66-5afa-45a1-822e-e226c089bc78)
 
 
-Menubar for seletion Printers, Logs or change Dark-/Lightmode:
+Menubar with one menu holding the dashboard, the printers, the settings and the logs, and the dark and light mode button on the right:
 ![image](https://github.com/user-attachments/assets/c93c95bf-551b-459e-ae8b-b027b37b067d)
 
 Logs can be accessed over the Backend Logs Menubutton (it only display the logs of the selected Printer from the Main Menu):

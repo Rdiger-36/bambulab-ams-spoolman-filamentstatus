@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="hide-footer settings-page">
+    <div id="menubar">
+        <div id="menu-root"></div>
+        <button id="dark-mode-toggle" class="dark-mode-button">
+            <img id="dark-mode-icon" src="https://img.icons8.com/ios-glyphs/30/moon-symbol.png" alt="Mode Toggle">
+        </button>
+    </div>
+
+    <div class="set-page">
+        <div class="set-page-head">
+            <h1>Settings</h1>
+            <span class="set-page-note">Stored in printers/settings.json and applied without a restart, unless a field says otherwise.</span>
+        </div>
+
+        <div id="set-banner" class="set-banner"></div>
+
+        <div class="set-card">
+            <div class="set-card-head">
+                <h2>Printers</h2>
+                <button class="btn btn-primary" id="add-printer">Add printer</button>
+            </div>
+            <div id="printer-table"></div>
+        </div>
+
+        <div class="set-card">
+            <div class="set-card-head">
+                <h2>Service</h2>
+                <button class="btn" id="restart-service">Restart service</button>
+            </div>
+            <p class="set-note" id="restart-note"></p>
+        </div>
+
+        <form id="settings-form">
+            <div id="settings-groups"></div>
+            <div class="set-actions">
+                <button class="btn btn-primary" type="submit" id="save-settings" disabled>Save settings</button>
+                <button class="btn" type="button" id="reload-settings" disabled>Discard changes</button>
+                <span class="set-actions-hint" id="dirty-hint"></span>
+            </div>
+        </form>
+    </div>
+
+    <script src="menu.js"></script>
+    <script src="settings.js"></script>
+
+    <dialog id="printer-dialog">
+        <h3 id="printer-dialog-title"></h3>
+        <div class="set-form" id="printer-dialog-fields"></div>
+        <p class="set-error" id="printer-dialog-error"></p>
+        <div id="printer-test-result" class="set-test-result"></div>
+        <div class="button-container">
+            <button class="btn" id="printer-dialog-test" type="button">Test connection</button>
+            <button class="btn" id="printer-dialog-cancel" type="button">Cancel</button>
+            <button class="btn btn-primary" id="printer-dialog-save" type="button">Save</button>
+        </div>
+    </dialog>
+
+    <dialog id="confirm-dialog">
+        <h3 id="confirm-dialog-title"></h3>
+        <div id="confirm-dialog-text"></div>
+        <div class="button-container">
+            <button class="btn" id="confirm-dialog-cancel" type="button">Cancel</button>
+            <button class="btn btn-danger" id="confirm-dialog-ok" type="button">Delete</button>
+        </div>
+    </dialog>
+</body>
+</html>

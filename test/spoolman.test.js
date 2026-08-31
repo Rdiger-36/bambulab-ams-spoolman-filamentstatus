@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildFilamentPayload } from "../src/spoolman.js";
+import { buildFilamentPayload, buildSpoolPayload } from "../src/spoolman.js";
 import { state } from "../src/state.js";
 
 state.vendorID = 1;
@@ -96,4 +96,53 @@ test("fields Spoolman does not accept are not sent", () => {
     for (const key of ["spool_type", "finish", "pattern", "translucent", "glow"]) {
         assert.equal(key in p, false, `${key} should not be part of the payload`);
     }
+});
+
+/* ---- The spool payload, shared by both creation paths ---- */
+
+const bambuSlot = {
+    tray_sub_brands: "PLA Basic",
+    tray_type: "PLA",
+    tray_uuid: "ABCD1234",
+    tray_weight: "1000",
+    remain: 63,
+};
+
+test("the spool payload carries the slot weight, what is used, and the tag", () => {
+    const payload = buildSpoolPayload({ slot: bambuSlot }, 7);
+
+    assert.equal(payload.filament_id, 7);
+    assert.equal(payload.initial_weight, 1000);
+    // 63% left of 1000 g, so 370 g are already gone
+    assert.equal(payload.used_weight, 370);
+    // JSON encoded, because that is the shape Spoolman stores an extra field in
+    assert.equal(payload.extra.tag, '"ABCD1234"');
+    assert.equal(typeof payload.first_used, "number");
+});
+
+test("both creation paths build the same spool", () => {
+    // They differ only in where the filament id comes from: an existing
+    // Spoolman filament, or one created moments earlier
+    const fromExisting = buildSpoolPayload({ slot: bambuSlot }, "7");
+    const fromNew = buildSpoolPayload({ slot: bambuSlot }, 7);
+
+    assert.deepEqual({ ...fromExisting, first_used: 0 }, { ...fromNew, first_used: 0 });
+});
+
+test("a slot reporting nothing left creates a spool with everything used", () => {
+    // processData clamps a missing or negative remain to 0, so this is also what
+    // a spool the AMS cannot estimate looks like
+    const payload = buildSpoolPayload({ slot: { ...bambuSlot, remain: 0 } }, 7);
+
+    assert.equal(payload.initial_weight, 1000);
+    assert.equal(payload.used_weight, 1000);
+});
+
+test("the remain percentage is rescaled to the real spool size", () => {
+    // The AMS estimates against a 1 kg reference, so 25% on a 500 g spool means
+    // half of it is left, not a quarter
+    const payload = buildSpoolPayload({ slot: { ...bambuSlot, tray_weight: "500", remain: 25 } }, 7);
+
+    assert.equal(payload.initial_weight, 500);
+    assert.equal(payload.used_weight, 250);
 });

@@ -2,10 +2,19 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
-// TLS options for BambuLab's self-signed certificate. The printer presents a
-// cert with CN = serial number; we don't validate it (same as the MQTT
-// connection, which also uses rejectUnauthorized:false).
-const BAMBU_TLS = { rejectUnauthorized: false };
+/**
+ * TLS options for BambuLab's self-signed certificate. The printer presents a
+ * cert with CN = serial number; we don't validate it (same as the MQTT
+ * connection, which also uses rejectUnauthorized:false).
+ *
+ * Built fresh for every connection on purpose. basic-ftp writes the host into
+ * the object it is given, and for implicit TLS that stored host wins over the
+ * one passed to access(), so a shared object sends every later connection to
+ * the printer that used it first.
+ */
+export function bambuTlsOptions() {
+    return { rejectUnauthorized: false };
+}
 
 /**
  * Downloads the .gcode.3mf for the active print via FTPS and extracts only
@@ -32,7 +41,7 @@ export async function fetchSliceInfo(printer, jobName) {
             user: "bblp",
             password: printer.code,
             secure: "implicit",
-            secureOptions: BAMBU_TLS,
+            secureOptions: bambuTlsOptions(),
         });
 
         const candidates = resolveRemotePaths(jobName);
@@ -270,4 +279,53 @@ function roundEntries(result) {
         result[k].grams = Math.round(result[k].grams * 100) / 100;
     }
     return result;
+}
+
+/**
+ * Checks whether the FTPS server of a printer accepts the access code.
+ *
+ * Same connection the consumption tracking uses, so a green result here means
+ * the sliced file can actually be downloaded. Nothing is transferred beyond the
+ * login itself.
+ *
+ * @param {{ip: string, code: string}} printer - address and access code to try
+ * @param {number} [timeout] - milliseconds before the attempt is given up
+ * @returns {Promise<{ok: boolean, error?: string, detail?: string}>}
+ */
+export async function testFtpsConnection(printer, timeout = 8000) {
+    const client = new ftp.Client(timeout);
+    client.ftp.verbose = false;
+
+    try {
+        await client.access({
+            host: printer.ip,
+            port: 990,
+            user: "bblp",
+            password: printer.code,
+            secure: "implicit",
+            secureOptions: bambuTlsOptions(),
+        });
+        return { ok: true };
+    } catch (err) {
+        const detail = err?.message || String(err);
+        return { ok: false, error: describeFtpsError(err), detail };
+    } finally {
+        client.close();
+    }
+}
+
+/**
+ * Turns an FTPS failure into something a user can act on. The library reports
+ * a rejected login as a 530 reply code and an unreachable host as a socket
+ * error, which are two very different things to fix.
+ */
+function describeFtpsError(err) {
+    const message = err?.message || String(err);
+
+    if (err?.code === 530 || /530/.test(message)) return "The printer rejected the access code";
+    if (/ECONNREFUSED/.test(message)) return "Port 990 refused the connection. Is FTP access enabled on the printer?";
+    if (/ETIMEDOUT|timeout|Timeout/.test(message)) return "No answer on port 990 within the timeout";
+    if (/EHOSTUNREACH|ENETUNREACH|ENOTFOUND|EAI_AGAIN/.test(message)) return "The address cannot be reached";
+
+    return message;
 }

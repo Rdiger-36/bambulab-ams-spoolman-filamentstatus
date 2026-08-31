@@ -1,9 +1,14 @@
+import AdmZip from "adm-zip";
 import { createReadStream } from "fs";
 import mime from "mime-types";
 import path from "path";
-import { serverLogFilePath, PORT, version, SPOOLMAN_URL, SPOOLMAN_FQDN, MODE, MAX_RETRIES, LEGACY_MODE } from "./config.js";
+import { serverLogFilePath, version } from "./config.js";
+import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode } from "./settings.js";
+import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
+import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
-import { tailFileLines } from "./logger.js";
+import { tailLogLines, logFileSet } from "./logger.js";
+import { toClientSpool } from "./uispool.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -17,15 +22,11 @@ import {
     createNamedVendor,
     createFilament,
     createSpoolRecord,
+    checkSpoolmanHealth,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey } from "./gcode.js";
-import { setupMqtt, broadcastSlotUpdate } from "./mqtt.js";
-import { getMappings, setMapping, clearMapping } from "./mappings.js";
-
-/** Strips server-only fields from a UI spool before it goes out to a client. */
-function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
-    return rest;
-}
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection } from "./gcode.js";
+import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
+import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /**
  * Looks up the cached UI spool for a printer and slot, answering with a 404 and
@@ -57,7 +58,7 @@ function resolveSpoolData({ printerId, amsId }, printers, res) {
  * @returns {boolean} true when the request was answered and the caller must stop
  */
 function rejectInLegacyMode(res) {
-    if (!LEGACY_MODE) return false;
+    if (!legacyMode()) return false;
     res.status(409).json({ ok: false, error: "Manual spool assignment is not available in legacy mode" });
     return true;
 }
@@ -87,11 +88,11 @@ export function registerRoutes(app, printers) {
             lastMqttAmsUpdate: printer.lastMqttAmsUpdate,
             PRINTER_ID: printer.id,
             printerName: printer.name,
-            MODE,
-            LEGACY_MODE,
-            SPOOLMAN_URL,
+            MODE: settings.MODE,
+            LEGACY_MODE: legacyMode(),
+            SPOOLMAN_URL: spoolmanUrl(),
             VERSION: version,
-            SPOOLMAN_FQDN,
+            SPOOLMAN_FQDN: settings.SPOOLMAN_FQDN,
             monitoringEnabled: printer.monitoringEnabled,
         });
     });
@@ -99,7 +100,7 @@ export function registerRoutes(app, printers) {
     app.get("/api/spools/:printerId", (req, res) => {
         const printer = printers.find(p => p.id === req.params.printerId);
         if (!printer) return res.status(404).json({ error: "Printer not found" });
-        res.json((printer.spoolData || []).map(sanitizeSpoolForClient));
+        res.json((printer.spoolData || []).map(toClientSpool));
     });
 
     app.get("/api/printers", (req, res) => {
@@ -154,50 +155,83 @@ export function registerRoutes(app, printers) {
         });
     });
 
+    // Reads across the rotated files, so the requested number of lines is
+    // delivered even right after a rotation, when the current file is nearly
+    // empty. "files" is what the download button needs to know whether it is
+    // handing out one file or an archive.
     app.get("/api/logs/:printerId", async (req, res) => {
         try {
             const limitRaw = req.query.limit;
             const limit = Math.max(1, Math.min(2000, parseInt(limitRaw ?? "250", 10) || 250));
 
-            if (req.params.printerId === "server") {
-                const lines = await tailFileLines(serverLogFilePath, limit);
-                return res.json({ logs: lines });
+            let filePath = serverLogFilePath;
+            if (req.params.printerId !== "server") {
+                const printer = printers.find(p => p.id === req.params.printerId);
+                if (!printer) return res.status(404).json({ error: "Printer not found" });
+                filePath = printer.logFilePath;
             }
 
-            const printer = printers.find(p => p.id === req.params.printerId);
-            if (!printer) return res.status(404).json({ error: "Printer not found" });
-
-            const lines = await tailFileLines(printer.logFilePath, limit);
-            return res.json({ logs: lines });
+            const [lines, files] = await Promise.all([
+                tailLogLines(filePath, limit),
+                logFileSet(filePath),
+            ]);
+            return res.json({ logs: lines, files: files.length });
         } catch (err) {
             console.error("Server", serverLogFilePath, `Failed to read log file: ${err.message}`);
             return res.status(500).json({ error: "Failed to read log file" });
         }
     });
 
+    // Hands out the whole history, not only the current file: once a log has
+    // rotated, the interesting lines are usually in <name>.log.1. A single file
+    // is streamed as it is, several become one zip, because that keeps the file
+    // boundaries and the order intact.
     app.get("/api/logs/:printerId/download", async (req, res) => {
         try {
             const { printerId } = req.params;
-            let filePath, downloadName;
+            let filePath, baseName;
 
             if (printerId === "server") {
                 filePath = serverLogFilePath;
-                downloadName = "server.log";
+                baseName = "server";
             } else {
                 const printer = printers.find(p => p.id === printerId);
                 if (!printer) return res.status(404).json({ error: "Printer not found" });
                 filePath = printer.logFilePath;
-                downloadName = `${printer.name.replace(/\s+/g, "_")}_${printer.id}.log`;
+                baseName = `${printer.name.replace(/\s+/g, "_")}_${printer.id}`;
             }
 
-            res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
-            res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
-            const stream = createReadStream(filePath);
-            stream.on("error", err => {
-                console.error("Server", serverLogFilePath, `Failed to stream log: ${err.message}`);
-                if (!res.headersSent) res.status(500).end("Failed to read log file");
+            const files = await logFileSet(filePath);
+            if (files.length === 0) return res.status(404).json({ error: "No log file found" });
+
+            if (files.length === 1) {
+                res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
+                res.setHeader("Content-Disposition", `attachment; filename="${baseName}.log"`);
+                const stream = createReadStream(files[0]);
+                stream.on("error", err => {
+                    console.error("Server", serverLogFilePath, `Failed to stream log: ${err.message}`);
+                    if (!res.headersSent) res.status(500).end("Failed to read log file");
+                });
+                return stream.pipe(res);
+            }
+
+            // The archive is built in memory. Its size is bounded by the log
+            // settings, LOG_MAX_SIZE_MB times the number of kept files, and log
+            // text compresses well, so this stays small for any sane setting.
+            const zip = new AdmZip();
+            files.forEach((file, index) => {
+                // Oldest first inside the archive, and numbered so the order
+                // survives a file listing that sorts by name.
+                const position = files.length - index;
+                const suffix = index === 0 ? "current" : `rotated.${index}`;
+                zip.addLocalFile(file, "", `${String(position).padStart(2, "0")}_${baseName}.${suffix}.log`);
             });
-            stream.pipe(res);
+
+            const buffer = zip.toBuffer();
+            res.setHeader("Content-Type", "application/zip");
+            res.setHeader("Content-Disposition", `attachment; filename="${baseName}_logs.zip"`);
+            res.setHeader("Content-Length", buffer.length);
+            return res.end(buffer);
         } catch (err) {
             console.error("Server", serverLogFilePath, `Download error: ${err.message}`);
             res.status(500).json({ error: "Download failed" });
@@ -280,33 +314,11 @@ export function registerRoutes(app, printers) {
             }
         }
 
-        // Build loaded spool summary with readable names (same data the main
-        // menu uses: Spoolman filament name/material/vendor when linked, AMS
-        // slot data as fallback).
-        const loadedSpools = (printer.spoolData || []).map(s => {
-            const fil = s.existingSpool?.filament || null;
-            return {
-                amsId:          s.amsId,
-                vendor:         fil?.vendor?.name
-                                ?? s.matchingExternalFilament?.manufacturer
-                                ?? null,
-                material:       fil?.material
-                                ?? s.slot?.tray_type
-                                ?? null,
-                filamentName:   fil?.name
-                                ?? s.matchingExternalFilament?.name
-                                ?? s.slot?.tray_sub_brands
-                                ?? null,
-                color:          s.slot?.tray_color       ?? null,
-                tray_info_idx:  s.slot?.tray_info_idx    ?? null,
-                key:            consumptionKey(s.slot?.tray_info_idx, s.slot?.tray_color),
-                tray_uuid:      s.slot?.tray_uuid        ?? null,
-                spoolmanId:     s.existingSpool?.id       ?? null,
-                connectedViaTag: s.connectedViaTag        ?? false,
-                remainingWeight: s.correctedWeight        ?? null,
-                slotState:      s.slotState               ?? null,
-            };
-        });
+        // The same projection the dashboard gets, rather than a second one with
+        // its own field names. That second projection is why this endpoint used
+        // to report connectedViaTag but not connectedViaMapping, so it could not
+        // answer "will this slot be booked" on its own.
+        const loadedSpools = (printer.spoolData || []).map(toClientSpool);
 
         // fullConsumption = total grams the whole print needs per tray_info_idx
         // (used for the "needed" column). consumption = estimate at the current
@@ -499,6 +511,245 @@ export function registerRoutes(app, printers) {
 
         res.json({ ok: true, removed: existed });
     });
+
+    // ---------------------------------------------------------------------
+    // Runtime configuration
+    //
+    // Everything that used to be an environment variable only. The values are
+    // stored in printers/settings.json and applied to the running process right
+    // away, except for the fields the schema marks as restart required.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/settings", (req, res) => {
+        res.json(getSettingsView());
+    });
+
+    app.put("/api/settings", (req, res) => {
+        const previousUrl = spoolmanUrl();
+
+        // Two accepted shapes: the bare field map, and the same map wrapped with
+        // the revision the caller read, which is what the settings page sends so
+        // that a save against a replaced state is refused.
+        const wrapped = req.body && typeof req.body.values === "object" && req.body.values !== null;
+        const patch = wrapped ? req.body.values : req.body;
+        const expectedRevision = wrapped ? req.body.revision : undefined;
+
+        let result;
+        try {
+            result = updateSettings(patch, expectedRevision);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not write settings.json:", err?.message);
+            return res.status(500).json({ ok: false, error: err?.message || "Could not save the settings" });
+        }
+
+        if (!result.ok) {
+            const status = result.conflict ? 409 : 400;
+            return res.status(status).json({ ok: false, error: result.errors.join(" / "), conflict: !!result.conflict });
+        }
+
+        if (result.changed.length) {
+            console.log("Server", serverLogFilePath, `[Settings] Changed: ${result.changed.join(", ")}`);
+        }
+        // The interval is copied onto every printer object, so a change has to
+        // be pushed into the running ones.
+        if (result.changed.includes("UPDATE_INTERVAL")) syncPrinterIntervals();
+        if (spoolmanUrl() !== previousUrl) restartSpoolmanConnection();
+
+        const view = getSettingsView();
+        broadcastSSE({ type: "settings_update", values: view.values });
+
+        res.json({ ok: true, ...view, changed: result.changed, restartRequired: result.restartRequired });
+    });
+
+    // ---------------------------------------------------------------------
+    // Printer management
+    //
+    // The access code is never sent to a client. An update without a code keeps
+    // the stored one, which is how the Web UI edits a printer it cannot display
+    // the code of.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/printers/config", (req, res) => {
+        res.json(printers.map(publicPrinter));
+    });
+
+    app.post("/api/printers", (req, res) => {
+        const result = addPrinter(req.body);
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+
+        console.log("Server", serverLogFilePath, `[Printer] Added ${result.printer.name} (${result.printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        // Connect right away instead of waiting for the next monitor pass.
+        setupMqtt(result.printer);
+
+        res.json({ ok: true, printer: publicPrinter(result.printer) });
+    });
+
+    app.put("/api/printers/:printerId", (req, res) => {
+        const printer = printers.find(p => p.id === req.params.printerId);
+        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+
+        // Only an address or credential change drops the connection, a rename
+        // does not, so only that needs the print in flight to be confirmed.
+        const changesConnection = (req.body?.ip?.trim() && req.body.ip.trim() !== printer.ip)
+            || !!req.body?.code?.trim();
+        if (changesConnection && printBlocks(printer, req.body)) {
+            return respondPrintInFlight(res, printer, "Changing the address or the access code reconnects the printer");
+        }
+
+        const result = updatePrinter(req.params.printerId, req.body);
+        if (!result.ok) {
+            const status = result.error === "Printer not found" ? 404 : 400;
+            return res.status(status).json({ ok: false, error: result.error });
+        }
+
+        console.log(result.printer.name, result.printer.logFilePath, `[Printer] Updated ${result.printer.name} (${result.printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        if (result.reconnect) {
+            disconnectPrinter(result.printer);
+            // The cooldown in setupMqtt guards against retry storms, not against
+            // a deliberate reconnect, so clear it here.
+            result.printer.lastReconnectAttempt = 0;
+            result.printer.reconnectAttempts = 0;
+            if (result.printer.monitoringEnabled) setupMqtt(result.printer);
+        }
+
+        res.json({ ok: true, printer: publicPrinter(result.printer), reconnected: result.reconnect });
+    });
+
+    app.delete("/api/printers/:printerId", (req, res) => {
+        const printer = printers.find(p => p.id === req.params.printerId);
+        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+
+        if (printBlocks(printer, req.body)) {
+            return respondPrintInFlight(res, printer, "Removing the printer disconnects it");
+        }
+
+        printer.monitoringEnabled = false;
+        disconnectPrinter(printer);
+
+        const result = removePrinter(printer.id);
+        if (!result.ok) return res.status(404).json({ ok: false, error: result.error });
+
+        // The assignments describe slots of a printer that no longer exists.
+        clearPrinterMappings(printer.id);
+
+        console.log("Server", serverLogFilePath, `[Printer] Removed ${printer.name} (${printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        res.json({ ok: true, removed: printer.id });
+    });
+
+    // Ends the process so it is started again. The consumption of a running job
+    // is booked when it ends, and that state lives in memory, so a restart mid
+    // print has to be confirmed the same way a reconnect does.
+    app.post("/api/restart", (req, res) => {
+        const printing = printers.find(printer => printBlocks(printer, req.body));
+        if (printing) {
+            return respondPrintInFlight(res, printing, "Restarting ends the process");
+        }
+
+        res.json({ ok: true });
+        restartService();
+    });
+
+    // ---------------------------------------------------------------------
+    // Connection tests
+    //
+    // Both take the values from the form rather than the stored ones, so a
+    // setting can be tried before it is saved. Nothing is written here.
+    // ---------------------------------------------------------------------
+
+    app.post("/api/test/spoolman", async (req, res) => {
+        const candidate = {};
+        for (const key of ["SPOOLMAN_ENDPOINT", "SPOOLMAN_IP", "SPOOLMAN_PORT", "SPOOLMAN_SUBFOLDER"]) {
+            const result = coerceSetting(key, req.body?.[key]);
+            if (result.error) return res.status(400).json({ ok: false, error: result.error });
+            candidate[key] = result.value;
+        }
+
+        const url = buildSpoolmanUrl(candidate);
+        const health = await checkSpoolmanHealth(url);
+
+        res.json({ ...health, url });
+    });
+
+    app.post("/api/test/printer", async (req, res) => {
+        const id = String(req.body?.id || "").trim().toUpperCase();
+        const ip = String(req.body?.ip || "").trim();
+        // The Web UI never receives the stored access code, so an empty one in
+        // an edit means "test the code that is already stored".
+        const known = printers.find(p => p.id === id);
+        const code = String(req.body?.code || "").trim() || known?.code || "";
+
+        if (!id) return res.status(400).json({ ok: false, error: "Serial number is required" });
+        if (!ip) return res.status(400).json({ ok: false, error: "Address is required" });
+        if (!code) return res.status(400).json({ ok: false, error: "Access code is required" });
+
+        // Both checks are independent, and a printer that fails one usually
+        // fails the other, so waiting for them one after another only doubles
+        // the time until the user sees the result.
+        const [mqttResult, ftpsResult] = await Promise.all([
+            testMqttConnection({ id, ip, code }),
+            testFtpsConnection({ ip, code }),
+        ]);
+
+        const target = known ? known.name : id;
+        console.log("Server", serverLogFilePath, `[Test] ${target}: MQTT ${mqttResult.ok ? "ok" : `failed (${mqttResult.detail})`}, FTPS ${ftpsResult.ok ? "ok" : `failed (${ftpsResult.detail})`}`);
+
+        res.json({ ok: mqttResult.ok && ftpsResult.ok, mqtt: mqttResult, ftps: ftpsResult });
+    });
+}
+
+/**
+ * Whether a request has to be confirmed because the printer is mid print.
+ *
+ * The consumption of a running job is booked when it reaches a terminal state,
+ * from data collected while it ran. Dropping the connection before that loses
+ * the booking. Legacy mode writes the weight on every AMS update instead, so
+ * there is nothing in flight to lose there.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} body - the request body, which may carry `force`
+ * @returns {boolean} true when the caller has to confirm first
+ */
+function printBlocks(printer, body) {
+    if (body?.force === true) return false;
+    if (legacyMode()) return false;
+    return ACTIVE_STATES.has(printer.currentGcodeState);
+}
+
+/** Answers a request that would interrupt a running print. */
+function respondPrintInFlight(res, printer, what) {
+    res.status(409).json({
+        ok: false,
+        printInFlight: true,
+        error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}, and the consumption of the running job is booked only when it ends, so it would be lost.`,
+    });
+}
+
+/** The printer fields a client may see. The access code is deliberately not one of them. */
+function publicPrinter(printer) {
+    return {
+        id: printer.id,
+        name: printer.name,
+        ip: printer.ip,
+        hasCode: !!printer.code,
+        mqttStatus: printer.mqttStatus,
+        monitoringEnabled: printer.monitoringEnabled,
+    };
+}
+
+/** Closes the MQTT connection of a printer, if it has one. */
+function disconnectPrinter(printer) {
+    if (printer.mqttClient) {
+        printer.mqttClient.end();
+        printer.mqttClient = null;
+    }
+    printer.mqttRunning = false;
+    printer.mqttStatus = "Disconnected";
 }
 
 /** Parses a value into a finite number, or null when it is empty or invalid. */
