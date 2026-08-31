@@ -139,23 +139,60 @@ goes end of life the choice is:
 A 64 bit OS sidesteps it entirely. A Raspberry Pi 3B and newer are all 64 bit
 capable, and `linux/arm64` stays supported.
 
-## Settings GUI, follow up work
+## Settings GUI and printer management
 
-The settings page and the printer management landed on
-`feat/settings-ui-and-printer-management`. What follows are the gaps that were
-knowingly left open, grouped by effort. Effort is implementation plus test, no
-review.
+Everything below landed on `feat/settings-ui-and-printer-management` up to
+2026-08-31. The branch is not pushed and has no pull request. Written down here
+because it is large enough that the next session should not have to read the
+diff to know what is in it.
 
-### Small, under an hour each
+### What the branch contains
 
-Done on 2026-08-31: the tracking mode is frozen at startup and read through
-`legacyMode()`, the restart notice names the actual step and stays on the page
-until the service is restarted, both documentation gaps are covered in the
-README, the printer dialog was checked at 375 px, and a field whose value
-differs from the schema default now carries a "default" link back to it.
+- **A settings page** at `public/settings.html`, rendered from what
+  `/api/settings` describes, so a new field only has to be added to
+  `SETTINGS_SCHEMA` in `src/settings.js`. Cards: Spoolman connection, Tracking,
+  Synchronisation, Printer connection, Logging, plus Printers and Service.
+- **Configuration lives in `printers/settings.json`** and is applied to the
+  running service. Environment variables only seed a setting that has never been
+  saved. The file carries a schema version, a migration hook and a write counter;
+  a save against a state somebody else replaced is answered with a 409.
+- **Printer management** in the Web UI: add, edit and remove, with the list in
+  `printers/printers.json` written by the service (atomically) rather than by
+  hand. A new printer connects right away, a removed one is disconnected and its
+  assignments are dropped. The serial number is immutable and the access code is
+  never sent to a client.
+- **Connection tests** for Spoolman and for a printer, MQTT and FTPS in
+  parallel, using the values in the form rather than the stored ones. The MQTT
+  test waits for a report on the topic of the serial number, because the printer
+  accepts a subscription to any topic.
+- **The tracking mode is frozen at startup** and read through `legacyMode()`.
+  Saving it changes what is stored, only a restart changes what runs.
+- **A supervisor**: `entrypoint.js` runs the service (`starting.js`) as a child
+  process and starts it again on the restart exit code, so the restart button
+  works without a container restart policy. `SUPERVISOR=false` gives the single
+  process back, which is worth the memory of one more Node process, measured at
+  47 MB on macOS and around 30 MB on Alpine.
+- **Log rotation** with the size and the number of kept files configurable, for
+  the server log and per printer.
+- **One menu bar** across all pages, `public/menu.js`, keyboard operable, and a
+  shared visual language: `.data-table`, the button classes and the form fields
+  are the same everywhere.
+- **Tests**: 81, including an HTTP harness (`test/helpers/app.js`) that registers
+  the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
+  temporary directory.
 
+### Still to verify on hardware
 
-### Medium, one to three hours
+The Web UI was exercised against the real P2S only as a connection test and a
+container run. Still unverified:
+
+- [ ] **Adding and removing a printer with real hardware**, including what the
+  dashboard does while the MQTT connection of a new printer comes up.
+- [ ] **A restart through the Web UI during a running print.** The guard asks
+  first and the booking of that job is lost when it is forced, which is what the
+  dialog says, but it was never observed on a real print.
+
+### Still open
 
 - [ ] **The log page only reads the current file.** Since the logs rotate, the
   history sits in `<name>.log.1` and further. The viewer should read backwards
@@ -163,34 +200,36 @@ differs from the schema default now carries a "default" link back to it.
   download should hand out the rotated ones too, most likely as one archive.
   The button was renamed from "Download complete logs" to "Download this log
   file" in the meantime, so it no longer promises what it does not deliver.
+- [ ] **The Home Assistant add-on repository needs a note.** The add-on passes
+  its options as environment variables, and those stop having an effect once a
+  user saves on the settings page, because the file owns the values from then
+  on. The README of this repository says so; the add-on's does not.
 
-Done on 2026-08-31: the spool assignment dialog follows the settings form now,
-same field labels, inputs, focus colour and section headers, with the picker as
-selectable rows. `settings.json` carries a schema version, a migration hook and
-a write counter, and a save against a state somebody else replaced is answered
-with a 409 instead of overwriting it. Removing a printer or changing its
-address or access code is refused with a 409 while a print is running, and the
-Web UI asks before repeating it with `force`. The menu is keyboard operable
-(`aria-expanded`, submenu labels are buttons, ArrowDown opens, Escape closes
-and hands the focus back) and every dialog focuses a sensible control, the
-harmless one where the other writes or deletes. A focus trap was unnecessary,
-`showModal()` traps focus by itself.
+### Decisions taken along the way
 
+Not tasks. Recorded so they are not relitigated.
 
-### Large, half a day and up
+**`settings.json` owns every field after the first save**, not only the ones
+that were edited. Chosen so that a value changed in the Web UI is not silently
+reverted by a container definition that still passes the old variable. The cost
+is that an environment change no longer has an effect, which the README states
+and a "default" link per field softens.
 
-Done on 2026-08-31: the HTTP API has a harness. `test/helpers/app.js` registers
-the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
-temporary directory, so the settings PUT, the printer CRUD and the validation of
-both connection tests are covered without touching an installation. The service
-can also be restarted from the settings page. `entrypoint.js` supervises the
-service as a child process (`starting.js`), so the restart no longer depends on
-the container policy; `SUPERVISOR=false` gives the single process back.
+**The restart is an exit code, not an in place reload.** The values that need a
+restart are read at startup, and re-reading them in place is what the frozen
+tracking mode exists to prevent. Only the dedicated code restarts; every other
+exit is passed on, so a crash stays a crash and the container restart policy
+stays in charge of it. Letting both layers restart on a crash would nest two
+loops.
 
+**No automatic recovery after an uncaught exception**, for the same reason. The
+supervisor could do it, and that is deliberately not built.
 
-Rejected: encrypting the access code at rest. Without a key store the key ships
-in the same image, so it is obfuscation. The documentation note above is the
-honest version.
+**The Web UI still has no access protection**, see the entry under known gaps.
+
+**Encrypting the access code at rest was rejected.** Without a key store the key
+ships in the same image, so it is obfuscation rather than protection. The README
+note that the code sits in plain text in `printers.json` is the honest version.
 
 ## Code quality
 
@@ -228,7 +267,8 @@ honest version.
 The Home Assistant integration in `ha-bambulab-ams-spoolman-filamentstatus`
 needs no change. It only calls `/api/printers`,
 `/api/printer/{id}/monitoring/start|stop` and `/api/status/{id}`, none of which
-changed, and it sets no environment variables of its own.
+changed, and it sets no environment variables of its own. The add-on wrapper is
+a different matter, see the note in the settings section above.
 
 ## Known gaps, by design
 
