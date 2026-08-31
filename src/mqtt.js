@@ -42,10 +42,15 @@ import {
     hasSpoolUiChanged,
 } from "./ams.js";
 
+/** Strips server-only fields from a UI spool before it goes out to a client. */
 function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
     return rest;
 }
 
+/**
+ * Sends an event to every connected SSE client. A payload that cannot be
+ * serialised is dropped with a log line rather than taking the handler down.
+ */
 function broadcastSSE(data) {
     let payload;
     try {
@@ -57,6 +62,7 @@ function broadcastSSE(data) {
     state.clients.forEach(client => client.write(payload));
 }
 
+/** Pushes one slot's new state to the dashboard. */
 export function broadcastSlotUpdate(printerId, spool) {
     broadcastSSE({ type: "slot_update", printer: printerId, spool: sanitizeSpoolForClient(spool) });
 }
@@ -69,6 +75,19 @@ const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
 /**
  * Tracks gcode_state transitions and triggers filament consumption tracking.
  * Called on every MQTT message that contains a gcode_state field.
+ *
+ * The slice info is fetched once, on the transition into RUNNING, because that
+ * is the first point at which the sliced file is reliably present in the
+ * printer's /cache. Consumption is booked once, on the transition from an
+ * active state into a terminal one: the full slicer estimate for FINISH, and a
+ * layer proportional share for FAILED and CANCEL.
+ *
+ * Both steps are guarded by a flag on the printer, since the printer repeats
+ * its state in every report. Entering an active state resets those flags, so a
+ * reprint of the same file is tracked again.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} print - the `print` object from the MQTT report
  */
 async function handlePrintStateChange(printer, print) {
     const newState    = print.gcode_state;
@@ -134,6 +153,14 @@ async function handlePrintStateChange(printer, print) {
 }
 
 /**
+ * Fallback identity for a filament, used when no tray_info_idx is available.
+ * Mirrored client side in public/frontend.js.
+ */
+function materialKey(type, color) {
+    return `${type || "?"}|${normColor(color)}`;
+}
+
+/**
  * Books the consumed grams in Spoolman for each filament of a finished print.
  *
  * A slot is only booked when we actually know which physical spool sits in it:
@@ -152,10 +179,6 @@ async function handlePrintStateChange(printer, print) {
  * assignment is the user explicitly resolving what the automatic match cannot,
  * namely two connected spools identical in both profile and color.
  */
-function materialKey(type, color) {
-    return `${type || "?"}|${normColor(color)}`;
-}
-
 async function bookConsumption(printer, consumption) {
     if (!printer.spoolData?.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No spool data available for consumption booking");
@@ -229,6 +252,23 @@ async function bookConsumption(printer, consumption) {
     }
 }
 
+/**
+ * Handles one MQTT report from a printer.
+ *
+ * Three things happen here, in order: the reception timestamp is refreshed and
+ * throttled out over SSE, print state changes are forwarded to the consumption
+ * tracking (G-code mode only), and AMS data is processed against Spoolman.
+ *
+ * The AMS part is rate limited by the printer's update interval and skipped
+ * entirely when neither the Spoolman spools nor the tray data actually changed,
+ * because the printer sends a full report every few seconds. Reentry is blocked
+ * through printer.blockMqttUpdates, so a report arriving while the previous one
+ * is still being processed is dropped rather than queued.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {string} topic - the MQTT topic, unused
+ * @param {Buffer|string} message - the raw report payload
+ */
 async function handleMqttMessage(printer, topic, message) {
     if (printer.blockMqttUpdates || state.spoolmanStatus === "Disconnected") return;
     printer.blockMqttUpdates = true;
@@ -383,6 +423,11 @@ async function handleMqttMessage(printer, topic, message) {
     printer.blockMqttUpdates = false;
 }
 
+/**
+ * Clears the Spoolman location of the spool that used to sit in this slot when
+ * a different one is there now, so a removed spool does not keep claiming an
+ * AMS slot as its location. No-op unless SET_LOCATION is on.
+ */
 async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevByAmsId) {
     if (!SET_LOCATION) return;
     const prevSpoolId = prevByAmsId[amsId]?.existingSpool?.id ?? null;
@@ -396,6 +441,33 @@ async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevB
     }
 }
 
+/**
+ * Classifies one AMS slot, acts on it in Spoolman, and records the result for
+ * the UI.
+ *
+ * The branches are tried in order and the order matters: an invalid slot, then
+ * a genuinely empty one, then a slot the printer could not identify (a 3rd
+ * party spool, which can only be linked by a manual assignment), and finally a
+ * fully identified Bambu Lab spool.
+ *
+ * For that last case the slot is connected to an existing tagged spool, or
+ * offered for merge or creation depending on what Spoolman already holds. In
+ * automatic mode the offered action is carried out right away; in manual mode
+ * it is only surfaced in the UI. Legacy mode additionally patches the remaining
+ * weight from the AMS remain percentage here, which G-code mode leaves to the
+ * consumption booking after a print.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} ams - the AMS unit the slot belongs to
+ * @param {object} slot - the normalised slot
+ * @param {object[]} spools - Spoolman spools, as fetched for this AMS update
+ * @param {object[]} externalFilaments - the SpoolmanDB catalogue
+ * @param {object[]} internalFilaments - filaments in this Spoolman instance
+ * @param {object} prevByAmsId - the previous UI spools, keyed by slot label
+ * @param {Date} currentTime - timestamp shared across this AMS update
+ * @returns {Promise<boolean>} whether Spoolman was mutated, which tells the
+ *   caller its cached lists are stale and have to be refetched
+ */
 async function processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime) {
     const amsId = await convertAMSandSlot(ams.id, slot.id);
     const validSlot = Object.keys(slot).length > 6;
@@ -650,6 +722,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     return mutated;
 }
 
+/** Builds the UI entry for an empty slot: nothing matched, no action offered. */
 function buildEmptySpool(printer, amsId, slot) {
     return {
         amsId,
@@ -667,6 +740,12 @@ function buildEmptySpool(printer, amsId, slot) {
     };
 }
 
+/**
+ * Builds the UI entry for a slot holding a spool the printer could not
+ * identify. Nothing about it can be matched automatically, so the only action
+ * offered is assigning a Spoolman spool by hand, and the displayed weight comes
+ * from that assignment rather than from the AMS.
+ */
 function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
     const correctedWeight = mappedSpool?.remaining_weight ?? null;
 
@@ -711,6 +790,10 @@ function resolveMappedSpool(printer, amsId, slot, spools) {
     return spool;
 }
 
+/**
+ * Records a UI spool for this AMS update and broadcasts it, but only when the
+ * slot is worth sending and something the user sees actually changed.
+ */
 function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
     if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
         broadcastSlotUpdate(printer.id, newUiSpool);
@@ -718,6 +801,19 @@ function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
     printer.spoolData.push(newUiSpool);
 }
 
+/**
+ * Opens the MQTT connection to a printer and subscribes to its report topic.
+ *
+ * Guarded against concurrent and rapid retries: an attempt is skipped while one
+ * is already running, while the connection is up, or within a 30 second
+ * cooldown of the last attempt. With MAX_RETRIES set, repeated failures disable
+ * monitoring for that printer instead of retrying forever.
+ *
+ * Neither the close nor the error handler reschedules itself. monitorPrinters
+ * is the only place that retries.
+ *
+ * @param {object} printer - the printer runtime object
+ */
 export async function setupMqtt(printer) {
     const now = Date.now();
     const COOLDOWN_PERIOD = 30000;
@@ -798,6 +894,17 @@ export async function setupMqtt(printer) {
     }
 }
 
+/**
+ * Runs forever, reconnecting printers that are reachable but not connected.
+ *
+ * This is the single retry driver for MQTT. Every OFFLINE_CHECK_INTERVAL each
+ * enabled printer is probed with a plain TCP connect before setupMqtt is
+ * attempted, so an unreachable printer costs one short timeout rather than a
+ * hanging MQTT handshake. The whole loop idles while Spoolman is down, since
+ * there would be nothing to write AMS data to.
+ *
+ * @param {object[]} printers - the printer list
+ */
 export async function monitorPrinters(printers) {
     while (true) {
         if (state.spoolmanStatus === "Disconnected") {
@@ -848,6 +955,12 @@ export async function monitorPrinters(printers) {
     }
 }
 
+/**
+ * Blocks until Spoolman reports healthy, polling every 30 seconds.
+ *
+ * Called once during startup: without Spoolman there is nothing to sync to, so
+ * the service waits here rather than starting up half working.
+ */
 export async function monitorSpoolman() {
     while (true) {
         try {
@@ -870,6 +983,12 @@ export async function monitorSpoolman() {
     }
 }
 
+/**
+ * Runs forever, keeping the Spoolman connection status current.
+ *
+ * Unlike monitorSpoolman this never blocks anything; it only flips the shared
+ * status, which the MQTT handler checks before processing AMS data.
+ */
 export async function monitorSpoolmanBackground() {
     while (true) {
         try {
@@ -893,6 +1012,12 @@ export async function monitorSpoolmanBackground() {
     }
 }
 
+/**
+ * Whether a plain TCP connection to the printer succeeds within the timeout.
+ * Used as a cheap reachability probe before attempting an MQTT handshake.
+ *
+ * @returns {Promise<boolean>} always resolves, never rejects
+ */
 function checkPrinterAvailability(host, port, timeout = 5000) {
     return new Promise(resolve => {
         const socket = new net.Socket();

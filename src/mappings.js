@@ -28,6 +28,15 @@ export function slotFingerprint(slot) {
     return `${slot?.tray_type || "?"}|${normColor(slot?.tray_color)}`;
 }
 
+/**
+ * Loads the mapping file once and caches it for the process lifetime.
+ *
+ * A missing file is the normal first run case and yields an empty map. So does
+ * a corrupt one, because refusing to start over an unreadable convenience cache
+ * would be worse than losing the assignments in it.
+ *
+ * @returns {object} the whole mapping structure, keyed by printer id
+ */
 function load() {
     if (mappings) return mappings;
 
@@ -48,6 +57,7 @@ function load() {
     return mappings;
 }
 
+/** Writes the in-memory mappings back to disk atomically. */
 function persist() {
     // Write to a temp file and rename, so a crash mid-write cannot leave a
     // truncated mappings.json behind.
@@ -61,6 +71,7 @@ function persist() {
     }
 }
 
+/** Returns all slot assignments for a printer, or an empty object. */
 export function getMappings(printerId) {
     return load()[printerId] || {};
 }
@@ -83,6 +94,19 @@ export function getMapping(printerId, amsId, slot = null) {
     return entry;
 }
 
+/**
+ * Assigns a Spoolman spool to an AMS slot and persists it immediately.
+ *
+ * The slot is stored as a fingerprint alongside the id, so a later lookup can
+ * tell whether the same physical spool is still in place. Passing no slot
+ * stores an assignment that is never invalidated by a filament change.
+ *
+ * @param {string} printerId - printer serial
+ * @param {string} amsId - slot label, e.g. "A0"
+ * @param {number|string} spoolId - Spoolman spool id
+ * @param {object|null} slot - the AMS slot the assignment was made from
+ * @returns {object} the stored entry
+ */
 export function setMapping(printerId, amsId, spoolId, slot = null) {
     const all = load();
     (all[printerId] ||= {})[amsId] = {
@@ -94,6 +118,10 @@ export function setMapping(printerId, amsId, spoolId, slot = null) {
     return all[printerId][amsId];
 }
 
+/**
+ * Removes a slot assignment and persists the change. Returns false when there
+ * was nothing to remove.
+ */
 export function clearMapping(printerId, amsId) {
     const all = load();
     if (!all[printerId]?.[amsId]) return false;

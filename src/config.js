@@ -40,9 +40,16 @@ export const SET_LOCATION = (process.env.SET_LOCATION || "false") === "true";
 // works for 3rd-party spools without an RFID chip.
 export const LEGACY_MODE = (process.env.LEGACY_MODE || "false") === "true";
 export const DEBUG = process.env.DEBUG || "false";
-// "auto" is accepted as a shorthand for "automatic"; anything unrecognised
-// falls back to manual. `valid` is reported separately so startup can warn
-// about a typo instead of silently behaving like manual mode.
+/**
+ * Normalises the MODE environment variable.
+ *
+ * "auto" is accepted as a shorthand for "automatic"; anything unrecognised
+ * falls back to manual. `valid` is reported separately so startup can warn
+ * about a typo instead of silently behaving like manual mode.
+ *
+ * @param {string|undefined} raw - the raw MODE value
+ * @returns {{raw: string, mode: "automatic"|"manual", valid: boolean}}
+ */
 export function resolveMode(raw) {
     const value = (raw || "manual").trim();
     const normalized = value.toLowerCase();

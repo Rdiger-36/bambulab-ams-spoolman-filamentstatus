@@ -179,7 +179,21 @@ function resolveRemotePaths(jobName) {
     return [`/cache/${file}`, `/${file}`];
 }
 
-// Exported for tests; fetchSliceInfo is the normal entry point.
+/**
+ * Parses `Metadata/slice_info.config` into the shape the consumption maths
+ * expects.
+ *
+ * Two things are read out of it: the filament list, where each entry carries
+ * the material profile, colour and the grams the slicer predicted, and the
+ * layer_filament_list entries, which say over which layer ranges each filament
+ * is actually used. Filament ids are 1 based and may be non contiguous, while
+ * the layer lists reference a 0 based index, so both are kept.
+ *
+ * Exported for tests; fetchSliceInfo is the normal entry point.
+ *
+ * @param {string} xml - the raw slice_info.config contents
+ * @returns {{filaments: object[], totalLayers: number, rangesByFilamentIdx: object}}
+ */
 export function parseSliceInfo(xml) {
     // --- filaments ---
     const filaments = [];
@@ -223,6 +237,11 @@ export function parseSliceInfo(xml) {
     return { filaments, totalLayers, rangesByFilamentIdx };
 }
 
+/**
+ * Parses the `key="value"` attributes of one XML tag into an object. The slice
+ * info file is small and machine generated, so this is used instead of pulling
+ * in an XML parser.
+ */
 function parseAttrs(str) {
     const result = {};
     const re = /(\w+)="([^"]*)"/g;
@@ -231,6 +250,12 @@ function parseAttrs(str) {
     return result;
 }
 
+/**
+ * Parses a `layer_ranges` attribute into inclusive layer pairs.
+ *
+ * "0 127" yields [[0, 127]], "0 50,60 127" yields [[0, 50], [60, 127]].
+ * Malformed pairs are dropped rather than producing NaN ranges.
+ */
 function parseLayerRanges(str) {
     // "0 127" → [[0,127]];  "0 50,60 127" → [[0,50],[60,127]]
     return str.split(",")
@@ -239,6 +264,7 @@ function parseLayerRanges(str) {
         .map(([s, e]) => [s, e]);
 }
 
+/** Rounds every consumption entry to two decimals, in place. */
 function roundEntries(result) {
     for (const k of Object.keys(result)) {
         result[k].grams = Math.round(result[k].grams * 100) / 100;

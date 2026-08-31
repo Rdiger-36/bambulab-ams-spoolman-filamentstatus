@@ -1,5 +1,21 @@
 import { NEVER_MERGE_IF_TAG } from "./config.js";
 
+/**
+ * Normalises the raw `print.ams.ams` payload so the rest of the pipeline sees
+ * one consistent shape instead of the printer's mix of empty strings, nulls
+ * and placeholder values.
+ *
+ * Missing material, colour and uuid all become the literal "N/A", which is the
+ * marker every later stage tests against. An all zero `tray_uuid` means the
+ * printer read no RFID chip and is treated the same as a missing one. Negative
+ * or missing `remain` is clamped to 0.
+ *
+ * PETG Translucent is a special case: it reports a fully transparent colour
+ * that would render as invisible in the UI, so it is shown as white instead.
+ *
+ * @param {object[]} amsData - `print.ams.ams` from an MQTT report
+ * @returns {object[]} the same structure with normalised tray entries
+ */
 export function processData(amsData) {
     return amsData.map(ams => ({
         ...ams,
@@ -21,6 +37,18 @@ export function processData(amsData) {
     }));
 }
 
+/**
+ * Reduces normalised AMS data to just the fields that should trigger
+ * reprocessing, so two consecutive MQTT reports can be compared as JSON.
+ *
+ * Everything volatile is dropped: humidity, temperature and the many fields
+ * that tick on every message would otherwise make every report look like a
+ * change. Units and trays are sorted by id, because the printer does not
+ * guarantee an order.
+ *
+ * @param {object[]} amsArray - output of processData, or an empty array
+ * @returns {object[]} a stable, comparable projection
+ */
 export function extractComparableTrayData(amsArray) {
     return amsArray.map(ams => ({
         id: ams.id,
@@ -50,6 +78,19 @@ export function extractComparableTrayData(amsArray) {
     })).sort((a, b) => a.id - b.id);
 }
 
+/**
+ * Converts the AMS remain percentage into a percentage of the spool's real
+ * size.
+ *
+ * The AMS estimates the remaining filament against a 1 kg reference regardless
+ * of the actual spool, so a full 250 g spool reports 25 %. Rescaling to the
+ * real `tray_weight` gives the value a user expects to see, clamped to 0 to 100.
+ *
+ * @param {number|string} remainOn1kgBasis - `remain` as reported by the AMS
+ * @param {number|string} trayWeight - the spool's real filament weight in grams
+ * @param {string|null} trayType - `tray_type`, needed to spot support material
+ * @returns {number} remaining percentage of the real spool, rounded
+ */
 export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) {
     const remain = parseFloat(remainOn1kgBasis);
     const weight = parseFloat(trayWeight);
@@ -89,6 +130,18 @@ export function slotIsOccupied(slot) {
     return Number(slot.state) !== 0;
 }
 
+/**
+ * Finds the Spoolman spool already connected to this slot.
+ *
+ * The connection is the `extra.tag` field holding the slot's `tray_uuid`, which
+ * only Bambu Lab spools have. Material and colour must agree as well, so a tag
+ * left over from a previous spool cannot resurface as a match. Multi colour
+ * filaments compare the whole sorted colour set instead of a single hex.
+ *
+ * @param {object} amsSpool - a normalised AMS slot
+ * @param {object[]} allSpools - the Spoolman spool list
+ * @returns {object|null} the connected spool, or null
+ */
 export function findExistingSpool(amsSpool, allSpools) {
     return allSpools.find(spoolmanSpool => {
         const tag = spoolmanSpool.extra?.tag?.replace(/"/g, "");
@@ -108,6 +161,24 @@ export function findExistingSpool(amsSpool, allSpools) {
     }) || null;
 }
 
+/**
+ * Finds the SpoolmanDB catalogue entry for a slot, which is what supplies the
+ * density, diameter and temperatures needed to create a filament.
+ *
+ * Catalogue ids look like `bambulab_pla_basic`, built from the material name,
+ * but the AMS reports that name in a shape that does not always match. Three
+ * transformations are tried in order, from strictest to loosest: lowercase,
+ * lowercase with spaces turned into underscores, and finally the first word
+ * stripped to letters only. Support material is keyed differently and needs the
+ * base material from `tray_type` in the id as well.
+ *
+ * The colour set must match exactly in every attempt, so a looser material
+ * match can never pull in the wrong colour.
+ *
+ * @param {object|null} amsSpool - a normalised AMS slot
+ * @param {object[]} externalFilaments - the SpoolmanDB catalogue
+ * @returns {object|null} the catalogue entry, or null
+ */
 export function findMatchingExternalFilament(amsSpool, externalFilaments) {
     if (!amsSpool) return null;
 
@@ -142,11 +213,35 @@ export function findMatchingExternalFilament(amsSpool, externalFilaments) {
     return null;
 }
 
+/**
+ * Finds the filament already created in this Spoolman instance for a catalogue
+ * entry, matched on `external_id`. A null result means the filament still has
+ * to be created before a spool can reference it.
+ */
 export function findMatchingInternalFilament(externalFilament, internalFilaments) {
     if (!externalFilament) return null;
     return internalFilaments.find(f => f.external_id === externalFilament.id) || null;
 }
 
+/**
+ * Finds an untagged Spoolman spool that plausibly is the spool now sitting in
+ * this slot, so the two can be merged instead of creating a duplicate.
+ *
+ * This is the path for users who tracked their spools in Spoolman by hand
+ * before connecting this service. Matching is deliberately looser than
+ * findExistingSpool, since there is no tag to confirm the guess: material is
+ * compared as a substring in either direction, so "PLA" matches "PLA Basic",
+ * and a single colour hit is enough for a multi colour filament.
+ *
+ * Among those candidates, one is accepted when its weight is within 15 % of
+ * what the AMS reports, or when it is empty, or when it was never used. With
+ * NEVER_MERGE_IF_TAG set, a spool that already carries any tag is skipped
+ * outright.
+ *
+ * @param {object} amsSpool - a normalised AMS slot
+ * @param {object[]} allSpools - the Spoolman spool list
+ * @returns {object|undefined} the mergeable spool, or undefined
+ */
 export function findMergeableSpool(amsSpool, allSpools) {
     // Use tray_color as fallback when cols is missing or empty
     const rawColors = amsSpool.cols?.length ? amsSpool.cols : (amsSpool.tray_color ? [amsSpool.tray_color] : []);
@@ -193,6 +288,17 @@ export function findMergeableSpool(amsSpool, allSpools) {
     });
 }
 
+/**
+ * Whether the Spoolman side changed in a way that should trigger reprocessing.
+ *
+ * Only the three fields this service reacts to are compared: the tag link, the
+ * remaining weight and the filament record. A null or non-array baseline counts
+ * as changed, which is how the very first pass is forced to process everything.
+ *
+ * @param {object[]} spools - the current Spoolman spool list
+ * @param {object[]|null} lastSpoolData - the previous list, null when unseeded
+ * @returns {Promise<boolean>}
+ */
 export async function haveSpoolDataChanged(spools, lastSpoolData) {
     if (!Array.isArray(spools) || !Array.isArray(lastSpoolData)) return true;
     if (spools.length !== lastSpoolData.length) return true;
@@ -213,6 +319,14 @@ export async function haveSpoolDataChanged(spools, lastSpoolData) {
     });
 }
 
+/**
+ * Whether a slot is worth pushing to the UI over SSE.
+ *
+ * On the first run everything is sent, so the client starts from a complete
+ * picture. Afterwards only slots the printer fully identified are sent, which
+ * keeps the sparse payloads of empty and unidentified slots from overwriting a
+ * populated row on every message.
+ */
 export function shouldSendSlotUpdate(slot, isFirstRun) {
     const isValidBambu =
         slot &&
@@ -222,6 +336,19 @@ export function shouldSendSlotUpdate(slot, isFirstRun) {
     return isFirstRun || isValidBambu;
 }
 
+/**
+ * Whether anything the UI actually displays changed between two versions of a
+ * slot, used to suppress redundant SSE broadcasts.
+ *
+ * The comparison is an explicit key list rather than a deep equality check,
+ * because the slot object carries plenty of fields that tick without meaning
+ * anything to the user. A new displayed field must be added to that list, or it
+ * will never reach the UI on its own.
+ *
+ * @param {object|undefined} next - the freshly built UI spool
+ * @param {object|undefined} prev - the previous one for the same slot
+ * @returns {boolean} true when unknown or different, so the caller broadcasts
+ */
 export function hasSpoolUiChanged(next, prev) {
     if (!next || !prev) return true;
     const keys = [

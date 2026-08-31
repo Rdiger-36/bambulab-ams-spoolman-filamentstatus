@@ -22,10 +22,21 @@ import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptio
 import { setupMqtt, broadcastSlotUpdate } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping } from "./mappings.js";
 
+/** Strips server-only fields from a UI spool before it goes out to a client. */
 function sanitizeSpoolForClient({ logFilePath, printerName, ...rest }) {
     return rest;
 }
 
+/**
+ * Looks up the cached UI spool for a printer and slot, answering with a 404 and
+ * returning null when either does not exist. Callers must stop on null; the
+ * response has already been sent.
+ *
+ * @param {{printerId: string, amsId: string}} params - route parameters
+ * @param {object[]} printers - the printer list
+ * @param {object} res - the Express response, used for the 404
+ * @returns {object|null} the cached UI spool, or null
+ */
 function resolveSpoolData({ printerId, amsId }, printers, res) {
     const printer = printers.find(p => p.id === printerId);
     if (!printer) { res.status(404).json({ ok: false, error: "Printer not found" }); return null; }
@@ -34,6 +45,19 @@ function resolveSpoolData({ printerId, amsId }, printers, res) {
     return spoolData;
 }
 
+/**
+ * Registers every HTTP route on the Express app.
+ *
+ * The API falls into four groups: read-only status and spool data for the
+ * dashboard, the SSE stream at /api/events that pushes live updates, the
+ * actions the UI triggers (create, merge, assign a spool, start and stop
+ * monitoring), and the log endpoints. Handlers read from the cached
+ * printer.spoolData rather than talking to the printer, so a request never
+ * blocks on MQTT.
+ *
+ * @param {object} app - the Express app
+ * @param {object[]} printers - the printer list from printers.js
+ */
 export function registerRoutes(app, printers) {
     app.get("/api/status/:printerId", (req, res) => {
         const printer = printers.find(p => p.id === req.params.printerId);
@@ -454,19 +478,28 @@ export function registerRoutes(app, printers) {
     });
 }
 
+/** Parses a value into a finite number, or null when it is empty or invalid. */
 function numberOrNull(value) {
     if (value === "" || value === null || value === undefined) return null;
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
 }
 
+/** Normalises a colour to a bare 6 digit uppercase hex, or null when invalid. */
 function normalizeHex(value) {
     const hex = String(value || "").replace(/^#/, "").slice(0, 6).toUpperCase();
     return /^[0-9A-F]{6}$/.test(hex) ? hex : null;
 }
 
-// density and diameter are the only fields Spoolman requires on a filament, and
-// neither can be read off a chipless spool.
+/**
+ * Validates the filament details typed into the new spool dialog.
+ *
+ * Density and diameter are the only fields Spoolman requires on a filament, and
+ * neither can be read off a chipless spool.
+ *
+ * @param {object|undefined} filament - the filament details from the request
+ * @returns {string|null} an error message, or null when the input is usable
+ */
 function validateFilamentInput(filament) {
     if (!filament) return "Either filamentId or filament details are required";
     if (!Number.isFinite(Number(filament.density)) || Number(filament.density) <= 0) return "Density must be a positive number";

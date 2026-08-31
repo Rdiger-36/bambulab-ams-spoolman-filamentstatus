@@ -8,6 +8,18 @@ const originalConsoleError = console.error;
 // --- Ordered file write queue (prevents concurrent write races) ---
 const __logQueues = new Map();
 
+/**
+ * Runs a task after every task already queued for the same file has finished.
+ *
+ * All log writes for one file go through here, which is what keeps concurrent
+ * appends and the read-modify-write in updateLastMatchingLine from interleaving.
+ * A failing task never breaks the chain: the queue swallows the rejection and
+ * carries on.
+ *
+ * @param {string} filePath - the log file the task operates on
+ * @param {() => Promise<void>} taskFn - the work to run
+ * @returns {Promise<void>} resolves when this task has run
+ */
 function enqueueTask(filePath, taskFn) {
     const prev = __logQueues.get(filePath) || Promise.resolve();
     const next = prev
@@ -19,16 +31,23 @@ function enqueueTask(filePath, taskFn) {
     });
 }
 
+/** Appends content to a log file through that file's write queue. */
 function enqueueAppend(filePath, content) {
     return enqueueTask(filePath, () => fsp.appendFile(filePath, content));
 }
 
-// Collapses a repeated message into the last line instead of appending it again.
-//
-// The read has to happen inside the queue: it used to run outside, so the file
-// was snapshotted before the write was scheduled and every line appended in
-// between was overwritten by that stale snapshot. With a collapsing message
-// firing every few seconds that silently ate most of the log.
+/**
+ * Collapses a repeated message into the last line instead of appending it again.
+ *
+ * The read has to happen inside the queue: it used to run outside, so the file
+ * was snapshotted before the write was scheduled and every line appended in
+ * between was overwritten by that stale snapshot. With a collapsing message
+ * firing every few seconds that silently ate most of the log.
+ *
+ * @param {string} logFilePath - the log file to rewrite
+ * @param {string} messagePrefix - the prefix that marks a line as collapsible
+ * @param {string} newLogMessage - the line replacing the last matching one
+ */
 function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
     return enqueueTask(logFilePath, async () => {
         let data;
@@ -69,6 +88,11 @@ const COLLAPSING_PREFIXES = [
     "Monitoring for following Printer stopped:",
 ];
 
+/**
+ * Joins console arguments into one string, JSON encoding anything that is not
+ * already a string and falling back to String() for values JSON cannot handle,
+ * such as a circular object.
+ */
 function safeStringify(args) {
     return args.map(a => {
         if (typeof a === "string") return a;
@@ -76,7 +100,18 @@ function safeStringify(args) {
     }).join(" ");
 }
 
-// Override console.log. Signature: (device, logFilePath, ...args)
+/**
+ * Writes a log line to stdout and to the given file.
+ *
+ * Overrides the global console.log with a different signature, so every call
+ * site in this project must pass the device name and the target log file first.
+ * Messages starting with one of COLLAPSING_PREFIXES replace the previous such
+ * line rather than piling up, which keeps a reconnect loop from filling the file.
+ *
+ * @param {string} device - printer name, or "Server"
+ * @param {string|null} logFilePath - target file, defaults to the server log
+ * @param {...any} args - message parts, objects are JSON encoded
+ */
 console.log = (device, logFilePath, ...args) => {
     const logMessage = `[LOG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleLog(logMessage);
@@ -91,7 +126,10 @@ console.log = (device, logFilePath, ...args) => {
     }
 };
 
-// Override console.error. Signature: (device, logFilePath, ...args)
+/**
+ * Writes an error line to stderr and to the given file. Same signature as the
+ * console.log override; errors are never collapsed.
+ */
 console.error = (device, logFilePath, ...args) => {
     const errorMessage = `[ERROR] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleError(errorMessage);
@@ -100,7 +138,10 @@ console.error = (device, logFilePath, ...args) => {
     enqueueAppend(path, errorMessage + "\n");
 };
 
-// Override console.debug. Signature: (device, logFilePath, ...args)
+/**
+ * Writes a debug line, but only when the DEBUG environment variable is "true".
+ * Same signature as the console.log override.
+ */
 console.debug = (device, logFilePath, ...args) => {
     if (DEBUG === "true") {
         const debugMessage = `[DEBUG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
@@ -111,6 +152,18 @@ console.debug = (device, logFilePath, ...args) => {
     }
 };
 
+/**
+ * Reads the last lines of a log file without loading the whole file.
+ *
+ * Log files grow without bound, so the file is read backwards in chunks and
+ * stops as soon as enough lines are collected. Blank lines are skipped and the
+ * result is returned in normal top to bottom order.
+ *
+ * @param {string} filePath - the log file to read
+ * @param {number} [maxLines=250] - how many lines to return at most
+ * @param {number} [chunkSize=65536] - read size per backwards step, in bytes
+ * @returns {Promise<string[]>} the last lines, oldest first
+ */
 export async function tailFileLines(filePath, maxLines = 250, chunkSize = 64 * 1024) {
     const fh = await fsp.open(filePath, "r");
     try {
