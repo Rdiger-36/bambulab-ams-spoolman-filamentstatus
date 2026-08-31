@@ -1,3 +1,4 @@
+import AdmZip from "adm-zip";
 import { createReadStream } from "fs";
 import mime from "mime-types";
 import path from "path";
@@ -6,7 +7,7 @@ import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSetting
 import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
-import { tailFileLines } from "./logger.js";
+import { tailLogLines, logFileSet } from "./logger.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -158,50 +159,83 @@ export function registerRoutes(app, printers) {
         });
     });
 
+    // Reads across the rotated files, so the requested number of lines is
+    // delivered even right after a rotation, when the current file is nearly
+    // empty. "files" is what the download button needs to know whether it is
+    // handing out one file or an archive.
     app.get("/api/logs/:printerId", async (req, res) => {
         try {
             const limitRaw = req.query.limit;
             const limit = Math.max(1, Math.min(2000, parseInt(limitRaw ?? "250", 10) || 250));
 
-            if (req.params.printerId === "server") {
-                const lines = await tailFileLines(serverLogFilePath, limit);
-                return res.json({ logs: lines });
+            let filePath = serverLogFilePath;
+            if (req.params.printerId !== "server") {
+                const printer = printers.find(p => p.id === req.params.printerId);
+                if (!printer) return res.status(404).json({ error: "Printer not found" });
+                filePath = printer.logFilePath;
             }
 
-            const printer = printers.find(p => p.id === req.params.printerId);
-            if (!printer) return res.status(404).json({ error: "Printer not found" });
-
-            const lines = await tailFileLines(printer.logFilePath, limit);
-            return res.json({ logs: lines });
+            const [lines, files] = await Promise.all([
+                tailLogLines(filePath, limit),
+                logFileSet(filePath),
+            ]);
+            return res.json({ logs: lines, files: files.length });
         } catch (err) {
             console.error("Server", serverLogFilePath, `Failed to read log file: ${err.message}`);
             return res.status(500).json({ error: "Failed to read log file" });
         }
     });
 
+    // Hands out the whole history, not only the current file: once a log has
+    // rotated, the interesting lines are usually in <name>.log.1. A single file
+    // is streamed as it is, several become one zip, because that keeps the file
+    // boundaries and the order intact.
     app.get("/api/logs/:printerId/download", async (req, res) => {
         try {
             const { printerId } = req.params;
-            let filePath, downloadName;
+            let filePath, baseName;
 
             if (printerId === "server") {
                 filePath = serverLogFilePath;
-                downloadName = "server.log";
+                baseName = "server";
             } else {
                 const printer = printers.find(p => p.id === printerId);
                 if (!printer) return res.status(404).json({ error: "Printer not found" });
                 filePath = printer.logFilePath;
-                downloadName = `${printer.name.replace(/\s+/g, "_")}_${printer.id}.log`;
+                baseName = `${printer.name.replace(/\s+/g, "_")}_${printer.id}`;
             }
 
-            res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
-            res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
-            const stream = createReadStream(filePath);
-            stream.on("error", err => {
-                console.error("Server", serverLogFilePath, `Failed to stream log: ${err.message}`);
-                if (!res.headersSent) res.status(500).end("Failed to read log file");
+            const files = await logFileSet(filePath);
+            if (files.length === 0) return res.status(404).json({ error: "No log file found" });
+
+            if (files.length === 1) {
+                res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
+                res.setHeader("Content-Disposition", `attachment; filename="${baseName}.log"`);
+                const stream = createReadStream(files[0]);
+                stream.on("error", err => {
+                    console.error("Server", serverLogFilePath, `Failed to stream log: ${err.message}`);
+                    if (!res.headersSent) res.status(500).end("Failed to read log file");
+                });
+                return stream.pipe(res);
+            }
+
+            // The archive is built in memory. Its size is bounded by the log
+            // settings, LOG_MAX_SIZE_MB times the number of kept files, and log
+            // text compresses well, so this stays small for any sane setting.
+            const zip = new AdmZip();
+            files.forEach((file, index) => {
+                // Oldest first inside the archive, and numbered so the order
+                // survives a file listing that sorts by name.
+                const position = files.length - index;
+                const suffix = index === 0 ? "current" : `rotated.${index}`;
+                zip.addLocalFile(file, "", `${String(position).padStart(2, "0")}_${baseName}.${suffix}.log`);
             });
-            stream.pipe(res);
+
+            const buffer = zip.toBuffer();
+            res.setHeader("Content-Type", "application/zip");
+            res.setHeader("Content-Disposition", `attachment; filename="${baseName}_logs.zip"`);
+            res.setHeader("Content-Length", buffer.length);
+            return res.end(buffer);
         } catch (err) {
             console.error("Server", serverLogFilePath, `Download error: ${err.message}`);
             res.status(500).json({ error: "Download failed" });

@@ -173,11 +173,13 @@ diff to know what is in it.
   process back, which is worth the memory of one more Node process, measured at
   47 MB on macOS and around 30 MB on Alpine.
 - **Log rotation** with the size and the number of kept files configurable, for
-  the server log and per printer.
+  the server log and per printer. The log page reads backwards across the
+  rotated files, and the download hands out the whole history as one zip as
+  soon as there is more than the current file.
 - **One menu bar** across all pages, `public/menu.js`, keyboard operable, and a
   shared visual language: `.data-table`, the button classes and the form fields
   are the same everywhere.
-- **Tests**: 81, including an HTTP harness (`test/helpers/app.js`) that registers
+- **Tests**: 89, including an HTTP harness (`test/helpers/app.js`) that registers
   the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
   temporary directory.
 
@@ -194,12 +196,6 @@ container run. Still unverified:
 
 ### Still open
 
-- [ ] **The log page only reads the current file.** Since the logs rotate, the
-  history sits in `<name>.log.1` and further. The viewer should read backwards
-  across them when the current file holds fewer lines than asked for, and the
-  download should hand out the rotated ones too, most likely as one archive.
-  The button was renamed from "Download complete logs" to "Download this log
-  file" in the meantime, so it no longer promises what it does not deliver.
 - [ ] **The Home Assistant add-on repository needs a note.** The add-on passes
   its options as environment variables, and those stop having an effect once a
   user saves on the settings page, because the file owns the values from then

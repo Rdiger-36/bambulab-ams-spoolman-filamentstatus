@@ -1,5 +1,8 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
+import AdmZip from "adm-zip";
+import fs from "fs";
+import path from "path";
 
 import { startTestApp, call } from "./helpers/app.js";
 
@@ -152,4 +155,50 @@ test("the Spoolman test builds the URL from host, port and subfolder", async () 
 
     assert.equal(body.url, "http://127.0.0.1:1/spoolman");
     assert.equal(body.ok, false);
+});
+
+/* ---- Logs ---- */
+
+test("the log endpoint reads across the rotated files", async () => {
+    const logDir = process.env.LOG_DIR;
+    fs.writeFileSync(path.join(logDir, "server.log.1"), "older line\n");
+    fs.writeFileSync(path.join(logDir, "server.log"), "current line\n");
+
+    const { status, body } = await call(`${app.url}/api/logs/server?limit=10`);
+
+    assert.equal(status, 200);
+    assert.deepEqual(body.logs, ["older line", "current line"]);
+    assert.equal(body.files, 2);
+});
+
+test("the download is a zip once there is a history, and a log file before that", async () => {
+    const logDir = process.env.LOG_DIR;
+    fs.writeFileSync(path.join(logDir, "server.log.1"), "older line\n");
+    fs.writeFileSync(path.join(logDir, "server.log"), "current line\n");
+
+    const archive = await fetch(`${app.url}/api/logs/server/download`);
+    assert.equal(archive.status, 200);
+    assert.equal(archive.headers.get("content-type"), "application/zip");
+    assert.match(archive.headers.get("content-disposition"), /server_logs\.zip/);
+
+    // The rotated file has to be in there, otherwise the button promises more
+    // than it delivers, which is what it used to do.
+    const zip = new AdmZip(Buffer.from(await archive.arrayBuffer()));
+    const names = zip.getEntries().map(entry => entry.entryName).sort();
+    assert.deepEqual(names, ["01_server.rotated.1.log", "02_server.current.log"]);
+    assert.equal(zip.readAsText("01_server.rotated.1.log"), "older line\n");
+
+    fs.rmSync(path.join(logDir, "server.log.1"));
+    const single = await fetch(`${app.url}/api/logs/server/download`);
+    assert.match(single.headers.get("content-type"), /text\/plain/);
+    assert.match(single.headers.get("content-disposition"), /server\.log/);
+    assert.equal(await single.text(), "current line\n");
+});
+
+test("the log endpoints refuse an unknown printer", async () => {
+    const read = await call(`${app.url}/api/logs/01P00A0000NOPE`);
+    assert.equal(read.status, 404);
+
+    const download = await fetch(`${app.url}/api/logs/01P00A0000NOPE/download`);
+    assert.equal(download.status, 404);
 });

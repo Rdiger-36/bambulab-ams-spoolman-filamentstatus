@@ -1,4 +1,5 @@
 import { promises as fsp } from "fs";
+import path from "path";
 import { serverLogFilePath } from "./config.js";
 import { settings } from "./settings.js";
 import { formatDateLog } from "./utils.js";
@@ -295,4 +296,73 @@ async function rotateNow(filePath, maxBytes, keep) {
         originalConsoleError(`[ERROR] Could not rotate ${filePath}: ${err.message}`);
         return false;
     }
+}
+
+/**
+ * The files a log consists of, newest first: the current one, then the rotated
+ * `<name>.log.1`, `.2` and so on.
+ *
+ * The directory is listed rather than counting up from `.1`, so a history left
+ * behind by a since lowered keep count is still found instead of stopping at
+ * the first gap. Files that do not exist are left out, so the result is empty
+ * before anything has been logged.
+ *
+ * @param {string} filePath - the current log file
+ * @returns {Promise<string[]>} existing paths, newest first
+ */
+export async function logFileSet(filePath) {
+    const dir = path.dirname(filePath);
+    const base = path.basename(filePath);
+
+    let entries;
+    try {
+        entries = await fsp.readdir(dir);
+    } catch (err) {
+        if (err.code !== "ENOENT") {
+            originalConsoleError(`[ERROR] Could not list ${dir}: ${err.message}`);
+        }
+        return [];
+    }
+
+    const rotated = entries
+        .map(name => {
+            const match = name.startsWith(`${base}.`) && /^\d+$/.test(name.slice(base.length + 1))
+                ? Number(name.slice(base.length + 1))
+                : null;
+            return match === null ? null : { index: match, path: path.join(dir, name) };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.index - b.index)
+        .map(entry => entry.path);
+
+    return entries.includes(base) ? [filePath, ...rotated] : rotated;
+}
+
+/**
+ * Reads the last lines of a log, continuing into the rotated files when the
+ * current one does not hold enough of them.
+ *
+ * Without this the viewer goes blank right after a rotation, because everything
+ * written before it sits in `<name>.log.1`.
+ *
+ * @param {string} filePath - the current log file
+ * @param {number} [maxLines=250] - how many lines to return at most
+ * @returns {Promise<string[]>} the last lines across the files, oldest first
+ */
+export async function tailLogLines(filePath, maxLines = 250) {
+    const files = await logFileSet(filePath);
+    const lines = [];
+
+    for (const file of files) {
+        if (lines.length >= maxLines) break;
+        try {
+            const older = await tailFileLines(file, maxLines - lines.length);
+            lines.unshift(...older);
+        } catch (err) {
+            // A file rotated away between the listing and the read is normal
+            if (err.code !== "ENOENT") throw err;
+        }
+    }
+
+    return lines;
 }

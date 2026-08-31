@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import { flushLogs, rotateLogFile } from "../src/logger.js";
+import { flushLogs, logFileSet, rotateLogFile, tailLogLines } from "../src/logger.js";
 
 // Flushing once only awaits what is queued at that moment. Yielding to the event
 // loop in between catches a write that was still being scheduled, so the test
@@ -135,4 +135,51 @@ test("a missing log file is not an error", async () => {
     fs.rmSync(file);
 
     assert.equal(await rotateLogFile(file, { maxBytes: 1, keep: 2 }), false);
+});
+
+test("the rotated files are listed newest first, gaps included", async () => {
+    // Lowering the keep count leaves the files past it behind, so counting up
+    // from .1 would stop before them and lose history the viewer could show.
+    const file = tmpLog("set.log");
+    fs.writeFileSync(`${file}.1`, "one\n");
+    fs.writeFileSync(`${file}.3`, "three\n");
+
+    assert.deepEqual(await logFileSet(file), [file, `${file}.1`, `${file}.3`]);
+});
+
+test("a log that has never been written is an empty set", async () => {
+    const file = tmpLog("none.log");
+    fs.rmSync(file);
+
+    assert.deepEqual(await logFileSet(file), []);
+});
+
+test("the tail continues into the rotated files when the current one is short", async () => {
+    // Right after a rotation the current file holds almost nothing, and the
+    // viewer used to go blank because it only ever read that one file.
+    const file = tmpLog("tail.log");
+    fs.writeFileSync(`${file}.2`, "oldest 1\noldest 2\n");
+    fs.writeFileSync(`${file}.1`, "older 1\nolder 2\n");
+    fs.writeFileSync(file, "current 1\n");
+
+    assert.deepEqual(await tailLogLines(file, 5), [
+        "oldest 1", "oldest 2", "older 1", "older 2", "current 1",
+    ]);
+
+    // Asking for fewer lines stops in the middle of the history
+    assert.deepEqual(await tailLogLines(file, 2), ["older 2", "current 1"]);
+});
+
+test("the tail of a log without history is the current file alone", async () => {
+    const file = tmpLog("single.log");
+    fs.writeFileSync(file, "a\nb\n");
+
+    assert.deepEqual(await tailLogLines(file, 10), ["a", "b"]);
+});
+
+test("the tail of a log that does not exist yet is empty", async () => {
+    const file = tmpLog("missing.log");
+    fs.rmSync(file);
+
+    assert.deepEqual(await tailLogLines(file, 10), []);
 });
