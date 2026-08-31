@@ -412,9 +412,9 @@ printer from another page opens it on the dashboard.
   well.
 - **Legacy mode** is the one field that needs a restart. The value is saved
   right away, but the running service keeps the mode it started with, and the
-  page says so until the service is restarted. The two tracking modes book
-  consumption differently, so switching one into a running process would book a
-  print in flight twice or not at all.
+  page keeps saying so, with a "Restart now" next to it, until the service is
+  restarted. The two tracking modes book consumption differently, so switching
+  one into a running process would book a print in flight twice or not at all.
 
 - **Restart service**, in its own card at the bottom. The container runs a small
   supervisor that starts the service again by itself, so this works whether or

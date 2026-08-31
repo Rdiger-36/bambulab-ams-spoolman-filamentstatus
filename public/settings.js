@@ -4,11 +4,6 @@
 
 // Order and headline of the field groups. The group key comes from the schema,
 // the fields the schema marks as advanced go into the collapsed part.
-// Named once, because the notice appears both after a save and on every load
-// while the stored value differs from the running one.
-const RESTART_MESSAGE = "Legacy mode was changed. Restart the service to apply it: "
-    + "restart the container (docker restart <container>) or the Home Assistant add-on.";
-
 const GROUPS = [
     { key: "spoolman",  title: "Spoolman connection", advancedLabel: "Host, port, subfolder and public URL" },
     { key: "tracking",  title: "Tracking" },
@@ -149,7 +144,12 @@ function applyView(view) {
 function showRestartNotice() {
     if (!restartPending) return;
 
-    showBanner(RESTART_MESSAGE, "warn");
+    // With the supervisor the button next to this does the whole job, so naming
+    // the manual way would only send the user off to a terminal for nothing.
+    showBanner(supervised
+        ? "Legacy mode was changed. Restart the service to apply it."
+        : "Legacy mode was changed. Restart the service to apply it: restart the container "
+          + "(docker restart <container>) or the Home Assistant add-on.", "warn");
     // Straight from the notice, rather than sending the user looking for the
     // button further down the page.
     const action = document.createElement("button");
