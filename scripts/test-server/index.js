@@ -28,7 +28,7 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  *   node scripts/test-server/index.js [--spoolman-port 7912] [--printer-port 8883]
  *                                     [--interval 3000] [--no-service]
  *                                     [--real-printer <ip> <code> <serial>]
- *                                     [--mode manual|automatic]
+ *                                     [--spoolman <url>] [--mode manual|automatic]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
@@ -37,6 +37,13 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  * one, while Spoolman stays the mock. That is the way to see how a spool nobody
  * here owns is really reported and really drawn, without a single write
  * reaching a Spoolman instance that matters.
+ *
+ * `--spoolman <url>` skips the mock Spoolman and points the service at a real
+ * instance. Everything the service writes then reaches that instance, so use it
+ * only against one whose contents do not matter. The mock's catalogue is a
+ * curated subset, which is enough for its own scenario and not for a real
+ * printer full of spools nobody picked; a real Spoolman serves the whole of
+ * SpoolmanDB.
  *
  * `--mode automatic` lets the service create and merge in the mock Spoolman
  * without waiting for a button. Pointed at a real printer it seeds the mock
@@ -60,6 +67,7 @@ function readOptions(argv) {
         interval: 3000,
         service: true,
         realPrinter: null,
+        spoolman: null,
         mode: "manual",
     };
 
@@ -70,6 +78,14 @@ function readOptions(argv) {
             case "--printer-port": options.printerPort = Number(value); i++; break;
             case "--interval": options.interval = Number(value); i++; break;
             case "--no-service": options.service = false; break;
+            case "--spoolman":
+                if (!value || !/^https?:\/\//.test(value)) {
+                    console.error("--spoolman takes a base URL, for example http://192.168.1.9:30010");
+                    process.exit(2);
+                }
+                options.spoolman = value.replace(/\/+$/, "");
+                i++;
+                break;
             case "--mode":
                 if (value !== "manual" && value !== "automatic") {
                     console.error("--mode takes manual or automatic");
@@ -115,15 +131,26 @@ function describeScenario() {
 async function main() {
     const options = readOptions(process.argv.slice(2));
 
-    const { app, store } = createMockSpoolman(prefixed("spoolman"));
-    const spoolman = http.createServer(app);
-    await new Promise((resolve, reject) => {
-        spoolman.once("error", reject);
-        spoolman.listen(options.spoolmanPort, () => {
-            console.log(`[spoolman] listening on ${options.spoolmanPort}`);
-            resolve();
+    // A real Spoolman takes the mock's place entirely. Starting both would leave
+    // a listener nothing talks to and a store nothing writes to.
+    let store = null;
+    let spoolman = null;
+
+    if (options.spoolman) {
+        console.log(`[spoolman] using ${options.spoolman}, the mock is not started`);
+        console.log("[spoolman] every write the service makes reaches that instance");
+    } else {
+        const mock = createMockSpoolman(prefixed("spoolman"));
+        store = mock.store;
+        spoolman = http.createServer(mock.app);
+        await new Promise((resolve, reject) => {
+            spoolman.once("error", reject);
+            spoolman.listen(options.spoolmanPort, () => {
+                console.log(`[spoolman] listening on ${options.spoolmanPort}`);
+                resolve();
+            });
         });
-    });
+    }
 
     // A physical printer takes the mock's place entirely. Running both would
     // mean two printers in the list reporting different things, and the point
@@ -162,7 +189,7 @@ async function main() {
                 ...process.env,
                 DATA_DIR: dataDir,
                 LOG_DIR: path.join(dataDir, "logs"),
-                SPOOLMAN_ENDPOINT: `http://127.0.0.1:${options.spoolmanPort}`,
+                SPOOLMAN_ENDPOINT: options.spoolman ?? `http://127.0.0.1:${options.spoolmanPort}`,
                 PRINTER_ID: options.realPrinter?.serial ?? PRINTER_SERIAL,
                 PRINTER_CODE: options.realPrinter?.code ?? PRINTER_CODE,
                 PRINTER_IP: options.realPrinter?.ip ?? "127.0.0.1",
@@ -188,8 +215,9 @@ async function main() {
         });
     } else {
         console.log("[service] not started, point one at " +
-            `http://127.0.0.1:${options.spoolmanPort} and at 127.0.0.1:${options.printerPort} ` +
-            `with serial ${PRINTER_SERIAL} and access code ${PRINTER_CODE}`);
+            `${options.spoolman ?? `http://127.0.0.1:${options.spoolmanPort}`} and at ` +
+            `127.0.0.1:${options.printerPort} with serial ${PRINTER_SERIAL} ` +
+            `and access code ${PRINTER_CODE}`);
     }
 
     if (options.realPrinter) {
@@ -205,10 +233,12 @@ async function main() {
 
         if (service && service.exitCode === null) service.kill("SIGTERM");
         if (printer) await printer.close();
-        await new Promise(done => spoolman.close(() => done()));
+        if (spoolman) await new Promise(done => spoolman.close(() => done()));
 
-        console.log(`[spoolman] ${store.writes.length} write(s) received:`);
-        for (const write of store.writes) console.log(`[spoolman]   ${write}`);
+        if (store) {
+            console.log(`[spoolman] ${store.writes.length} write(s) received:`);
+            for (const write of store.writes) console.log(`[spoolman]   ${write}`);
+        }
         if (printer) console.log(`[printer] published ${printer.reports()} report(s)`);
         if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
 

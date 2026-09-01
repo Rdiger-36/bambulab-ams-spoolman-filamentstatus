@@ -135,8 +135,7 @@ async function handlePrintStateChange(printer, print) {
             ? calcFullConsumption(printer.currentSliceInfo)
             : calcPartialConsumption(printer.currentSliceInfo, layerNum);
 
-        console.log(printer.name, printer.logFilePath, `[Print] ${newState}, booking filament consumption:`, JSON.stringify(consumption));
-        await bookConsumption(printer, consumption);
+        await bookConsumption(printer, consumption, newState);
     }
 }
 
@@ -250,8 +249,12 @@ export function slotConfirmsSlice(candidate, info) {
  * Within a stage, manually assigned spools win over tag-connected ones: an
  * assignment is the user explicitly resolving what the automatic match cannot,
  * namely two connected spools identical in both profile and color.
+ *
+ * @param {object} printer - the runtime printer
+ * @param {object} consumption - a map from calcFullConsumption or the partial one
+ * @param {string} state - the terminal state that triggered this, for the log
  */
-async function bookConsumption(printer, consumption) {
+async function bookConsumption(printer, consumption, state) {
     if (!printer.spoolData?.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No spool data available for consumption booking");
         return;
@@ -261,6 +264,11 @@ async function bookConsumption(printer, consumption) {
     // in that list is a slot only once it is resolved against the slots this
     // printer actually reports.
     resolveSliceSlots(consumption, orderedAmsSlots(printer.spoolData.map(s => s.amsId)));
+
+    // Logged from here rather than from the caller, which ran before the slots
+    // were named and therefore printed every `amsId` as null, which is the one
+    // field somebody reading this line is looking for.
+    console.log(printer.name, printer.logFilePath, `[Print] ${state}, booking filament consumption:`, JSON.stringify(consumption));
 
     const candidates = [];
     for (const uiSpool of printer.spoolData) {
