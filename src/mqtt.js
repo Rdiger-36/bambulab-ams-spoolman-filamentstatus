@@ -422,6 +422,47 @@ async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevB
     }
 }
 
+// How many AMS updates a slot may wait for its remain reading before a spool is
+// created without one. The reading arrived between 17 and 74 seconds after the
+// spool went in across every insert captured on a P2S, so at the default 15
+// second interval five updates cover that with room to spare, and a spool whose
+// chip never reports still ends up in Spoolman rather than being skipped in
+// silence.
+const MAX_REMAIN_WAITS = 5;
+
+/**
+ * Whether a slot has waited long enough to be created without a remain reading.
+ *
+ * Counts consecutive AMS updates in which the printer reported no percentage
+ * for this slot. The count is kept per slot and reset as soon as a reading
+ * arrives or a different spool shows up, so it measures this spool in this
+ * slot and nothing else.
+ *
+ * Creating without a reading is not free: `usedWeightFromSlot()` then treats
+ * the spool as brand new, which is wrong for a partly used one. Waiting is the
+ * better default, giving up eventually is better than never creating the spool
+ * at all.
+ *
+ * @param {object} printer - the printer runtime object, holding the counters
+ * @param {string} amsId - the slot label
+ * @param {object} slot - the normalised slot
+ * @returns {boolean} true once the wait is over, so the caller stops holding back
+ */
+export function waitedLongEnoughForRemain(printer, amsId, slot) {
+    if (!printer.remainWaits) printer.remainWaits = {};
+
+    if (slot.remain != null) {
+        delete printer.remainWaits[amsId];
+        return true;
+    }
+
+    const previous = printer.remainWaits[amsId];
+    const waits = previous?.uuid === slot.tray_uuid ? previous.waits + 1 : 1;
+    printer.remainWaits[amsId] = { uuid: slot.tray_uuid, waits };
+
+    return waits > MAX_REMAIN_WAITS;
+}
+
 /**
  * Classifies one AMS slot, acts on it in Spoolman, and records the result for
  * the UI.
@@ -611,7 +652,19 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         if (!mergeableSpool) {
             existingSpool = spools.length !== 0 ? findExistingSpool(slot, spools) : null;
 
-            if (!existingSpool) {
+            // Creating a spool writes its used weight, and that comes from the
+            // AMS remain percentage, which is not there for the first seconds
+            // after a spool goes in. Creating in that window stores a brand new
+            // spool for a partly used one, and in G-code mode nothing corrects
+            // the weight afterwards. Merging is deliberately not held back: it
+            // only writes the tag, never a weight.
+            const waitingForRemain = !existingSpool && !waitedLongEnoughForRemain(printer, amsId, slot);
+
+            if (!existingSpool && waitingForRemain) {
+                console.debug(printer.name, printer.logFilePath, "    Waiting for the AMS to report the remaining percentage before creating a spool");
+                option = "Waiting for data";
+                enableButton = "false";
+            } else if (!existingSpool) {
                 if (matchingInternalFilament) {
                     console.log(printer.name, printer.logFilePath, "    Filament exists, create a Spool with this Data");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
@@ -654,7 +707,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             option = "Merge Spool";
         }
 
-        if (!automatic) enableButton = "true";
+        if (!automatic && option !== "Waiting for data") enableButton = "true";
         printer.lastUpdateTime = new Date();
 
         // A create/merge just happened, so look the spool back up right away so

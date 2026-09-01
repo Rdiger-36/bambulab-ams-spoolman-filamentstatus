@@ -112,6 +112,16 @@ build their Spoolman payload from.
   to reading `state`: on a P2S it is 9 or 10 when empty and 11 or 27 when
   loaded, so "non zero means occupied" marks every empty slot as a 3rd party
   spool and freezes change detection for chipless slots.
+- **A spool is not created before the AMS reports how much is left.**
+  `usedWeightFromSlot()` turns the percentage into `used_weight`, and without
+  one it has to assume brand new, which is wrong for a partly used spool that
+  nothing corrects afterwards in G-code mode. `waitedLongEnoughForRemain()`
+  holds the create branch back, in both modes: automatic skips the slot for
+  this update, manual shows a disabled "Waiting for data" button. It gives up
+  after `MAX_REMAIN_WAITS` updates so a chip that never reports still gets its
+  spool. Merging is deliberately not held back, it writes only the tag. The
+  wait resolves itself because `hasTrayDataChanged()` treats the arrival of the
+  first reading as a change.
 - **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to

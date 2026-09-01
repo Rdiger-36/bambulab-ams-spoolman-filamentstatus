@@ -47,6 +47,9 @@ function createRuntimePrinter(entry) {
         currentLayerNum: 0,
         consumptionBooked: false,
         sliceFetchDone: false,
+        // How many AMS updates a slot has been waiting for its remain reading,
+        // keyed by slot label. See waitedLongEnoughForRemain() in mqtt.js.
+        remainWaits: {},
     };
 }
 

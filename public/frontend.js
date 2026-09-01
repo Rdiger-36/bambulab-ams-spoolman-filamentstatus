@@ -1191,11 +1191,19 @@ document.addEventListener("DOMContentLoaded", () => {
             "Create Filament & Spool": "Create Filament & Spool",
             "Assign Spool": "Assign Spool",
             "Unassign Spool": "Unassign Spool",
-            "Show Info!": "Show Info!"
+            "Show Info!": "Show Info!",
+            // Not an action: the AMS has not reported the remaining percentage
+            // yet, and creating a spool without it would store a partly used
+            // one as brand new. The backend offers the real action as soon as
+            // the reading arrives, or after five updates without one.
+            "Waiting for data": "Waiting for data"
         };
 
         button.textContent = actionMap[amsSpool.option] || "No actions available";
         button.disabled = amsSpool.enableButton !== "true" || !spoolmanConnected;
+        if (amsSpool.option === "Waiting for data") {
+            button.title = "The AMS has not reported how much filament is left yet. Creating the spool now would store it as brand new.";
+        }
     }
 
     // Generate the content of the confirmation dialog
