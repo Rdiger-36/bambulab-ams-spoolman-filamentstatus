@@ -21,7 +21,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `logger.js` | The `console.*` overrides, the serialised per-file write queue, `tailLogLines()` for the log viewer, which reads across the rotated files, and the size based rotation itself. |
 | `printers.js` | Loads and writes `printers/printers.json` (or seeds it from the `PRINTER_*` env vars), seeds the mutable per-printer runtime object, and owns add, update and remove. |
 | `mqtt.js` | The engine. Connection lifecycle, message handling, slot processing, print-state tracking, consumption booking, SSE broadcast, monitor loops. |
-| `ams.js` | Pure functions over AMS payloads: normalisation, change detection, spool matching. No I/O. |
+| `ams.js` | Pure functions over AMS payloads: normalisation, change detection, spool matching, and `matchConsumption()`, the one decision about which sliced filament comes out of which slot. No I/O. |
 | `gcode.js` | FTPS fetch of the sliced 3MF, `slice_info.config` parsing, consumption maths. |
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
@@ -198,6 +198,27 @@ build their Spoolman payload from.
   lists an empty slot too and counting only the occupied ones shifts everything
   after one. Where an AMS HT sits is inference, no observed file has one, and it
   costs nothing to be wrong about because the confirmation below rejects it.
+- **The slot a sliced filament belongs to is decided once**, by
+  `matchConsumption()` in `ams.js`. `bookConsumption()` runs it over the spools
+  it may book on, so an unassigned slot can never take an amount, and the
+  `/api/print` route runs it over every loaded slot and writes the answer onto
+  each entry as `matchedAmsId`, next to the `amsId` the slice named. The Web UI
+  reads that field and decides nothing. It used to decide it again in
+  `public/frontend.js`, where `public/` has no tests, and the two drifted: both
+  defects fixed at the end of PR #89 sat in that copy. A new consumer asks this
+  function rather than reimplementing the stages.
+- **The profile alone speaks only where it names one filament.** The last stage
+  of `matchConsumption()` matches on `tray_info_idx`, and Bambu Studio slices
+  PLA Basic black and PLA Basic white as the same `GFA00`. With only the black
+  spool loaded, the white filament reached that slot through this stage and its
+  grams were booked onto a spool that never printed it. It now counts how many
+  filaments of the print carry the profile and stays out of it above one, which
+  leaves the filament unplaced and the log asking for an assignment.
+- **A slot the printer named for one filament is off limits to every other.**
+  The fallback stages compare colours, and a print running from remapped slots
+  has two slots agreeing on a colour: the one being consumed and the one merely
+  holding what the file was sliced with. Without the claim, the second one takes
+  the same amount, which showed every figure twice on the dashboard.
 - **An estimated slot is confirmed, a reported one is not.**
   `slotConfirmsSlice()` requires the slot to really hold the profile and the
   colours the slice expects, comparing colours as sorted sets because the slicer
@@ -297,5 +318,6 @@ slot.
 ## Related context
 
 - Root overview and global rules: [`../AGENTS.md`](../AGENTS.md)
-- Frontend consuming this API: `../public/frontend.js`
+- Frontend consuming this API: `../public/frontend.js`. It renders; every
+  decision it shows is made here.
 - Known gaps and unverified paths: `../OPEN.md`

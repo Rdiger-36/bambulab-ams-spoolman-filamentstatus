@@ -237,8 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const keyCount = {};
 	    for (const s of spools) {
 	        if (s.slotState === "Empty") continue;
-	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols);
-	        keyCount[key] = (keyCount[key] || 0) + 1;
+	        keyCount[s.key] = (keyCount[s.key] || 0) + 1;
 	    }
 	    const ctx = { keyCount };
 	    // Remembered so single-row SSE updates keep the duplicate-spool ⚠, which
@@ -356,10 +355,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     
-    function cutDisplayColorName(colorName) {
-        return colorName.replace(/^(For AMS |Support for PLA\/PETG |Support for PLA |Matte |Silk\+? |Glow |HF |FR )/g, "");
-    }
-
     // Every colour of an AMS slot, in the order the printer reported them.
     // `cols` is the full set and `tray_color` only ever the first of them, so
     // the single field is a fallback for a payload that predates `cols` rather
@@ -875,8 +870,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    // A manual assignment resolves the ambiguity for this slot, so the warning
 	    // only applies while the slot still relies on the automatic match.
-	    const key = consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols);
-	    const ambiguous = (!isEmpty && !amsSpool.connectedViaMapping && ctx?.keyCount && ctx.keyCount[key] > 1)
+	    const ambiguous = (!isEmpty && !amsSpool.connectedViaMapping && ctx?.keyCount && ctx.keyCount[amsSpool.key] > 1)
 	        ? ` <span class="gc-warn" title="Another loaded spool is identical in profile and colour. Consumption is still split correctly whenever the sliced file names the slot each filament was meant for. Where it does not, the whole amount goes to one of them; assign one to choose which.">⚠</span>`
 	        : "";
 
@@ -986,21 +980,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return String(color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 	}
 
-	// Mirrors consumptionKey in src/gcode.js, including the colour set that
-	// separates a gradient spool from the plain spool it shares a profile and a
-	// first colour with. A single colour yields the key it always did.
-	function consumptionKeyJS(idx, color, colors = null) {
-	    const set = [...new Set((colors || []).map(normColorJS).filter(Boolean))];
-	    const suffix = set.length > 1 ? `|${set.sort().join("+")}` : "";
-	    return `${idx || "?"}|${normColorJS(color)}${suffix}`;
-	}
-
-	// Mirrors materialKey in src/mqtt.js, the fallback identity used for spools
-	// without a usable tray_info_idx (i.e. 3rd-party spools).
-	function materialKeyJS(type, color) {
-	    return `${type || "?"}|${normColorJS(color)}`;
-	}
-
 	function gcodeStateBadge(state) {
 	    const variants = {
 	        RUNNING: "gc-state-running", FINISH: "gc-state-done",
@@ -1041,7 +1020,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        // Spool column into a narrow wrapped block.
 	        synchronizeSelectedColumns([0, 1, 2, 3, 4]);
 
-	        const missing = buildGcodeMissing(spools, printData);
+	        const missing = buildGcodeMissing(printData);
 	        if (missing) el.appendChild(missing);
 	    } catch (err) {
 	        el.innerHTML = `<p class="gc-required">Request failed: ${err.message}</p>`;
@@ -1093,8 +1072,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const keyCount = {};
 	    for (const s of spools) {
 	        if (s.slotState === "Empty") continue;
-	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols);
-	        keyCount[key] = (keyCount[key] || 0) + 1;
+	        keyCount[s.key] = (keyCount[s.key] || 0) + 1;
 	    }
 	    const ctx = { fullCons, partCons, keyCount, showBooking: true };
 
@@ -1134,52 +1112,20 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return tables;
 	}
 
-	// Looks up a slot's entry in a consumption map, mirroring the staged match in
-	// bookConsumption (src/mqtt.js): the slot the slice named, then the filament
-	// identity, then material + colour for 3rd-party spools, which report no
-	// usable tray_info_idx.
-	function findConsumption(cons, amsSpool) {
-	    const slot = amsSpool.slot || {};
-
-	    // The server names the slot each sliced filament runs from. A slot the
-	    // printer itself reported is taken as it stands, because a filament
-	    // substituted for the sliced one is exactly what it reports. A slot
-	    // estimated from the slicer's list order is confirmed first, or it would
-	    // show another slot's figures.
-	    const entries = Object.values(cons);
-
-	    const bySlot = entries.find(e => e.amsId && e.amsId === amsSpool.amsId);
-	    if (bySlot && (bySlot.amsIdFromPrinter || slotConfirmsSliceJS(slot, bySlot))) return bySlot;
-
-	    // An entry the printer placed on a slot belongs to that slot and to no
-	    // other. Without this every row whose colour matches the sliced filament
-	    // claimed the same figures, so a print running from remapped slots showed
-	    // each amount twice: on the slot being consumed and on the slot that
-	    // merely holds the colour the file was sliced with.
-	    const unclaimed = entries.filter(e => !e.amsIdFromPrinter);
-
-	    // Compared entry by entry rather than looked up. The server keys the map
-	    // by the position of the filament in the slicer's list, so indexing it
-	    // with a colour key never hit anything.
-	    const wantedKey = consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols);
-	    const exact = unclaimed.find(e => consumptionKeyJS(e.tray_info_idx, e.color, e.colors) === wantedKey);
-	    if (exact) return exact;
-
-	    const wantedMaterial = materialKeyJS(slot.tray_type, slot.tray_color);
-	    return unclaimed.find(e => materialKeyJS(e.type, e.color) === wantedMaterial) || null;
-	}
-
-	// Mirrors slotConfirmsSlice in src/mqtt.js. Colours are compared as sorted
-	// sets, because the slicer and the RFID chip need not agree on which colour
-	// of a set comes first.
-	function slotConfirmsSliceJS(slot, entry) {
-	    if (!slot.tray_info_idx || slot.tray_info_idx !== entry.tray_info_idx) return false;
-
-	    const sliceColors = (entry.colors?.length ? entry.colors : [entry.color]).map(normColorJS).filter(Boolean);
-	    const slotColors = slotColorsJS(slot);
-	    if (!sliceColors.length || !slotColors.length) return false;
-
-	    return [...sliceColors].sort().join("+") === [...slotColors].sort().join("+");
+	// The grams a slot carries in a consumption map.
+	//
+	// The server decides which sliced filament belongs to which slot, in
+	// matchConsumption() (src/ams.js), the same function the booking uses, and
+	// names the slot on every entry as `matchedAmsId`. This used to be a second
+	// implementation of that decision, and both defects fixed at the end of
+	// PR #89 sat in it.
+	//
+	// Summed rather than picked: one slot can serve two filaments of a print,
+	// and the booking writes both of their amounts onto its spool.
+	function consumedGrams(cons, amsId) {
+	    return Object.values(cons)
+	        .filter(e => e.matchedAmsId && e.matchedAmsId === amsId)
+	        .reduce((total, e) => total + (e.grams || 0), 0);
 	}
 
 	function createGcodeSpoolRow(amsSpool, ctx) {
@@ -1189,8 +1135,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    const slot   = amsSpool.slot || {};
 	    const isEmpty = amsSpool.slotState === "Empty";
-	    const needed = isEmpty ? 0 : (findConsumption(fullCons, amsSpool)?.grams ?? 0);
-	    const used   = isEmpty ? 0 : (findConsumption(partCons, amsSpool)?.grams ?? 0);
+	    const needed = isEmpty ? 0 : consumedGrams(fullCons, amsSpool.amsId);
+	    const used   = isEmpty ? 0 : consumedGrams(partCons, amsSpool.amsId);
 
 	    // On spool: Spoolman remaining/initial weight whenever we know which spool
 	    // this is (tag link or manual assignment), else the AMS-reported
@@ -1243,24 +1189,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return tr;
 	}
 
-	function buildGcodeMissing(spools, printData) {
+	function buildGcodeMissing(printData) {
 	    const fullCons = printData.fullConsumption || {};
-	    const loaded = spools.filter(s => s.slotState !== "Empty");
 
-	    const loadedKeys = new Set(loaded.map(s => consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols)));
-	    // 3rd-party spools report no usable tray_info_idx, so they'd always look
-	    // "not loaded" by profile alone, so fall back to material + color, the same
-	    // second-stage match the backend uses when booking.
-	    const loadedMaterials = new Set(loaded.map(s => materialKeyJS(s.slot?.tray_type, s.slot?.tray_color)));
-
-	    // An entry the server placed on a loaded slot is by definition not
-	    // missing, so only the ones it could not place are candidates here.
-	    const loadedSlots = new Set(loaded.map(s => s.amsId));
-	    const missing = Object.values(fullCons).filter(
-	        e => !(e.amsId && loadedSlots.has(e.amsId))
-	          && !loadedKeys.has(consumptionKeyJS(e.tray_info_idx, e.color, e.colors))
-	          && !loadedMaterials.has(materialKeyJS(e.type, e.color))
-	    );
+	    // An entry the server could place on a loaded slot is by definition not
+	    // missing. It matched the slots over every loaded one, not only the
+	    // bookable ones, which is exactly the question this list asks.
+	    const missing = Object.values(fullCons).filter(e => !e.matchedAmsId);
 	    if (!missing.length) return null;
 
 	    const wrap = document.createElement("div");
