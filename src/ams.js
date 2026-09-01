@@ -584,7 +584,9 @@ export function slotConfirmsSlice(candidate, info) {
  *      with
  *   2. material type + colour: for 3rd party spools, which report no usable
  *      tray_info_idx
- *   3. tray_info_idx alone: colours did not line up but the profile is unique
+ *   3. tray_info_idx alone: the colours did not line up, and the profile
+ *      identifies one filament of this print, so there is nothing else it
+ *      could belong to
  *
  * The two sources of that slot are trusted differently, which is the whole of
  * stage 0. What the printer reports is taken as it stands. What the list order
@@ -599,6 +601,13 @@ export function slotConfirmsSlice(candidate, info) {
  * exists to report. Checking it against the sliced colour rejected the one
  * answer that was right and fell through to the colour stages, which found the
  * spool that was sliced instead of the spool that would have been consumed.
+ *
+ * The last stage speaks only where the profile identifies a single filament of
+ * the print. Bambu Studio slices PLA Basic black and PLA Basic white as the
+ * same GFA00, so with only the black spool loaded the white filament reached it
+ * on the profile alone and its grams were booked onto a spool that never
+ * printed it. Where the profile says nothing, the filament stays unplaced and
+ * the log asks for an assignment, which is the honest answer.
  *
  * A slot the printer named for one filament is off limits to every other one.
  * The fallback stages compare colours, and a print running from remapped slots
@@ -623,6 +632,12 @@ export function matchConsumption(entries, candidates) {
     );
     const unclaimed = candidates.filter(candidate => !claimed.has(candidate.amsId));
 
+    // How many filaments of this print carry each profile, for the last stage.
+    const perProfile = {};
+    for (const entry of entries) {
+        if (entry.tray_info_idx) perProfile[entry.tray_info_idx] = (perProfile[entry.tray_info_idx] ?? 0) + 1;
+    }
+
     const result = new Map();
 
     for (const info of entries) {
@@ -634,7 +649,7 @@ export function matchConsumption(entries, candidates) {
             [candidates, c => !!info.amsId && c.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(c, info))],
             [unclaimed,  c => c.key === wantedKey],
             [unclaimed,  c => c.matKey === wantedMatKey],
-            [unclaimed,  c => c.idx && c.idx === info.tray_info_idx],
+            [unclaimed,  c => c.idx && c.idx === info.tray_info_idx && perProfile[info.tray_info_idx] === 1],
         ]) {
             matches = pool.filter(predicate);
             if (matches.length) break;

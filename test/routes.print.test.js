@@ -113,8 +113,8 @@ test("what the printer reports beats the colours the file was sliced with", asyn
 });
 
 test("a filament nothing loaded can serve stays unplaced", async () => {
-    // Only the two generic ones here: the fixture's other filament shares its
-    // profile with the loaded slot and is covered by the test below.
+    // Three of the four: the two generic ones, and the white PLA Basic that
+    // shares its profile with the loaded slot, see the test below.
     const [f0] = fixtureFilaments();
     printer.currentMapping = null;
     printer.spoolData = [loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color })];
@@ -122,26 +122,26 @@ test("a filament nothing loaded can serve stays unplaced", async () => {
     const { body } = await call(`${app.url}/api/print/${SERIAL}`);
     const unplaced = Object.values(body.fullConsumption).filter(e => e.matchedAmsId === null);
 
-    // Both GFL99 filaments: neither the profile nor the colour is in the slot,
-    // so this is what the dashboard lists as required but not loaded.
-    assert.equal(unplaced.length, 2);
-    assert.ok(unplaced.every(e => e.tray_info_idx === "GFL99"));
+    // What the dashboard lists as required but not loaded.
+    assert.equal(unplaced.length, 3);
 });
 
-test("two filaments of one profile land on the one slot that carries it", async () => {
-    // The last stage matches on tray_info_idx alone, so the white PLA Basic
-    // reaches the black PLA Basic slot once the colour stages have failed. Both
-    // amounts are then booked onto that spool, and the dashboard shows their
-    // sum for the same reason: it reads the answer the booking will act on.
+test("a slot carries only the filament that is really its own", async () => {
+    // The fixture prints two filaments of one profile, black and white PLA
+    // Basic, and only the black spool is loaded. The white one must not reach
+    // that slot through the profile stage: the amount would be booked onto a
+    // spool that never printed it, and the dashboard would show it there.
     const [f0] = fixtureFilaments();
     printer.currentMapping = null;
     printer.spoolData = [loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color })];
 
     const { body } = await call(`${app.url}/api/print/${SERIAL}`);
-    const onA0 = Object.values(body.fullConsumption).filter(e => e.matchedAmsId === "A0");
+    const entries = Object.values(body.fullConsumption);
+    const onA0 = entries.filter(e => e.matchedAmsId === "A0");
 
-    assert.equal(onA0.length, 2);
-    assert.ok(onA0.every(e => e.tray_info_idx === f0.idx));
+    assert.equal(onA0.length, 1);
+    assert.equal(onA0[0].color.replace("#", "").toUpperCase(), f0.color.toUpperCase());
+    assert.equal(entries.filter(e => e.matchedAmsId === null).length, 3);
 });
 
 test("an empty slot is not offered to the match", async () => {

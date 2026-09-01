@@ -207,6 +207,13 @@ build their Spoolman payload from.
   `public/frontend.js`, where `public/` has no tests, and the two drifted: both
   defects fixed at the end of PR #89 sat in that copy. A new consumer asks this
   function rather than reimplementing the stages.
+- **The profile alone speaks only where it names one filament.** The last stage
+  of `matchConsumption()` matches on `tray_info_idx`, and Bambu Studio slices
+  PLA Basic black and PLA Basic white as the same `GFA00`. With only the black
+  spool loaded, the white filament reached that slot through this stage and its
+  grams were booked onto a spool that never printed it. It now counts how many
+  filaments of the print carry the profile and stays out of it above one, which
+  leaves the filament unplaced and the log asking for an assignment.
 - **A slot the printer named for one filament is off limits to every other.**
   The fallback stages compare colours, and a print running from remapped slots
   has two slots agreeing on a colour: the one being consumed and the one merely

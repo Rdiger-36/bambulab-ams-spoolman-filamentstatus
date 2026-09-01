@@ -174,6 +174,21 @@ test("a 3rd party spool is matched on material and colour", () => {
     assert.equal(matchedSlot([sliced], slots, sliced), "External");
 });
 
+test("a profile two filaments of the print share matches nothing on its own", () => {
+    // Bambu Studio slices PLA Basic black and PLA Basic white as the same
+    // GFA00. With only the black spool loaded, the white filament used to reach
+    // it on the profile alone, and its grams were booked onto a spool that never
+    // printed it. Unplaced, and a log line asking for an assignment, is the
+    // honest answer.
+    const black = filament(0, { idx: "GFA00", color: "#000000" });
+    const white = filament(1, { idx: "GFA00", color: "#FFFFFF" });
+    const slots = [spool("A0", { id: 1, idx: "GFA00", color: "000000", tag: true })];
+
+    const matched = matchConsumption([black, white], slots);
+    assert.equal(matched.get(black)[0].amsId, "A0");
+    assert.deepEqual(matched.get(white), []);
+});
+
 test("a unique profile still matches when the colours do not line up", () => {
     const sliced = filament(0, { idx: "GFB01", color: "#123456", type: "ABS" });
     const slots = [spool("A2", { id: 3, idx: "GFB01", type: "ABS", color: "FFFFFF", tag: true })];
