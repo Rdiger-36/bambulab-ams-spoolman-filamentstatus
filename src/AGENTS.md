@@ -50,9 +50,12 @@ Legacy mode also has no 3rd party support and no manual assignment. Both exist
 only to serve the G-code booking, which does not run here, so a chipless slot is
 read-only and the mapping endpoints answer 409.
 
-Consequence: in G-code mode the `remain` field is deliberately stripped before
-change detection, so a drifting RFID percentage does not trigger endless
-reprocessing.
+Consequence: in G-code mode the `remain` value is deliberately dropped before
+change detection (`hasTrayDataChanged()`), so a drifting RFID percentage does
+not trigger endless reprocessing. Whether there is a reading at all is kept:
+the transition from "not reported" to a real percentage has to refresh
+`printer.spoolData`, because that is the snapshot the create and merge actions
+build their Spoolman payload from.
 
 ## Contracts & invariants
 
@@ -89,11 +92,43 @@ reprocessing.
   next MQTT message in `extractComparableTrayData()`; normalise into a local
   (`correctRemainInt`) instead. Mutating it desyncs change detection forever for
   any spool whose `tray_weight != 1000`.
+- **A `remain` of `null` means "not reported", never "empty".** The AMS answers
+  `-1` between a spool going in and its RFID percentage arriving, measured on
+  a P2S at anything from 17 seconds to over a minute, and forever for a
+  chipless one. `processData()` turns
+  that into `null` and `correctRemainInt()` passes the `null` through, so every
+  caller has to decide for itself: create the spool full, skip the legacy PATCH,
+  skip the weight test when looking for a mergeable spool, render a dash. A `0`
+  is a reading and means the spool really is empty. Collapsing the two created
+  new spools at `used_weight = initial_weight`, and in G-code mode nothing
+  patches the weight afterwards, so they stayed at 0 g left.
 - **`state.lastSpoolData === null` means "not yet seeded".** `[]` is a legitimate
   value (empty Spoolman) and must stay comparable. Never re-seed on empty.
-- **An unidentified spool looks exactly like an empty slot** in every field
-  except `state`. `slotIsOccupied()` is the only correct test; a slot with
-  `tray_uuid === "N/A"` is not automatically empty.
+- **An unidentified spool is not an empty slot.** `slotIsOccupied()` is the only
+  correct test; a slot with `tray_uuid === "N/A"` is not automatically empty.
+  It reads the shape of the tray record, because a loaded slot carries the full
+  payload (`tray_info_idx`, `tray_type`, `cols`, `tag_uid`) whether the chip was
+  read or not, while an empty one carries `id` and `state` alone. Never go back
+  to reading `state`: on a P2S it is 9 or 10 when empty and 11 or 27 when
+  loaded, so "non zero means occupied" marks every empty slot as a 3rd party
+  spool and freezes change detection for chipless slots. `slotIsBusy()` is the
+  one remaining reader of `state`, and it decides a label and nothing else: a
+  slot the AMS is moving filament into reports `{ id, state }` and nothing else,
+  which is byte for byte an empty slot, so for the roughly 20 seconds until the
+  tray record arrives the dashboard would call it empty with the user watching
+  the spool sit in it. Its allow list holds the values seen while busy, not the
+  ones seen at rest, so an unseen value reads as empty rather than leaving a
+  slot claiming to read a spool for good.
+- **A spool is not created before the AMS reports how much is left.**
+  `usedWeightFromSlot()` turns the percentage into `used_weight`, and without
+  one it has to assume brand new, which is wrong for a partly used spool that
+  nothing corrects afterwards in G-code mode. `waitedLongEnoughForRemain()`
+  holds the create branch back, in both modes: automatic skips the slot for
+  this update, manual shows a disabled "Waiting for data" button. It gives up
+  after `MAX_REMAIN_WAITS` updates so a chip that never reports still gets its
+  spool. Merging is deliberately not held back, it writes only the tag. The
+  wait resolves itself because `hasTrayDataChanged()` treats the arrival of the
+  first reading as a change.
 - **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to
@@ -144,7 +179,13 @@ covers exactly this seam.
 `broadcastSSE()` for status/refresh events. A slot goes out through
 `toClientSpool()` in `uispool.js`, the one projection from the runtime object to
 the client payload, shared with `/api/spools` and `/api/print`. Add a field
-there when the UI needs it; anything not listed stays on the server.
+there when the UI needs it; anything not listed stays on the server. That
+includes the `"N/A"` placeholder `processData()` writes: it is a backend marker
+and the projection turns it back into `null`, so a client never renders it. The
+broadcast decision is `hasSpoolUiChanged()` alone, which compares that same
+projection. Do not add a second condition in front of it; the one that used to
+be there held every slot the printer could not identify back, so an emptied slot
+never reached the UI.
 
 **Changing slot classification:** `processSlot()` in `mqtt.js` branches, in
 order: invalid slot → empty slot → 3rd party (unidentified) → Bambu Lab. The

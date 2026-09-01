@@ -106,6 +106,41 @@ test("a missing assignment reads as false rather than absent", () => {
     assert.equal(client.enableButton, "false");
 });
 
+test("the N/A placeholder does not reach a client", () => {
+    // processData writes "N/A" into every field the printer left out. It is a
+    // backend marker, and a client that receives it renders it, which is how an
+    // emptied slot ended up labelled "N/A" with a `#N/A` colour swatch.
+    const client = toClientSpool({
+        amsId: "A0",
+        slotState: "Empty",
+        slot: { id: 0, state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" },
+    });
+
+    assert.equal(client.slot.tray_uuid, null);
+    assert.equal(client.slot.tray_color, null);
+    assert.equal(client.slot.tray_sub_brands, null);
+    assert.equal(client.slot.tray_type, null);
+    assert.equal(client.filamentName, null);
+    assert.equal(client.material, null);
+});
+
+test("a 3rd party slot keeps what the printer does know", () => {
+    // Material and colour set on the AMS are real values and have to survive,
+    // even though the same record carries placeholders next to them.
+    const client = toClientSpool({
+        amsId: "B0",
+        slotState: "Loaded (3rd party)",
+        slot: { id: 0, state: 11, tray_info_idx: "GFL99", tray_type: "PLA", tray_sub_brands: "N/A", tray_color: "0ACC38FF", tray_weight: "0", tray_uuid: "N/A", remain: 0 },
+    });
+
+    assert.equal(client.slot.tray_type, "PLA");
+    assert.equal(client.slot.tray_color, "0ACC38FF");
+    assert.equal(client.slot.tray_uuid, null);
+    assert.equal(client.material, "PLA");
+    assert.equal(client.filamentName, null);
+    assert.equal(client.key, "GFL99|0ACC38");
+});
+
 test("a change the UI does not show does not trigger a broadcast", () => {
     const prev = uiSpool();
     const next = uiSpool({ slot: { ...uiSpool().slot, bed_temp: "60", nozzle_temp_max: "250" } });

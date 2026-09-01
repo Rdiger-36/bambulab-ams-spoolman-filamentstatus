@@ -1,4 +1,4 @@
-import { settings } from "./settings.js";
+import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
 
 /**
@@ -8,8 +8,14 @@ import { toClientSpool } from "./uispool.js";
  *
  * Missing material, colour and uuid all become the literal "N/A", which is the
  * marker every later stage tests against. An all zero `tray_uuid` means the
- * printer read no RFID chip and is treated the same as a missing one. Negative
- * or missing `remain` is clamped to 0.
+ * printer read no RFID chip and is treated the same as a missing one.
+ *
+ * `remain` becomes null when the printer does not know it. The AMS reports -1
+ * after a spool is inserted, while it has the RFID tag but not yet the
+ * remaining percentage, measured on a P2S at anything from 17 seconds to over a
+ * minute, and a chipless spool reports -1 for good. That was clamped to 0, which is a real reading meaning "empty",
+ * so a spool created inside that window was booked as fully used and came out
+ * at 0 g left.
  *
  * PETG Translucent is a special case: it reports a fully transparent colour
  * that would render as invisible in the UI, so it is shown as white instead.
@@ -24,11 +30,14 @@ export function processData(amsData) {
             const isPetgTranslucent = slot.tray_sub_brands === "PETG Translucent" && slot.tray_color === "00000000";
             const updatedTrayColor = isPetgTranslucent ? "FFFFFF00" : (slot.tray_color ?? "N/A");
 
-            if (!slot.remain || slot.remain < 0) slot.remain = 0;
+            // Not written back onto `slot`: the raw value is what the next
+            // report is compared against, and mutating it here desyncs that.
+            const rawRemain = Number(slot.remain);
+            const remain = Number.isFinite(rawRemain) && rawRemain >= 0 ? rawRemain : null;
 
             return {
                 ...slot,
-                remain: slot.remain,
+                remain,
                 tray_color: updatedTrayColor,
                 tray_sub_brands: slot.tray_sub_brands === "" ? "N/A" : (slot.tray_sub_brands ?? "N/A"),
                 tray_weight: slot.tray_weight ?? 0,
@@ -56,15 +65,33 @@ export function extractComparableTrayData(amsArray) {
         tray: ams.tray
             .filter(t => t && Object.keys(t).length > 6)
             .map(t => {
-                // A spool the printer cannot identify reports no uuid, material,
-                // colour or weight, so the only thing worth comparing is whether
-                // it is there at all. Dropping such trays entirely used to hide
-                // the arrival of a 3rd party spool from the change detection, so
-                // the slot was never reprocessed. `state` itself is deliberately
-                // not compared: it varies between loaded-but-unidentified values
-                // (10 and 20 both occur) and would cause pointless reprocessing.
+                // A spool the printer cannot identify carries no uuid and no
+                // material, but it does carry what the user set on the AMS, so
+                // that is compared alongside the bare occupancy. Occupancy alone
+                // was not enough: swapping one chipless spool for another, or
+                // setting material and colour on the printer, left the
+                // projection unchanged and the slot was never reprocessed.
+                //
+                // `state` is deliberately not compared. It is undocumented, it
+                // varies between reports about the same unchanged slot, and it
+                // does not separate an empty slot from a loaded one either;
+                // `slotIsOccupied` explains what replaced it.
                 if (t.tray_uuid === "N/A" || t.tray_sub_brands === "N/A") {
-                    return { id: t.id, occupied: slotIsOccupied(t) };
+                    return {
+                        id: t.id,
+                        occupied: slotIsOccupied(t),
+                        // An empty slot and one the AMS is reading are the same
+                        // two fields, so without this the slot is not
+                        // reprocessed while the spool goes in and the "Reading
+                        // spool" label never reaches a client. It is a boolean,
+                        // so the states the AMS cycles through cost one update
+                        // between them, not one each.
+                        busy: slotIsBusy(t),
+                        tray_type: t.tray_type ?? null,
+                        tray_info_idx: t.tray_info_idx ?? null,
+                        tray_color: t.tray_color,
+                        tray_weight: t.tray_weight,
+                    };
                 }
                 return {
                     id: t.id,
@@ -80,6 +107,38 @@ export function extractComparableTrayData(amsArray) {
 }
 
 /**
+ * Whether the tray data changed in a way that should trigger reprocessing.
+ *
+ * Legacy mode compares the projections as they are: the remaining percentage is
+ * what it writes to Spoolman, so every tick of it matters.
+ *
+ * G-code mode takes the weight from the sliced file instead, so a drifting
+ * percentage there would mean endless reprocessing and log output for nothing.
+ * The value is dropped, but whether there is one at all is kept. The AMS
+ * answers -1, which `processData` turns into null, for anything from 17 seconds
+ * to well over a minute after a spool goes in, and that transition has to be
+ * noticed: `printer.spoolData` is the snapshot the create and merge actions
+ * build their Spoolman payload from, and while it still says "no reading" they
+ * fall back to creating a full spool. A spool inserted at 53 % and created from
+ * the UI was stored as untouched, because nothing had refreshed the snapshot
+ * between the insert and the click.
+ *
+ * @param {object[]} nextTrayData - output of extractComparableTrayData
+ * @param {object[]} lastTrayData - the same projection of the previous report
+ * @returns {boolean}
+ */
+export function hasTrayDataChanged(nextTrayData, lastTrayData) {
+    if (legacyMode()) return JSON.stringify(nextTrayData) !== JSON.stringify(lastTrayData);
+
+    const project = data => data.map(ams => ({
+        ...ams,
+        tray: ams.tray.map(({ remain, ...tray }) => ({ ...tray, remainKnown: remain != null })),
+    }));
+
+    return JSON.stringify(project(nextTrayData)) !== JSON.stringify(project(lastTrayData));
+}
+
+/**
  * Converts the AMS remain percentage into a percentage of the spool's real
  * size.
  *
@@ -90,10 +149,14 @@ export function extractComparableTrayData(amsArray) {
  * @param {number|string} remainOn1kgBasis - `remain` as reported by the AMS
  * @param {number|string} trayWeight - the spool's real filament weight in grams
  * @param {string|null} trayType - `tray_type`, needed to spot support material
- * @returns {number} remaining percentage of the real spool, rounded
+ * @returns {number|null} remaining percentage of the real spool, rounded, or
+ *   null when the printer reported no usable value
  */
 export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) {
     const remain = parseFloat(remainOn1kgBasis);
+    // Unknown in, unknown out. Every caller has to decide for itself what to do
+    // without a reading; none of them may treat it as 0.
+    if (!Number.isFinite(remain)) return null;
     const weight = parseFloat(trayWeight);
 
     // Support/accessory material (tray_type suffix "-S", e.g. "PLA-S") is sold
@@ -113,37 +176,73 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
 }
 
 /**
+ * The fields an empty AMS slot reports. Anything beyond these is filament data.
+ *
+ * The names are the ones left after `processData`, which fills `tray_color`,
+ * `tray_sub_brands`, `tray_weight` and `tray_uuid` with placeholders on every
+ * tray, so those four say nothing about occupancy.
+ */
+const EMPTY_TRAY_KEYS = new Set(["id", "state", "remain", "tray_color", "tray_sub_brands", "tray_weight", "tray_uuid"]);
+
+/**
  * Whether the AMS reports something physically sitting in the slot.
  *
- * A slot holding a spool the printer cannot identify, whether because it has
- * no RFID chip or because reading it failed, comes through with the same
- * sparse payload as an empty slot: tray_uuid "N/A", no tray_type,
- * tray_weight 0. The only field that separates them is `state`.
+ * Occupancy is read from the payload the tray carries, not from `state`.
  *
- * `state` is not documented by Bambu Lab, so what follows is what this project
- * has actually seen on a P2S, not a specification:
+ * A loaded slot always comes with the full tray record, whether the RFID chip
+ * was read or not: the AMS fills `tray_info_idx` (`GFL99` for anything it
+ * cannot identify), `tray_type`, `cols`, `tag_uid` and the temperature fields
+ * from its own defaults. An empty slot reports `id` and `state` and nothing
+ * else, which is the whole difference between the two.
  *
- * - `0` on an empty slot, in every observation so far.
- * - `3`, `10`, `11`, `20` and `27` while a slot is loaded. Which one appears
- *   varies, including between two reports about the same unchanged slot.
- * - `11` was once read as proof of a Bambu Lab tag having been decoded. It is
- *   not: a chipless spool with an all zero `tray_uuid` reports 11 as well, so
- *   the value says something is in the slot, not that it was identified. Use
- *   `tray_uuid` for that.
+ * `state` used to be the test and it is wrong. It is undocumented, and on a
+ * P2S with two AMS 2 Pro units it reads 9 or 10 on an empty slot and 11 or 27
+ * on a loaded one, so "non zero means occupied" marked every empty slot as
+ * holding an unidentifiable spool. That is what put an "N/A" row with an
+ * "Assign Spool" button on every emptied slot, and it also froze change
+ * detection: `extractComparableTrayData` reduces an unidentified tray to its
+ * occupancy, so with occupancy stuck at true, removing or inserting a chipless
+ * spool produced a byte identical projection and was never processed.
  *
- * Everything non zero is therefore treated as occupied, which is a heuristic in
- * both directions: a value nobody has seen yet still reads as occupied, and
- * firmware reporting a transient non zero state on an empty slot would show a
- * phantom spool until it settles. It is the safer way round, because the
- * opposite, an allow list of known values, would make a spool disappear from
- * the UI the first time a firmware update invents a new one.
- *
- * Firmware that does not report `state` at all falls back to "not occupied", so
- * such slots keep being treated as empty rather than sprouting phantom spools.
+ * The trade off runs the other way round now. Firmware that reports a loaded
+ * chipless slot with no filament fields at all would read as empty here, where
+ * the old heuristic invented a spool on every empty one. Nothing observed so
+ * far reports such a tray.
  */
 export function slotIsOccupied(slot) {
-    if (slot?.state === null || slot?.state === undefined) return false;
-    return Number(slot.state) !== 0;
+    if (!slot) return false;
+    return Object.keys(slot).some(key => !EMPTY_TRAY_KEYS.has(key));
+}
+
+// The `state` values seen on a sparse tray while the AMS was moving filament in
+// or out of the slot, as opposed to 9 and 10, which it reports while a slot sits
+// there empty. Undocumented, so this is an observation on a P2S, not a
+// specification.
+const BUSY_EMPTY_STATES = new Set([1, 5, 17, 21]);
+
+/**
+ * Whether an empty looking slot is one the AMS is currently working on.
+ *
+ * Purely cosmetic, and the one place `state` is still read. It has to be: a
+ * spool being read reports `{ id, state }` and nothing else, byte for byte what
+ * an empty slot reports, so there is no field to tell them apart. The AMS takes
+ * around 20 seconds from the spool going in to the first tray record, and for
+ * that whole time the dashboard would otherwise call the slot empty while the
+ * user is watching the spool sit in it.
+ *
+ * Compared by `extractComparableTrayData()`, so the slot is reprocessed when it
+ * starts and stops being busy. Without that the label would only ever reach a
+ * client when some other slot happened to change in the same update.
+ *
+ * Deliberately an allow list of values seen while busy, not of values seen at
+ * rest. A value nobody has observed yet reads as "at rest", so the slot says
+ * "Empty slot", which is what it says today. The other way round an empty slot
+ * could claim to be reading a spool for good. Nothing acts on this either way:
+ * occupancy comes from `slotIsOccupied()`, which does not look at `state`.
+ */
+export function slotIsBusy(slot) {
+    if (!slot || slotIsOccupied(slot)) return false;
+    return BUSY_EMPTY_STATES.has(Number(slot.state));
 }
 
 /**
@@ -283,12 +382,16 @@ export function findMergeableSpool(amsSpool, allSpools) {
 
     return matchingSpools.find(spoolmanSpool => {
         const tag = (spoolmanSpool.extra?.tag || "").trim();
-        const spoolRemainingWeight = (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
-        const lowerTolerance = spoolRemainingWeight * 0.85;
-        const upperTolerance = spoolRemainingWeight * 1.15;
-        const weightMatches =
-            spoolmanSpool.remaining_weight >= lowerTolerance &&
-            spoolmanSpool.remaining_weight <= upperTolerance;
+        // Without a remain reading there is nothing to compare the weight
+        // against. Treating the missing value as 0 matched every spool that
+        // happened to be empty, so the test is skipped instead and the
+        // remaining criteria decide on their own.
+        const spoolRemainingWeight = amsSpool.remain == null
+            ? null
+            : (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
+        const weightMatches = spoolRemainingWeight !== null &&
+            spoolmanSpool.remaining_weight >= spoolRemainingWeight * 0.85 &&
+            spoolmanSpool.remaining_weight <= spoolRemainingWeight * 1.15;
         const hasTag = tag && tag !== "" && tag !== '""';
 
         if (settings.NEVER_MERGE_IF_TAG && hasTag) return false;
@@ -333,23 +436,6 @@ export async function haveSpoolDataChanged(spools, lastSpoolData) {
             JSON.stringify(spool.filament) === JSON.stringify(lastSpool.filament)
         );
     });
-}
-
-/**
- * Whether a slot is worth pushing to the UI over SSE.
- *
- * On the first run everything is sent, so the client starts from a complete
- * picture. Afterwards only slots the printer fully identified are sent, which
- * keeps the sparse payloads of empty and unidentified slots from overwriting a
- * populated row on every message.
- */
-export function shouldSendSlotUpdate(slot, isFirstRun) {
-    const isValidBambu =
-        slot &&
-        Object.keys(slot).length > 6 &&
-        slot.tray_uuid !== "N/A" &&
-        slot.tray_sub_brands !== "N/A";
-    return isFirstRun || isValidBambu;
 }
 
 /**

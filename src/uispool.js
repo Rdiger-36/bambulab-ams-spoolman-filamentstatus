@@ -16,15 +16,29 @@ import { consumptionKey } from "./gcode.js";
  * the projection itself instead of a hand-maintained key list.
  */
 
+/**
+ * Turns the "N/A" placeholder into a real absence.
+ *
+ * `processData` writes that literal into every field the printer left out,
+ * because the backend branches on it. It is a marker, not a value, and it must
+ * not leave the server: a client that receives it renders it, which is how an
+ * emptied slot came to be labelled "N/A" and how its colour swatch ended up
+ * styled `#N/A`. An empty string is squashed for the same reason.
+ */
+function orNull(value) {
+    if (value === "N/A" || value === "") return null;
+    return value ?? null;
+}
+
 /** The AMS slot fields the Web UI reads. Everything else stays on the server. */
 function pickSlot(slot) {
     if (!slot) return null;
     return {
-        tray_uuid: slot.tray_uuid ?? null,
-        tray_type: slot.tray_type ?? null,
-        tray_sub_brands: slot.tray_sub_brands ?? null,
-        tray_color: slot.tray_color ?? null,
-        tray_info_idx: slot.tray_info_idx ?? null,
+        tray_uuid: orNull(slot.tray_uuid),
+        tray_type: orNull(slot.tray_type),
+        tray_sub_brands: orNull(slot.tray_sub_brands),
+        tray_color: orNull(slot.tray_color),
+        tray_info_idx: orNull(slot.tray_info_idx),
         tray_weight: slot.tray_weight ?? null,
         remain: slot.remain ?? null,
     };
@@ -80,7 +94,9 @@ function pickInternalFilament(filament) {
  * @returns {object} the payload for `/api/spools`, `/api/print` and SSE
  */
 export function toClientSpool(uiSpool) {
-    const slot = uiSpool.slot || {};
+    // Derived below from the picked slot, not the runtime one, so the "N/A"
+    // placeholder cannot slip back in through a fallback.
+    const slot = pickSlot(uiSpool.slot || {});
     const existingSpool = pickSpool(uiSpool.existingSpool);
     const matchingExternalFilament = pickExternalFilament(uiSpool.matchingExternalFilament);
     const filament = existingSpool?.filament || null;
@@ -88,7 +104,7 @@ export function toClientSpool(uiSpool) {
     return {
         amsId: uiSpool.amsId ?? null,
         slotState: uiSpool.slotState ?? null,
-        slot: pickSlot(slot),
+        slot,
         existingSpool,
         mergeableSpool: pickSpool(uiSpool.mergeableSpool),
         matchingInternalFilament: pickInternalFilament(uiSpool.matchingInternalFilament),

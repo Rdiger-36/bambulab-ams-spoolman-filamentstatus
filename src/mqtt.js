@@ -24,12 +24,13 @@ import {
     extractComparableTrayData,
     correctRemainInt,
     slotIsOccupied,
+    slotIsBusy,
     findExistingSpool,
     findMatchingExternalFilament,
     findMatchingInternalFilament,
     findMergeableSpool,
     haveSpoolDataChanged,
-    shouldSendSlotUpdate,
+    hasTrayDataChanged,
     hasSpoolUiChanged,
 } from "./ams.js";
 import { toClientSpool } from "./uispool.js";
@@ -323,13 +324,7 @@ async function handleMqttMessage(printer, topic, message) {
                         const processedAmsData = processData(data.print.ams.ams);
                         const newTrayData = extractComparableTrayData(processedAmsData);
                         const lastTrayData = extractComparableTrayData(printer.lastAmsData || []);
-                        // In G-code mode the AMS remain % is irrelevant (weight is
-                        // tracked from the slice), so don't let it trigger reprocessing
-                        // and log output. Only react to real identity/weight changes.
-                        const stripRemain = (d) => legacyMode() ? d
-                            : d.map(a => ({ ...a, tray: a.tray.map(({ remain, ...t }) => t) }));
-                        const trayDataChanged =
-                            JSON.stringify(stripRemain(newTrayData)) !== JSON.stringify(stripRemain(lastTrayData));
+                        const trayDataChanged = hasTrayDataChanged(newTrayData, lastTrayData);
 
                         if (isValidAmsData && (spoolsChanged || trayDataChanged)) {
                             console.debug(printer.name, printer.logFilePath, "Loaded AMS Spools:");
@@ -428,6 +423,47 @@ async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevB
     }
 }
 
+// How many AMS updates a slot may wait for its remain reading before a spool is
+// created without one. The reading arrived between 17 and 74 seconds after the
+// spool went in across every insert captured on a P2S, so at the default 15
+// second interval five updates cover that with room to spare, and a spool whose
+// chip never reports still ends up in Spoolman rather than being skipped in
+// silence.
+const MAX_REMAIN_WAITS = 5;
+
+/**
+ * Whether a slot has waited long enough to be created without a remain reading.
+ *
+ * Counts consecutive AMS updates in which the printer reported no percentage
+ * for this slot. The count is kept per slot and reset as soon as a reading
+ * arrives or a different spool shows up, so it measures this spool in this
+ * slot and nothing else.
+ *
+ * Creating without a reading is not free: `usedWeightFromSlot()` then treats
+ * the spool as brand new, which is wrong for a partly used one. Waiting is the
+ * better default, giving up eventually is better than never creating the spool
+ * at all.
+ *
+ * @param {object} printer - the printer runtime object, holding the counters
+ * @param {string} amsId - the slot label
+ * @param {object} slot - the normalised slot
+ * @returns {boolean} true once the wait is over, so the caller stops holding back
+ */
+export function waitedLongEnoughForRemain(printer, amsId, slot) {
+    if (!printer.remainWaits) printer.remainWaits = {};
+
+    if (slot.remain != null) {
+        delete printer.remainWaits[amsId];
+        return true;
+    }
+
+    const previous = printer.remainWaits[amsId];
+    const waits = previous?.uuid === slot.tray_uuid ? previous.waits + 1 : 1;
+    printer.remainWaits[amsId] = { uuid: slot.tray_uuid, waits };
+
+    return waits > MAX_REMAIN_WAITS;
+}
+
 /**
  * Classifies one AMS slot, acts on it in Spoolman, and records the result for
  * the UI.
@@ -463,17 +499,18 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
-        pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+        pushSlotUpdate(printer, newUiSpool, prevByAmsId);
         return false;
     }
 
-    // An unidentified spool looks exactly like an empty slot in every field but
-    // `state`, so an occupied slot must not be swallowed by this branch.
+    // An unidentified spool shares every placeholder field with an empty slot,
+    // so an occupied slot must not be swallowed by this branch. Only
+    // `slotIsOccupied()` tells the two apart.
     if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0") && (!slot.tray_type || slot.tray_type === "") && !slotIsOccupied(slot)) {
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots (empty slot with N/A values)");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
-        pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+        pushSlotUpdate(printer, newUiSpool, prevByAmsId);
         return false;
     }
 
@@ -481,9 +518,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // only sign of life is `state`, which the empty branch above no longer takes.
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
-        // The printer may know the material because the user set it on the AMS;
-        // when it does not, leave the placeholder rather than blanking the field.
-        if (slot.tray_type) slot.tray_sub_brands = slot.tray_type;
+        // `tray_sub_brands` used to be overwritten with the material here, so
+        // the slot had a name at all. The projection now drops the "N/A"
+        // placeholder on its own, and the dashboard builds the name from the
+        // material anyway, so copying it produced "PLA . PLA". It also wrote
+        // into the record kept as `printer.lastAmsData`, which is the baseline
+        // the next report is compared against.
 
         // No RFID chip means no extra.tag link in Spoolman, so the only way to
         // know which spool sits here is a manual assignment made in the UI.
@@ -493,9 +533,13 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
-        if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
+        if (hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
             broadcastSlotUpdate(printer.id, newUiSpool);
-            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
+            // No uuid to print, so the line says what the slot is instead: the
+            // material and colour set on the printer, and the assignment that
+            // decides whether consumption can be booked onto it.
+            const assignment = mappedSpool ? `=> Spool-ID ${mappedSpool.id} (assigned)` : "(3rd party, not assigned)";
+            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_type || "Unknown material"} ${slot.tray_color} ${assignment}`);
         }
         printer.spoolData.push(newUiSpool);
         return false;
@@ -552,6 +596,14 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                         break;
                     }
 
+                    // The whole mode rests on the percentage, so there is
+                    // nothing to patch until the AMS has read one. It arrives
+                    // within about 20 seconds of the spool going in.
+                    if (currRemain === null) {
+                        console.debug(printer.name, printer.logFilePath, " Remain not reported yet; skipping PATCH until the AMS has read it");
+                        break;
+                    }
+
                     const remainingWeight = Math.round((currRemain / 100) * slot.tray_weight);
                     const newLocation = settings.SET_LOCATION ? `${printer.name} - ${amsId}` : null;
 
@@ -594,14 +646,30 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
     if (!found) {
         console.debug(printer.name, printer.logFilePath, " Connected Spool not found, process with merging and creation logic");
-        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain == null ? "remain unknown" : `${slot.remain}%`}) [[ ${slot.tray_uuid} ]]`);
 
         mergeableSpool = spools.length !== 0 ? findMergeableSpool(slot, spools) : null;
 
         if (!mergeableSpool) {
             existingSpool = spools.length !== 0 ? findExistingSpool(slot, spools) : null;
 
-            if (!existingSpool) {
+            // Creating a spool writes its used weight, and that comes from the
+            // AMS remain percentage, which is not there for the first seconds
+            // after a spool goes in. Creating in that window stores a brand new
+            // spool for a partly used one, and in G-code mode nothing corrects
+            // the weight afterwards. Merging is deliberately not held back: it
+            // only writes the tag, never a weight.
+            const waitingForRemain = !existingSpool && !waitedLongEnoughForRemain(printer, amsId, slot);
+
+            if (!existingSpool && waitingForRemain) {
+                // Logged rather than debugged, and in both modes: in automatic
+                // nobody is looking at the button, so without this line the
+                // service just appears to ignore the slot for a minute.
+                const waits = printer.remainWaits?.[amsId]?.waits ?? 0;
+                console.log(printer.name, printer.logFilePath, `    Waiting for the AMS to report how much is left before creating a spool (${waits}/${MAX_REMAIN_WAITS})`);
+                option = "Waiting for data";
+                enableButton = "false";
+            } else if (!existingSpool) {
                 if (matchingInternalFilament) {
                     console.log(printer.name, printer.logFilePath, "    Filament exists, create a Spool with this Data");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
@@ -644,7 +712,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             option = "Merge Spool";
         }
 
-        if (!automatic) enableButton = "true";
+        if (!automatic && option !== "Waiting for data") enableButton = "true";
         printer.lastUpdateTime = new Date();
 
         // A create/merge just happened, so look the spool back up right away so
@@ -666,8 +734,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         }
     }
 
+    // Both stay null while the AMS has not reported a percentage yet, so the
+    // dashboard shows a dash instead of a confident "0 g".
     const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
-    const correctedWeight = Math.round((correctedRemain / 100) * slot.tray_weight);
+    const correctedWeight = correctedRemain === null
+        ? null
+        : Math.round((correctedRemain / 100) * slot.tray_weight);
 
     // A manual assignment wins over the automatic tag match: it is the only way
     // for the user to resolve two tagged spools that are identical in
@@ -713,11 +785,17 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         correctedWeight,
     };
 
-    pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+    pushSlotUpdate(printer, newUiSpool, prevByAmsId);
     return mutated;
 }
 
-/** Builds the UI entry for an empty slot: nothing matched, no action offered. */
+/**
+ * Builds the UI entry for an empty slot: nothing matched, no action offered.
+ *
+ * A slot the AMS is currently reading looks exactly like an empty one until the
+ * tray record arrives, so it is still built here, but it says "Waiting for
+ * data" rather than claiming there is nothing to do. See `slotIsBusy()`.
+ */
 function buildEmptySpool(printer, amsId, slot) {
     return {
         amsId,
@@ -726,7 +804,7 @@ function buildEmptySpool(printer, amsId, slot) {
         matchingInternalFilament: null,
         matchingExternalFilament: null,
         existingSpool: null,
-        option: "No actions available",
+        option: slotIsBusy(slot) ? "Waiting for data" : "No actions available",
         enableButton: "false",
         printerName: printer.name,
         logFilePath: printer.logFilePath,
@@ -789,11 +867,19 @@ function resolveMappedSpool(printer, amsId, slot, spools) {
 }
 
 /**
- * Records a UI spool for this AMS update and broadcasts it, but only when the
- * slot is worth sending and something the user sees actually changed.
+ * Records a UI spool for this AMS update and broadcasts it, but only when
+ * something the user sees actually changed.
+ *
+ * A slot with no previous entry counts as changed, so the first pass sends
+ * everything. There used to be a second condition, holding back every slot the
+ * printer had not fully identified, which meant an emptied slot never reached
+ * the UI and its row kept showing the spool that had been taken out. It was
+ * guarding against sparse payloads overwriting a populated row, which was the
+ * old occupancy bug rather than a real case, and `hasSpoolUiChanged` already
+ * suppresses everything that would not change the display.
  */
-function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
-    if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
+function pushSlotUpdate(printer, newUiSpool, prevByAmsId) {
+    if (hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
         broadcastSlotUpdate(printer.id, newUiSpool);
     }
     printer.spoolData.push(newUiSpool);
