@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, slotIsBusy, processData } from "../src/ams.js";
+import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, slotIsBusy, processData, findExistingSpool, findMatchingExternalFilament } from "../src/ams.js";
+import { slotColors } from "../src/utils.js";
 
 test("correctRemainInt passes through a full-size spool unchanged", () => {
     assert.equal(correctRemainInt(63, 1000, "PLA"), 63);
@@ -274,4 +275,110 @@ test("extractComparableTrayData does not reprocess for every busy state", () => 
 
     assert.deepEqual(extractComparableTrayData(state(1)), extractComparableTrayData(state(5)));
     assert.deepEqual(extractComparableTrayData(state(5)), extractComparableTrayData(state(21)));
+});
+
+/* ---- Multi colour filaments ---- */
+
+// A real PLA Silk Multi-Color slot as a P2S reports it: two colours in `cols`
+// and only the first of them in `tray_color`.
+const gildedRose = {
+    id: "0",
+    state: 11,
+    cols: ["FF9425FF", "FCA2BFFF"],
+    remain: 80,
+    tag_uid: "BAA8227400000100",
+    tray_color: "FF9425FF",
+    tray_diameter: "1.75",
+    tray_info_idx: "GFA05",
+    tray_sub_brands: "PLA Silk",
+    tray_type: "PLA",
+    tray_uuid: "0417584A3ABE4274838571DB6AA6CABA",
+    tray_weight: "1000",
+};
+
+test("slotColors strips the alpha byte and keeps the reported order", () => {
+    assert.deepEqual(slotColors(gildedRose), ["ff9425", "fca2bf"]);
+});
+
+test("slotColors falls back to the single colour the printer always sends", () => {
+    // Some firmware leaves `cols` out entirely. Three matching functions read
+    // it, and they used to reach into `undefined.length` and throw.
+    assert.deepEqual(slotColors({ tray_color: "0ACC38FF" }), ["0acc38"]);
+    assert.deepEqual(slotColors({ tray_color: "N/A" }), []);
+    assert.deepEqual(slotColors({}), []);
+});
+
+test("processData fills cols in from the single colour when it is missing", () => {
+    const [ams] = processData([{ id: "0", tray: [{ ...gildedRose, cols: undefined }] }]);
+    assert.deepEqual(ams.tray[0].cols, ["FF9425FF"]);
+});
+
+test("processData leaves an empty slot empty", () => {
+    // `cols` is added to every tray, and slotIsOccupied() reads the shape of
+    // the record, so a field the normalisation adds unconditionally has to be
+    // in EMPTY_TRAY_KEYS or it alone makes every empty slot look occupied.
+    const [ams] = processData([{ id: "0", tray: [{ id: "1", state: 10 }] }]);
+    assert.deepEqual(ams.tray[0].cols, []);
+    assert.equal(slotIsOccupied(ams.tray[0]), false);
+});
+
+test("findExistingSpool matches a multi colour spool on its whole colour set", () => {
+    const tagged = {
+        id: 21,
+        extra: { tag: '"0417584A3ABE4274838571DB6AA6CABA"' },
+        filament: { material: "PLA Silk", color_hex: null, multi_color_hexes: "FCA2BF,FF9425" },
+    };
+    // The catalogues do not agree on an order, so the sets are compared sorted.
+    assert.equal(findExistingSpool(gildedRose, [tagged])?.id, 21);
+
+    const wrongSecondColour = { ...tagged, filament: { ...tagged.filament, multi_color_hexes: "FF9425,000000" } };
+    assert.equal(findExistingSpool(gildedRose, [wrongSecondColour]), null);
+});
+
+test("findExistingSpool does not match a multi colour slot to a single colour spool", () => {
+    // Both share the first colour, which is all `tray_color` carries, so
+    // matching on that field alone connected the slot to the wrong filament.
+    const singleColour = {
+        id: 22,
+        extra: { tag: '"0417584A3ABE4274838571DB6AA6CABA"' },
+        filament: { material: "PLA Silk", color_hex: "FF9425" },
+    };
+    assert.equal(findExistingSpool(gildedRose, [singleColour]), null);
+});
+
+test("findMatchingExternalFilament matches a multi colour catalogue entry", () => {
+    // Shape and id taken from SpoolmanDB. The material transformations reduce
+    // "PLA Silk" to "pla", so only the colour set separates the entries.
+    const catalogue = [
+        { id: "bambulab_pla_gildedrose(pink-gold)_1000_175_n", material: "PLA", color_hex: null, color_hexes: ["FF9425", "FCA2BF"], multi_color_direction: "coaxial" },
+        { id: "bambulab_pla_bluehawaii(blue-green)_1000_175_n", material: "PLA", color_hex: null, color_hexes: ["60A4E8", "4CE4A0"], multi_color_direction: "coaxial" },
+    ];
+    assert.equal(findMatchingExternalFilament(gildedRose, catalogue).id, "bambulab_pla_gildedrose(pink-gold)_1000_175_n");
+});
+
+test("extractComparableTrayData sees a colour set change that tray_color misses", () => {
+    // Two multi colour filaments sharing their first colour. Without `cols` the
+    // projection is byte identical and the slot is never reprocessed, so the
+    // old colours stay on screen.
+    const before = processData([{ id: "0", tray: [{ ...gildedRose, tray_uuid: "N/A", tray_sub_brands: "N/A" }] }]);
+    const after = processData([{ id: "0", tray: [{ ...gildedRose, tray_uuid: "N/A", tray_sub_brands: "N/A", cols: ["FF9425FF", "000000FF"] }] }]);
+
+    assert.equal(before[0].tray[0].tray_color, after[0].tray[0].tray_color);
+    assert.notDeepEqual(extractComparableTrayData(before), extractComparableTrayData(after));
+});
+
+test("processData substitutes the PETG Translucent colour in cols too", () => {
+    // The spool reports a fully transparent colour, which renders as nothing,
+    // so it is shown as white. Correcting only `tray_color` was enough while
+    // that was the only colour anything read. `cols` is read first now, and a
+    // transparent value left in it draws the spool black.
+    const [ams] = processData([{ id: "0", tray: [{
+        id: "0", state: 11, cols: ["00000000"], tray_type: "PETG",
+        tray_sub_brands: "PETG Translucent", tray_color: "00000000",
+        tray_weight: "1000", tray_uuid: "ABCD", remain: 80,
+    }] }]);
+
+    assert.equal(ams.tray[0].tray_color, "FFFFFF00");
+    assert.deepEqual(ams.tray[0].cols, ["FFFFFF00"]);
+    assert.deepEqual(slotColors(ams.tray[0]), ["ffffff"]);
 });

@@ -85,3 +85,49 @@ test("an old fingerprint for a different filament is still dropped", async () =>
 
     assert.equal(freshGetMapping("P4", "A0", slot()), null);
 });
+
+/* ---- Multi colour spools ---- */
+
+const gradient = (colors, overrides = {}) => ({
+    tray_info_idx: "GFA00",
+    tray_type: "PLA",
+    tray_color: `${colors[0]}FF`,
+    cols: colors.map(c => `${c}FF`),
+    ...overrides,
+});
+
+test("the fingerprint carries the colour set of a multi colour spool", () => {
+    // A gradient spool is not a profile of its own: Bambu Studio slices PLA
+    // Basic Gradient as GFA00, the same as plain PLA Basic. With only the first
+    // colour in the fingerprint, Arctic Whisper and Solar Breeze were the same
+    // spool as far as an assignment could tell, and so was ordinary white.
+    const arctic = slotFingerprint(gradient(["FFFFFF", "9CDBD9"]));
+    const solar  = slotFingerprint(gradient(["FFFFFF", "E94B3C"]));
+    const plain  = slotFingerprint({ tray_info_idx: "GFA00", tray_type: "PLA", tray_color: "FFFFFFFF" });
+
+    assert.equal(new Set([arctic, solar, plain]).size, 3);
+    // The single colour spool keeps the three part fingerprint it always had,
+    // so nothing on disk has to be migrated for it
+    assert.equal(plain, "GFA00|PLA|FFFFFF");
+    assert.equal(arctic, "GFA00|PLA|FFFFFF|9CDBD9+FFFFFF");
+});
+
+test("swapping one gradient for another drops the assignment", () => {
+    setMapping("P4", "A0", 11, gradient(["FFFFFF", "9CDBD9"]));
+
+    assert.equal(getMapping("P4", "A0", gradient(["FFFFFF", "9CDBD9"])).spoolId, 11);
+    assert.equal(getMapping("P4", "A0", gradient(["FFFFFF", "E94B3C"])), null);
+});
+
+test("a fingerprint from before the colour set still matches, and is rewritten", async () => {
+    // Same reasoning as the two part format above: an upgrade must not drop
+    // every assignment that happens to sit on a multi colour spool.
+    fs.outputFileSync(mappingsPath, JSON.stringify({
+        P5: { A0: { spoolId: 9, fingerprint: "GFA00|PLA|FFFFFF", updatedAt: "2026-08-01T00:00:00.000Z" } },
+    }));
+    const fresh = await import(`../src/mappings.js?colorset=${Date.now()}`);
+
+    const slot = gradient(["FFFFFF", "9CDBD9"]);
+    assert.equal(fresh.getMapping("P5", "A0", slot).spoolId, 9);
+    assert.equal(stored().P5.A0.fingerprint, "GFA00|PLA|FFFFFF|9CDBD9+FFFFFF");
+});

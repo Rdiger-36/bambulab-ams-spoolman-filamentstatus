@@ -237,7 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const keyCount = {};
 	    for (const s of spools) {
 	        if (s.slotState === "Empty") continue;
-	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color);
+	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols);
 	        keyCount[key] = (keyCount[key] || 0) + 1;
 	    }
 	    const ctx = { keyCount };
@@ -247,9 +247,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    // Split AMS types:
 	    // Normal AMS = up to 4 slots per unit
-	    // AMS HT = 1 slot per unit, each should have its own table
-	    const normalAMS = spools.filter(s => !s.amsId.startsWith("HT-"));
-	    const htAMS = spools.filter(s => s.amsId.startsWith("HT-"));
+	    // AMS HT and the external spool holder = 1 slot each, own table
+	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
+	    const htAMS = spools.filter(s => isSingleSlotUnit(s.amsId));
 
 	    // Render normal AMS units in tables of four (original behavior)
 	    for (let i = 0; i < normalAMS.length; i += 4) {
@@ -360,19 +360,56 @@ document.addEventListener("DOMContentLoaded", () => {
         return colorName.replace(/^(For AMS |Support for PLA\/PETG |Support for PLA |Matte |Silk\+? |Glow |HF |FR )/g, "");
     }
 
-    function getSpoolColorStyle(filament, defaultColor, colorName) {
-        if (colorName === 'N/A') {
-            return '';
+    // Every colour of an AMS slot, in the order the printer reported them.
+    // `cols` is the full set and `tray_color` only ever the first of them, so
+    // the single field is a fallback for a payload that predates `cols` rather
+    // than the value to read.
+    function slotColorsJS(slot) {
+        const cols = Array.isArray(slot?.cols) ? slot.cols.filter(Boolean) : [];
+        if (cols.length) return cols.map(normColorJS);
+        return slot?.tray_color ? [normColorJS(slot.tray_color)] : [];
+    }
+
+    // Every colour of a Spoolman filament. Single and multi colour records are
+    // mutually exclusive there: a multi colour filament carries no color_hex.
+    function filamentColorsJS(filament) {
+        if (filament?.multi_color_hexes) {
+            return filament.multi_color_hexes.split(",").filter(Boolean).map(normColorJS);
         }
-        
-        if (filament?.color_hex) {
-            return `background-color: #${filament.color_hex}; color: ${getTextColor(filament.color_hex)};`;
-        } else if (filament?.multi_color_hexes) {
-            const colors = filament.multi_color_hexes.split(",");
-            return `background: linear-gradient(to right, #${colors[0]} 50%, #${colors[1]} 50%); color: ${getTextColor(colors[0])};`;
+        return filament?.color_hex ? [normColorJS(filament.color_hex)] : [];
+    }
+
+    // The CSS background showing a whole colour set in one box.
+    //
+    // `direction` is Spoolman's multi_color_direction. A "longitudinal"
+    // filament changes colour along its length, which is what the gradient
+    // spools do, so it fades. A "coaxial" one carries its colours side by side
+    // down the strand and reads as hard bands. An unknown or missing direction
+    // is drawn as bands too: equal hard stripes still show every colour, while
+    // a fade would invent a transition that may not exist.
+    function colorSetBackground(colors, direction) {
+        if (!colors.length) return "";
+        if (colors.length === 1) return `#${colors[0]}`;
+
+        if (direction === "longitudinal") {
+            return `linear-gradient(to right, ${colors.map(c => `#${c}`).join(", ")})`;
         }
-        
-        return `background-color: #${defaultColor}; color: ${getTextColor(defaultColor)};`;
+
+        const stops = colors.map((color, index) => {
+            const from = (index / colors.length) * 100;
+            const to = ((index + 1) / colors.length) * 100;
+            return `#${color} ${from.toFixed(2)}% ${to.toFixed(2)}%`;
+        });
+        return `linear-gradient(to right, ${stops.join(", ")})`;
+    }
+
+    // The small square in front of a filament name. Empty string when there is
+    // no colour to show, so a caller can concatenate it unconditionally.
+    function swatchHtml(colors, direction = null) {
+        const background = colorSetBackground(colors, direction);
+        if (!background) return "";
+        const title = colors.map(c => `#${c}`).join(" ");
+        return `<span class="gc-swatch" style="background:${background}" title="${title}"></span>`;
     }
 
 	// Build an action button with the shared Create/Merge/Show behaviour.
@@ -418,12 +455,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	// long inventory to find the obvious candidate.
 	function rankSpoolsForSlot(spools, slot) {
 	    const slotMaterial = (slot?.tray_type || "").toUpperCase();
-	    const slotColor    = normColorJS(slot?.tray_color);
+	    // Compared as a set rather than as a single hex, so a multi colour spool
+	    // can reach the top for its own slot. Those carry no color_hex at all,
+	    // so against the single field they always ranked last.
+	    const slotColors   = [...slotColorsJS(slot)].sort().join(",");
 
 	    const score = (sp) => {
 	        const material = (sp.filament?.material || "").toUpperCase();
-	        const color    = normColorJS(sp.filament?.color_hex);
-	        if (material && material === slotMaterial && color && color === slotColor) return 0;
+	        const colors   = [...filamentColorsJS(sp.filament)].sort().join(",");
+	        if (material && material === slotMaterial && colors && colors === slotColors) return 0;
 	        if (material && material === slotMaterial) return 1;
 	        return 2;
 	    };
@@ -437,9 +477,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const fil   = sp.filament || {};
 	    const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
 	    const left  = sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
-	    const swatch = fil.color_hex
-	        ? `<span class="gc-swatch" style="background:#${normColorJS(fil.color_hex)}"></span>`
-	        : "";
+	    const swatch = swatchHtml(filamentColorsJS(fil), fil.multi_color_direction);
 	    return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"} <span class="gc-muted">(${left})</span>`;
 	}
 
@@ -810,9 +848,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const emptyLabel = amsSpool.option === "Waiting for data" ? "Reading spool" : "Empty slot";
 	    const readable = isEmpty ? emptyLabel : (nameParts.length ? nameParts.join(" · ") : "Unknown filament");
 
-	    const color = (!isEmpty && slot.tray_color)
-	        ? `<span class="gc-swatch" style="background:#${normColorJS(slot.tray_color)}"></span>`
-	        : "";
+	    // The colours come from the slot, not from the matched filament: they are
+	    // what physically sits in the AMS, and the printer reports them in the
+	    // order they run along the strand. The direction only decides how they
+	    // are drawn, and the AMS does not report it, so it comes from whichever
+	    // filament record was matched.
+	    const direction = fil?.multi_color_direction ?? amsSpool.matchingExternalFilament?.multi_color_direction ?? null;
+	    const color = isEmpty ? "" : swatchHtml(slotColorsJS(slot), direction);
 
 	    const spoolmanBaseUrl = (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
 	    const spoolman = amsSpool.existingSpool?.id
@@ -833,9 +875,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    // A manual assignment resolves the ambiguity for this slot, so the warning
 	    // only applies while the slot still relies on the automatic match.
-	    const key = consumptionKeyJS(slot.tray_info_idx, slot.tray_color);
+	    const key = consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols);
 	    const ambiguous = (!isEmpty && !amsSpool.connectedViaMapping && ctx?.keyCount && ctx.keyCount[key] > 1)
-	        ? ` <span class="gc-warn" title="Another loaded spool is identical (same type AND color), consumption cannot be split automatically; assign the spools manually to split correctly">⚠</span>`
+	        ? ` <span class="gc-warn" title="Another loaded spool is identical in profile and colour. Consumption is still split correctly whenever the sliced file names the slot each filament was meant for. Where it does not, the whole amount goes to one of them; assign one to choose which.">⚠</span>`
 	        : "";
 
 	    return `
@@ -928,14 +970,29 @@ document.addEventListener("DOMContentLoaded", () => {
 	    }, 1000);
 	}
 
+	// The label the server gives the external spool holder. It reports one spool
+	// and gets a table of its own, like an AMS HT unit, because it belongs to no
+	// four slot unit and would otherwise break their grouping.
+	const EXTERNAL_SLOT = "External";
+
+	// Slots that stand alone rather than filling a four slot AMS unit.
+	function isSingleSlotUnit(amsId) {
+	    return amsId === EXTERNAL_SLOT || amsId.startsWith("HT-");
+	}
+
 	// Mirrors normColor in src/gcode.js: slice colors carry a leading "#" and AMS
 	// colors carry a trailing alpha byte, so both are trimmed to bare 6-digit hex.
 	function normColorJS(color) {
 	    return String(color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 	}
 
-	function consumptionKeyJS(idx, color) {
-	    return `${idx || "?"}|${normColorJS(color)}`;
+	// Mirrors consumptionKey in src/gcode.js, including the colour set that
+	// separates a gradient spool from the plain spool it shares a profile and a
+	// first colour with. A single colour yields the key it always did.
+	function consumptionKeyJS(idx, color, colors = null) {
+	    const set = [...new Set((colors || []).map(normColorJS).filter(Boolean))];
+	    const suffix = set.length > 1 ? `|${set.sort().join("+")}` : "";
+	    return `${idx || "?"}|${normColorJS(color)}${suffix}`;
 	}
 
 	// Mirrors materialKey in src/mqtt.js, the fallback identity used for spools
@@ -1036,7 +1093,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const keyCount = {};
 	    for (const s of spools) {
 	        if (s.slotState === "Empty") continue;
-	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color);
+	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols);
 	        keyCount[key] = (keyCount[key] || 0) + 1;
 	    }
 	    const ctx = { fullCons, partCons, keyCount, showBooking: true };
@@ -1058,15 +1115,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	    };
 
 	    const tables = [];
-	    const normalAMS = spools.filter(s => !s.amsId.startsWith("HT-"));
-	    const htAMS     = spools.filter(s => s.amsId.startsWith("HT-"));
+	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
+	    const singles   = spools.filter(s => isSingleSlotUnit(s.amsId));
 
 	    // Normal AMS: up to 4 slots per unit/table
 	    for (let i = 0; i < normalAMS.length; i += 4) {
 	        tables.push(makeTable(normalAMS.slice(i, i + 4)));
 	    }
-	    // AMS HT: one slot per table
-	    for (const ht of htAMS) tables.push(makeTable([ht]));
+	    // AMS HT and the external spool holder: one slot per table
+	    for (const single of singles) tables.push(makeTable([single]));
 
 	    if (!tables.length) {
 	        const empty = makeTable([]);
@@ -1077,15 +1134,52 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return tables;
 	}
 
-	// Looks up a slot's entry in a consumption map. Matches on the exact material
-	// profile first, then on material + color. 3rd-party spools report no usable
-	// tray_info_idx, mirroring the staged match in bookConsumption (src/mqtt.js).
-	function findConsumption(cons, slot) {
-	    const exact = cons[consumptionKeyJS(slot.tray_info_idx, slot.tray_color)];
+	// Looks up a slot's entry in a consumption map, mirroring the staged match in
+	// bookConsumption (src/mqtt.js): the slot the slice named, then the filament
+	// identity, then material + colour for 3rd-party spools, which report no
+	// usable tray_info_idx.
+	function findConsumption(cons, amsSpool) {
+	    const slot = amsSpool.slot || {};
+
+	    // The server names the slot each sliced filament runs from. A slot the
+	    // printer itself reported is taken as it stands, because a filament
+	    // substituted for the sliced one is exactly what it reports. A slot
+	    // estimated from the slicer's list order is confirmed first, or it would
+	    // show another slot's figures.
+	    const entries = Object.values(cons);
+
+	    const bySlot = entries.find(e => e.amsId && e.amsId === amsSpool.amsId);
+	    if (bySlot && (bySlot.amsIdFromPrinter || slotConfirmsSliceJS(slot, bySlot))) return bySlot;
+
+	    // An entry the printer placed on a slot belongs to that slot and to no
+	    // other. Without this every row whose colour matches the sliced filament
+	    // claimed the same figures, so a print running from remapped slots showed
+	    // each amount twice: on the slot being consumed and on the slot that
+	    // merely holds the colour the file was sliced with.
+	    const unclaimed = entries.filter(e => !e.amsIdFromPrinter);
+
+	    // Compared entry by entry rather than looked up. The server keys the map
+	    // by the position of the filament in the slicer's list, so indexing it
+	    // with a colour key never hit anything.
+	    const wantedKey = consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols);
+	    const exact = unclaimed.find(e => consumptionKeyJS(e.tray_info_idx, e.color, e.colors) === wantedKey);
 	    if (exact) return exact;
 
-	    const wanted = materialKeyJS(slot.tray_type, slot.tray_color);
-	    return Object.values(cons).find(e => materialKeyJS(e.type, e.color) === wanted) || null;
+	    const wantedMaterial = materialKeyJS(slot.tray_type, slot.tray_color);
+	    return unclaimed.find(e => materialKeyJS(e.type, e.color) === wantedMaterial) || null;
+	}
+
+	// Mirrors slotConfirmsSlice in src/mqtt.js. Colours are compared as sorted
+	// sets, because the slicer and the RFID chip need not agree on which colour
+	// of a set comes first.
+	function slotConfirmsSliceJS(slot, entry) {
+	    if (!slot.tray_info_idx || slot.tray_info_idx !== entry.tray_info_idx) return false;
+
+	    const sliceColors = (entry.colors?.length ? entry.colors : [entry.color]).map(normColorJS).filter(Boolean);
+	    const slotColors = slotColorsJS(slot);
+	    if (!sliceColors.length || !slotColors.length) return false;
+
+	    return [...sliceColors].sort().join("+") === [...slotColors].sort().join("+");
 	}
 
 	function createGcodeSpoolRow(amsSpool, ctx) {
@@ -1095,8 +1189,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    const slot   = amsSpool.slot || {};
 	    const isEmpty = amsSpool.slotState === "Empty";
-	    const needed = isEmpty ? 0 : (findConsumption(fullCons, slot)?.grams ?? 0);
-	    const used   = isEmpty ? 0 : (findConsumption(partCons, slot)?.grams ?? 0);
+	    const needed = isEmpty ? 0 : (findConsumption(fullCons, amsSpool)?.grams ?? 0);
+	    const used   = isEmpty ? 0 : (findConsumption(partCons, amsSpool)?.grams ?? 0);
 
 	    // On spool: Spoolman remaining/initial weight whenever we know which spool
 	    // this is (tag link or manual assignment), else the AMS-reported
@@ -1153,14 +1247,18 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const fullCons = printData.fullConsumption || {};
 	    const loaded = spools.filter(s => s.slotState !== "Empty");
 
-	    const loadedKeys = new Set(loaded.map(s => consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color)));
+	    const loadedKeys = new Set(loaded.map(s => consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols)));
 	    // 3rd-party spools report no usable tray_info_idx, so they'd always look
 	    // "not loaded" by profile alone, so fall back to material + color, the same
 	    // second-stage match the backend uses when booking.
 	    const loadedMaterials = new Set(loaded.map(s => materialKeyJS(s.slot?.tray_type, s.slot?.tray_color)));
 
+	    // An entry the server placed on a loaded slot is by definition not
+	    // missing, so only the ones it could not place are candidates here.
+	    const loadedSlots = new Set(loaded.map(s => s.amsId));
 	    const missing = Object.values(fullCons).filter(
-	        e => !loadedKeys.has(consumptionKeyJS(e.tray_info_idx, e.color))
+	        e => !(e.amsId && loadedSlots.has(e.amsId))
+	          && !loadedKeys.has(consumptionKeyJS(e.tray_info_idx, e.color, e.colors))
 	          && !loadedMaterials.has(materialKeyJS(e.type, e.color))
 	    );
 	    if (!missing.length) return null;
@@ -1169,9 +1267,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	    let html = `<h4 class="gc-required" style="margin:16px 0 4px">Required but not loaded</h4>`;
 	    html += `<table class="data-table gc-required-table">`;
 	    for (const e of missing) {
-	        const swatch = e.color
-	            ? `<span class="gc-swatch" style="background:#${normColorJS(e.color)}"></span>`
-	            : "";
+	        // The sliced file names one colour per filament, so there is never a
+	        // set to draw here, unlike on a slot.
+	        const swatch = swatchHtml(e.color ? [normColorJS(e.color)] : []);
 	        const label = e.type ? `${e.type} <code>${e.tray_info_idx}</code>` : `<code>${e.tray_info_idx}</code>`;
 	        html += `<tr><td>${swatch}${label}</td>
 	            <td class="gc-required-amount">${e.grams}g needed</td></tr>`;
@@ -1444,15 +1542,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateElementText(id, text) {
         const element = getElementSafe(id);
         if (element) element.textContent = text;
-    }
-    
-    // Calculate the appropriate text color based on background brightness
-    function getTextColor(hexColor) {
-        const r = parseInt(hexColor.slice(0, 2), 16);
-        const g = parseInt(hexColor.slice(2, 4), 16);
-        const b = parseInt(hexColor.slice(4, 6), 16);
-        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-        return brightness > 128 ? "black" : "white";
     }
 
     // Format a Date object into a human-readable string

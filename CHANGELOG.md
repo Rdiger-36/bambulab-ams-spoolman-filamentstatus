@@ -1,4 +1,39 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - Multi colour spools (PLA Silk Multi-Color, PLA Basic Gradient, TPU 90A Blaze and Frozen) show all of their colours again instead of only the first one
+         - The AMS reports every colour of a spool in cols and only the first of them in tray_color. cols never left the server: the client projection did not carry it, so the Web UI drew a two colour spool as if it were plain
+         - A Spoolman filament with several colours has no color_hex at all, it has multi_color_hexes, and that field was not carried either, so even a spool already linked in Spoolman had no colour to draw
+         - The colour swatch draws the whole set: colours that run side by side down the strand (SpoolmanDB "coaxial", the Silk multi colour spools) as hard bands, colours that change along the length ("longitudinal", the gradient spools) as a fade, and any number of them rather than exactly two. A single colour spool is unchanged
+         - The swatch in the assignment dialog and the ranking of its candidates read the colour set as well, so a multi colour spool is no longer the entry with no colour next to it and can reach the top of the list for its own slot
+      - A slot whose report contains no cols no longer throws. Three matching functions read the field directly, and processData now fills it in from the single colour the printer always sends
+      - Swapping two multi colour filaments that share their first colour is detected. Change detection compared only tray_color, which is identical for both, so the slot kept showing the colours of the spool that had been taken out
+      - Filament consumption is booked onto the right spool when two loaded spools look alike
+         - The sliced file names the AMS slot each filament was meant for, in the position of the filament in the slicer's list, and that is now the first thing consumption is matched on. It is the only thing that separates two spools identical in profile and colour
+         - It is confirmed rather than trusted: the printer can reassign slots when a job is sent and the sliced file is written before that, so the slot counts only when it really holds the profile and the colours the slice expects. Anything unconfirmed is matched exactly as before
+         - The position is resolved against the slots the printer actually reports, never calculated. With two AMS units and a spool on the external holder the slicer lists nine filaments, and arithmetic on four slots per unit turned the ninth into a unit that printer does not have. The list length is no help either: it is the project's filament count, and the same printer produced files with six, eight and nine entries
+         - What the printer reports is taken as it stands, while the fallback below is checked against the slot first. A print started with a different spool selected than the one that was sliced is not a mistake to correct, it is exactly what that field exists to report, and checking it against the sliced colour booked onto the spool that was sliced instead of the one that was consumed
+         - Where the printer reports which slot each filament of the print is running from, in print.mapping, that is what is used. It needs no assumption about how the slicer numbers its list, and it is the assignment after any reassignment the printer made when the job was sent rather than the slicer's intention before it. Measured against two prints on a P2S, every entry matched, including the external spool holder
+         - Without it, the order is by AMS unit id, which is what the printer numbers them by: the four slot units first, then an AMS HT, then the external spool holder. Read off a printer, whose nine reported slots matched the nine filaments of a sliced file position for position
+         - The amounts no longer merge before the match: two filaments in two slots stayed two entries, where they used to be added together and could not be split afterwards however the spools were identified
+      - A gradient spool is no longer confused with a plain spool of the same first colour
+         - Bambu Studio slices PLA Basic Gradient under GFA00, the same profile as plain PLA Basic, and the AMS reports only the first colour of a set in tray_color. Arctic Whisper, Solar Breeze and an ordinary white PLA Basic were one and the same for consumption matching, for the duplicate warning in the dashboard, and for a manual assignment, which survived a spool swap it should have been dropped for
+         - The whole colour set is part of all three now, sorted, because Bambu Studio and SpoolmanDB do not agree on the order. A single colour spool is unchanged in every one of them, so nothing stored has to be migrated
+      - A spool on the external spool holder is shown and can be assigned, in G-code mode
+         - The printer reports it outside the AMS block, as vir_slot, and this service ignored the field. Its consumption therefore landed on whichever AMS slot happened to match by material and colour
+         - It appears as a slot of its own called External, in a table of its own like an AMS HT unit, classified as the 3rd party spool it is because the holder has no RFID chip. Assigning a Spoolman spool to it is what makes its consumption bookable, and the consumption then reaches it through the slot the sliced file names rather than through a colour that another spool may share
+         - An empty holder is still reported by the printer, in full, with only the fields that name a material left blank and a colour of fully transparent white. It shows as no slot at all rather than as a spool nobody can identify
+         - Legacy mode leaves it out, for the same reason it shows every chipless spool read-only: it derives the weight from the RFID remain percentage and there is no chip to read
+         - Firmware that reports the holder as vt_tray instead is read as well
+      - The dashboard no longer shows a print's figures twice when it runs from remapped slots. The needed and after-print amounts appeared on the slot being consumed and again on the slot that merely holds the colour the file was sliced with, because the fallback match did not know the amount already belonged to a slot the printer had named. The booking itself was correct throughout
+      - The log line that admits to a guess reaches the log file. It was written with console.warn, which is not one of the three overridden by the logger, so it went to raw stdout with the routing arguments printed as text and never into the printer log
+      - The duplicate warning no longer promises what an assignment cannot do. Two spools reach that point only when the sliced file could not separate them either, so assigning both splits nothing; assigning one decides which spool carries the total
+   - Development:
+      - New test server under scripts/test-server: a mock printer over TLS on 8883, a mock Spoolman on 7912 and the service pointed at both, started with one command and writing to a temporary directory rather than to printers/
+         - The scenario fills all 25 addressable positions (four AMS units, eight AMS HT units and the external spool holder) with the multi colour filaments from the Bambu Lab hex code tables, next to single colour, empty, being read and 3rd party slots
+         - The catalogue it serves is copied from SpoolmanDB, so matching runs against the real ids, colour sets and directions
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.3
    - Documentation:
       - The README is rebuilt around G-code tracking, which is the default since 1.3.0

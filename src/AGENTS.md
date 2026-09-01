@@ -28,7 +28,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
-| `utils.js` | Date/interval formatting, `sleep`, AMS id → slot label (`A0`, `HT-A`). |
+| `utils.js` | Date/interval formatting, `sleep`, AMS id to slot label (`A0`, `HT-A`), and `slotColors()`, the colour set of a slot. It lives here because both `ams.js` and `uispool.js` need it and `ams.js` already imports `uispool.js`. |
 
 ## The two tracking modes
 
@@ -92,6 +92,16 @@ build their Spoolman payload from.
   next MQTT message in `extractComparableTrayData()`; normalise into a local
   (`correctRemainInt`) instead. Mutating it desyncs change detection forever for
   any spool whose `tray_weight != 1000`.
+- **`cols` is the colour set of a slot, `tray_color` only its first colour.**
+  A multi colour filament reports every colour it carries in `cols`, and
+  Spoolman stores the same thing as `multi_color_hexes` with no `color_hex` at
+  all, so anything comparing or drawing a colour has to read the set.
+  `slotColors()` in `utils.js` normalises it, dropping the alpha byte the AMS
+  appends, and `processData()` guarantees the field exists on every tray, which
+  is why `cols` has to be in `EMPTY_TRAY_KEYS`: a field the normalisation adds
+  unconditionally makes every empty slot look occupied otherwise. Order is the
+  printer's, because it is the order the colours run along the strand; the two
+  catalogues do not agree on one, so comparisons sort a copy.
 - **A `remain` of `null` means "not reported", never "empty".** The AMS answers
   `-1` between a spool going in and its RFID percentage arriving, measured on
   a P2S at anything from 17 seconds to over a minute, and forever for a
@@ -129,6 +139,19 @@ build their Spoolman payload from.
   spool. Merging is deliberately not held back, it writes only the tag. The
   wait resolves itself because `hasTrayDataChanged()` treats the arrival of the
   first reading as a change.
+- **The external spool holder is a slot like any other, in G-code mode only.**
+  The printer reports it outside the AMS block as `print.vir_slot`, an array
+  whose entry is field for field a chipless AMS tray, so `externalSpoolUnits()`
+  hands it to the same pipeline as a unit of id 255 and `processSlot` classifies
+  it as the 3rd party spool it is. `convertAMSandSlot()` labels it `External`,
+  which is also the key an assignment is stored under, so changing the label
+  orphans what is on disk. Legacy mode leaves it out for the reason it leaves
+  every chipless spool read-only: it writes the RFID remain percentage and the
+  holder has no chip. Older firmware called it `vt_tray` and sent a single
+  object; a P2S on 2026 firmware does not send that key at all. Only a holder
+  that carries something is emitted, because what an empty one reports has not
+  been observed and an entry of empty strings would still reach
+  `slotIsOccupied()` carrying its temperature fields.
 - **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to
@@ -138,6 +161,66 @@ build their Spoolman payload from.
   `connectedViaTag` (Spoolman `extra.tag` == the slot's `tray_uuid`) or
   `connectedViaMapping` (explicit user assignment). Type/colour similarity alone
   never books.
+- **The sliced file names the slot, and that beats every colour comparison.**
+  The position of a filament in Bambu Studio's list is the AMS slot it was
+  sliced for, verified against a real print on a P2S with two AMS units where
+  the ids 5, 7 and 8 were B0, B2 and B3. It is the only thing that separates two
+  spools identical in profile and colour, so `calcFullConsumption()` keys by
+  that position: two filaments never merge, where a colour key added them
+  together before anything looked at the AMS and the sum could not be split
+  afterwards.
+- **The printer says which slot a print runs each filament from, and that beats
+  working it out.** `print.mapping` carries one entry per filament of the
+  slicer's project, the unit in the high byte and the slot in the low one:
+  `0x0100` is B0, `0xFF00` the external holder, `0xFFFF` a filament the plate
+  does not use. `decodePrintMapping()` turns it into the same shape
+  `orderedAmsSlots()` produces, so `resolveSliceSlots()` takes either without
+  knowing which. It is captured at the transition to RUNNING and kept on the
+  printer as `currentMapping`, like the slice info and for the same reason: the
+  booking happens on a terminal state and this describes the job that reached
+  it. It is also the assignment after any remapping the printer did when the job
+  was sent, which the sliced file cannot know. Read off a P2S across three
+  prints, where every entry matched the slots the print was really running from.
+  It is followed for as long as the print is active rather than read once: the
+  value settles a moment after the start, and one observed report still carried
+  the slot the job had been configured with before the user changed it.
+- **A position is resolved against the printer, never computed.**
+  `resolveSliceSlots()` takes the slots from `orderedAmsSlots()`, which orders
+  them by ascending AMS unit id: the four slot units 0 to 3, then AMS HT at 128
+  to 135, then the external holder at 255. That order is read off a printer. A
+  P2S with two AMS units and a spool on the holder produced a nine entry
+  filament list whose colours matched the reported slots position for position,
+  the holder last. Arithmetic on "four per unit" is wrong, it turned that ninth
+  entry into "C0", a unit the printer does not have, and the list length says
+  nothing either: it is the project's filament count, and the same P2S produced
+  files with six, eight and nine entries. All four positions of an attached four
+  slot unit are listed whether or not they reported a spool, because the slicer
+  lists an empty slot too and counting only the occupied ones shifts everything
+  after one. Where an AMS HT sits is inference, no observed file has one, and it
+  costs nothing to be wrong about because the confirmation below rejects it.
+- **An estimated slot is confirmed, a reported one is not.**
+  `slotConfirmsSlice()` requires the slot to really hold the profile and the
+  colours the slice expects, comparing colours as sorted sets because the slicer
+  and the RFID chip need not agree on which comes first. It guards the list
+  order estimate, which cannot tell whether the project is synchronised with the
+  printer. It must not guard `print.mapping`: a print configured to take a
+  filament from a slot holding a different colour than the sliced one is the
+  substitution that field exists to report, and checking it against the sliced
+  colour rejected the one right answer. Measured: a print started with the wrong
+  spool selected reported that spool's slot correctly, the check rejected it,
+  and the colour stages then found the spool that was sliced rather than the one
+  that would have been consumed. `resolveSliceSlots()` records the source as
+  `amsIdFromPrinter` so the stage can tell them apart. Everything unconfirmed,
+  and every filament with no slot at all, falls through to the stages below.
+- **`consumptionKey()` carries the colour set, and `slotFingerprint()` too.**
+  A gradient spool is not a profile of its own: Bambu Studio slices PLA Basic
+  Gradient as `GFA00`, the same as plain PLA Basic, and `tray_color` is only its
+  first colour. Arctic Whisper, Solar Breeze and an ordinary white PLA Basic
+  were one key and one fingerprint. The set is sorted in both, because the
+  sources disagree on order (Studio writes Cotton Candy Cloud as
+  `#8EC9E9 #E7C1D5`, SpoolmanDB stores it the other way round) and an unsorted
+  comparison matches nothing rather than the wrong thing. A single colour
+  produces the string it always did, so nothing on disk needs migrating.
 - **A mapping carries a fingerprint** (`tray_type|colour`). When it stops
   matching, the assignment is dropped rather than booked onto the wrong spool.
 - **`mappings.json` is written temp-file-then-rename**, so a crash mid-write
@@ -174,6 +257,12 @@ function to `spoolman.js`.
 **Adding matching logic:** put the decision in `ams.js` as a pure function and
 call it from `mqtt.js`. That is what makes it testable: `test/ams.test.js`
 covers exactly this seam.
+
+**Testing against a whole system:** `node scripts/test-server/index.js` starts a
+mock printer, a mock Spoolman and this service against both, with its state in a
+temporary directory. The mocks implement only what `spoolman.js` and `mqtt.js`
+actually call. Reach for it when the thing to check is a payload travelling all
+the way to the browser, which is the one seam `test/` cannot cover.
 
 **Pushing something to the UI:** `broadcastSlotUpdate()` for a single slot,
 `broadcastSSE()` for status/refresh events. A slot goes out through

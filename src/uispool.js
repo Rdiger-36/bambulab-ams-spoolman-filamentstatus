@@ -1,4 +1,5 @@
 import { consumptionKey } from "./gcode.js";
+import { slotColors } from "./utils.js";
 
 /**
  * The one projection from an internal UI spool to what a client sees.
@@ -30,13 +31,21 @@ function orNull(value) {
     return value ?? null;
 }
 
-/** The AMS slot fields the Web UI reads. Everything else stays on the server. */
+/**
+ * The AMS slot fields the Web UI reads. Everything else stays on the server.
+ *
+ * `cols` carries every colour of the filament, `tray_color` only the first of
+ * them. Both are sent, because both are read: the swatch draws the whole set,
+ * and the consumption key is built from the single colour plus the set, in the
+ * same order on both sides, so the two have to keep agreeing.
+ */
 function pickSlot(slot) {
     if (!slot) return null;
     return {
         tray_uuid: orNull(slot.tray_uuid),
         tray_type: orNull(slot.tray_type),
         tray_sub_brands: orNull(slot.tray_sub_brands),
+        cols: slotColors(slot),
         tray_color: orNull(slot.tray_color),
         tray_info_idx: orNull(slot.tray_info_idx),
         tray_weight: slot.tray_weight ?? null,
@@ -44,7 +53,13 @@ function pickSlot(slot) {
     };
 }
 
-/** The Spoolman spool fields the UI shows, for a linked or mergeable spool. */
+/**
+ * The Spoolman spool fields the UI shows, for a linked or mergeable spool.
+ *
+ * A multi colour filament has no `color_hex` at all in Spoolman, it has
+ * `multi_color_hexes` instead, so sending only the single field left every
+ * multi colour spool in the UI with no colour to draw.
+ */
 function pickSpool(spool) {
     if (!spool) return null;
     const filament = spool.filament || null;
@@ -59,12 +74,20 @@ function pickSpool(spool) {
             material: filament.material ?? null,
             weight: filament.weight ?? null,
             color_hex: filament.color_hex ?? null,
+            multi_color_hexes: orNull(filament.multi_color_hexes),
+            multi_color_direction: orNull(filament.multi_color_direction),
             vendor: filament.vendor ? { name: filament.vendor.name ?? null } : null,
         } : null,
     };
 }
 
-/** A filament candidate from the SpoolmanDB catalogue, as the dialogs show it. */
+/**
+ * A filament candidate from the SpoolmanDB catalogue, as the dialogs show it.
+ *
+ * `multi_color_direction` is carried for a slot that has no Spoolman spool yet:
+ * the AMS reports which colours are on the filament but not how they sit on it,
+ * and the catalogue is then the only source for that.
+ */
 function pickExternalFilament(filament) {
     if (!filament) return null;
     return {
@@ -74,6 +97,7 @@ function pickExternalFilament(filament) {
         material: filament.material ?? null,
         density: filament.density ?? null,
         diameter: filament.diameter ?? null,
+        multi_color_direction: orNull(filament.multi_color_direction),
     };
 }
 
@@ -118,12 +142,15 @@ export function toClientSpool(uiSpool) {
         error: uiSpool.error ?? false,
 
         // Derived once here rather than in every consumer: the readable name the
-        // dashboard prints, the Spoolman id it links to, and the consumption key
-        // that ties a slot to an entry of the sliced file.
+        // dashboard prints, the Spoolman id it links to, and the filament
+        // identity, which is what the dashboard counts to find two slots it
+        // cannot tell apart. It is no longer what ties a slot to an entry of
+        // the sliced file: that is the slot itself wherever the slice names one,
+        // and this identity is the fallback for where it does not.
         vendor: filament?.vendor?.name ?? matchingExternalFilament?.manufacturer ?? null,
         material: filament?.material ?? slot.tray_type ?? null,
         filamentName: filament?.name ?? matchingExternalFilament?.name ?? slot.tray_sub_brands ?? null,
         spoolmanId: existingSpool?.id ?? null,
-        key: consumptionKey(slot.tray_info_idx, slot.tray_color),
+        key: consumptionKey(slot.tray_info_idx, slot.tray_color, slot.cols),
     };
 }

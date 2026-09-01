@@ -1,6 +1,7 @@
 import fs from "fs-extra";
 import { mappingsPath, serverLogFilePath } from "./config.js";
 import { normColor } from "./gcode.js";
+import { slotColors } from "./utils.js";
 
 /**
  * Manual AMS slot -> Spoolman spool assignments.
@@ -32,8 +33,29 @@ let mappings = null;
  * It is added to the material rather than replacing it: a P2S reports the
  * generic `GFL99` for every 3rd party spool, so on its own it would not even
  * tell PLA from PETG.
+ *
+ * The colour set is added for the same reason, one level further down. A multi
+ * colour filament reports only its first colour in `tray_color`, and a gradient
+ * spool carries the plain `GFA00` profile, so swapping Arctic Whisper for Solar
+ * Breeze changed nothing in the first three parts and the assignment survived a
+ * spool it no longer described.
+ *
+ * A single colour spool produces the three part fingerprint it always did, so
+ * nothing already on disk has to be migrated for it.
  */
 export function slotFingerprint(slot) {
+    // Through normColor like every other part, so the whole fingerprint is one
+    // case. slotColors() normalises to lower, the rest of this string is upper.
+    const colors = [...new Set(slotColors(slot).map(normColor))];
+    const suffix = colors.length > 1 ? `|${colors.sort().join("+")}` : "";
+    return `${slot?.tray_info_idx || "?"}|${slot?.tray_type || "?"}|${normColor(slot?.tray_color)}${suffix}`;
+}
+
+/**
+ * The fingerprint format written before the colour set was part of it, which is
+ * only ever different for a multi colour spool.
+ */
+function preColorSetFingerprint(slot) {
     return `${slot?.tray_info_idx || "?"}|${slot?.tray_type || "?"}|${normColor(slot?.tray_color)}`;
 }
 
@@ -59,6 +81,12 @@ function fingerprintMatches(stored, slot) {
     if (stored === slotFingerprint(slot)) return { matches: true, legacy: false };
     // Two parts means it was written before the profile was included
     if (stored.split("|").length === 2 && stored === legacyFingerprint(slot)) {
+        return { matches: true, legacy: true };
+    }
+    // Three parts on a multi colour slot means it was written before the colour
+    // set was included. The assignment still describes this spool, it just says
+    // less about it than it could, so it is kept and rewritten.
+    if (stored.split("|").length === 3 && stored === preColorSetFingerprint(slot)) {
         return { matches: true, legacy: true };
     }
     return { matches: false, legacy: false };

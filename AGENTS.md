@@ -32,7 +32,7 @@ matter for them are below.
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
 | `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
-| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), standalone `mqtt.js` probe. |
+| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), the standalone `mqtt.js` probe, `capture-trays.js` (prints a printer's slots once and exits: the AMS trays, the external holder and the slots the running print reports), and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
 
 ## Global invariants
@@ -127,7 +127,8 @@ Not punctuation, and therefore allowed:
   `originalConsoleError` belong to `src/logger.js` and to the few places that
   must not recurse into the logger; `process.stdout.write` belongs to
   `entrypoint.js` and `starting.js` only, which both run before the overrides
-  exist. No leftover debug logging.
+  exist. No leftover debug logging. `scripts/` is outside the service and never
+  imports `logger.js`, so the plain console is correct there and only there.
 - **Shared mutable state goes through `src/state.js`**, per-printer state onto
   the printer object created in `src/printers.js`. Never introduce a new
   module-level mutable global, and never keep state in a route handler or in a
@@ -158,6 +159,26 @@ Not punctuation, and therefore allowed:
   routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
   temporary directory. Those two variables are read once at import time, so a
   test that needs them must set them before the first import.
+- Whole system by hand: `node scripts/test-server/index.js` starts a mock
+  printer on 8883, a mock Spoolman on 7912 and the service against both, with
+  its state in a temporary directory rather than in `printers/`. Then open
+  http://localhost:4000. The scenario fills all 24 addressable AMS slots with
+  the multi colour filaments from the Bambu Lab hex code tables, plus the
+  external spool holder, which is every position this service can address. It
+  covers what no unit test and no ordinary spool collection reaches. `--no-service`
+  runs only the two mocks, for pointing a container at them. Stop it before
+  running `npm test`: the suite expects nothing on 8883, and a broker answering
+  there leaves the connection tests waiting for a report.
+- Against real hardware: `--real-printer <ip> <code> <serial>` replaces the mock
+  printer with a physical one and keeps the mock Spoolman, so a spool nobody
+  here owns can be seen as the printer really reports it without a write
+  reaching a Spoolman instance that matters. Add `--mode automatic` to exercise
+  the write paths: pointed at a real printer it seeds the mock with that
+  printer's own spools, tags and all, which is what makes a real print bookable
+  against a Spoolman nobody has to care about. `node scripts/capture-trays.js
+  <ip> <code> <serial>` prints the slots alone when only the payload is in
+  question, including `print.mapping` decoded into slot labels, which is what a
+  question about a booking landing on the wrong spool starts from.
 - There is no linter, formatter or type checker configured. Match the
   surrounding style: 4-space indent in `src/`, double quotes, semicolons.
 - Comments in this codebase explain why, usually pointing at the bug the line

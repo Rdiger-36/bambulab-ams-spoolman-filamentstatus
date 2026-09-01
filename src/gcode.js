@@ -2,6 +2,8 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
+import { EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
+
 /**
  * TLS options for BambuLab's self-signed certificate. The printer presents a
  * cert with CN = serial number; we don't validate it (same as the MQTT
@@ -67,7 +69,17 @@ export async function fetchSliceInfo(printer, jobName) {
         const entry = zip.getEntry("Metadata/slice_info.config");
         if (!entry) return null;
 
-        return parseSliceInfo(entry.getData().toString("utf8"));
+        // The whole archive is already in memory, so the second entry costs
+        // nothing on the wire. It is the only place the colour set of a multi
+        // colour filament appears: slice_info.config keeps one colour per
+        // filament, the first of the set. Missing on older slicers, and then
+        // the single colour is all there is, exactly as before.
+        const settings = zip.getEntry("Metadata/project_settings.config");
+
+        return parseSliceInfo(
+            entry.getData().toString("utf8"),
+            settings ? settings.getData().toString("utf8") : null,
+        );
     } finally {
         client.close();
     }
@@ -87,24 +99,211 @@ export function normColor(c) {
  * material profile (e.g. "GFA00" = PLA Basic) and does NOT distinguish colors,
  * so we combine it with the normalised color. This separates e.g. PLA Black
  * from PLA Jade White even though both share tray_info_idx.
+ *
+ * `colors` extends that with the whole colour set of a multi colour filament,
+ * which the two fields above cannot separate: a gradient spool is not a profile
+ * of its own (Bambu Studio slices PLA Basic Gradient as GFA00, the same as
+ * plain PLA Basic) and `color` is only the first colour of the set. Arctic
+ * Whisper, Solar Breeze and an ordinary white PLA Basic were one key.
+ *
+ * The set is sorted, because the sources disagree on order: Bambu Studio writes
+ * Cotton Candy Cloud as "#8EC9E9 #E7C1D5" and SpoolmanDB stores it the other
+ * way round. Comparing unsorted would match nothing at all rather than match
+ * the wrong thing.
+ *
+ * A single colour produces the key it always did, byte for byte, so nothing
+ * changes for the spools that were never ambiguous.
+ *
+ * @param {string|null} trayInfoIdx - the filament profile
+ * @param {string|null} color - the first colour, as either side reports it
+ * @param {string[]} [colors] - every colour of the filament, any order
  */
-export function consumptionKey(trayInfoIdx, color) {
-    return `${trayInfoIdx || "?"}|${normColor(color)}`;
+export function consumptionKey(trayInfoIdx, color, colors = null) {
+    const set = (colors || []).map(normColor).filter(Boolean);
+    const suffix = set.length > 1 ? `|${[...new Set(set)].sort().join("+")}` : "";
+    return `${trayInfoIdx || "?"}|${normColor(color)}${suffix}`;
 }
 
 /**
- * Calculates consumed grams per (tray_info_idx + color) for a complete print.
- * Purge is already included in used_g from the slicer.
+ * Names the AMS slot each consumption entry was sliced for, in place.
+ *
+ * Bambu Studio's filament list is the printer's slot list, so the position in
+ * it is the slot: the fifth entry is the fifth slot. Verified against a print
+ * sliced for a P2S with two AMS units, where the ids 5, 7 and 8 were B0, B2
+ * and B3.
+ *
+ * The position is resolved against the slots the printer actually reports,
+ * never against a computed geometry. A second file settled that: with two AMS
+ * units and a spool on the external holder the list holds nine entries, and
+ * arithmetic on "four slots per unit" turns the ninth into "C0", a unit that
+ * printer does not have. The list length is no help either, it is the project's
+ * filament count and not the printer's: the same P2S produced files with six,
+ * eight and nine entries.
+ *
+ * Only the four slot units are passed in by the callers. An AMS HT, an external
+ * holder or a second extruder sit somewhere in that list that no observed file
+ * pins down, so a filament beyond the known slots is left unnamed rather than
+ * placed on a real slot the print never touched.
+ *
+ * The result is a suggestion, never a conclusion. The printer can remap slots
+ * when a job is sent and slice_info.config is written before that, so whoever
+ * reads `amsId` has to confirm it against what the slot actually holds.
+ *
+ * `reportedByPrinter` records where the slots came from, because the answer is
+ * trusted differently depending on that: what the printer reports is what it
+ * will run, while the list order is an estimate that has to be confirmed
+ * against the slot before anything is booked on it.
+ *
+ * @param {object} consumption - a map from calcFullConsumption or the partial one
+ * @param {string[]} amsIds - the printer's slots, in the order the slicer lists them
+ * @param {object} [options]
+ * @param {boolean} [options.reportedByPrinter] - whether `amsIds` came from `print.mapping`
+ * @returns {object} the same map, for chaining
+ */
+export function resolveSliceSlots(consumption, amsIds, { reportedByPrinter = false } = {}) {
+    for (const entry of Object.values(consumption)) {
+        entry.amsId = amsIds?.[entry.index] ?? null;
+        entry.amsIdFromPrinter = entry.amsId !== null && reportedByPrinter;
+    }
+    return consumption;
+}
+
+/**
+ * The value `print.mapping` uses for a filament the plate does not print.
+ * Decoding it would otherwise read as unit 255 slot 255 and name the external
+ * spool holder, which is unit 255 slot 0.
+ */
+const MAPPING_UNUSED = 0xFFFF;
+
+/**
+ * The slots a printer says a print is actually taking its filaments from.
+ *
+ * `print.mapping` is the printer's own answer to the question `orderedAmsSlots`
+ * can only estimate, and it is the better one twice over: it needs no
+ * assumption about how the slicer numbers its list, and it is the assignment
+ * after any remapping the printer did when the job was sent, not the slicer's
+ * intention before it.
+ *
+ * One entry per filament of the slicer's project, in the same order, so the
+ * result drops straight into `resolveSliceSlots()`. Each is the unit in the
+ * high byte and the slot in the low one: 0x0100 is B0, 0x0002 is A2, 0xFF00 is
+ * the external holder, and 0xFFFF means the plate does not use that filament.
+ *
+ * Read off a P2S across two prints, where all seven entries matched the slots
+ * the print was really running from, including the holder and the unused
+ * marker.
+ *
+ * A unit this service cannot address yields null rather than a label, so the
+ * caller treats it as unknown instead of booking onto whatever "Z" would name.
+ *
+ * @param {number[]|undefined} mapping - `print.mapping` from an MQTT report
+ * @returns {string[]|null} slot labels by filament index, null when not reported
+ */
+export function decodePrintMapping(mapping) {
+    if (!Array.isArray(mapping) || !mapping.length) return null;
+
+    return mapping.map(value => {
+        const number = Number(value);
+        if (!Number.isInteger(number) || number < 0 || number === MAPPING_UNUSED) return null;
+
+        const label = convertAMSandSlot(number >> 8, number & 0xFF);
+        return label === "Z" ? null : label;
+    });
+}
+
+/**
+ * The printer's slots in the order Bambu Studio lists them, which is by
+ * ascending AMS unit id and then by slot within the unit.
+ *
+ * That order is read off a printer rather than assumed. A P2S with two AMS
+ * units and a spool on the external holder produced a nine entry filament list
+ * whose colours matched, position for position, the slots the printer reported:
+ * unit 0 as positions 0 to 3, unit 1 as 4 to 7, and the holder, which the
+ * printer numbers 255, as position 8. Sorting by unit id reproduces exactly
+ * that, so an AMS HT, numbered 128 to 135, falls between the four slot units
+ * and the holder.
+ *
+ * The four slot units contribute all four of their positions whether or not a
+ * slot reported a spool, because the slicer lists an empty slot too and
+ * counting only the occupied ones would shift every position after one onto the
+ * wrong spool. An AMS HT and the holder are one position each.
+ *
+ * Where an AMS HT really sits is inference, not measurement: no observed file
+ * has one in it. It costs nothing to be wrong about, because `slotConfirmsSlice`
+ * refuses a position whose slot does not hold the expected profile and colours,
+ * and the stages below it then decide exactly as they did before positions were
+ * used at all.
+ *
+ * This is the fallback for a printer that does not report `print.mapping`,
+ * which answers the same question and is right where this is only sometimes:
+ * measured on a P2S, it named the right slots for a project synchronised with
+ * the printer and none of them for a project holding fewer filaments than the
+ * printer has slots.
+ *
+ * @param {string[]} amsIds - slot labels as `convertAMSandSlot` produces them
+ * @returns {string[]} the positions, ordered
+ */
+export function orderedAmsSlots(amsIds) {
+    const ids = (amsIds || []).filter(id => typeof id === "string");
+    const units = ["A", "B", "C", "D"];
+
+    const attached = units.filter(unit => ids.some(id => id[0] === unit && /^[0-3]$/.test(id[1])));
+    const fourSlotUnits = attached.flatMap(unit => [0, 1, 2, 3].map(slot => `${unit}${slot}`));
+
+    const highTemperature = ids.filter(id => /^HT-[A-H]$/.test(id)).sort();
+    const external = ids.includes(EXTERNAL_SLOT) ? [EXTERNAL_SLOT] : [];
+
+    return [...fourSlotUnits, ...highTemperature, ...external];
+}
+
+/**
+ * The key one sliced filament is accumulated under, and the entry it seeds.
+ *
+ * The position in the slicer's filament list, which is one slot, so two
+ * filaments never merge. They used to be accumulated under their identity, and
+ * two identical black spools in two slots were therefore one number before
+ * anything looked at the AMS; the sum could not be split afterwards however the
+ * spools were identified. Keeping them apart costs nothing where the printer
+ * cannot tell them apart either: both then match the same spool and book
+ * separately, which adds up to the same total.
+ *
+ * The key is deliberately not the slot label. Which slot a position is depends
+ * on the printer the print is booked against, and that is not known here.
+ */
+function consumptionEntry(f) {
+    return {
+        key: `filament${f.index}`,
+        entry: {
+            index: f.index,
+            tray_info_idx: f.tray_info_idx,
+            color: f.color,
+            colors: f.colors || null,
+            type: f.type,
+            // Both filled in by resolveSliceSlots, which needs the printer this
+            // is going to be matched against and is therefore not known here.
+            amsId: null,
+            amsIdFromPrinter: false,
+            grams: 0,
+        },
+    };
+}
+
+/**
+ * Calculates consumed grams per sliced filament for a complete print. Purge is
+ * already included in used_g from the slicer.
+ *
+ * Run the result through `resolveSliceSlots()` to name the slots before
+ * matching it against a printer.
  *
  * @param {object} sliceInfo - result of fetchSliceInfo
- * @returns {{ [key]: { tray_info_idx, color, type, grams } }}
+ * @returns {{ [key]: { index, tray_info_idx, color, colors, type, amsId, grams } }}
  */
 export function calcFullConsumption(sliceInfo) {
     const result = {};
     for (const f of sliceInfo.filaments) {
         if (!f.tray_info_idx) continue;
-        const key = consumptionKey(f.tray_info_idx, f.color);
-        if (!result[key]) result[key] = { tray_info_idx: f.tray_info_idx, color: f.color, type: f.type, grams: 0 };
+        const { key, entry } = consumptionEntry(f);
+        if (!result[key]) result[key] = entry;
         result[key].grams += f.used_g;
     }
     return roundEntries(result);
@@ -153,8 +352,8 @@ export function calcPartialConsumption(sliceInfo, upToLayer) {
             proportion = total > 0 ? done / total : 0;
         }
 
-        const key = consumptionKey(f.tray_info_idx, f.color);
-        if (!result[key]) result[key] = { tray_info_idx: f.tray_info_idx, color: f.color, type: f.type, grams: 0 };
+        const { key, entry } = consumptionEntry(f);
+        if (!result[key]) result[key] = entry;
         result[key].grams += f.used_g * proportion;
     }
 
@@ -198,12 +397,21 @@ function resolveRemotePaths(jobName) {
  * is actually used. Filament ids are 1 based and may be non contiguous, while
  * the layer lists reference a 0 based index, so both are kept.
  *
+ * `projectSettings` is the sibling entry of the same archive. It is optional
+ * and adds two things this file does not carry: the whole colour set of a
+ * multi colour filament, and nothing else. slice_info.config keeps only the
+ * first colour of a set, which is why a gradient spool and a plain spool of
+ * the same first colour were one filament as far as this service could tell.
+ *
  * Exported for tests; fetchSliceInfo is the normal entry point.
  *
  * @param {string} xml - the raw slice_info.config contents
+ * @param {string|null} [projectSettings] - raw project_settings.config
  * @returns {{filaments: object[], totalLayers: number, rangesByFilamentIdx: object}}
  */
-export function parseSliceInfo(xml) {
+export function parseSliceInfo(xml, projectSettings = null) {
+    const colorSets = parseMultiColours(projectSettings);
+
     // --- filaments ---
     const filaments = [];
     const filamentRe = /<filament\s+([^>]+?)\/>/g;
@@ -218,6 +426,7 @@ export function parseSliceInfo(xml) {
             tray_info_idx: a.tray_info_idx || null,
             type: a.type || null,
             color: a.color || null,
+            colors: colorSets[id - 1] || null,
             used_m: parseFloat(a.used_m) || 0,
             used_g: parseFloat(a.used_g) || 0,
         });
@@ -244,6 +453,42 @@ export function parseSliceInfo(xml) {
     }
 
     return { filaments, totalLayers, rangesByFilamentIdx };
+}
+
+/**
+ * Reads `filament_multi_colour` out of project_settings.config, indexed the way
+ * the slicer indexes its filament list, so entry `id - 1` belongs to filament
+ * `id`.
+ *
+ * The file is JSON, but it is parsed with a regular expression on purpose: it
+ * is the slicer's whole configuration, tens of thousands of characters of
+ * gcode templates and per filament arrays, and one key out of it does not
+ * justify holding all of that as objects. A file that cannot be read at all
+ * yields nothing, and the single colour each filament also carries stays the
+ * only thing known about it.
+ *
+ * Studio writes a set as one space separated string, "#8EC9E9 #E7C1D5", and a
+ * single colour filament as its one colour, so a set of one is not a set.
+ *
+ * @param {string|null} json - raw project_settings.config
+ * @returns {string[][]} colour sets by filament index, sparse
+ */
+function parseMultiColours(json) {
+    if (!json) return [];
+
+    const match = /"filament_multi_colour"\s*:\s*\[([^\]]*)\]/.exec(json);
+    if (!match) return [];
+
+    return match[1]
+        .split(",")
+        .map(entry => {
+            const colors = (entry.match(/"([^"]*)"/)?.[1] || "")
+                .trim()
+                .split(/\s+/)
+                .map(normColor)
+                .filter(Boolean);
+            return colors.length > 1 ? colors : null;
+        });
 }
 
 /**
