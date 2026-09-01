@@ -360,19 +360,56 @@ document.addEventListener("DOMContentLoaded", () => {
         return colorName.replace(/^(For AMS |Support for PLA\/PETG |Support for PLA |Matte |Silk\+? |Glow |HF |FR )/g, "");
     }
 
-    function getSpoolColorStyle(filament, defaultColor, colorName) {
-        if (colorName === 'N/A') {
-            return '';
+    // Every colour of an AMS slot, in the order the printer reported them.
+    // `cols` is the full set and `tray_color` only ever the first of them, so
+    // the single field is a fallback for a payload that predates `cols` rather
+    // than the value to read.
+    function slotColorsJS(slot) {
+        const cols = Array.isArray(slot?.cols) ? slot.cols.filter(Boolean) : [];
+        if (cols.length) return cols.map(normColorJS);
+        return slot?.tray_color ? [normColorJS(slot.tray_color)] : [];
+    }
+
+    // Every colour of a Spoolman filament. Single and multi colour records are
+    // mutually exclusive there: a multi colour filament carries no color_hex.
+    function filamentColorsJS(filament) {
+        if (filament?.multi_color_hexes) {
+            return filament.multi_color_hexes.split(",").filter(Boolean).map(normColorJS);
         }
-        
-        if (filament?.color_hex) {
-            return `background-color: #${filament.color_hex}; color: ${getTextColor(filament.color_hex)};`;
-        } else if (filament?.multi_color_hexes) {
-            const colors = filament.multi_color_hexes.split(",");
-            return `background: linear-gradient(to right, #${colors[0]} 50%, #${colors[1]} 50%); color: ${getTextColor(colors[0])};`;
+        return filament?.color_hex ? [normColorJS(filament.color_hex)] : [];
+    }
+
+    // The CSS background showing a whole colour set in one box.
+    //
+    // `direction` is Spoolman's multi_color_direction. A "longitudinal"
+    // filament changes colour along its length, which is what the gradient
+    // spools do, so it fades. A "coaxial" one carries its colours side by side
+    // down the strand and reads as hard bands. An unknown or missing direction
+    // is drawn as bands too: equal hard stripes still show every colour, while
+    // a fade would invent a transition that may not exist.
+    function colorSetBackground(colors, direction) {
+        if (!colors.length) return "";
+        if (colors.length === 1) return `#${colors[0]}`;
+
+        if (direction === "longitudinal") {
+            return `linear-gradient(to right, ${colors.map(c => `#${c}`).join(", ")})`;
         }
-        
-        return `background-color: #${defaultColor}; color: ${getTextColor(defaultColor)};`;
+
+        const stops = colors.map((color, index) => {
+            const from = (index / colors.length) * 100;
+            const to = ((index + 1) / colors.length) * 100;
+            return `#${color} ${from.toFixed(2)}% ${to.toFixed(2)}%`;
+        });
+        return `linear-gradient(to right, ${stops.join(", ")})`;
+    }
+
+    // The small square in front of a filament name. Empty string when there is
+    // no colour to show, so a caller can concatenate it unconditionally.
+    function swatchHtml(colors, direction = null) {
+        const background = colorSetBackground(colors, direction);
+        if (!background) return "";
+        const title = colors.map(c => `#${c}`).join(" ");
+        return `<span class="gc-swatch" style="background:${background}" title="${title}"></span>`;
     }
 
 	// Build an action button with the shared Create/Merge/Show behaviour.
@@ -418,12 +455,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	// long inventory to find the obvious candidate.
 	function rankSpoolsForSlot(spools, slot) {
 	    const slotMaterial = (slot?.tray_type || "").toUpperCase();
-	    const slotColor    = normColorJS(slot?.tray_color);
+	    // Compared as a set rather than as a single hex, so a multi colour spool
+	    // can reach the top for its own slot. Those carry no color_hex at all,
+	    // so against the single field they always ranked last.
+	    const slotColors   = [...slotColorsJS(slot)].sort().join(",");
 
 	    const score = (sp) => {
 	        const material = (sp.filament?.material || "").toUpperCase();
-	        const color    = normColorJS(sp.filament?.color_hex);
-	        if (material && material === slotMaterial && color && color === slotColor) return 0;
+	        const colors   = [...filamentColorsJS(sp.filament)].sort().join(",");
+	        if (material && material === slotMaterial && colors && colors === slotColors) return 0;
 	        if (material && material === slotMaterial) return 1;
 	        return 2;
 	    };
@@ -437,9 +477,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const fil   = sp.filament || {};
 	    const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
 	    const left  = sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
-	    const swatch = fil.color_hex
-	        ? `<span class="gc-swatch" style="background:#${normColorJS(fil.color_hex)}"></span>`
-	        : "";
+	    const swatch = swatchHtml(filamentColorsJS(fil), fil.multi_color_direction);
 	    return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"} <span class="gc-muted">(${left})</span>`;
 	}
 
@@ -810,9 +848,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const emptyLabel = amsSpool.option === "Waiting for data" ? "Reading spool" : "Empty slot";
 	    const readable = isEmpty ? emptyLabel : (nameParts.length ? nameParts.join(" · ") : "Unknown filament");
 
-	    const color = (!isEmpty && slot.tray_color)
-	        ? `<span class="gc-swatch" style="background:#${normColorJS(slot.tray_color)}"></span>`
-	        : "";
+	    // The colours come from the slot, not from the matched filament: they are
+	    // what physically sits in the AMS, and the printer reports them in the
+	    // order they run along the strand. The direction only decides how they
+	    // are drawn, and the AMS does not report it, so it comes from whichever
+	    // filament record was matched.
+	    const direction = fil?.multi_color_direction ?? amsSpool.matchingExternalFilament?.multi_color_direction ?? null;
+	    const color = isEmpty ? "" : swatchHtml(slotColorsJS(slot), direction);
 
 	    const spoolmanBaseUrl = (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
 	    const spoolman = amsSpool.existingSpool?.id
@@ -1169,9 +1211,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	    let html = `<h4 class="gc-required" style="margin:16px 0 4px">Required but not loaded</h4>`;
 	    html += `<table class="data-table gc-required-table">`;
 	    for (const e of missing) {
-	        const swatch = e.color
-	            ? `<span class="gc-swatch" style="background:#${normColorJS(e.color)}"></span>`
-	            : "";
+	        // The sliced file names one colour per filament, so there is never a
+	        // set to draw here, unlike on a slot.
+	        const swatch = swatchHtml(e.color ? [normColorJS(e.color)] : []);
 	        const label = e.type ? `${e.type} <code>${e.tray_info_idx}</code>` : `<code>${e.tray_info_idx}</code>`;
 	        html += `<tr><td>${swatch}${label}</td>
 	            <td class="gc-required-amount">${e.grams}g needed</td></tr>`;
@@ -1444,15 +1486,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateElementText(id, text) {
         const element = getElementSafe(id);
         if (element) element.textContent = text;
-    }
-    
-    // Calculate the appropriate text color based on background brightness
-    function getTextColor(hexColor) {
-        const r = parseInt(hexColor.slice(0, 2), 16);
-        const g = parseInt(hexColor.slice(2, 4), 16);
-        const b = parseInt(hexColor.slice(4, 6), 16);
-        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-        return brightness > 128 ? "black" : "white";
     }
 
     // Format a Date object into a human-readable string

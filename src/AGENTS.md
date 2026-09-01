@@ -28,7 +28,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
-| `utils.js` | Date/interval formatting, `sleep`, AMS id → slot label (`A0`, `HT-A`). |
+| `utils.js` | Date/interval formatting, `sleep`, AMS id to slot label (`A0`, `HT-A`), and `slotColors()`, the colour set of a slot. It lives here because both `ams.js` and `uispool.js` need it and `ams.js` already imports `uispool.js`. |
 
 ## The two tracking modes
 
@@ -92,6 +92,16 @@ build their Spoolman payload from.
   next MQTT message in `extractComparableTrayData()`; normalise into a local
   (`correctRemainInt`) instead. Mutating it desyncs change detection forever for
   any spool whose `tray_weight != 1000`.
+- **`cols` is the colour set of a slot, `tray_color` only its first colour.**
+  A multi colour filament reports every colour it carries in `cols`, and
+  Spoolman stores the same thing as `multi_color_hexes` with no `color_hex` at
+  all, so anything comparing or drawing a colour has to read the set.
+  `slotColors()` in `utils.js` normalises it, dropping the alpha byte the AMS
+  appends, and `processData()` guarantees the field exists on every tray, which
+  is why `cols` has to be in `EMPTY_TRAY_KEYS`: a field the normalisation adds
+  unconditionally makes every empty slot look occupied otherwise. Order is the
+  printer's, because it is the order the colours run along the strand; the two
+  catalogues do not agree on one, so comparisons sort a copy.
 - **A `remain` of `null` means "not reported", never "empty".** The AMS answers
   `-1` between a spool going in and its RFID percentage arriving, measured on
   a P2S at anything from 17 seconds to over a minute, and forever for a
@@ -174,6 +184,12 @@ function to `spoolman.js`.
 **Adding matching logic:** put the decision in `ams.js` as a pure function and
 call it from `mqtt.js`. That is what makes it testable: `test/ams.test.js`
 covers exactly this seam.
+
+**Testing against a whole system:** `node scripts/test-server/index.js` starts a
+mock printer, a mock Spoolman and this service against both, with its state in a
+temporary directory. The mocks implement only what `spoolman.js` and `mqtt.js`
+actually call. Reach for it when the thing to check is a payload travelling all
+the way to the browser, which is the one seam `test/` cannot cover.
 
 **Pushing something to the UI:** `broadcastSlotUpdate()` for a single slot,
 `broadcastSSE()` for status/refresh events. A slot goes out through

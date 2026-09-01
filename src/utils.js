@@ -64,3 +64,29 @@ export function convertAMSandSlot(amsID, slotID) {
     if (amsID >= 128 && amsID <= 135) return `HT-${letters[amsID - 128]}`;
     return "Z";
 }
+
+/**
+ * The colour set of an AMS slot as bare six digit lowercase hex.
+ *
+ * AMS colours carry a trailing alpha byte that no Spoolman or SpoolmanDB record
+ * has, so every comparison has to drop it first. Reading `cols` rather than
+ * `tray_color` is what makes a multi colour filament comparable at all: the
+ * single field only ever holds the first colour.
+ *
+ * Order is the one the printer reported, because it is the order the colours
+ * sit on the filament and the order the UI draws them in. Callers comparing
+ * colour sets sort a copy; Spoolman and SpoolmanDB do not agree on an order.
+ *
+ * Lives here rather than in `ams.js` so that `uispool.js` can use it too.
+ * `ams.js` imports `uispool.js`, so an export there would close an import
+ * cycle between the two.
+ *
+ * @param {object} slot - an AMS slot, normalised or raw
+ * @returns {string[]} the colours, possibly empty
+ */
+export function slotColors(slot) {
+    const raw = Array.isArray(slot?.cols) && slot.cols.length ? slot.cols : [slot?.tray_color];
+    return raw
+        .filter(color => color && color !== "N/A")
+        .map(color => String(color).slice(0, 6).toLowerCase());
+}

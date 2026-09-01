@@ -182,3 +182,102 @@ test("the dashboard and the print endpoint report the same slots", async () => {
     assert.equal(print.body.loadedSpools[0].connectedViaMapping, true);
     assert.equal(print.body.loadedSpools[0].key, "GFA00|F98C36");
 });
+
+test("a multi colour slot carries its whole colour set to the client", () => {
+    // `tray_color` holds only the first colour, so a client that reads it alone
+    // draws a two colour spool as if it were plain orange.
+    const client = toClientSpool(uiSpool({
+        slot: {
+            id: 0,
+            state: 11,
+            cols: ["FF9425FF", "FCA2BFFF"],
+            tray_uuid: "0417584A3ABE4274838571DB6AA6CABA",
+            tray_type: "PLA",
+            tray_sub_brands: "PLA Silk",
+            tray_color: "FF9425FF",
+            tray_info_idx: "GFA05",
+            tray_weight: "1000",
+            remain: 80,
+        },
+    }));
+
+    assert.deepEqual(client.slot.cols, ["ff9425", "fca2bf"]);
+    // Still sent, because the consumption key and the mapping fingerprint are
+    // built from it on both sides and have to keep agreeing.
+    assert.equal(client.slot.tray_color, "FF9425FF");
+    assert.equal(client.key, "GFA05|FF9425");
+});
+
+test("a slot without cols still reports the one colour the printer sends", () => {
+    const client = toClientSpool(uiSpool({
+        slot: { id: 0, tray_uuid: "ABCD", tray_type: "PLA", tray_sub_brands: "PLA Basic", tray_color: "F98C36FF", tray_weight: "1000", remain: 63 },
+    }));
+    assert.deepEqual(client.slot.cols, ["f98c36"]);
+});
+
+test("an empty slot reports no colours at all", () => {
+    const client = toClientSpool({
+        amsId: "A1",
+        slotState: "Empty",
+        slot: { id: 1, state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" },
+    });
+    assert.deepEqual(client.slot.cols, []);
+});
+
+test("a multi colour Spoolman filament keeps its colours and its direction", () => {
+    // Spoolman stores the two mutually exclusively: a multi colour filament has
+    // no color_hex, so sending only that field left it with nothing to draw.
+    const client = toClientSpool(uiSpool({
+        existingSpool: {
+            id: 42,
+            remaining_weight: 640,
+            initial_weight: 1000,
+            filament: {
+                id: 7,
+                name: "Gilded Rose (Pink-Gold)",
+                material: "PLA Silk",
+                color_hex: null,
+                multi_color_hexes: "FF9425,FCA2BF",
+                multi_color_direction: "coaxial",
+                vendor: { id: 3, name: "Bambu Lab" },
+            },
+        },
+    }));
+
+    assert.equal(client.existingSpool.filament.multi_color_hexes, "FF9425,FCA2BF");
+    assert.equal(client.existingSpool.filament.multi_color_direction, "coaxial");
+    assert.equal(client.existingSpool.filament.color_hex, null);
+});
+
+test("a single colour filament reports no multi colour fields", () => {
+    // buildFilamentPayload writes an empty string for a single colour spool,
+    // and an empty string must not reach a client any more than "N/A" does.
+    const client = toClientSpool(uiSpool({
+        existingSpool: {
+            id: 42,
+            filament: { id: 7, name: "Orange", material: "PLA", color_hex: "F98C36", multi_color_hexes: "", multi_color_direction: null },
+        },
+    }));
+    assert.equal(client.existingSpool.filament.multi_color_hexes, null);
+    assert.equal(client.existingSpool.filament.multi_color_direction, null);
+});
+
+test("an unmatched slot learns how its colours sit from the catalogue", () => {
+    // The AMS reports which colours are on the filament but not whether they
+    // fade into each other or run side by side, so for a slot with no Spoolman
+    // spool yet the catalogue entry is the only source for that.
+    const client = toClientSpool(uiSpool({
+        existingSpool: null,
+        matchingExternalFilament: {
+            id: "bambulab_pla_arcticwhisper_1000_175_n",
+            name: "Arctic Whisper",
+            manufacturer: "Bambu Lab",
+            material: "PLA",
+            density: 1.24,
+            diameter: 1.75,
+            multi_color_direction: "longitudinal",
+        },
+    }));
+
+    assert.equal(client.matchingExternalFilament.multi_color_direction, "longitudinal");
+});

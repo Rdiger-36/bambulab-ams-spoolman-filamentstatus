@@ -1,5 +1,6 @@
 import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
+import { slotColors } from "./utils.js";
 
 /**
  * Normalises the raw `print.ams.ams` payload so the rest of the pipeline sees
@@ -20,6 +21,13 @@ import { toClientSpool } from "./uispool.js";
  * PETG Translucent is a special case: it reports a fully transparent colour
  * that would render as invisible in the UI, so it is shown as white instead.
  *
+ * `cols` is guaranteed to be an array from here on. A multi colour filament
+ * reports every one of its colours there and only the first of them in
+ * `tray_color`, so `cols` is the full truth about what is in the slot and
+ * three matching functions read it. The printer does not always send it, and
+ * those functions used to reach into `undefined.length`, so a slot without it
+ * threw instead of falling back to the single colour it does report.
+ *
  * @param {object[]} amsData - `print.ams.ams` from an MQTT report
  * @returns {object[]} the same structure with normalised tray entries
  */
@@ -35,9 +43,17 @@ export function processData(amsData) {
             const rawRemain = Number(slot.remain);
             const remain = Number.isFinite(rawRemain) && rawRemain >= 0 ? rawRemain : null;
 
+            // The corrected colour, not the reported one, so the PETG
+            // Translucent substitution above cannot be undone by a fallback.
+            const reportedColors = Array.isArray(slot.cols) ? slot.cols.filter(Boolean) : [];
+            const cols = reportedColors.length
+                ? reportedColors
+                : (updatedTrayColor === "N/A" ? [] : [updatedTrayColor]);
+
             return {
                 ...slot,
                 remain,
+                cols,
                 tray_color: updatedTrayColor,
                 tray_sub_brands: slot.tray_sub_brands === "" ? "N/A" : (slot.tray_sub_brands ?? "N/A"),
                 tray_weight: slot.tray_weight ?? 0,
@@ -89,6 +105,10 @@ export function extractComparableTrayData(amsArray) {
                         busy: slotIsBusy(t),
                         tray_type: t.tray_type ?? null,
                         tray_info_idx: t.tray_info_idx ?? null,
+                        // `tray_color` alone misses a swap between two multi
+                        // colour filaments that share their first colour, so
+                        // the slot would keep the old colour set on screen.
+                        cols: slotColors(t),
                         tray_color: t.tray_color,
                         tray_weight: t.tray_weight,
                     };
@@ -98,6 +118,7 @@ export function extractComparableTrayData(amsArray) {
                     tray_uuid: t.tray_uuid,
                     tray_weight: t.tray_weight,
                     tray_sub_brands: t.tray_sub_brands,
+                    cols: slotColors(t),
                     tray_color: t.tray_color,
                     remain: t.remain,
                 };
@@ -178,11 +199,13 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
 /**
  * The fields an empty AMS slot reports. Anything beyond these is filament data.
  *
- * The names are the ones left after `processData`, which fills `tray_color`,
- * `tray_sub_brands`, `tray_weight` and `tray_uuid` with placeholders on every
- * tray, so those four say nothing about occupancy.
+ * The names are the ones left after `processData`, which fills `cols`,
+ * `tray_color`, `tray_sub_brands`, `tray_weight` and `tray_uuid` with
+ * placeholders on every tray, so those five say nothing about occupancy.
+ * Every field the normalisation adds unconditionally has to be listed here, or
+ * it alone makes an empty slot look occupied.
  */
-const EMPTY_TRAY_KEYS = new Set(["id", "state", "remain", "tray_color", "tray_sub_brands", "tray_weight", "tray_uuid"]);
+const EMPTY_TRAY_KEYS = new Set(["id", "state", "remain", "cols", "tray_color", "tray_sub_brands", "tray_weight", "tray_uuid"]);
 
 /**
  * Whether the AMS reports something physically sitting in the slot.
@@ -258,21 +281,22 @@ export function slotIsBusy(slot) {
  * @returns {object|null} the connected spool, or null
  */
 export function findExistingSpool(amsSpool, allSpools) {
+    const amsColors = slotColors(amsSpool);
+    const sortedAmsColors = [...amsColors].sort();
+
     return allSpools.find(spoolmanSpool => {
         const tag = spoolmanSpool.extra?.tag?.replace(/"/g, "");
         const materialMatches = spoolmanSpool.filament.material === amsSpool.tray_sub_brands;
         const tagMatches = tag === amsSpool.tray_uuid;
 
-        if (amsSpool.cols.length > 1) {
+        if (amsColors.length > 1) {
             if (!spoolmanSpool.filament.multi_color_hexes) return false;
-            const amsColors = amsSpool.cols.map(c => c.slice(0, 6).toLowerCase()).sort();
             const filamentColors = spoolmanSpool.filament.multi_color_hexes.split(",").map(c => c.toLowerCase()).sort();
-            return materialMatches && JSON.stringify(filamentColors) === JSON.stringify(amsColors) && tagMatches;
+            return materialMatches && JSON.stringify(filamentColors) === JSON.stringify(sortedAmsColors) && tagMatches;
         }
 
         const colorHex = spoolmanSpool.filament.color_hex?.toLowerCase();
-        const amsColor = amsSpool.tray_color.slice(0, 6).toLowerCase();
-        return materialMatches && colorHex === amsColor && tagMatches;
+        return materialMatches && colorHex === amsColors[0] && tagMatches;
     }) || null;
 }
 
@@ -303,7 +327,7 @@ export function findMatchingExternalFilament(amsSpool, externalFilaments) {
         material => material.split(" ")[0].replace(/[^A-Za-z]/g, "").toLowerCase(),
     ];
 
-    const amsColors = amsSpool.cols.map(c => c.slice(0, 6).toLowerCase()).sort();
+    const amsColors = slotColors(amsSpool).sort();
 
     for (const transform of transformations) {
         const transformedMaterial = transform(amsSpool.tray_sub_brands || "");
@@ -358,9 +382,7 @@ export function findMatchingInternalFilament(externalFilament, internalFilaments
  * @returns {object|undefined} the mergeable spool, or undefined
  */
 export function findMergeableSpool(amsSpool, allSpools) {
-    // Use tray_color as fallback when cols is missing or empty
-    const rawColors = amsSpool.cols?.length ? amsSpool.cols : (amsSpool.tray_color ? [amsSpool.tray_color] : []);
-    const amsColors = rawColors.map(c => (c || "").slice(0, 6).toLowerCase());
+    const amsColors = slotColors(amsSpool);
 
     const matchingSpools = allSpools.filter(spoolmanSpool => {
         const materialA = (spoolmanSpool.filament?.material || "").toLowerCase();
