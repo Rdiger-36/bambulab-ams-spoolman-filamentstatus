@@ -1,4 +1,19 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0-dev.4
+   - Fixes:
+      - Multi colour spools (PLA Silk Multi-Color, PLA Basic Gradient, TPU 90A Blaze and Frozen) show all of their colours again instead of only the first one
+         - The AMS reports every colour of a spool in cols and only the first of them in tray_color. cols never left the server: the client projection did not carry it, so the Web UI drew a two colour spool as if it were plain
+         - A Spoolman filament with several colours has no color_hex at all, it has multi_color_hexes, and that field was not carried either, so even a spool already linked in Spoolman had no colour to draw
+         - The colour swatch draws the whole set: colours that run side by side down the strand (SpoolmanDB "coaxial", the Silk multi colour spools) as hard bands, colours that change along the length ("longitudinal", the gradient spools) as a fade, and any number of them rather than exactly two. A single colour spool is unchanged
+         - The swatch in the assignment dialog and the ranking of its candidates read the colour set as well, so a multi colour spool is no longer the entry with no colour next to it and can reach the top of the list for its own slot
+      - A slot whose report contains no cols no longer throws. Three matching functions read the field directly, and processData now fills it in from the single colour the printer always sends
+      - Swapping two multi colour filaments that share their first colour is detected. Change detection compared only tray_color, which is identical for both, so the slot kept showing the colours of the spool that had been taken out
+   - Development:
+      - New test server under scripts/test-server: a mock printer over TLS on 8883, a mock Spoolman on 7912 and the service pointed at both, started with one command and writing to a temporary directory rather than to printers/
+         - The scenario fills all 24 addressable AMS slots (four AMS units and eight AMS HT units) with the multi colour filaments from the Bambu Lab hex code tables, next to single colour, empty, being read and 3rd party slots
+         - The catalogue it serves is copied from SpoolmanDB, so matching runs against the real ids, colour sets and directions
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.3
    - Documentation:
       - The README is rebuilt around G-code tracking, which is the default since 1.3.0
