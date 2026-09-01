@@ -95,6 +95,70 @@ document.addEventListener("DOMContentLoaded", () => {
         console.error("Error with the SSE connection:", error);
     };
 
+    // Configuration through environment variables is deprecated since 1.3.0.
+    // Shown once per installation rather than once per browser: the dismissal
+    // is stored server side, and the notice stops being sent on its own as soon
+    // as the values have been saved on the settings page.
+    async function showDeprecationNotice() {
+        let notice;
+        try {
+            const response = await fetch("./api/notices");
+            notice = (await response.json())["env-config"];
+        } catch {
+            // A hint is not worth an error message of its own.
+            return;
+        }
+
+        if (!notice || !notice.active || notice.acknowledged) return;
+
+        const code = list => `<code>${list.map(escapeHtml).join("</code>, <code>")}</code>`;
+        const parts = [
+            "<p>This installation is still configured through environment variables. That is <b>deprecated since 1.3.0</b>.</p>",
+            "<p>They keep working, so nothing has to change today. The settings page is the supported place for them now, and the printer list is edited there as well instead of by hand in <code>printers.json</code>.</p>",
+        ];
+
+        if (notice.variables && notice.variables.length) {
+            parts.push(`<p>Still taken from the environment: ${code(notice.variables)}</p>`);
+        }
+
+        if (notice.printerVariables && notice.printerVariables.length) {
+            parts.push(notice.printerVariablesIgnored
+                ? `<p>${code(notice.printerVariables)} are set but no longer have an effect: <code>printers.json</code> exists and owns the printer list.</p>`
+                : `<p>The printer list was seeded from ${code(notice.printerVariables)} and written to <code>printers.json</code>, which owns it from now on.</p>`);
+        }
+
+        parts.push("<p>One thing to know before editing your compose file again: once a setting has been saved here, the settings file owns it and the matching variable stops changing anything.</p>");
+
+        const dialog = document.getElementById("notice-dialog");
+        document.getElementById("notice-dialog-title").textContent = "Configuration has moved into the Web UI";
+        document.getElementById("notice-dialog-content").innerHTML = parts.join("");
+
+        // Dismissed either way, because both buttons mean the hint was read.
+        const acknowledge = async () => {
+            try {
+                await fetch("./api/notices/env-config/ack", { method: "POST" });
+            } catch {
+                // Then it is shown again on the next load, which is the safe way round.
+            }
+        };
+
+        document.getElementById("notice-dialog-close").onclick = async () => {
+            await acknowledge();
+            dialog.close();
+        };
+
+        document.getElementById("notice-dialog-open").onclick = async () => {
+            await acknowledge();
+            dialog.close();
+            window.location.href = "settings.html";
+        };
+
+        dialog.showModal();
+        document.getElementById("notice-dialog-close").focus();
+    }
+
+    showDeprecationNotice();
+
     // Check if any modal dialog is currently open
     function isDialogOpen() {
         const dialog = document.getElementById("info-dialog");

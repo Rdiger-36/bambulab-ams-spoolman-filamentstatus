@@ -33,7 +33,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const downloadUrl = (name === "server")
         ? `./api/logs/server/download`
         : `./api/logs/${printerSerial}/download`;
-      window.location.href = downloadUrl;
+
+      // A log carries every address and serial the service has seen, and these
+      // files end up attached to bug reports, so the choice is asked rather
+      // than assumed.
+      downloadWithExportMode({
+        url: downloadUrl,
+        title: "Download the log",
+        what: name === "server"
+          ? "The server log, including its rotated history."
+          : `The log of ${name}, including its rotated history.`,
+      });
     });
   }
 

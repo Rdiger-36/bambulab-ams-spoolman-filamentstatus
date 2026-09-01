@@ -1,0 +1,121 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+    MASKED_CODE,
+    exportPrinters,
+    exportSettings,
+    maskHost,
+    maskIp,
+    maskPath,
+    maskSerial,
+    maskText,
+    maskUrl,
+} from "../src/anonymize.js";
+
+test("an IPv4 address keeps its network and loses its host", () => {
+    assert.equal(maskIp("192.168.1.42"), "192.168.1.XXX");
+    assert.equal(maskIp("10.0.0.1"), "10.0.0.XXX");
+});
+
+test("an IPv6 address keeps its first two groups", () => {
+    assert.equal(maskIp("fd00:1234:5678:9abc::1"), "fd00:1234:XXXX:XXXX::XXXX");
+});
+
+test("something that is not an address is left alone", () => {
+    assert.equal(maskIp("printer.local"), "printer.local");
+    assert.equal(maskIp(""), "");
+});
+
+test("a serial number keeps its first five characters", () => {
+    assert.equal(maskSerial("01P00A123456789"), "01P00XXXXXXXXXX");
+    // Same length, so a log line does not change shape
+    assert.equal(maskSerial("01P00A123456789").length, "01P00A123456789".length);
+});
+
+test("a serial too short to mask is returned unchanged", () => {
+    assert.equal(maskSerial("01P0"), "01P0");
+});
+
+test("a host name keeps only its last label", () => {
+    assert.equal(maskHost("spoolman.example.net"), "XXX.XXX.net");
+    // A single label is not identifying and stays readable
+    assert.equal(maskHost("localhost"), "localhost");
+    assert.equal(maskHost("spoolman"), "spoolman");
+});
+
+test("a URL keeps everything that makes it debuggable", () => {
+    assert.equal(maskUrl("http://192.168.1.9:30010"), "http://192.168.1.XXX:30010");
+    assert.equal(maskUrl("https://spoolman.example.net/spoolman"), "https://XXX.XXX.net/spoolman");
+});
+
+test("a URL loses any credentials it carries", () => {
+    assert.equal(maskUrl("https://user:secret@spoolman.example.net:7912/sub"), "https://XXX.XXX.net:7912/sub");
+});
+
+test("the mask survives the lower casing a URL normally applies", () => {
+    // URL.hostname lower cases what it is given, which would turn XXX into xxx
+    assert.ok(maskUrl("http://192.168.1.9:30010").includes("XXX"));
+});
+
+test("a path is shortened to its last two segments", () => {
+    assert.equal(maskPath("/Users/somebody/checkout/printers"), ".../checkout/printers");
+    assert.equal(maskPath("/app/printers"), "/app/printers");
+});
+
+test("a log line loses the address, the serial and the code", () => {
+    const line = "Printer 01P00A123456789 with IP 192.168.1.250 code 12345678 is unreachable";
+    const masked = maskText(line, { codes: ["12345678"], serials: ["01P00A123456789"] });
+
+    assert.equal(masked, `Printer 01P00XXXXXXXXXX with IP 192.168.1.XXX code ${MASKED_CODE} is unreachable`);
+});
+
+test("an access code that sits inside a serial number does not cut it up", () => {
+    // The regression this ordering exists for: masking the code first turns
+    // 01P00A123456789 into 01P00AXXX9, which no serial pass recognises again.
+    const masked = maskText("serial 01P00A123456789", {
+        codes: ["12345678"],
+        serials: ["01P00A123456789"],
+    });
+
+    assert.equal(masked, "serial 01P00XXXXXXXXXX");
+});
+
+test("a serial of a printer that is no longer configured is masked as well", () => {
+    // Older log files still carry it, and nothing in the current list matches
+    assert.equal(maskText("old 01S00B987654321 gone", {}), "old 01S00XXXXXXXXXX gone");
+});
+
+test("every address in a log is masked, configured or not", () => {
+    assert.equal(maskText("from 10.1.2.3 to 172.16.9.100", {}), "from 10.1.2.XXX to 172.16.9.XXX");
+});
+
+test("the access code is replaced in the full export as well", () => {
+    const entries = [{ id: "01P00A123456789", ip: "192.168.1.250", name: "P2S", code: "12345678" }];
+
+    assert.deepEqual(exportPrinters(entries, false), [
+        { id: "01P00A123456789", ip: "192.168.1.250", name: "P2S", code: MASKED_CODE },
+    ]);
+    assert.deepEqual(exportPrinters(entries, true), [
+        { id: "01P00XXXXXXXXXX", ip: "192.168.1.XXX", name: "P2S", code: MASKED_CODE },
+    ]);
+});
+
+test("only the settings that carry an address are masked", () => {
+    const values = {
+        SPOOLMAN_ENDPOINT: "http://192.168.1.9:7912",
+        SPOOLMAN_FQDN: "https://spoolman.example.net",
+        SPOOLMAN_IP: "192.168.1.9",
+        UPDATE_INTERVAL: 60000,
+        MODE: "automatic",
+    };
+
+    const masked = exportSettings(values, true);
+    assert.equal(masked.SPOOLMAN_ENDPOINT, "http://192.168.1.XXX:7912");
+    assert.equal(masked.SPOOLMAN_FQDN, "https://XXX.XXX.net");
+    assert.equal(masked.SPOOLMAN_IP, "192.168.1.XXX");
+    assert.equal(masked.UPDATE_INTERVAL, 60000);
+    assert.equal(masked.MODE, "automatic");
+
+    assert.deepEqual(exportSettings(values, false), values);
+});

@@ -130,3 +130,18 @@ test("a wrapped file without a revision starts counting at zero", () => {
 
     assert.equal(file.revision, 0);
 });
+
+test("the dismissed notices are read beside the values", () => {
+    const file = parseStoredFile({ schemaVersion: 1, values: {}, notices: { "env-config": true } });
+
+    assert.deepEqual(file.notices, { "env-config": true });
+    // Never merged into the values: a dismissed hint must not become a setting
+    // the file owns, which would stop the environment variables from seeding.
+    assert.deepEqual(file.values, {});
+});
+
+test("a file written before the notices existed reads as none dismissed", () => {
+    assert.deepEqual(parseStoredFile({ schemaVersion: 1, values: {} }).notices, {});
+    assert.deepEqual(parseStoredFile({ MAX_RETRIES: 3 }).notices, {});
+    assert.deepEqual(parseStoredFile({ schemaVersion: 1, values: {}, notices: "yes" }).notices, {});
+});

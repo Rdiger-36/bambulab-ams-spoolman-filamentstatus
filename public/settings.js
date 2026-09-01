@@ -38,6 +38,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("reload-settings").addEventListener("click", () => loadSettings(true));
     document.getElementById("add-printer").addEventListener("click", () => openPrinterDialog(null));
     document.getElementById("restart-service").addEventListener("click", confirmRestart);
+    document.getElementById("download-diagnostics").addEventListener("click", downloadDiagnostics);
+    document.getElementById("reconnect-printers").addEventListener("click", reconnectPrinters);
+    document.getElementById("toggle-monitoring").addEventListener("click", toggleAllMonitoring);
     document.getElementById("printer-dialog-cancel").addEventListener("click", () => closeDialog("printer-dialog"));
     document.getElementById("printer-dialog-test").addEventListener("click", testPrinterConnection);
 
@@ -49,6 +52,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadSettings();
     loadPrinters();
+    loadSystemInfo();
+    loadUpdate();
 
     const eventSource = new EventSource("./api/events");
     eventSource.onmessage = event => {
@@ -160,6 +165,172 @@ function showRestartNotice() {
     action.textContent = "Restart now";
     action.addEventListener("click", confirmRestart);
     document.getElementById("set-banner").append(" ", action);
+}
+
+/* ---- Service card ---- */
+
+/**
+ * The facts about this installation, rendered as a definition list.
+ *
+ * Shown rather than kept for the diagnostics bundle alone, because half of what
+ * a support question asks for is on this line, and because "tracking" tells the
+ * user what the process is actually doing, which is not always what the stored
+ * setting says while a restart is pending.
+ */
+async function loadSystemInfo() {
+    const container = document.getElementById("system-info");
+    if (!container) return;
+
+    let info;
+    try {
+        info = await fetchJson("./api/system");
+    } catch (err) {
+        container.innerHTML = `<div class="set-fact"><dt>System</dt><dd>could not be read: ${escapeHtml(err.message)}</dd></div>`;
+        return;
+    }
+
+    const rows = [
+        ["Version", info.version],
+        ["Node", info.node],
+        ["Platform", info.platform],
+        ["Uptime", formatUptime(info.uptime)],
+        ["Memory", `${info.memoryMB} MB`],
+        ["Tracking", info.tracking],
+        ["Supervisor", info.supervised ? "on" : "off"],
+        ["Printers", String(info.printers)],
+        ["Spoolman", info.spoolman],
+    ];
+
+    container.innerHTML = rows
+        .map(([label, value]) => `<div class="set-fact"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+        .join("");
+}
+
+/** Seconds into the coarsest unit that still says something useful. */
+function formatUptime(seconds) {
+    if (!Number.isFinite(seconds)) return "unknown";
+    if (seconds < 60) return `${seconds} s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+    if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`;
+    return `${(seconds / 86400).toFixed(1)} days`;
+}
+
+/**
+ * Compares this version against the latest GitHub release.
+ *
+ * Nothing is installed and nothing about the installation is sent. A failure is
+ * reported as "could not check" rather than as an error, because a printer
+ * network without internet access is a normal setup, not a broken one.
+ */
+async function loadUpdate() {
+    const note = document.getElementById("update-note");
+    if (!note) return;
+
+    let update;
+    try {
+        update = await fetchJson("./api/update");
+    } catch {
+        note.textContent = "The update check could not be reached.";
+        return;
+    }
+
+    if (update.error) {
+        note.textContent = `Could not check for updates: ${update.error}`;
+        return;
+    }
+
+    if (update.ahead) {
+        // A dev or release candidate image. Saying "up to date" here would
+        // suggest this version is the released one, which it is not.
+        note.textContent = `This is a prerelease. The latest release is ${update.latest}.`;
+        return;
+    }
+
+    if (!update.updateAvailable) {
+        note.textContent = `Up to date, the latest release is ${update.latest}.`;
+        return;
+    }
+
+    note.innerHTML = `Version <strong>${escapeHtml(update.latest)}</strong> is available.
+        ${update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noopener">Release notes</a>` : ""}`;
+}
+
+/** Asks whether the bundle should be anonymised, then downloads it. */
+function downloadDiagnostics() {
+    downloadWithExportMode({
+        url: "./api/diagnostics/download",
+        title: "Download diagnostics",
+        what: "One archive with the logs, the settings, the printer list and the facts about this installation. This is what a bug report needs.",
+    });
+}
+
+/**
+ * Rebuilds every MQTT connection without ending the process.
+ *
+ * Deliberately without a confirmation, unlike the restart: the consumption of a
+ * running print is tracked in memory and booked when the job ends, and that
+ * state survives a reconnect. It is the smaller hammer of the two.
+ */
+async function reconnectPrinters() {
+    const button = document.getElementById("reconnect-printers");
+    button.disabled = true;
+
+    try {
+        const result = await sendJson("./api/printers/reconnect", "POST", {});
+        const skipped = result.skipped ? `, ${result.skipped} skipped because monitoring is off` : "";
+        showBanner(`Reconnecting ${result.reconnected.length} printer(s)${skipped}.`, "ok");
+        loadPrinters();
+    } catch (err) {
+        showBanner(`Could not reconnect: ${err.message}`, "bad");
+    } finally {
+        button.disabled = false;
+    }
+}
+
+/** Whether at least one printer is currently being monitored. */
+function anyMonitoring() {
+    return printers.some(printer => printer.monitoringEnabled);
+}
+
+/** Keeps the label of the monitoring button on what pressing it would do. */
+function renderMonitoringButton() {
+    const button = document.getElementById("toggle-monitoring");
+    if (!button) return;
+
+    button.disabled = !printers.length;
+    button.textContent = anyMonitoring() ? "Pause all monitoring" : "Resume all monitoring";
+    document.getElementById("service-note").textContent = printers.length && !anyMonitoring()
+        ? "Monitoring is paused. No AMS report is processed and nothing is written to Spoolman."
+        : "";
+}
+
+/**
+ * Turns monitoring off or on for every printer at once.
+ *
+ * The per printer switch on the dashboard is the same thing; this is for the
+ * case the switch exists for, a Spoolman that is being worked on, where doing it
+ * one printer at a time is busywork.
+ */
+async function toggleAllMonitoring() {
+    const button = document.getElementById("toggle-monitoring");
+    const enable = !anyMonitoring();
+    button.disabled = true;
+
+    try {
+        const result = await sendJson(`./api/monitoring/${enable ? "start" : "stop"}`, "POST", {});
+        showBanner(
+            result.changed.length
+                ? `Monitoring ${enable ? "resumed" : "paused"} for ${result.changed.length} of ${result.total} printer(s).`
+                : `Monitoring was already ${enable ? "on" : "off"} everywhere.`,
+            "ok",
+        );
+        await loadPrinters();
+    } catch (err) {
+        showBanner(`Could not change monitoring: ${err.message}`, "bad");
+    } finally {
+        button.disabled = false;
+        renderMonitoringButton();
+    }
 }
 
 /* ---- Restarting the service ---- */
@@ -489,6 +660,9 @@ async function loadPrinters() {
     try {
         printers = await fetchJson("./api/printers/config");
         renderPrinters();
+        // The Service card offers the opposite of what is currently the case,
+        // so it has to follow every change to the list.
+        renderMonitoringButton();
     } catch (err) {
         document.getElementById("printer-table").innerHTML =
             `<p class="set-error">Could not load the printers: ${escapeHtml(err.message)}</p>`;

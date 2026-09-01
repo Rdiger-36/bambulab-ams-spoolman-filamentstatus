@@ -201,6 +201,9 @@ container run. Still unverified:
   its options as environment variables, and those stop having an effect once a
   user saves on the settings page, because the file owns the values from then
   on. The README of this repository says so; the add-on's does not.
+  Since environment configuration is deprecated the add-on also triggers the
+  deprecation hint on every start, which will look like a defect to an add-on
+  user until its README explains which of the two places owns the values.
 
 ### Decisions taken along the way
 
@@ -223,6 +226,50 @@ loops.
 supervisor could do it, and that is deliberately not built.
 
 **The Web UI still has no access protection**, see the entry under known gaps.
+
+**A shutdown button was considered and rejected.** The supervisor passes every
+exit code except the restart one straight through, so a shutdown lands on the
+container restart policy: with `unless-stopped` or `always`, the recommended
+setting, the container comes straight back and the button visibly does nothing;
+with `restart: no` it stays down and takes the Web UI with it, so the only way
+back is Docker or the Home Assistant UI. It works exactly in the configuration
+where it is hardest to undo. "Reconnect all printers" covers what people
+actually reach for the restart button for, and does it without losing the
+consumption tracking of a running print.
+
+**Anonymising an export masks the network, not the user's own labels.** Printer
+names and spool data are kept: they are what makes a log readable, and a name is
+chosen by the user rather than assigned by the network. The RFID tag ids are kept
+for the same reason, they identify a piece of filament. If this is revisited,
+the right shape is an extra "also replace the printer names" switch, not a
+different default.
+
+**The access code is masked in the full export as well.** The service never
+writes it to a log on purpose, but "on purpose" is not a guarantee worth handing
+out, and the code is the one value that is never useful in a bug report. "Full"
+therefore means the addresses, serials and paths, which is what the dialog says.
+
+**Serials are masked before access codes**, in `maskText()`. An eight character
+access code can appear inside a fifteen character Bambu serial; masking the code
+first cuts the serial into pieces that the serial pass no longer recognises, and
+the address in the same line then leaks in a different shape. `test/anonymize.test.js`
+holds the ordering.
+
+**The deprecation of environment configuration is state driven, not version
+driven.** Nothing records which version an installation came from, and it would
+not help: a fresh install set up from an older README needs the same hint as one
+upgraded from 1.2.x. `deprecatedConfig()` asks instead which settings still
+resolve from the environment right now, so the hint and the log lines stop by
+themselves once the values have been saved. Deprecated means deprecated here, not
+scheduled for removal, and neither the hint nor the README names a version that
+would drop the variables.
+
+**The dismissal of that hint is stored beside the values in `settings.json`**,
+under `notices`, not among them. Acknowledging it writes the file on an
+installation that has never saved anything, and writing a value there is exactly
+what takes ownership away from the environment. Keeping the flag outside `values`
+is what lets the file exist with nothing in it, so every variable still seeds its
+setting. `test/notices.test.js` holds that guarantee.
 
 **Encrypting the access code at rest was rejected.** Without a key store the key
 ships in the same image, so it is obfuscation rather than protection. The README

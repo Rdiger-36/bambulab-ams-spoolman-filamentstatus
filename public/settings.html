@@ -30,16 +30,29 @@
             <div id="printer-table"></div>
         </div>
 
-        <div class="set-card">
-            <div class="set-card-head">
-                <h2>Service</h2>
-                <button class="btn" id="restart-service">Restart service</button>
-            </div>
-            <p class="set-note" id="restart-note"></p>
-        </div>
-
         <form id="settings-form">
             <div id="settings-groups"></div>
+
+            <!-- Inside the form so the sticky save bar stays the last element on
+                 the page. type="button" keeps the restart out of the submit. -->
+            <div class="set-card">
+                <div class="set-card-head">
+                    <h2>Service</h2>
+                    <button class="btn btn-danger-solid" type="button" id="restart-service">Restart service</button>
+                </div>
+                <p class="set-note" id="restart-note"></p>
+
+                <dl class="set-facts" id="system-info"></dl>
+                <p class="set-note" id="update-note"></p>
+
+                <div class="set-service-actions">
+                    <button class="btn" type="button" id="download-diagnostics">Download diagnostics...</button>
+                    <button class="btn" type="button" id="reconnect-printers">Reconnect all printers</button>
+                    <button class="btn" type="button" id="toggle-monitoring">Pause all monitoring</button>
+                </div>
+                <p class="set-note" id="service-note"></p>
+            </div>
+
             <div class="set-actions">
                 <button class="btn btn-primary" type="submit" id="save-settings" disabled>Save settings</button>
                 <button class="btn" type="button" id="reload-settings" disabled>Discard changes</button>
@@ -49,6 +62,7 @@
     </div>
 
     <script src="menu.js"></script>
+    <script src="export.js"></script>
     <script src="settings.js"></script>
 
     <dialog id="printer-dialog">
