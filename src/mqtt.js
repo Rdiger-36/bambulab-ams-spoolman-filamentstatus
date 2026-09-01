@@ -467,8 +467,9 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         return false;
     }
 
-    // An unidentified spool looks exactly like an empty slot in every field but
-    // `state`, so an occupied slot must not be swallowed by this branch.
+    // An unidentified spool shares every placeholder field with an empty slot,
+    // so an occupied slot must not be swallowed by this branch. Only
+    // `slotIsOccupied()` tells the two apart.
     if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0") && (!slot.tray_type || slot.tray_type === "") && !slotIsOccupied(slot)) {
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots (empty slot with N/A values)");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);

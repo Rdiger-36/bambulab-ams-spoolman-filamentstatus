@@ -52,44 +52,65 @@ test("haveSpoolDataChanged detects a changed remaining weight", async () => {
     assert.equal(await haveSpoolDataChanged([spool(1, "AAA", 700)], [spool(1, "AAA", 800)]), true);
 });
 
-// Real tray payloads observed on a P2S with two AMS units: a Bambu Lab spool,
-// two 3rd party spools the printer cannot identify, and an empty slot. Only
-// `state` tells the last three apart.
-const bambuTray = { state: 11, tray_type: "PLA", tray_sub_brands: "PLA Basic", tray_color: "000000FF", tray_weight: "1000", tray_uuid: "18F1DE9B" };
-const thirdParty10 = { id: "2", state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" };
-const thirdParty20 = { id: "2", state: 20, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" };
-const emptyTray = { id: "0", state: 0, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" };
+// Real tray payloads captured from a P2S with two AMS 2 Pro units. A loaded
+// slot always carries the full record, whether the chip was read or not; an
+// empty slot carries `id` and `state` and nothing else. `state` separates
+// nothing: 9 and 10 appear on empty slots, 11 and 27 on loaded ones.
+const bambuTray = { id: "0", state: 11, cols: ["000000FF"], tag_uid: "55650E0F00000100", tray_diameter: "1.75", tray_info_idx: "GFA00", tray_type: "PLA", tray_sub_brands: "PLA Basic", tray_color: "000000FF", tray_weight: "1000", tray_uuid: "18F1DE9B", remain: 27 };
+const thirdParty = { id: "0", state: 11, cols: ["0ACC38FF"], tag_uid: "0000000000000000", tray_diameter: "1.75", tray_info_idx: "GFL99", tray_type: "PLA", tray_sub_brands: "N/A", tray_color: "0ACC38FF", tray_weight: "0", tray_uuid: "N/A", remain: 0 };
+const emptyTray = { id: "1", state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" };
 
 test("slotIsOccupied separates an unidentified spool from an empty slot", () => {
     assert.equal(slotIsOccupied(emptyTray), false);
-    assert.equal(slotIsOccupied(thirdParty10), true);
-    assert.equal(slotIsOccupied(thirdParty20), true);
+    assert.equal(slotIsOccupied(thirdParty), true);
     assert.equal(slotIsOccupied(bambuTray), true);
 });
 
-test("slotIsOccupied treats a missing state as not occupied", () => {
-    // Rather than inventing spools on firmware that does not report the field
-    assert.equal(slotIsOccupied({ tray_uuid: "N/A" }), false);
-    assert.equal(slotIsOccupied({ state: null }), false);
-    assert.equal(slotIsOccupied(undefined), false);
+test("slotIsOccupied ignores state", () => {
+    // The empty slot reports state 10 and the loaded ones report 11, so reading
+    // "non zero means occupied" made every empty slot look like a 3rd party
+    // spool. Flipping the value must change nothing in either direction.
+    assert.equal(slotIsOccupied({ ...emptyTray, state: 0 }), false);
+    assert.equal(slotIsOccupied({ ...emptyTray, state: 27 }), false);
+    assert.equal(slotIsOccupied({ ...thirdParty, state: 0 }), true);
 });
 
-test("slotIsOccupied reads a state sent as a string", () => {
-    assert.equal(slotIsOccupied({ state: "0" }), false);
-    assert.equal(slotIsOccupied({ state: "10" }), true);
+test("slotIsOccupied handles a missing slot", () => {
+    assert.equal(slotIsOccupied(undefined), false);
+    assert.equal(slotIsOccupied(null), false);
 });
 
 test("extractComparableTrayData notices a 3rd party spool arriving", () => {
     const before = [{ id: "0", tray: [{ ...emptyTray, id: "1" }] }];
-    const after  = [{ id: "0", tray: [{ ...thirdParty10, id: "1" }] }];
+    const after  = [{ id: "0", tray: [{ ...thirdParty, id: "1" }] }];
+    assert.notDeepEqual(extractComparableTrayData(before), extractComparableTrayData(after));
+});
+
+test("extractComparableTrayData notices a 3rd party spool being removed", () => {
+    const before = [{ id: "0", tray: [{ ...thirdParty, id: "1" }] }];
+    const after  = [{ id: "0", tray: [{ ...emptyTray, id: "1" }] }];
+    assert.notDeepEqual(extractComparableTrayData(before), extractComparableTrayData(after));
+});
+
+test("extractComparableTrayData notices material and colour set on the printer", () => {
+    // The AMS keeps the slot unidentified, so only the fields the user set on
+    // the printer change. Comparing occupancy alone hid this completely.
+    const before = [{ id: "0", tray: [{ ...thirdParty, tray_type: "", tray_info_idx: "", tray_color: "N/A" }] }];
+    const after  = [{ id: "0", tray: [thirdParty] }];
+    assert.notDeepEqual(extractComparableTrayData(before), extractComparableTrayData(after));
+});
+
+test("extractComparableTrayData notices one chipless spool swapped for another", () => {
+    const before = [{ id: "0", tray: [thirdParty] }];
+    const after  = [{ id: "0", tray: [{ ...thirdParty, cols: ["F98C36FF"], tray_color: "F98C36FF" }] }];
     assert.notDeepEqual(extractComparableTrayData(before), extractComparableTrayData(after));
 });
 
 test("extractComparableTrayData ignores the state value of an unidentified spool", () => {
-    // 10 and 20 both mean "loaded but unknown"; flipping between them must not
-    // look like a change and trigger a reprocess.
-    const a = [{ id: "0", tray: [{ ...thirdParty10, id: "1" }] }];
-    const b = [{ id: "0", tray: [{ ...thirdParty20, id: "1" }] }];
+    // It varies between reports about the same unchanged slot, so comparing it
+    // would trigger a reprocess on nothing.
+    const a = [{ id: "0", tray: [{ ...thirdParty, state: 10 }] }];
+    const b = [{ id: "0", tray: [{ ...thirdParty, state: 20 }] }];
     assert.deepEqual(extractComparableTrayData(a), extractComparableTrayData(b));
 });
 

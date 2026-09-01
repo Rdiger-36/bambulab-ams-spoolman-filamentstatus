@@ -91,9 +91,14 @@ reprocessing.
   any spool whose `tray_weight != 1000`.
 - **`state.lastSpoolData === null` means "not yet seeded".** `[]` is a legitimate
   value (empty Spoolman) and must stay comparable. Never re-seed on empty.
-- **An unidentified spool looks exactly like an empty slot** in every field
-  except `state`. `slotIsOccupied()` is the only correct test; a slot with
-  `tray_uuid === "N/A"` is not automatically empty.
+- **An unidentified spool is not an empty slot.** `slotIsOccupied()` is the only
+  correct test; a slot with `tray_uuid === "N/A"` is not automatically empty.
+  It reads the shape of the tray record, because a loaded slot carries the full
+  payload (`tray_info_idx`, `tray_type`, `cols`, `tag_uid`) whether the chip was
+  read or not, while an empty one carries `id` and `state` alone. Never go back
+  to reading `state`: on a P2S it is 9 or 10 when empty and 11 or 27 when
+  loaded, so "non zero means occupied" marks every empty slot as a 3rd party
+  spool and freezes change detection for chipless slots.
 - **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to

@@ -56,15 +56,26 @@ export function extractComparableTrayData(amsArray) {
         tray: ams.tray
             .filter(t => t && Object.keys(t).length > 6)
             .map(t => {
-                // A spool the printer cannot identify reports no uuid, material,
-                // colour or weight, so the only thing worth comparing is whether
-                // it is there at all. Dropping such trays entirely used to hide
-                // the arrival of a 3rd party spool from the change detection, so
-                // the slot was never reprocessed. `state` itself is deliberately
-                // not compared: it varies between loaded-but-unidentified values
-                // (10 and 20 both occur) and would cause pointless reprocessing.
+                // A spool the printer cannot identify carries no uuid and no
+                // material, but it does carry what the user set on the AMS, so
+                // that is compared alongside the bare occupancy. Occupancy alone
+                // was not enough: swapping one chipless spool for another, or
+                // setting material and colour on the printer, left the
+                // projection unchanged and the slot was never reprocessed.
+                //
+                // `state` is deliberately not compared. It is undocumented, it
+                // varies between reports about the same unchanged slot, and it
+                // does not separate an empty slot from a loaded one either;
+                // `slotIsOccupied` explains what replaced it.
                 if (t.tray_uuid === "N/A" || t.tray_sub_brands === "N/A") {
-                    return { id: t.id, occupied: slotIsOccupied(t) };
+                    return {
+                        id: t.id,
+                        occupied: slotIsOccupied(t),
+                        tray_type: t.tray_type ?? null,
+                        tray_info_idx: t.tray_info_idx ?? null,
+                        tray_color: t.tray_color,
+                        tray_weight: t.tray_weight,
+                    };
                 }
                 return {
                     id: t.id,
@@ -113,37 +124,42 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
 }
 
 /**
+ * The fields an empty AMS slot reports. Anything beyond these is filament data.
+ *
+ * The names are the ones left after `processData`, which fills `tray_color`,
+ * `tray_sub_brands`, `tray_weight` and `tray_uuid` with placeholders on every
+ * tray, so those four say nothing about occupancy.
+ */
+const EMPTY_TRAY_KEYS = new Set(["id", "state", "remain", "tray_color", "tray_sub_brands", "tray_weight", "tray_uuid"]);
+
+/**
  * Whether the AMS reports something physically sitting in the slot.
  *
- * A slot holding a spool the printer cannot identify, whether because it has
- * no RFID chip or because reading it failed, comes through with the same
- * sparse payload as an empty slot: tray_uuid "N/A", no tray_type,
- * tray_weight 0. The only field that separates them is `state`.
+ * Occupancy is read from the payload the tray carries, not from `state`.
  *
- * `state` is not documented by Bambu Lab, so what follows is what this project
- * has actually seen on a P2S, not a specification:
+ * A loaded slot always comes with the full tray record, whether the RFID chip
+ * was read or not: the AMS fills `tray_info_idx` (`GFL99` for anything it
+ * cannot identify), `tray_type`, `cols`, `tag_uid` and the temperature fields
+ * from its own defaults. An empty slot reports `id` and `state` and nothing
+ * else, which is the whole difference between the two.
  *
- * - `0` on an empty slot, in every observation so far.
- * - `3`, `10`, `11`, `20` and `27` while a slot is loaded. Which one appears
- *   varies, including between two reports about the same unchanged slot.
- * - `11` was once read as proof of a Bambu Lab tag having been decoded. It is
- *   not: a chipless spool with an all zero `tray_uuid` reports 11 as well, so
- *   the value says something is in the slot, not that it was identified. Use
- *   `tray_uuid` for that.
+ * `state` used to be the test and it is wrong. It is undocumented, and on a
+ * P2S with two AMS 2 Pro units it reads 9 or 10 on an empty slot and 11 or 27
+ * on a loaded one, so "non zero means occupied" marked every empty slot as
+ * holding an unidentifiable spool. That is what put an "N/A" row with an
+ * "Assign Spool" button on every emptied slot, and it also froze change
+ * detection: `extractComparableTrayData` reduces an unidentified tray to its
+ * occupancy, so with occupancy stuck at true, removing or inserting a chipless
+ * spool produced a byte identical projection and was never processed.
  *
- * Everything non zero is therefore treated as occupied, which is a heuristic in
- * both directions: a value nobody has seen yet still reads as occupied, and
- * firmware reporting a transient non zero state on an empty slot would show a
- * phantom spool until it settles. It is the safer way round, because the
- * opposite, an allow list of known values, would make a spool disappear from
- * the UI the first time a firmware update invents a new one.
- *
- * Firmware that does not report `state` at all falls back to "not occupied", so
- * such slots keep being treated as empty rather than sprouting phantom spools.
+ * The trade off runs the other way round now. Firmware that reports a loaded
+ * chipless slot with no filament fields at all would read as empty here, where
+ * the old heuristic invented a spool on every empty one. Nothing observed so
+ * far reports such a tray.
  */
 export function slotIsOccupied(slot) {
-    if (slot?.state === null || slot?.state === undefined) return false;
-    return Number(slot.state) !== 0;
+    if (!slot) return false;
+    return Object.keys(slot).some(key => !EMPTY_TRAY_KEYS.has(key));
 }
 
 /**
