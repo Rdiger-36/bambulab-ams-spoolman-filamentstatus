@@ -1146,14 +1146,27 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // substituted for the sliced one is exactly what it reports. A slot
 	    // estimated from the slicer's list order is confirmed first, or it would
 	    // show another slot's figures.
-	    const bySlot = Object.values(cons).find(e => e.amsId && e.amsId === amsSpool.amsId);
+	    const entries = Object.values(cons);
+
+	    const bySlot = entries.find(e => e.amsId && e.amsId === amsSpool.amsId);
 	    if (bySlot && (bySlot.amsIdFromPrinter || slotConfirmsSliceJS(slot, bySlot))) return bySlot;
 
-	    const exact = cons[consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols)];
+	    // An entry the printer placed on a slot belongs to that slot and to no
+	    // other. Without this every row whose colour matches the sliced filament
+	    // claimed the same figures, so a print running from remapped slots showed
+	    // each amount twice: on the slot being consumed and on the slot that
+	    // merely holds the colour the file was sliced with.
+	    const unclaimed = entries.filter(e => !e.amsIdFromPrinter);
+
+	    // Compared entry by entry rather than looked up. The server keys the map
+	    // by the position of the filament in the slicer's list, so indexing it
+	    // with a colour key never hit anything.
+	    const wantedKey = consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols);
+	    const exact = unclaimed.find(e => consumptionKeyJS(e.tray_info_idx, e.color, e.colors) === wantedKey);
 	    if (exact) return exact;
 
-	    const wanted = materialKeyJS(slot.tray_type, slot.tray_color);
-	    return Object.values(cons).find(e => materialKeyJS(e.type, e.color) === wanted) || null;
+	    const wantedMaterial = materialKeyJS(slot.tray_type, slot.tray_color);
+	    return unclaimed.find(e => materialKeyJS(e.type, e.color) === wantedMaterial) || null;
 	}
 
 	// Mirrors slotConfirmsSlice in src/mqtt.js. Colours are compared as sorted

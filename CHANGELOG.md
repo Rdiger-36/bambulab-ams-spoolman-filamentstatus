@@ -25,6 +25,7 @@ Version 1.3.0-dev.4
          - An empty holder is still reported by the printer, in full, with only the fields that name a material left blank and a colour of fully transparent white. It shows as no slot at all rather than as a spool nobody can identify
          - Legacy mode leaves it out, for the same reason it shows every chipless spool read-only: it derives the weight from the RFID remain percentage and there is no chip to read
          - Firmware that reports the holder as vt_tray instead is read as well
+      - The dashboard no longer shows a print's figures twice when it runs from remapped slots. The needed and after-print amounts appeared on the slot being consumed and again on the slot that merely holds the colour the file was sliced with, because the fallback match did not know the amount already belonged to a slot the printer had named. The booking itself was correct throughout
       - The log line that admits to a guess reaches the log file. It was written with console.warn, which is not one of the three overridden by the logger, so it went to raw stdout with the routing arguments printed as text and never into the printer log
       - The duplicate warning no longer promises what an assignment cannot do. Two spools reach that point only when the sliced file could not separate them either, so assigning both splits nothing; assigning one decides which spool carries the total
    - Development:
