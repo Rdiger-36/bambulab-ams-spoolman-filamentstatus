@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import { AMS_UNITS } from "./scenario.js";
+import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
 
 /**
  * A Bambu Lab printer that only exists in this process.
@@ -142,6 +142,9 @@ function buildReport() {
             gcode_state: "IDLE",
             layer_num: 0,
             subtask_name: "",
+            // The external spool holder, which the printer reports outside the
+            // AMS block. Older firmware called the same thing vt_tray.
+            vir_slot: EXTERNAL_SPOOL,
             nozzle_temper: 24.4,
             bed_temper: 23.1,
             ams: {

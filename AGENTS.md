@@ -163,8 +163,9 @@ Not punctuation, and therefore allowed:
   printer on 8883, a mock Spoolman on 7912 and the service against both, with
   its state in a temporary directory rather than in `printers/`. Then open
   http://localhost:4000. The scenario fills all 24 addressable AMS slots with
-  the multi colour filaments from the Bambu Lab hex code tables, so it covers
-  what no unit test and no ordinary spool collection reaches. `--no-service`
+  the multi colour filaments from the Bambu Lab hex code tables, plus the
+  external spool holder, which is every position this service can address. It
+  covers what no unit test and no ordinary spool collection reaches. `--no-service`
   runs only the two mocks, for pointing a container at them. Stop it before
   running `npm test`: the suite expects nothing on 8883, and a broker answering
   there leaves the connection tests waiting for a report.

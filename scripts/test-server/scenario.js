@@ -192,6 +192,42 @@ function htUnit(id, tray) {
 }
 
 /**
+ * The external spool holder, which the printer reports outside the AMS block as
+ * `print.vir_slot`.
+ *
+ * Copied from a live P2S report, down to the fields that carry nothing. The
+ * holder has no RFID chip, so the record is a chipless tray: an all zero uuid,
+ * empty `tray_sub_brands` and `tray_weight` "0". With the 24 AMS slots above it
+ * makes 25, which is every position this service can address.
+ */
+export const EXTERNAL_SPOOL = [
+    {
+        id: "255",
+        bed_temp: "0",
+        bed_temp_type: "0",
+        cali_idx: -1,
+        cols: ["9D432CFF"],
+        ctype: 2,
+        drying_temp: "0",
+        drying_time: "0",
+        nozzle_temp_max: "240",
+        nozzle_temp_min: "190",
+        remain: 0,
+        tag_uid: "0000000000000000",
+        total_len: 330000,
+        tray_color: "9D432CFF",
+        tray_diameter: "1.75",
+        tray_id_name: "",
+        tray_info_idx: "GFA00",
+        tray_sub_brands: "",
+        tray_type: "PLA",
+        tray_uuid: "00000000000000000000000000000000",
+        tray_weight: "0",
+        xcam_info: "000000000000000000000000",
+    },
+];
+
+/**
  * The filaments the mock Spoolman starts with.
  *
  * Only a few, so that the dashboard shows every state at once: a slot already

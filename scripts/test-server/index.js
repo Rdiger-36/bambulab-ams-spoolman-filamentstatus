@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { createMockSpoolman } from "./mock-spoolman.js";
 import { startMockPrinter } from "./mock-printer.js";
-import { AMS_UNITS } from "./scenario.js";
+import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
 
 /**
  * A whole environment for this service in one process: a mock printer, a mock
@@ -105,7 +105,7 @@ function describeScenario() {
 
     return {
         units: AMS_UNITS.length,
-        slots: trays.length,
+        slots: trays.length + EXTERNAL_SPOOL.length,
         multiColour: loaded.filter(tray => tray.cols.length > 1).length,
         singleColour: loaded.filter(tray => tray.cols.length === 1).length,
         other: trays.length - loaded.length,
@@ -143,7 +143,7 @@ async function main() {
         const scenario = describeScenario();
         console.log(`[scenario] ${scenario.units} AMS units, ${scenario.slots} slots: ` +
             `${scenario.multiColour} multi colour, ${scenario.singleColour} single colour, ` +
-            `${scenario.other} empty, being read or 3rd party`);
+            `${scenario.other} empty, being read or 3rd party, plus the external holder`);
     }
 
     let service = null;
