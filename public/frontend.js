@@ -1141,11 +1141,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	function findConsumption(cons, amsSpool) {
 	    const slot = amsSpool.slot || {};
 
-	    // The server names the slot each sliced filament was meant for. Confirmed
-	    // against the profile and the colours, because a slot the printer
-	    // remapped would otherwise show another slot's figures.
+	    // The server names the slot each sliced filament runs from. A slot the
+	    // printer itself reported is taken as it stands, because a filament
+	    // substituted for the sliced one is exactly what it reports. A slot
+	    // estimated from the slicer's list order is confirmed first, or it would
+	    // show another slot's figures.
 	    const bySlot = Object.values(cons).find(e => e.amsId && e.amsId === amsSpool.amsId);
-	    if (bySlot && slotConfirmsSliceJS(slot, bySlot)) return bySlot;
+	    if (bySlot && (bySlot.amsIdFromPrinter || slotConfirmsSliceJS(slot, bySlot))) return bySlot;
 
 	    const exact = cons[consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols)];
 	    if (exact) return exact;

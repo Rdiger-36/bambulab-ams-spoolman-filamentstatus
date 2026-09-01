@@ -179,8 +179,11 @@ build their Spoolman payload from.
   printer as `currentMapping`, like the slice info and for the same reason: the
   booking happens on a terminal state and this describes the job that reached
   it. It is also the assignment after any remapping the printer did when the job
-  was sent, which the sliced file cannot know. Read off a P2S across two prints,
-  where every entry matched the slots the print was really running from.
+  was sent, which the sliced file cannot know. Read off a P2S across three
+  prints, where every entry matched the slots the print was really running from.
+  It is followed for as long as the print is active rather than read once: the
+  value settles a moment after the start, and one observed report still carried
+  the slot the job had been configured with before the user changed it.
 - **A position is resolved against the printer, never computed.**
   `resolveSliceSlots()` takes the slots from `orderedAmsSlots()`, which orders
   them by ascending AMS unit id: the four slot units 0 to 3, then AMS HT at 128
@@ -195,13 +198,20 @@ build their Spoolman payload from.
   lists an empty slot too and counting only the occupied ones shifts everything
   after one. Where an AMS HT sits is inference, no observed file has one, and it
   costs nothing to be wrong about because the confirmation below rejects it.
-- **The named slot is confirmed before anything is booked on it.** The printer
-  can remap slots when a job is sent and slice_info.config is written before
-  that, so `slotConfirmsSlice()` requires the slot to really hold that profile
-  and those colours, comparing colours as sorted sets because the slicer and the
-  RFID chip need not agree on which comes first. Everything unconfirmed, and
-  every filament with no position at all, falls through to the stages that
-  existed before.
+- **An estimated slot is confirmed, a reported one is not.**
+  `slotConfirmsSlice()` requires the slot to really hold the profile and the
+  colours the slice expects, comparing colours as sorted sets because the slicer
+  and the RFID chip need not agree on which comes first. It guards the list
+  order estimate, which cannot tell whether the project is synchronised with the
+  printer. It must not guard `print.mapping`: a print configured to take a
+  filament from a slot holding a different colour than the sliced one is the
+  substitution that field exists to report, and checking it against the sliced
+  colour rejected the one right answer. Measured: a print started with the wrong
+  spool selected reported that spool's slot correctly, the check rejected it,
+  and the colour stages then found the spool that was sliced rather than the one
+  that would have been consumed. `resolveSliceSlots()` records the source as
+  `amsIdFromPrinter` so the stage can tell them apart. Everything unconfirmed,
+  and every filament with no slot at all, falls through to the stages below.
 - **`consumptionKey()` carries the colour set, and `slotFingerprint()` too.**
   A gradient spool is not a profile of its own: Bambu Studio slices PLA Basic
   Gradient as `GFA00`, the same as plain PLA Basic, and `tray_color` is only its

@@ -107,16 +107,6 @@ async function handlePrintStateChange(printer, print) {
         printer.sliceFetchDone = true;
         printer.currentJobName = jobName;
 
-        // Kept with the print rather than read at booking time, for the same
-        // reason the slice info is: the booking happens on a terminal state and
-        // this describes the job that reached it. Measured on a P2S, it is
-        // already correct in the first RUNNING report and unchanged through to
-        // the terminal one.
-        printer.currentMapping = decodePrintMapping(print.mapping);
-        if (printer.currentMapping) {
-            console.log(printer.name, printer.logFilePath, `[Print] The printer reports its slots as ${JSON.stringify(printer.currentMapping)}`);
-        }
-
         console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
         try {
             printer.currentSliceInfo = await fetchSliceInfo(printer, jobName);
@@ -127,6 +117,21 @@ async function handlePrintStateChange(printer, print) {
             }
         } catch (err) {
             console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);
+        }
+    }
+
+    // Followed for as long as the print is active rather than read once, and
+    // never on a terminal report, which may already describe the next job.
+    // Measured on a P2S: the value settles a moment after the print starts, and
+    // one report carried the slot the job was configured with before the user
+    // changed it. Reading only the first would have booked onto that one. The
+    // printer cannot move a filament to another slot mid print, so the last
+    // value before the terminal state is the one that ran.
+    if (ACTIVE_STATES.has(newState)) {
+        const reported = decodePrintMapping(print.mapping);
+        if (reported && JSON.stringify(reported) !== JSON.stringify(printer.currentMapping)) {
+            printer.currentMapping = reported;
+            console.log(printer.name, printer.logFilePath, `[Print] The printer reports its slots as ${JSON.stringify(reported)}`);
         }
     }
 
@@ -238,12 +243,11 @@ export function slotConfirmsSlice(candidate, info) {
  * candidates that merely match by type are never touched.
  *
  * Slots are matched to slice filaments in four stages, most specific first:
- *   0. the slot named for the filament, confirmed: the printer reports which
- *      slot each of them is running from, and where it does not, the position
- *      in the slicer's list is the estimate. Taken only when that slot really
- *      holds the profile and the colours the slice expects. It is the one stage
- *      that can tell two identical spools apart, because nothing else can: they
- *      differ in nothing but where they sit
+ *   0. the slot named for the filament: the printer reports which slot each of
+ *      them is running from, and where it does not, the position in the
+ *      slicer's list is the estimate. It is the one stage that can tell two
+ *      identical spools apart, because nothing else can: they differ in nothing
+ *      but where they sit
  *   1. tray_info_idx + colours: the filament identity, which separates e.g.
  *      PLA Black from PLA Jade White despite a shared profile, and a gradient
  *      spool from the plain spool it shares both a profile and a first colour
@@ -252,10 +256,19 @@ export function slotConfirmsSlice(candidate, info) {
  *                             tray_info_idx
  *   3. tray_info_idx alone:   colors did not line up but the profile is unique
  *
- * Stage 0 is deliberately a confirmation rather than a conclusion, whichever
- * source named the slot. An unconfirmed one would book a real amount onto a
- * real spool that the print never touched, silently. When it does not confirm,
- * the stages below decide exactly as they did before it existed.
+ * The two sources of that slot are trusted differently, which is the whole of
+ * stage 0. What the printer reports is taken as it stands. What the list order
+ * estimates has to be confirmed by `slotConfirmsSlice()`, because an unconfirmed
+ * guess would book a real amount onto a real spool the print never touched.
+ * When it does not confirm, the stages below decide as they did before stage 0
+ * existed.
+ *
+ * Confirming what the printer reports would be wrong, and was: a print
+ * configured to take a filament from a slot holding a different colour than the
+ * sliced one is not a mistake to correct, it is the substitution the whole field
+ * exists to report. Checking it against the sliced colour rejected the one
+ * answer that was right and fell through to the colour stages, which found the
+ * spool that was sliced instead of the spool that would have been consumed.
  *
  * Within a stage, manually assigned spools win over tag-connected ones: an
  * assignment is the user explicitly resolving what the automatic match cannot,
@@ -273,12 +286,13 @@ async function bookConsumption(printer, consumption, state) {
 
     // What the printer said its slots were beats working them out from the
     // slicer's list order, which only holds while the project is synchronised
-    // with the printer and cannot tell when it is not. It is also the
-    // assignment after any remapping the printer did when the job was sent.
-    // Without it, the position in the list is all there is.
+    // with the printer and cannot tell when it is not. Without it, the position
+    // in the list is all there is.
+    const reported = printer.currentMapping;
     resolveSliceSlots(
         consumption,
-        printer.currentMapping ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId)),
+        reported ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId)),
+        { reportedByPrinter: !!reported },
     );
 
     // Logged from here rather than from the caller, which ran before the slots
@@ -323,7 +337,7 @@ async function bookConsumption(printer, consumption, state) {
 
         let matches = [];
         for (const predicate of [
-            c => info.amsId && c.amsId === info.amsId && slotConfirmsSlice(c, info),
+            c => info.amsId && c.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(c, info)),
             c => c.key === wantedKey,
             c => c.matKey === wantedMatKey,
             c => c.idx && c.idx === idx,

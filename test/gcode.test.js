@@ -392,6 +392,28 @@ test("a unit this service cannot address is unknown, not a slot", () => {
     assert.deepEqual(decodePrintMapping([0x0707, -1, Number.NaN]), [null, null, null]);
 });
 
+test("where the slots came from is recorded, because it decides the trust", () => {
+    // A slot the printer reported is taken as it stands. One estimated from the
+    // list order is confirmed against the slot first.
+    const reported = resolveSliceSlots(calcFullConsumption(externalSpool),
+                                       decodePrintMapping([65535, 65535, 65535, 256, 2, 65535, 65535, 65535, 65280]),
+                                       { reportedByPrinter: true });
+    assert.deepEqual(Object.values(reported).map(e => e.amsIdFromPrinter), [true, true, true]);
+
+    const estimated = resolveSliceSlots(calcFullConsumption(externalSpool), orderedAmsSlots(twoUnits));
+    assert.deepEqual(Object.values(estimated).map(e => e.amsIdFromPrinter), [false, false, false]);
+});
+
+test("a filament the printer placed nowhere is never treated as reported", () => {
+    // 0xFFFF decodes to no slot at all, and a null slot carries no trust.
+    const full = resolveSliceSlots(calcFullConsumption(externalSpool),
+                                   decodePrintMapping([65535, 65535, 65535, 256, 2, 65535, 65535, 65535, 65535]),
+                                   { reportedByPrinter: true });
+    const holder = Object.values(full).find(e => e.index === 8);
+    assert.equal(holder.amsId, null);
+    assert.equal(holder.amsIdFromPrinter, false);
+});
+
 test("the mapping drops into the same resolution as the list order", () => {
     // Same shape as orderedAmsSlots, one slot per filament index, so the
     // booking path takes either without knowing which it got.

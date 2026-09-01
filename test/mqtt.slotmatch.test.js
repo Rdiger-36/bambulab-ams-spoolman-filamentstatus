@@ -64,3 +64,39 @@ test("a slot with no profile at all refuses", () => {
     assert.equal(slotConfirmsSlice(candidate(null, ["000000"]), entry("GFA00", "#000000")), false);
     assert.equal(slotConfirmsSlice(candidate("GFA00", []), entry("GFA00", "#000000")), false);
 });
+
+/* ---- A reported slot is trusted, an estimated one is confirmed ---- */
+
+// Read off a live print. The slice held Army Green on the external holder, and
+// the print was started with the orange spool in A1 selected for that filament
+// by mistake. print.mapping said A1, which was right: A1 is what the printer
+// would have consumed.
+const armyGreenSlice = { index: 3, amsId: "A1", tray_info_idx: "GFL99", color: "#5E6345", colors: null };
+const orangeInA1 = { id: 9, amsId: "A1", mapped: true, idx: "GFL99", colors: ["f98c36"] };
+
+test("a slot the printer reported is not checked against the sliced colour", () => {
+    // Confirming it rejected the one answer that was right. A filament
+    // substituted for the sliced one is not a mistake to catch, it is the
+    // substitution the field exists to report, and rejecting it fell through to
+    // the colour stages, which found the spool that was sliced rather than the
+    // spool that would have been consumed.
+    assert.equal(slotConfirmsSlice(orangeInA1, armyGreenSlice), false);
+
+    // Which is why the stage reads the flag rather than the confirmation for a
+    // reported slot. Same predicate as bookConsumption's first stage.
+    const stage = (candidate, info) =>
+        !!info.amsId && candidate.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(candidate, info));
+
+    assert.equal(stage(orangeInA1, { ...armyGreenSlice, amsIdFromPrinter: true }), true);
+    assert.equal(stage(orangeInA1, { ...armyGreenSlice, amsIdFromPrinter: false }), false);
+});
+
+test("an estimated slot still has to hold what the slice expects", () => {
+    // The list order cannot tell whether the project is synchronised with the
+    // printer, so its answer is corroborated before anything is booked on it.
+    const stage = (candidate, info) =>
+        !!info.amsId && candidate.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(candidate, info));
+
+    const matchingSlot = { id: 1, amsId: "A1", mapped: false, idx: "GFL99", colors: ["5e6345"] };
+    assert.equal(stage(matchingSlot, { ...armyGreenSlice, amsIdFromPrinter: false }), true);
+});

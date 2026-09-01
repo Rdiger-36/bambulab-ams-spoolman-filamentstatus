@@ -149,13 +149,21 @@ export function consumptionKey(trayInfoIdx, color, colors = null) {
  * when a job is sent and slice_info.config is written before that, so whoever
  * reads `amsId` has to confirm it against what the slot actually holds.
  *
+ * `reportedByPrinter` records where the slots came from, because the answer is
+ * trusted differently depending on that: what the printer reports is what it
+ * will run, while the list order is an estimate that has to be confirmed
+ * against the slot before anything is booked on it.
+ *
  * @param {object} consumption - a map from calcFullConsumption or the partial one
  * @param {string[]} amsIds - the printer's slots, in the order the slicer lists them
+ * @param {object} [options]
+ * @param {boolean} [options.reportedByPrinter] - whether `amsIds` came from `print.mapping`
  * @returns {object} the same map, for chaining
  */
-export function resolveSliceSlots(consumption, amsIds) {
+export function resolveSliceSlots(consumption, amsIds, { reportedByPrinter = false } = {}) {
     for (const entry of Object.values(consumption)) {
         entry.amsId = amsIds?.[entry.index] ?? null;
+        entry.amsIdFromPrinter = entry.amsId !== null && reportedByPrinter;
     }
     return consumption;
 }
@@ -271,9 +279,10 @@ function consumptionEntry(f) {
             color: f.color,
             colors: f.colors || null,
             type: f.type,
-            // Filled in by resolveSliceSlots, which needs the printer this is
-            // going to be matched against and is therefore not known here.
+            // Both filled in by resolveSliceSlots, which needs the printer this
+            // is going to be matched against and is therefore not known here.
             amsId: null,
+            amsIdFromPrinter: false,
             grams: 0,
         },
     };

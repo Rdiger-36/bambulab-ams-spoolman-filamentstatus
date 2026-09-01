@@ -417,13 +417,15 @@ export function registerRoutes(app, printers) {
             // The same resolution bookConsumption makes, so the dashboard reads
             // the figures off the slots the booking will use rather than
             // repeating the guess client side.
-            const slots = printer.currentMapping ?? orderedAmsSlots(loadedSpools.map(s => s.amsId));
+            const reported = printer.currentMapping;
+            const slots = reported ?? orderedAmsSlots(loadedSpools.map(s => s.amsId));
+            const from = { reportedByPrinter: !!reported };
 
-            fullConsumption = resolveSliceSlots(calcFullConsumption(sliceInfo), slots);
+            fullConsumption = resolveSliceSlots(calcFullConsumption(sliceInfo), slots, from);
             if (state === "FINISH") {
                 consumption = fullConsumption;
             } else if (TERMINAL.has(state) || state === "RUNNING" || state === "PAUSE") {
-                consumption = resolveSliceSlots(calcPartialConsumption(sliceInfo, layerNum), slots);
+                consumption = resolveSliceSlots(calcPartialConsumption(sliceInfo, layerNum), slots, from);
             }
         }
 
