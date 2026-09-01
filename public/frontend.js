@@ -355,10 +355,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     
-    function cutDisplayColorName(colorName) {
-        return colorName.replace(/^(For AMS |Support for PLA\/PETG |Support for PLA |Matte |Silk\+? |Glow |HF |FR )/g, "");
-    }
-
     // Every colour of an AMS slot, in the order the printer reported them.
     // `cols` is the full set and `tray_color` only ever the first of them, so
     // the single field is a fallback for a payload that predates `cols` rather
