@@ -29,7 +29,7 @@ import {
     checkSpoolmanHealth,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection } from "./gcode.js";
-import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /**
@@ -296,11 +296,7 @@ export function registerRoutes(app, printers) {
             console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}, restarting MQTT...`);
         } else {
             // Actively close the existing MQTT connection instead of waiting for it to drop
-            if (printer.mqttClient) {
-                printer.mqttClient.end();
-                printer.mqttClient = null;
-            }
-            printer.mqttRunning = false;
+            closeMqtt(printer, "monitoring was switched off");
             printer.mqttStatus = "Disabled";
             console.log(printer.name, printer.logFilePath, `Monitoring disabled for ${printer.name} - ${printer.id}`);
         }
@@ -360,11 +356,7 @@ export function registerRoutes(app, printers) {
         for (const printer of printers) {
             if (!printer.monitoringEnabled) continue;
 
-            if (printer.mqttClient) {
-                printer.mqttClient.end(true);
-                printer.mqttClient = null;
-            }
-            printer.mqttRunning = false;
+            closeMqtt(printer, "reconnecting on request", true);
             printer.reconnectAttempts = 0;
             // The cooldown in setupMqtt guards against retry storms, not against
             // a deliberate reconnect, so clear it here.
@@ -904,11 +896,7 @@ function publicPrinter(printer) {
 
 /** Closes the MQTT connection of a printer, if it has one. */
 function disconnectPrinter(printer) {
-    if (printer.mqttClient) {
-        printer.mqttClient.end();
-        printer.mqttClient = null;
-    }
-    printer.mqttRunning = false;
+    closeMqtt(printer, "the printer was changed or removed in the Web UI");
     printer.mqttStatus = "Disconnected";
 }
 

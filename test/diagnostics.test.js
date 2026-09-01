@@ -15,9 +15,17 @@ before(async () => {
     app = await startTestApp();
     await call(`${app.url}/api/printers`, "POST", printer);
 
+    // Adding a printer creates its log file asynchronously. Writing the fixture
+    // before that lands loses it to the create, which is what made this file
+    // flaky, so wait for the file and append rather than replace it.
+    const logFile = path.join(process.env.LOG_DIR, "01P00A000000042.log");
+    for (let i = 0; i < 50 && !fs.existsSync(logFile); i++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
     // A log line carrying everything the masking is supposed to remove
-    fs.writeFileSync(
-        path.join(process.env.LOG_DIR, "01P00A000000042.log"),
+    fs.appendFileSync(
+        logFile,
         "Printer 01P00A000000042 with IP 192.168.178.55 and code 87654321 is unreachable\n",
     );
 });

@@ -67,11 +67,12 @@ connection. The reconnect tears the session down and is back within a second.
 Pausing disconnects immediately, and a second pause reports that it changed
 nothing rather than claiming success.
 
-That run also surfaced the cooldown defect described below, and one cosmetic
-oddity that was left alone: closing the connection logs "will retry within 20
-second(s) via the monitor loop" even when the reconnect has already been started,
-so the line appears just above the successful reconnect and reads as if nothing
-had happened yet.
+That run also surfaced the cooldown defect described below and the misleading
+close line, both since fixed and re-checked against the same printer: reconnect,
+pause and resume in sequence now bring the connection back within a second, and
+the log says "Connection closed, reconnecting on request" and "Connection
+closed, monitoring was switched off" instead of announcing a retry by the
+monitor loop.
 
 It also found a real defect, now fixed: the fallback pattern for a serial that
 is no longer in the printer list required a leading zero, matching the P1S
@@ -280,6 +281,16 @@ access code can appear inside a fifteen character Bambu serial; masking the code
 first cuts the serial into pieces that the serial pass no longer recognises, and
 the address in the same line then leaks in a different shape. `test/anonymize.test.js`
 holds the ordering.
+
+**Every deliberate disconnect goes through `closeMqtt()`.** The "close" handler
+cannot otherwise tell a connection the network dropped from one the service
+closed itself, and it announced that the monitor loop would retry within the
+offline check interval in both cases. That is wrong whenever a reconnect has
+already been started or the process is shutting down, and the line then sat in
+the log directly above the successful reconnect. The handler also ignores a close
+that arrives after the printer already has a newer client, which a deliberate
+reconnect can produce and which would otherwise tear the live connection back
+down.
 
 **An explicit reconnect clears the retry cooldown, the monitor loop does not.**
 `setupMqtt()` ignores a call within 30 seconds of the last attempt, which is what
