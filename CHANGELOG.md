@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.4
    - Fixes:
       - Multi colour spools (PLA Silk Multi-Color, PLA Basic Gradient, TPU 90A Blaze and Frozen) show all of their colours again instead of only the first one
          - The AMS reports every colour of a spool in cols and only the first of them in tray_color. cols never left the server: the client projection did not carry it, so the Web UI drew a two colour spool as if it were plain
