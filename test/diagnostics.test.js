@@ -22,6 +22,15 @@ before(async () => {
         path.join(process.env.LOG_DIR, "01P00A000000042.log"),
         "Printer 01P00A000000042 with IP 192.168.178.55 and code 87654321 is unreachable\n",
     );
+
+    // Written rather than waited for. Nothing in this app writes a server log on
+    // its own unless debug logging happens to be on, which is what a developer
+    // has in their .env and CI does not, so the bundle had a server log locally
+    // and none on the runner.
+    fs.writeFileSync(
+        path.join(process.env.LOG_DIR, "server.log"),
+        "Server started, printer 01P00A000000042 at 192.168.178.55 registered\n",
+    );
 });
 
 after(async () => { await app.close(); });
