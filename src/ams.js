@@ -352,23 +352,6 @@ export async function haveSpoolDataChanged(spools, lastSpoolData) {
 }
 
 /**
- * Whether a slot is worth pushing to the UI over SSE.
- *
- * On the first run everything is sent, so the client starts from a complete
- * picture. Afterwards only slots the printer fully identified are sent, which
- * keeps the sparse payloads of empty and unidentified slots from overwriting a
- * populated row on every message.
- */
-export function shouldSendSlotUpdate(slot, isFirstRun) {
-    const isValidBambu =
-        slot &&
-        Object.keys(slot).length > 6 &&
-        slot.tray_uuid !== "N/A" &&
-        slot.tray_sub_brands !== "N/A";
-    return isFirstRun || isValidBambu;
-}
-
-/**
  * Whether anything the UI actually displays changed between two versions of a
  * slot, used to suppress redundant SSE broadcasts.
  *

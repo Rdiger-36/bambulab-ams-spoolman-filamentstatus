@@ -866,7 +866,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    tr.innerHTML = `
 	        <td data-label="Spool" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
 	        <td data-label="Remaining">${amsSpoolRemainingWeight} g / ${totalWeight} g (${correctedRemain}%)</td>
-	        <td data-label="Serialnumber">${amsSpool.slot.tray_uuid}</td>
+	        <td data-label="Serialnumber">${amsSpool.slot.tray_uuid ?? "—"}</td>
 	        <td data-label="State">${setIcon(amsSpool.error, amsSpool.slotState)}</td>
 	    `;
 	    const tdBtn = document.createElement("td");

@@ -29,7 +29,6 @@ import {
     findMatchingInternalFilament,
     findMergeableSpool,
     haveSpoolDataChanged,
-    shouldSendSlotUpdate,
     hasSpoolUiChanged,
 } from "./ams.js";
 import { toClientSpool } from "./uispool.js";
@@ -463,7 +462,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
-        pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+        pushSlotUpdate(printer, newUiSpool, prevByAmsId);
         return false;
     }
 
@@ -474,7 +473,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         console.debug(printer.name, printer.logFilePath, "No Data found in Slots (empty slot with N/A values)");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
-        pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+        pushSlotUpdate(printer, newUiSpool, prevByAmsId);
         return false;
     }
 
@@ -494,9 +493,13 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
-        if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
+        if (hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
             broadcastSlotUpdate(printer.id, newUiSpool);
-            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_type} ${slot.tray_color} [[ ${slot.tray_uuid} ]]`);
+            // No uuid to print, so the line says what the slot is instead: the
+            // material and colour set on the printer, and the assignment that
+            // decides whether consumption can be booked onto it.
+            const assignment = mappedSpool ? `=> Spool-ID ${mappedSpool.id} (assigned)` : "(3rd party, not assigned)";
+            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} ${assignment}`);
         }
         printer.spoolData.push(newUiSpool);
         return false;
@@ -714,7 +717,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         correctedWeight,
     };
 
-    pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot);
+    pushSlotUpdate(printer, newUiSpool, prevByAmsId);
     return mutated;
 }
 
@@ -790,11 +793,19 @@ function resolveMappedSpool(printer, amsId, slot, spools) {
 }
 
 /**
- * Records a UI spool for this AMS update and broadcasts it, but only when the
- * slot is worth sending and something the user sees actually changed.
+ * Records a UI spool for this AMS update and broadcasts it, but only when
+ * something the user sees actually changed.
+ *
+ * A slot with no previous entry counts as changed, so the first pass sends
+ * everything. There used to be a second condition, holding back every slot the
+ * printer had not fully identified, which meant an emptied slot never reached
+ * the UI and its row kept showing the spool that had been taken out. It was
+ * guarding against sparse payloads overwriting a populated row, which was the
+ * old occupancy bug rather than a real case, and `hasSpoolUiChanged` already
+ * suppresses everything that would not change the display.
  */
-function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
-    if (shouldSendSlotUpdate(slot, printer.first_run) && hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
+function pushSlotUpdate(printer, newUiSpool, prevByAmsId) {
+    if (hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
         broadcastSlotUpdate(printer.id, newUiSpool);
     }
     printer.spoolData.push(newUiSpool);

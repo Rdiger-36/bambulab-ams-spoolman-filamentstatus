@@ -149,7 +149,13 @@ covers exactly this seam.
 `broadcastSSE()` for status/refresh events. A slot goes out through
 `toClientSpool()` in `uispool.js`, the one projection from the runtime object to
 the client payload, shared with `/api/spools` and `/api/print`. Add a field
-there when the UI needs it; anything not listed stays on the server.
+there when the UI needs it; anything not listed stays on the server. That
+includes the `"N/A"` placeholder `processData()` writes: it is a backend marker
+and the projection turns it back into `null`, so a client never renders it. The
+broadcast decision is `hasSpoolUiChanged()` alone, which compares that same
+projection. Do not add a second condition in front of it; the one that used to
+be there held every slot the printer could not identify back, so an emptied slot
+never reached the UI.
 
 **Changing slot classification:** `processSlot()` in `mqtt.js` branches, in
 order: invalid slot → empty slot → 3rd party (unidentified) → Bambu Lab. The
