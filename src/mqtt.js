@@ -481,9 +481,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // only sign of life is `state`, which the empty branch above no longer takes.
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
         console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
-        // The printer may know the material because the user set it on the AMS;
-        // when it does not, leave the placeholder rather than blanking the field.
-        if (slot.tray_type) slot.tray_sub_brands = slot.tray_type;
+        // `tray_sub_brands` used to be overwritten with the material here, so
+        // the slot had a name at all. The projection now drops the "N/A"
+        // placeholder on its own, and the dashboard builds the name from the
+        // material anyway, so copying it produced "PLA . PLA". It also wrote
+        // into the record kept as `printer.lastAmsData`, which is the baseline
+        // the next report is compared against.
 
         // No RFID chip means no extra.tag link in Spoolman, so the only way to
         // know which spool sits here is a manual assignment made in the UI.
@@ -499,7 +502,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             // material and colour set on the printer, and the assignment that
             // decides whether consumption can be booked onto it.
             const assignment = mappedSpool ? `=> Spool-ID ${mappedSpool.id} (assigned)` : "(3rd party, not assigned)";
-            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} ${assignment}`);
+            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_type || "Unknown material"} ${slot.tray_color} ${assignment}`);
         }
         printer.spoolData.push(newUiSpool);
         return false;
