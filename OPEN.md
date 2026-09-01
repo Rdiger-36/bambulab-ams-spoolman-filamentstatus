@@ -14,12 +14,13 @@ None of this was exercised on a real printer during the rebuild. It works in
 theory or in tests. Ordered by how likely a user is to hit it.
 
 
-- [ ] **Booking a print as it actually finishes.** Everything up to the booking
-  was exercised on the P2S: the slice fetch, the consumption maths and the spool
-  matching. What has never run is `handlePrintStateChange()` reaching a terminal
-  state on a live job and calling `useSpoolWeight()`. Starting a small print and
-  letting it finish, then cancelling one halfway, closes this and the partial
-  booking with it.
+- [x] **Booking a print as it actually finishes.** Done on 2026-09-01 against
+  the P2S, seven cancelled prints against a throwaway Spoolman. `useSpoolWeight()`
+  reached it six times and the partial maths was exact: at layer 3 of a
+  sequential print, 8.13 g scaled over the first object's 85 layers gave the
+  0.38 g that was booked. A finished print, as opposed to a cancelled one, has
+  still not been observed, and neither has a booking onto the external spool
+  holder, which needs a run past layer 170.
 - [ ] **AMS Lite.** Everything was tested on a P2S with two AMS units. The AMS
   Lite was never in scope for G-code tracking; the README only documents its
   legacy mode limitation.
