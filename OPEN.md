@@ -25,6 +25,19 @@ theory or in tests. Ordered by how likely a user is to hit it.
   legacy mode limitation.
 - [ ] **A second printer.** Multiple AMS units on one printer work (A0 to A3 and
   B0 to B3 were addressed correctly). Two printers at once was never run.
+- [ ] **The anonymised export against a real log.** The masking was exercised
+  against a synthetic log line and a container pointed at a fake printer, where
+  the only identifying values are the ones `knownValues()` already knows. A real
+  P2S with `DEBUG=true` writes far more: `tray_uuid`, job names, the Spoolman
+  address in shapes the settings do not carry. One run with debug logging on,
+  then grepping the anonymised bundle for the real serial, address and code, is
+  what would close this.
+- [ ] **Reconnect and the global monitoring pause against real MQTT.** Both were
+  only seen against a printer that never connects, so the interesting half, an
+  established connection being torn down and rebuilt, has never run.
+- [ ] **The update check with a newer release.** Only the prerelease path was
+  observed, where the running version is ahead of the latest release. The
+  "version X is available" path has never been rendered against a real answer.
 
 ## Verified against the printer
 
