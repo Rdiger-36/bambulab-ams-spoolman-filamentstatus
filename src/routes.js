@@ -417,7 +417,7 @@ export function registerRoutes(app, printers) {
             // The same resolution bookConsumption makes, so the dashboard reads
             // the figures off the slots the booking will use rather than
             // repeating the guess client side.
-            const slots = orderedAmsSlots(loadedSpools.map(s => s.amsId));
+            const slots = printer.currentMapping ?? orderedAmsSlots(loadedSpools.map(s => s.amsId));
 
             fullConsumption = resolveSliceSlots(calcFullConsumption(sliceInfo), slots);
             if (state === "FINISH") {

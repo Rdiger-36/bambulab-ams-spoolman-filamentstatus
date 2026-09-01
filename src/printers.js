@@ -44,6 +44,9 @@ function createRuntimePrinter(entry) {
         currentGcodeState: "IDLE",
         currentJobName: null,
         currentSliceInfo: null,
+        // The slots the printer says the running print is taking its filaments
+        // from, decoded from print.mapping. Null until a print reports them.
+        currentMapping: null,
         currentLayerNum: 0,
         consumptionBooked: false,
         sliceFetchDone: false,

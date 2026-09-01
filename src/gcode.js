@@ -2,7 +2,7 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
-import { EXTERNAL_SLOT } from "./utils.js";
+import { EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
 
 /**
  * TLS options for BambuLab's self-signed certificate. The printer presents a
@@ -161,6 +161,49 @@ export function resolveSliceSlots(consumption, amsIds) {
 }
 
 /**
+ * The value `print.mapping` uses for a filament the plate does not print.
+ * Decoding it would otherwise read as unit 255 slot 255 and name the external
+ * spool holder, which is unit 255 slot 0.
+ */
+const MAPPING_UNUSED = 0xFFFF;
+
+/**
+ * The slots a printer says a print is actually taking its filaments from.
+ *
+ * `print.mapping` is the printer's own answer to the question `orderedAmsSlots`
+ * can only estimate, and it is the better one twice over: it needs no
+ * assumption about how the slicer numbers its list, and it is the assignment
+ * after any remapping the printer did when the job was sent, not the slicer's
+ * intention before it.
+ *
+ * One entry per filament of the slicer's project, in the same order, so the
+ * result drops straight into `resolveSliceSlots()`. Each is the unit in the
+ * high byte and the slot in the low one: 0x0100 is B0, 0x0002 is A2, 0xFF00 is
+ * the external holder, and 0xFFFF means the plate does not use that filament.
+ *
+ * Read off a P2S across two prints, where all seven entries matched the slots
+ * the print was really running from, including the holder and the unused
+ * marker.
+ *
+ * A unit this service cannot address yields null rather than a label, so the
+ * caller treats it as unknown instead of booking onto whatever "Z" would name.
+ *
+ * @param {number[]|undefined} mapping - `print.mapping` from an MQTT report
+ * @returns {string[]|null} slot labels by filament index, null when not reported
+ */
+export function decodePrintMapping(mapping) {
+    if (!Array.isArray(mapping) || !mapping.length) return null;
+
+    return mapping.map(value => {
+        const number = Number(value);
+        if (!Number.isInteger(number) || number < 0 || number === MAPPING_UNUSED) return null;
+
+        const label = convertAMSandSlot(number >> 8, number & 0xFF);
+        return label === "Z" ? null : label;
+    });
+}
+
+/**
  * The printer's slots in the order Bambu Studio lists them, which is by
  * ascending AMS unit id and then by slot within the unit.
  *
@@ -182,6 +225,12 @@ export function resolveSliceSlots(consumption, amsIds) {
  * refuses a position whose slot does not hold the expected profile and colours,
  * and the stages below it then decide exactly as they did before positions were
  * used at all.
+ *
+ * This is the fallback for a printer that does not report `print.mapping`,
+ * which answers the same question and is right where this is only sometimes:
+ * measured on a P2S, it named the right slots for a project synchronised with
+ * the printer and none of them for a project holding fewer filaments than the
+ * printer has slots.
  *
  * @param {string[]} amsIds - slot labels as `convertAMSandSlot` produces them
  * @returns {string[]} the positions, ordered

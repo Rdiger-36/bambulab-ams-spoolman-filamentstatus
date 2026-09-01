@@ -169,6 +169,18 @@ build their Spoolman payload from.
   that position: two filaments never merge, where a colour key added them
   together before anything looked at the AMS and the sum could not be split
   afterwards.
+- **The printer says which slot a print runs each filament from, and that beats
+  working it out.** `print.mapping` carries one entry per filament of the
+  slicer's project, the unit in the high byte and the slot in the low one:
+  `0x0100` is B0, `0xFF00` the external holder, `0xFFFF` a filament the plate
+  does not use. `decodePrintMapping()` turns it into the same shape
+  `orderedAmsSlots()` produces, so `resolveSliceSlots()` takes either without
+  knowing which. It is captured at the transition to RUNNING and kept on the
+  printer as `currentMapping`, like the slice info and for the same reason: the
+  booking happens on a terminal state and this describes the job that reached
+  it. It is also the assignment after any remapping the printer did when the job
+  was sent, which the sliced file cannot know. Read off a P2S across two prints,
+  where every entry matched the slots the print was really running from.
 - **A position is resolved against the printer, never computed.**
   `resolveSliceSlots()` takes the slots from `orderedAmsSlots()`, which orders
   them by ascending AMS unit id: the four slot units 0 to 3, then AMS HT at 128

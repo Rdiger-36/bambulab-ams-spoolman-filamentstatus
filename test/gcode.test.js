@@ -13,6 +13,7 @@ import {
     consumptionKey,
     resolveSliceSlots,
     orderedAmsSlots,
+    decodePrintMapping,
     bambuTlsOptions,
 } from "../src/gcode.js";
 
@@ -357,4 +358,46 @@ test("a filament beyond the printer's slots keeps its figures and no slot", () =
     const full = resolveSliceSlots(calcFullConsumption(beyondTheUnits), twoUnits);
     assert.equal(full["filament16"].grams, 30);
     assert.equal(full["filament16"].amsId, null);
+});
+
+/* ---- The slots the printer says it is printing from ---- */
+
+// Both values are copied from live P2S reports, and both were checked against
+// the slots the print was really running from.
+
+test("the printer's own mapping names the slots it is printing from", () => {
+    // A project of three filaments on a printer with two AMS units. The slicer
+    // list order would have said A0, A1 and A2, and none of those was right.
+    assert.deepEqual(decodePrintMapping([256, 2, 259]), ["B0", "A2", "B3"]);
+});
+
+test("the mapping carries the external holder and the filaments left unused", () => {
+    // 0xFF00 is unit 255, which is the holder. 0xFFFF is the marker for a
+    // filament of the project that this plate does not print, and decoding it
+    // as a unit and a slot would read as the holder too.
+    assert.deepEqual(decodePrintMapping([256, 2, 65535, 65280]), ["B0", "A2", null, "External"]);
+});
+
+test("a printer that reports no mapping says so", () => {
+    // Then the position in the slicer's list is all there is, which is what
+    // orderedAmsSlots estimates.
+    assert.equal(decodePrintMapping(undefined), null);
+    assert.equal(decodePrintMapping([]), null);
+    assert.equal(decodePrintMapping(null), null);
+});
+
+test("a unit this service cannot address is unknown, not a slot", () => {
+    // "Z" is the label for a unit outside the known ranges. Passing it on would
+    // put several slots under one name and book onto whichever came first.
+    assert.deepEqual(decodePrintMapping([0x0707, -1, Number.NaN]), [null, null, null]);
+});
+
+test("the mapping drops into the same resolution as the list order", () => {
+    // Same shape as orderedAmsSlots, one slot per filament index, so the
+    // booking path takes either without knowing which it got.
+    const full = resolveSliceSlots(calcFullConsumption(externalSpool),
+                                   decodePrintMapping([65535, 65535, 65535, 256, 2, 65535, 65535, 65535, 65280]));
+    assert.deepEqual(Object.values(full).map(e => [e.index, e.amsId]), [
+        [3, "B0"], [4, "A2"], [8, "External"],
+    ]);
 });

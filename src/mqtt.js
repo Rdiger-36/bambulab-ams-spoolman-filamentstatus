@@ -17,7 +17,7 @@ import {
     patchSpoolLocation,
     useSpoolWeight,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, normColor, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, normColor, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
 import {
     processData,
@@ -96,6 +96,7 @@ async function handlePrintStateChange(printer, print) {
     if (freshStart) {
         printer.currentJobName    = jobName;
         printer.currentSliceInfo  = null;
+        printer.currentMapping    = null;
         printer.consumptionBooked = false;
         printer.sliceFetchDone    = false;
     }
@@ -105,6 +106,16 @@ async function handlePrintStateChange(printer, print) {
     if (newState === "RUNNING" && jobName && !printer.sliceFetchDone) {
         printer.sliceFetchDone = true;
         printer.currentJobName = jobName;
+
+        // Kept with the print rather than read at booking time, for the same
+        // reason the slice info is: the booking happens on a terminal state and
+        // this describes the job that reached it. Measured on a P2S, it is
+        // already correct in the first RUNNING report and unchanged through to
+        // the terminal one.
+        printer.currentMapping = decodePrintMapping(print.mapping);
+        if (printer.currentMapping) {
+            console.log(printer.name, printer.logFilePath, `[Print] The printer reports its slots as ${JSON.stringify(printer.currentMapping)}`);
+        }
 
         console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
         try {
@@ -227,11 +238,12 @@ export function slotConfirmsSlice(candidate, info) {
  * candidates that merely match by type are never touched.
  *
  * Slots are matched to slice filaments in four stages, most specific first:
- *   0. the slot the slice names, confirmed: the position of a filament in the
- *      slicer's list is the AMS slot it was sliced for, and this takes it only
- *      when that slot really holds the profile and the colours the slice
- *      expects. It is the one stage that can tell two identical spools apart,
- *      because nothing else can: they differ in nothing but where they sit
+ *   0. the slot named for the filament, confirmed: the printer reports which
+ *      slot each of them is running from, and where it does not, the position
+ *      in the slicer's list is the estimate. Taken only when that slot really
+ *      holds the profile and the colours the slice expects. It is the one stage
+ *      that can tell two identical spools apart, because nothing else can: they
+ *      differ in nothing but where they sit
  *   1. tray_info_idx + colours: the filament identity, which separates e.g.
  *      PLA Black from PLA Jade White despite a shared profile, and a gradient
  *      spool from the plain spool it shares both a profile and a first colour
@@ -240,11 +252,10 @@ export function slotConfirmsSlice(candidate, info) {
  *                             tray_info_idx
  *   3. tray_info_idx alone:   colors did not line up but the profile is unique
  *
- * Stage 0 is deliberately a confirmation rather than a conclusion. The printer
- * can remap slots when a job is sent and the sliced file is written before
- * that, so an unconfirmed slot would book a real amount onto a real spool that
- * the print never touched, silently. When it does not confirm, the stages below
- * decide exactly as they did before it existed.
+ * Stage 0 is deliberately a confirmation rather than a conclusion, whichever
+ * source named the slot. An unconfirmed one would book a real amount onto a
+ * real spool that the print never touched, silently. When it does not confirm,
+ * the stages below decide exactly as they did before it existed.
  *
  * Within a stage, manually assigned spools win over tag-connected ones: an
  * assignment is the user explicitly resolving what the automatic match cannot,
@@ -260,10 +271,15 @@ async function bookConsumption(printer, consumption, state) {
         return;
     }
 
-    // The slicer lists a printer's slots in order, so the position of a filament
-    // in that list is a slot only once it is resolved against the slots this
-    // printer actually reports.
-    resolveSliceSlots(consumption, orderedAmsSlots(printer.spoolData.map(s => s.amsId)));
+    // What the printer said its slots were beats working them out from the
+    // slicer's list order, which only holds while the project is synchronised
+    // with the printer and cannot tell when it is not. It is also the
+    // assignment after any remapping the printer did when the job was sent.
+    // Without it, the position in the list is all there is.
+    resolveSliceSlots(
+        consumption,
+        printer.currentMapping ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId)),
+    );
 
     // Logged from here rather than from the caller, which ran before the slots
     // were named and therefore printed every `amsId` as null, which is the one
