@@ -17,7 +17,7 @@ import {
     patchSpoolLocation,
     useSpoolWeight,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, normColor } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, normColor, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
 import {
     processData,
@@ -216,6 +216,11 @@ async function bookConsumption(printer, consumption) {
         console.log(printer.name, printer.logFilePath, "[Print] No spool data available for consumption booking");
         return;
     }
+
+    // The slicer lists a printer's slots in order, so the position of a filament
+    // in that list is a slot only once it is resolved against the slots this
+    // printer actually reports.
+    resolveSliceSlots(consumption, orderedAmsSlots(printer.spoolData.map(s => s.amsId)));
 
     const candidates = [];
     for (const uiSpool of printer.spoolData) {

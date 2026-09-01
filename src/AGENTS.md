@@ -150,18 +150,34 @@ build their Spoolman payload from.
   never books.
 - **The sliced file names the slot, and that beats every colour comparison.**
   The position of a filament in Bambu Studio's list is the AMS slot it was
-  sliced for, so `sliceSlotLabel()` turns `<filament id="5">` into `B0`,
-  verified against a real print on a P2S with two AMS units. It is the only
-  thing that separates two spools identical in profile and colour, and
-  `calcFullConsumption()` therefore keys by it: two entries in two slots stay
-  two entries, where a colour key added them together before anything looked at
-  the AMS and the sum could not be split afterwards. It is always a suggestion:
-  the printer can remap slots when a job is sent and the file is written before
-  that, so `slotConfirmsSlice()` gates it on the slot really holding that
-  profile and those colours, and everything unconfirmed falls through to the
-  stages that existed before. Only the four slot units are addressed; an AMS HT
-  or an external spool holder sits somewhere in that list that no observed file
-  pins down, so `sliceSlotLabel()` refuses rather than guesses.
+  sliced for, verified against a real print on a P2S with two AMS units where
+  the ids 5, 7 and 8 were B0, B2 and B3. It is the only thing that separates two
+  spools identical in profile and colour, so `calcFullConsumption()` keys by
+  that position: two filaments never merge, where a colour key added them
+  together before anything looked at the AMS and the sum could not be split
+  afterwards.
+- **A position is resolved against the printer, never computed.**
+  `resolveSliceSlots()` takes the slots from `orderedAmsSlots()`, which lists
+  every position of every attached four slot unit. Arithmetic on "four per
+  unit" is wrong: with two AMS units and a spool on the external holder the
+  slicer's list is nine long, and the ninth entry became "C0", a unit that
+  printer does not have. The list length says nothing either, it is the
+  project's filament count and not the printer's, and the same P2S produced
+  files with six, eight and nine entries. All four positions of an attached
+  unit are listed whether or not they reported a spool, because the slicer
+  lists an empty slot too and counting only the occupied ones shifts everything
+  after one. AMS HT is left out: it holds one spool per unit and its place in
+  that list is not pinned down by any observed file.
+- **The named slot is confirmed before anything is booked on it.** The printer
+  can remap slots when a job is sent and slice_info.config is written before
+  that, so `slotConfirmsSlice()` requires the slot to really hold that profile
+  and those colours, comparing colours as sorted sets because the slicer and the
+  RFID chip need not agree on which comes first. Everything unconfirmed, and
+  every filament with no position at all, falls through to the stages that
+  existed before. A spool on the external holder is one of those: the printer
+  reports it as `vt_tray` and this service does not read it, so its grams land
+  on whichever AMS slot matches by profile and colour, exactly as they did
+  before slots were used at all.
 - **`consumptionKey()` carries the colour set, and `slotFingerprint()` too.**
   A gradient spool is not a profile of its own: Bambu Studio slices PLA Basic
   Gradient as `GFA00`, the same as plain PLA Basic, and `tray_color` is only its

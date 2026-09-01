@@ -28,7 +28,7 @@ import {
     createSpoolRecord,
     checkSpoolmanHealth,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
 import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
@@ -407,18 +407,23 @@ export function registerRoutes(app, printers) {
         // answer "will this slot be booked" on its own.
         const loadedSpools = (printer.spoolData || []).map(toClientSpool);
 
-        // fullConsumption = total grams the whole print needs per tray_info_idx
-        // (used for the "needed" column). consumption = estimate at the current
-        // print progress (partial for an in-progress/aborted print).
+        // fullConsumption = total grams the whole print needs per sliced
+        // filament (used for the "needed" column). consumption = estimate at the
+        // current print progress (partial for an in-progress/aborted print).
         let fullConsumption = null;
         let consumption     = null;
         if (sliceInfo) {
             const TERMINAL = new Set(["FINISH", "FAILED", "CANCEL"]);
-            fullConsumption = calcFullConsumption(sliceInfo);
+            // The same resolution bookConsumption makes, so the dashboard reads
+            // the figures off the slots the booking will use rather than
+            // repeating the guess client side.
+            const slots = orderedAmsSlots(loadedSpools.map(s => s.amsId));
+
+            fullConsumption = resolveSliceSlots(calcFullConsumption(sliceInfo), slots);
             if (state === "FINISH") {
                 consumption = fullConsumption;
             } else if (TERMINAL.has(state) || state === "RUNNING" || state === "PAUSE") {
-                consumption = calcPartialConsumption(sliceInfo, layerNum);
+                consumption = resolveSliceSlots(calcPartialConsumption(sliceInfo, layerNum), slots);
             }
         }
 

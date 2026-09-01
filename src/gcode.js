@@ -2,8 +2,6 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
-import { convertAMSandSlot } from "./utils.js";
-
 /**
  * TLS options for BambuLab's self-signed certificate. The printer presents a
  * cert with CN = serial number; we don't validate it (same as the MQTT
@@ -125,63 +123,106 @@ export function consumptionKey(trayInfoIdx, color, colors = null) {
 }
 
 /**
- * The AMS slot a sliced filament was meant for, or null when it cannot be told.
+ * Names the AMS slot each consumption entry was sliced for, in place.
  *
  * Bambu Studio's filament list is the printer's slot list, so the position in
- * it is the slot: id 5 is the fifth entry, which is the first slot of the
- * second AMS unit. Verified against a print sliced for a P2S with two AMS
- * units, where ids 5, 7 and 8 were B0, B2 and B3.
+ * it is the slot: the fifth entry is the fifth slot. Verified against a print
+ * sliced for a P2S with two AMS units, where the ids 5, 7 and 8 were B0, B2
+ * and B3.
  *
- * Only the four slot units are addressed here. An AMS HT, an external spool
- * holder or a second extruder sit somewhere in that list that no sliced file
- * observed so far pins down, and guessing would put consumption on a real slot
- * that the print never touched. Everything past the sixteenth entry is
- * therefore refused rather than estimated.
+ * The position is resolved against the slots the printer actually reports,
+ * never against a computed geometry. A second file settled that: with two AMS
+ * units and a spool on the external holder the list holds nine entries, and
+ * arithmetic on "four slots per unit" turns the ninth into "C0", a unit that
+ * printer does not have. The list length is no help either, it is the project's
+ * filament count and not the printer's: the same P2S produced files with six,
+ * eight and nine entries.
  *
- * This is a suggestion, never a conclusion. The printer can remap slots when a
- * job is sent, and slice_info.config is written before that, so whoever uses
- * this has to confirm it against what the slot actually holds.
+ * Only the four slot units are passed in by the callers. An AMS HT, an external
+ * holder or a second extruder sit somewhere in that list that no observed file
+ * pins down, so a filament beyond the known slots is left unnamed rather than
+ * placed on a real slot the print never touched.
  *
- * @param {number} id - the 1 based `id` of a `<filament>` entry
- * @returns {string|null} the slot label, e.g. "B0"
+ * The result is a suggestion, never a conclusion. The printer can remap slots
+ * when a job is sent and slice_info.config is written before that, so whoever
+ * reads `amsId` has to confirm it against what the slot actually holds.
+ *
+ * @param {object} consumption - a map from calcFullConsumption or the partial one
+ * @param {string[]} amsIds - the printer's slots, in the order the slicer lists them
+ * @returns {object} the same map, for chaining
  */
-export function sliceSlotLabel(id) {
-    const index = Number(id) - 1;
-    if (!Number.isInteger(index) || index < 0 || index > 15) return null;
-    return convertAMSandSlot(Math.floor(index / 4), index % 4);
+export function resolveSliceSlots(consumption, amsIds) {
+    for (const entry of Object.values(consumption)) {
+        entry.amsId = amsIds?.[entry.index] ?? null;
+    }
+    return consumption;
+}
+
+/**
+ * The printer's four slot AMS positions in the order Bambu Studio lists them,
+ * which is unit by unit and slot by slot.
+ *
+ * Derived from which units are attached rather than from which slots came back,
+ * and every attached unit contributes all four of its positions. The slicer
+ * lists a unit's slots whether or not they hold anything, so counting only the
+ * slots that reported would shift every position after an empty one onto the
+ * wrong spool.
+ *
+ * AMS HT units are left out. They hold one spool each and where they sit in the
+ * slicer's list is not pinned down by any file observed so far, so including
+ * them would misplace every filament after the first one instead.
+ *
+ * @param {string[]} amsIds - slot labels as `convertAMSandSlot` produces them
+ * @returns {string[]} the addressable positions, ordered
+ */
+export function orderedAmsSlots(amsIds) {
+    const units = ["A", "B", "C", "D"];
+    const attached = units.filter(unit =>
+        (amsIds || []).some(id => typeof id === "string" && id[0] === unit && /^[0-3]$/.test(id[1])));
+
+    return attached.flatMap(unit => [0, 1, 2, 3].map(slot => `${unit}${slot}`));
 }
 
 /**
  * The key one sliced filament is accumulated under, and the entry it seeds.
  *
- * The slot wins where the slice names one, because two entries in different
- * slots then stay two entries. Under a colour key they were added together,
- * and the sum could no longer be split afterwards no matter how the spools
- * were identified: two identical black spools in two slots were one number
- * before anything looked at the AMS. Falls back to the filament identity for a
- * slot this service cannot address, which is where it always was.
+ * The position in the slicer's filament list, which is one slot, so two
+ * filaments never merge. They used to be accumulated under their identity, and
+ * two identical black spools in two slots were therefore one number before
+ * anything looked at the AMS; the sum could not be split afterwards however the
+ * spools were identified. Keeping them apart costs nothing where the printer
+ * cannot tell them apart either: both then match the same spool and book
+ * separately, which adds up to the same total.
+ *
+ * The key is deliberately not the slot label. Which slot a position is depends
+ * on the printer the print is booked against, and that is not known here.
  */
 function consumptionEntry(f) {
     return {
-        key: f.amsId || consumptionKey(f.tray_info_idx, f.color, f.colors),
+        key: `filament${f.index}`,
         entry: {
+            index: f.index,
             tray_info_idx: f.tray_info_idx,
             color: f.color,
             colors: f.colors || null,
             type: f.type,
-            amsId: f.amsId || null,
+            // Filled in by resolveSliceSlots, which needs the printer this is
+            // going to be matched against and is therefore not known here.
+            amsId: null,
             grams: 0,
         },
     };
 }
 
 /**
- * Calculates consumed grams per slot, or per filament identity where the slice
- * names no slot, for a complete print. Purge is already included in used_g
- * from the slicer.
+ * Calculates consumed grams per sliced filament for a complete print. Purge is
+ * already included in used_g from the slicer.
+ *
+ * Run the result through `resolveSliceSlots()` to name the slots before
+ * matching it against a printer.
  *
  * @param {object} sliceInfo - result of fetchSliceInfo
- * @returns {{ [key]: { tray_info_idx, color, colors, type, amsId, grams } }}
+ * @returns {{ [key]: { index, tray_info_idx, color, colors, type, amsId, grams } }}
  */
 export function calcFullConsumption(sliceInfo) {
     const result = {};
@@ -308,9 +349,6 @@ export function parseSliceInfo(xml, projectSettings = null) {
         filaments.push({
             id,                       // 1-based, may be non-contiguous
             index: id - 1,            // 0-based index used in layer_filament_list
-            // The slot this was sliced for, to be confirmed against what the
-            // slot really holds before anything is booked on it.
-            amsId: sliceSlotLabel(id),
             tray_info_idx: a.tray_info_idx || null,
             type: a.type || null,
             color: a.color || null,
