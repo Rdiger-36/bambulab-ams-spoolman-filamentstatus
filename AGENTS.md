@@ -32,7 +32,7 @@ matter for them are below.
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
 | `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
-| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), standalone `mqtt.js` probe, and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
+| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), the standalone `mqtt.js` probe, `capture-trays.js` (prints a printer's AMS tray records once and exits), and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
 
 ## Global invariants
@@ -168,6 +168,12 @@ Not punctuation, and therefore allowed:
   runs only the two mocks, for pointing a container at them. Stop it before
   running `npm test`: the suite expects nothing on 8883, and a broker answering
   there leaves the connection tests waiting for a report.
+- Against real hardware: `--real-printer <ip> <code> <serial>` replaces the mock
+  printer with a physical one and keeps the mock Spoolman, so a spool nobody
+  here owns can be seen as the printer really reports it without a write
+  reaching a Spoolman instance that matters. `node scripts/capture-trays.js
+  <ip> <code> <serial>` prints the tray records alone when only the payload is
+  in question.
 - There is no linter, formatter or type checker configured. Match the
   surrounding style: 4-space indent in `src/`, double quotes, semicolons.
 - Comments in this codebase explain why, usually pointing at the bug the line

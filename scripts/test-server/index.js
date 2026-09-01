@@ -27,9 +27,15 @@ import { AMS_UNITS } from "./scenario.js";
  * Usage:
  *   node scripts/test-server/index.js [--spoolman-port 7912] [--printer-port 8883]
  *                                     [--interval 3000] [--no-service]
+ *                                     [--real-printer <ip> <code> <serial>]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
+ *
+ * `--real-printer` skips the mock printer and points the service at a physical
+ * one, while Spoolman stays the mock. That is the way to see how a spool nobody
+ * here owns is really reported and really drawn, without a single write
+ * reaching a Spoolman instance that matters.
  *
  * This file runs outside the service, so `src/logger.js` and its three argument
  * console signature are not in play here. The plain console is correct.
@@ -47,6 +53,7 @@ function readOptions(argv) {
         printerPort: 8883,
         interval: 3000,
         service: true,
+        realPrinter: null,
     };
 
     for (let i = 0; i < argv.length; i++) {
@@ -56,6 +63,14 @@ function readOptions(argv) {
             case "--printer-port": options.printerPort = Number(value); i++; break;
             case "--interval": options.interval = Number(value); i++; break;
             case "--no-service": options.service = false; break;
+            case "--real-printer":
+                if (argv.length - i < 4) {
+                    console.error("--real-printer takes an ip, an access code and a serial number");
+                    process.exit(2);
+                }
+                options.realPrinter = { ip: argv[i + 1], code: argv[i + 2], serial: argv[i + 3] };
+                i += 3;
+                break;
             default:
                 console.error(`Unknown option: ${argv[i]}`);
                 process.exit(2);
@@ -95,17 +110,26 @@ async function main() {
         });
     });
 
-    const printer = await startMockPrinter({
-        serial: PRINTER_SERIAL,
-        port: options.printerPort,
-        interval: options.interval,
-        log: prefixed("printer"),
-    });
+    // A physical printer takes the mock's place entirely. Running both would
+    // mean two printers in the list reporting different things, and the point
+    // of the real one is to see what it alone reports.
+    let printer = null;
 
-    const scenario = describeScenario();
-    console.log(`[scenario] ${scenario.units} AMS units, ${scenario.slots} slots: ` +
-        `${scenario.multiColour} multi colour, ${scenario.singleColour} single colour, ` +
-        `${scenario.other} empty, being read or 3rd party`);
+    if (options.realPrinter) {
+        console.log(`[printer] using the real printer at ${options.realPrinter.ip}, the mock is not started`);
+    } else {
+        printer = await startMockPrinter({
+            serial: PRINTER_SERIAL,
+            port: options.printerPort,
+            interval: options.interval,
+            log: prefixed("printer"),
+        });
+
+        const scenario = describeScenario();
+        console.log(`[scenario] ${scenario.units} AMS units, ${scenario.slots} slots: ` +
+            `${scenario.multiColour} multi colour, ${scenario.singleColour} single colour, ` +
+            `${scenario.other} empty, being read or 3rd party`);
+    }
 
     let service = null;
     let dataDir = null;
@@ -124,9 +148,9 @@ async function main() {
                 DATA_DIR: dataDir,
                 LOG_DIR: path.join(dataDir, "logs"),
                 SPOOLMAN_ENDPOINT: `http://127.0.0.1:${options.spoolmanPort}`,
-                PRINTER_ID: PRINTER_SERIAL,
-                PRINTER_CODE,
-                PRINTER_IP: "127.0.0.1",
+                PRINTER_ID: options.realPrinter?.serial ?? PRINTER_SERIAL,
+                PRINTER_CODE: options.realPrinter?.code ?? PRINTER_CODE,
+                PRINTER_IP: options.realPrinter?.ip ?? "127.0.0.1",
                 // Manual, so that nothing is created in the mock Spoolman until
                 // a button is pressed and every slot keeps showing its state.
                 MODE: "manual",
@@ -151,6 +175,11 @@ async function main() {
             `with serial ${PRINTER_SERIAL} and access code ${PRINTER_CODE}`);
     }
 
+    if (options.realPrinter) {
+        console.log("[spoolman] every write below comes from the real printer, " +
+            "and none of them reaches a Spoolman instance that matters");
+    }
+
     let shuttingDown = false;
 
     async function shutdown(code) {
@@ -158,12 +187,12 @@ async function main() {
         shuttingDown = true;
 
         if (service && service.exitCode === null) service.kill("SIGTERM");
-        await printer.close();
+        if (printer) await printer.close();
         await new Promise(done => spoolman.close(() => done()));
 
         console.log(`[spoolman] ${store.writes.length} write(s) received:`);
         for (const write of store.writes) console.log(`[spoolman]   ${write}`);
-        console.log(`[printer] published ${printer.reports()} report(s)`);
+        if (printer) console.log(`[printer] published ${printer.reports()} report(s)`);
         if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
 
         process.exit(code);
