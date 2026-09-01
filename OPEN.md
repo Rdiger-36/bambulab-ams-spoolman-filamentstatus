@@ -139,10 +139,14 @@ One `case` decides all four columns, so the image tags and the release cannot
 disagree: whatever does not move `:latest` is a pre-release.
 
 The release is written after the image push, not before, because a release
-pointing at an image that never built sends people to a pull that fails. Its
-body is the section of `CHANGELOG.md` for exactly that version, so a release
-without a changelog entry says so instead of inventing notes. A re-run for a
-tag that already has a release edits it rather than failing.
+pointing at an image that never built sends people to a pull that fails. A
+re-run for a tag that already has a release edits it rather than failing.
+
+Its body is every `CHANGELOG.md` section on that version line, newest first,
+not only the one for the exact tag: a prerelease is one step of a version, so
+`v1.3.0-dev.3` alone would show the documentation work and hide the G-code
+tracking that `1.3.0-dev.2` introduced, and the stable `v1.3.0` would hide all
+of it. A version with no section at all says so instead of inventing notes.
 
 Publishing from a branch is rejected outright, so the "Run workflow" button can
 no longer overwrite `:latest` with whatever is on `main`.
