@@ -21,14 +21,6 @@ theory or in tests. Ordered by how likely a user is to hit it.
   0.38 g that was booked. A finished print, as opposed to a cancelled one, has
   still not been observed, and neither has a booking onto the external spool
   holder, which needs a run past layer 170.
-- [ ] **The claim on a slot the printer named**, the one part of
-  `matchConsumption()` (`src/ams.js`) that tests alone cover. A slot the printer
-  named for one filament is off limits to every other, which stops a second one
-  reaching it through the colour stage. The booking has now run on hardware, see
-  below, but every filament of that print carried a slot from `print.mapping`,
-  so no fallback stage ran at all. It needs a print where at least one filament
-  has no reported slot while another one does, and a look at whether the amount
-  lands once.
 - [ ] **An AMS HT.** Nobody involved has one, so where its slots sit in Bambu
   Studio's filament list is unknown and `orderedAmsSlots()` leaves them out. It
   only matters for a printer that does not report `print.mapping`, which answers
@@ -397,6 +389,26 @@ a different matter, see the note in the settings section above.
 ## Known gaps, by design
 
 Not tasks. Decisions and limits worth not relitigating.
+
+**The claim on a slot the printer named cannot be produced from Bambu Studio**,
+so `test/ams.slotmatch.test.js` owns it rather than a print. It stops a filament
+with no reported slot from reaching, through the colour stages, a slot
+`print.mapping` named for another one. That needs a mapping that is present and
+still leaves one filament with an amount unplaced, and the two ways
+`decodePrintMapping()` yields nothing both rule that out: `0xFFFF` is a filament
+the plate does not print, which `slice_info.config` does not list either
+(measured on a P2S, a four filament project printed a three filament plate and
+the file listed exactly the three), and an index beyond the mapping array does
+not occur, because the mapping covers the whole project list including gaps in
+the filament ids. A printer that sends no mapping at all leaves every filament
+unreported, so the claim set is empty and the confirmation against the slot
+decides, which is the path that was observed live.
+
+Worth keeping anyway: it is one line, and the shape of the payload is the
+printer's to change. The defect it was written for is structurally gone, since
+the server now decides per filament, and one filament resolves to one slot. It
+was the browser asking per slot which filament it might be that could answer
+twice.
 
 **Two spools identical in material and colour** cannot be told apart. The
 booking goes to the first match and logs a warning; assigning them manually is
