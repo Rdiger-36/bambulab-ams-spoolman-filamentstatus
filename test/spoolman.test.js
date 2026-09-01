@@ -130,12 +130,21 @@ test("both creation paths build the same spool", () => {
 });
 
 test("a slot reporting nothing left creates a spool with everything used", () => {
-    // processData clamps a missing or negative remain to 0, so this is also what
-    // a spool the AMS cannot estimate looks like
     const payload = buildSpoolPayload({ slot: { ...bambuSlot, remain: 0 } }, 7);
 
     assert.equal(payload.initial_weight, 1000);
     assert.equal(payload.used_weight, 1000);
+});
+
+test("a slot with no remain reading yet creates a full spool, not an empty one", () => {
+    // processData turns the AMS -1 into null, which lasts the 15 to 20 seconds
+    // between inserting a spool and the RFID percentage arriving. Creating in
+    // that window used to book the whole spool as used, and in G-code mode
+    // nothing patches the weight afterwards, so it stayed at 0 g left.
+    const payload = buildSpoolPayload({ slot: { ...bambuSlot, remain: null } }, 7);
+
+    assert.equal(payload.initial_weight, 1000);
+    assert.equal(payload.used_weight, 0);
 });
 
 test("the remain percentage is rescaled to the real spool size", () => {

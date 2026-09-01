@@ -89,6 +89,15 @@ reprocessing.
   next MQTT message in `extractComparableTrayData()`; normalise into a local
   (`correctRemainInt`) instead. Mutating it desyncs change detection forever for
   any spool whose `tray_weight != 1000`.
+- **A `remain` of `null` means "not reported", never "empty".** The AMS answers
+  `-1` for the 15 to 20 seconds between a spool going in and its RFID
+  percentage arriving, and forever for a chipless one. `processData()` turns
+  that into `null` and `correctRemainInt()` passes the `null` through, so every
+  caller has to decide for itself: create the spool full, skip the legacy PATCH,
+  skip the weight test when looking for a mergeable spool, render a dash. A `0`
+  is a reading and means the spool really is empty. Collapsing the two created
+  new spools at `used_weight = initial_weight`, and in G-code mode nothing
+  patches the weight afterwards, so they stayed at 0 g left.
 - **`state.lastSpoolData === null` means "not yet seeded".** `[]` is a legitimate
   value (empty Spoolman) and must stay comparable. Never re-seed on empty.
 - **An unidentified spool is not an empty slot.** `slotIsOccupied()` is the only

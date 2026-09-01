@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData } from "../src/ams.js";
+import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, processData } from "../src/ams.js";
 
 test("correctRemainInt passes through a full-size spool unchanged", () => {
     assert.equal(correctRemainInt(63, 1000, "PLA"), 63);
@@ -50,6 +50,36 @@ test("haveSpoolDataChanged ignores the order of the Spoolman response", async ()
 
 test("haveSpoolDataChanged detects a changed remaining weight", async () => {
     assert.equal(await haveSpoolDataChanged([spool(1, "AAA", 700)], [spool(1, "AAA", 800)]), true);
+});
+
+// The AMS reports remain -1 for the first 15 to 20 seconds after a spool goes
+// in, and permanently for a chipless one. Captured on a P2S: at 11:39:10 the
+// slot read `remain=-1 state=27 sub="PLA Matte"`, at 11:39:25 `remain=100`.
+test("processData keeps an unreported remain unknown instead of calling it empty", () => {
+    const [ams] = processData([{ id: "0", tray: [
+        { id: "0", state: 27, remain: -1, tray_type: "PLA", tray_sub_brands: "PLA Matte", tray_color: "FFFFFFFF", tray_weight: "1000", tray_uuid: "A5F4AA83" },
+        { id: "1", state: 11, remain: 0,  tray_type: "PLA", tray_sub_brands: "PLA Basic", tray_color: "000000FF", tray_weight: "1000", tray_uuid: "18F1DE9B" },
+    ] }]);
+
+    assert.equal(ams.tray[0].remain, null, "-1 means the AMS has not read it yet");
+    assert.equal(ams.tray[1].remain, 0, "a real 0 is a reading and has to survive");
+});
+
+test("processData does not write the normalised remain back onto the raw slot", () => {
+    // The raw value is what the next report is compared against.
+    const raw = { id: "0", state: 27, remain: -1, tray_color: "FFFFFFFF", tray_sub_brands: "PLA Matte", tray_weight: "1000", tray_uuid: "A5F4AA83" };
+    processData([{ id: "0", tray: [raw] }]);
+    assert.equal(raw.remain, -1);
+});
+
+test("correctRemainInt reports an unknown remain as null, never as 0", () => {
+    assert.equal(correctRemainInt(null, "1000", "PLA"), null);
+    assert.equal(correctRemainInt(undefined, "1000", "PLA"), null);
+    // A spool created from a null here was booked as fully used and came out
+    // at 0 g left, with nothing in G-code mode to correct it afterwards.
+    assert.equal(correctRemainInt(0, "1000", "PLA"), 0);
+    assert.equal(correctRemainInt(100, "1000", "PLA"), 100);
+    assert.equal(correctRemainInt(25, "250", "PLA"), 100);
 });
 
 // Real tray payloads captured from a P2S with two AMS 2 Pro units. A loaded

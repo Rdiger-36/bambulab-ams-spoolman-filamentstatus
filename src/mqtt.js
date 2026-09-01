@@ -559,6 +559,14 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                         break;
                     }
 
+                    // The whole mode rests on the percentage, so there is
+                    // nothing to patch until the AMS has read one. It arrives
+                    // within about 20 seconds of the spool going in.
+                    if (currRemain === null) {
+                        console.debug(printer.name, printer.logFilePath, " Remain not reported yet; skipping PATCH until the AMS has read it");
+                        break;
+                    }
+
                     const remainingWeight = Math.round((currRemain / 100) * slot.tray_weight);
                     const newLocation = settings.SET_LOCATION ? `${printer.name} - ${amsId}` : null;
 
@@ -601,7 +609,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
 
     if (!found) {
         console.debug(printer.name, printer.logFilePath, " Connected Spool not found, process with merging and creation logic");
-        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain}%) [[ ${slot.tray_uuid} ]]`);
+        console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain == null ? "remain unknown" : `${slot.remain}%`}) [[ ${slot.tray_uuid} ]]`);
 
         mergeableSpool = spools.length !== 0 ? findMergeableSpool(slot, spools) : null;
 
@@ -673,8 +681,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         }
     }
 
+    // Both stay null while the AMS has not reported a percentage yet, so the
+    // dashboard shows a dash instead of a confident "0 g".
     const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
-    const correctedWeight = Math.round((correctedRemain / 100) * slot.tray_weight);
+    const correctedWeight = correctedRemain === null
+        ? null
+        : Math.round((correctedRemain / 100) * slot.tray_weight);
 
     // A manual assignment wins over the automatic tag match: it is the only way
     // for the user to resolve two tagged spools that are identical in

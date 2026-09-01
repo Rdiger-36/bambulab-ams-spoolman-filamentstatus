@@ -16,6 +16,9 @@ let currentPrinterName = "";
 // suffix "-S") is measured relative to its actual spool size already.
 function correctRemainIntJS(remainOn1kgBasis, trayWeight, trayType) {
 	const remain = parseFloat(remainOn1kgBasis);
+	// Mirrors correctRemainInt in src/ams.js: the AMS reports no percentage for
+	// the first seconds after a spool goes in, and null must not become 0.
+	if (!Number.isFinite(remain)) return null;
 	const weight = parseFloat(trayWeight);
 	const isSupportMaterial = typeof trayType === "string" && trayType.endsWith("-S");
 
@@ -843,7 +846,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const tr = document.createElement("tr");
 	    tr.setAttribute("data-amsid", amsSpool.amsId);
 	
-	    let amsSpoolRemainingWeight = amsSpool.correctedWeight ?? ((amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
+	    let amsSpoolRemainingWeight = amsSpool.correctedWeight ?? (amsSpool.slot.remain == null
+	        ? null
+	        : (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
 	    let correctedRemain = amsSpool.correctedRemain ?? amsSpool.slot.remain;
 	    let totalWeight = amsSpool.slot.tray_weight;
 
@@ -865,7 +870,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    tr.innerHTML = `
 	        <td data-label="Spool" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
-	        <td data-label="Remaining">${amsSpoolRemainingWeight} g / ${totalWeight} g (${correctedRemain}%)</td>
+	        <td data-label="Remaining">${amsSpoolRemainingWeight == null ? "—" : `${amsSpoolRemainingWeight} g`} / ${totalWeight} g (${correctedRemain == null ? "—" : `${correctedRemain}%`})</td>
 	        <td data-label="Serialnumber">${amsSpool.slot.tray_uuid ?? "—"}</td>
 	        <td data-label="State">${setIcon(amsSpool.error, amsSpool.slotState)}</td>
 	    `;
@@ -1210,7 +1215,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 </table>
             `;
         } else if (button.textContent === "Merge Spool") {
-            let remain = (amsSpool.slot.remain / 100) * amsSpool.slot.tray_weight;
+            const remain = amsSpool.slot.remain == null
+                ? null
+                : (amsSpool.slot.remain / 100) * amsSpool.slot.tray_weight;
 
             return `
                 <p>Do you really want to merge this Spool with an existing Spool in Spoolman?</p>
@@ -1221,7 +1228,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </tr>
                     <tr>
                         <th>Spoolman Spool:</th>
-                        <td>Spool-ID ${amsSpool.mergeableSpool.id} - Bambu Lab - ${amsSpool.mergeableSpool.filament.material} - ${amsSpool.mergeableSpool.filament.name} - ${remain} g left on spool</td>
+                        <td>Spool-ID ${amsSpool.mergeableSpool.id} - Bambu Lab - ${amsSpool.mergeableSpool.filament.material} - ${amsSpool.mergeableSpool.filament.name} - ${remain == null ? "unknown" : `${remain} g`} left on spool</td>
                     </tr>
                 </table>
             `;

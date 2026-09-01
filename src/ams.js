@@ -8,8 +8,14 @@ import { toClientSpool } from "./uispool.js";
  *
  * Missing material, colour and uuid all become the literal "N/A", which is the
  * marker every later stage tests against. An all zero `tray_uuid` means the
- * printer read no RFID chip and is treated the same as a missing one. Negative
- * or missing `remain` is clamped to 0.
+ * printer read no RFID chip and is treated the same as a missing one.
+ *
+ * `remain` becomes null when the printer does not know it. The AMS reports -1
+ * for the first 15 to 20 seconds after a spool is inserted, while it has the
+ * RFID tag but not yet the remaining percentage, and a chipless spool reports
+ * -1 for good. That was clamped to 0, which is a real reading meaning "empty",
+ * so a spool created inside that window was booked as fully used and came out
+ * at 0 g left.
  *
  * PETG Translucent is a special case: it reports a fully transparent colour
  * that would render as invisible in the UI, so it is shown as white instead.
@@ -24,11 +30,14 @@ export function processData(amsData) {
             const isPetgTranslucent = slot.tray_sub_brands === "PETG Translucent" && slot.tray_color === "00000000";
             const updatedTrayColor = isPetgTranslucent ? "FFFFFF00" : (slot.tray_color ?? "N/A");
 
-            if (!slot.remain || slot.remain < 0) slot.remain = 0;
+            // Not written back onto `slot`: the raw value is what the next
+            // report is compared against, and mutating it here desyncs that.
+            const rawRemain = Number(slot.remain);
+            const remain = Number.isFinite(rawRemain) && rawRemain >= 0 ? rawRemain : null;
 
             return {
                 ...slot,
-                remain: slot.remain,
+                remain,
                 tray_color: updatedTrayColor,
                 tray_sub_brands: slot.tray_sub_brands === "" ? "N/A" : (slot.tray_sub_brands ?? "N/A"),
                 tray_weight: slot.tray_weight ?? 0,
@@ -101,10 +110,14 @@ export function extractComparableTrayData(amsArray) {
  * @param {number|string} remainOn1kgBasis - `remain` as reported by the AMS
  * @param {number|string} trayWeight - the spool's real filament weight in grams
  * @param {string|null} trayType - `tray_type`, needed to spot support material
- * @returns {number} remaining percentage of the real spool, rounded
+ * @returns {number|null} remaining percentage of the real spool, rounded, or
+ *   null when the printer reported no usable value
  */
 export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) {
     const remain = parseFloat(remainOn1kgBasis);
+    // Unknown in, unknown out. Every caller has to decide for itself what to do
+    // without a reading; none of them may treat it as 0.
+    if (!Number.isFinite(remain)) return null;
     const weight = parseFloat(trayWeight);
 
     // Support/accessory material (tray_type suffix "-S", e.g. "PLA-S") is sold
@@ -299,12 +312,16 @@ export function findMergeableSpool(amsSpool, allSpools) {
 
     return matchingSpools.find(spoolmanSpool => {
         const tag = (spoolmanSpool.extra?.tag || "").trim();
-        const spoolRemainingWeight = (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
-        const lowerTolerance = spoolRemainingWeight * 0.85;
-        const upperTolerance = spoolRemainingWeight * 1.15;
-        const weightMatches =
-            spoolmanSpool.remaining_weight >= lowerTolerance &&
-            spoolmanSpool.remaining_weight <= upperTolerance;
+        // Without a remain reading there is nothing to compare the weight
+        // against. Treating the missing value as 0 matched every spool that
+        // happened to be empty, so the test is skipped instead and the
+        // remaining criteria decide on their own.
+        const spoolRemainingWeight = amsSpool.remain == null
+            ? null
+            : (amsSpool.remain / 100) * spoolmanSpool.initial_weight;
+        const weightMatches = spoolRemainingWeight !== null &&
+            spoolmanSpool.remaining_weight >= spoolRemainingWeight * 0.85 &&
+            spoolmanSpool.remaining_weight <= spoolRemainingWeight * 1.15;
         const hasTag = tag && tag !== "" && tag !== '""';
 
         if (settings.NEVER_MERGE_IF_TAG && hasTag) return false;
