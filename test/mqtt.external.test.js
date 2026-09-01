@@ -61,14 +61,34 @@ test("older firmware reports the same thing as a single object", () => {
     assert.equal(unit.tray[0].tray_color, "9D432CFF");
 });
 
+// The same holder with the spool taken off, copied from a live report. Every
+// field is still there and only the three that name a material are empty.
+const emptyVirSlot = {
+    ...virSlot,
+    cols: ["FFFFFF00"],
+    nozzle_temp_max: "0",
+    nozzle_temp_min: "0",
+    tray_color: "FFFFFF00",
+    tray_info_idx: "",
+    tray_type: "",
+};
+
 test("a holder with nothing on it yields no unit", () => {
-    // What the printer reports for an empty holder has not been observed. An
-    // entry of empty strings would still carry its temperature fields into
-    // slotIsOccupied() and read as a loaded spool nobody can identify, so the
-    // row is left out until there is something in it.
+    // The whole record is reported either way, so the material is what tells
+    // the two apart. Without this the empty holder reaches slotIsOccupied()
+    // carrying its temperature fields and reads as a loaded spool nobody can
+    // identify.
+    assert.deepEqual(externalSpoolUnits({ vir_slot: [emptyVirSlot] }), []);
     assert.deepEqual(externalSpoolUnits({ vir_slot: [] }), []);
     assert.deepEqual(externalSpoolUnits({}), []);
-    assert.deepEqual(externalSpoolUnits({ vir_slot: [{ id: "255", tray_type: "", tray_info_idx: "", cols: [] }] }), []);
+});
+
+test("the colour of an empty holder is not evidence of a spool", () => {
+    // It reports fully transparent white, which is the printer saying there is
+    // nothing rather than that the filament is clear. Reading it as a colour
+    // put an invisible swatch on a row for a spool that was not there.
+    assert.deepEqual(emptyVirSlot.cols, ["FFFFFF00"]);
+    assert.deepEqual(externalSpoolUnits({ vir_slot: [{ ...emptyVirSlot, cols: ["FFFFFF00"] }] }), []);
 });
 
 test("a holder is one filament, never part of a four slot unit", () => {

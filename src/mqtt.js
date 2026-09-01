@@ -163,11 +163,16 @@ function materialKey(type, color) {
  * `vt_tray` is the same thing on older firmware, a single object rather than an
  * array. The P2S measured here no longer sends the key at all.
  *
- * Only emitted for a holder that actually carries something. What the printer
- * reports for an empty holder has not been observed, and an entry full of empty
- * strings would reach `slotIsOccupied()` carrying its temperature fields and
- * read as a loaded spool nobody can identify. Leaving the row out until there
- * is something in it is the answer that cannot be wrong in the meantime.
+ * Only emitted for a holder that actually carries something. An empty holder is
+ * still reported, and reported in full: measured on a P2S with nothing on it,
+ * every field is there and only the three that name a material are empty. The
+ * whole record would otherwise reach `slotIsOccupied()` carrying its
+ * temperature fields and read as a loaded spool nobody can identify.
+ *
+ * The material is the test and the colour is not. An empty holder reports
+ * `cols` as `["FFFFFF00"]`, fully transparent, which is the printer saying
+ * there is nothing rather than that the filament is clear. Reading that as a
+ * colour put an invisible swatch on a row for a spool that was not there.
  *
  * @param {object} print - `data.print` from an MQTT report
  * @returns {object[]} zero or one unit, shaped like an entry of `print.ams.ams`
@@ -177,8 +182,7 @@ export function externalSpoolUnits(print) {
         ? print.vir_slot
         : (print?.vt_tray ? [print.vt_tray] : []);
 
-    const loaded = reported.filter(tray =>
-        tray && (tray.tray_type || tray.tray_info_idx || tray.cols?.length));
+    const loaded = reported.filter(tray => tray && (tray.tray_type || tray.tray_info_idx));
 
     if (!loaded.length) return [];
     return [{ id: String(EXTERNAL_SPOOL_ID), tray: loaded }];
