@@ -171,7 +171,10 @@ Not punctuation, and therefore allowed:
 - Against real hardware: `--real-printer <ip> <code> <serial>` replaces the mock
   printer with a physical one and keeps the mock Spoolman, so a spool nobody
   here owns can be seen as the printer really reports it without a write
-  reaching a Spoolman instance that matters. `node scripts/capture-trays.js
+  reaching a Spoolman instance that matters. Add `--mode automatic` to exercise
+  the write paths: pointed at a real printer it seeds the mock with that
+  printer's own spools, tags and all, which is what makes a real print bookable
+  against a Spoolman nobody has to care about. `node scripts/capture-trays.js
   <ip> <code> <serial>` prints the tray records alone when only the payload is
   in question.
 - There is no linter, formatter or type checker configured. Match the

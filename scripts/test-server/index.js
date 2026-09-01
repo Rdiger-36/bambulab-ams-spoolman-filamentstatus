@@ -28,6 +28,7 @@ import { AMS_UNITS } from "./scenario.js";
  *   node scripts/test-server/index.js [--spoolman-port 7912] [--printer-port 8883]
  *                                     [--interval 3000] [--no-service]
  *                                     [--real-printer <ip> <code> <serial>]
+ *                                     [--mode manual|automatic]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
@@ -36,6 +37,11 @@ import { AMS_UNITS } from "./scenario.js";
  * one, while Spoolman stays the mock. That is the way to see how a spool nobody
  * here owns is really reported and really drawn, without a single write
  * reaching a Spoolman instance that matters.
+ *
+ * `--mode automatic` lets the service create and merge in the mock Spoolman
+ * without waiting for a button. Pointed at a real printer it seeds the mock
+ * with that printer's actual spools, tags and all, which is what makes a real
+ * print bookable against a Spoolman nobody has to care about.
  *
  * This file runs outside the service, so `src/logger.js` and its three argument
  * console signature are not in play here. The plain console is correct.
@@ -54,6 +60,7 @@ function readOptions(argv) {
         interval: 3000,
         service: true,
         realPrinter: null,
+        mode: "manual",
     };
 
     for (let i = 0; i < argv.length; i++) {
@@ -63,6 +70,14 @@ function readOptions(argv) {
             case "--printer-port": options.printerPort = Number(value); i++; break;
             case "--interval": options.interval = Number(value); i++; break;
             case "--no-service": options.service = false; break;
+            case "--mode":
+                if (value !== "manual" && value !== "automatic") {
+                    console.error("--mode takes manual or automatic");
+                    process.exit(2);
+                }
+                options.mode = value;
+                i++;
+                break;
             case "--real-printer":
                 if (argv.length - i < 4) {
                     console.error("--real-printer takes an ip, an access code and a serial number");
@@ -151,9 +166,11 @@ async function main() {
                 PRINTER_ID: options.realPrinter?.serial ?? PRINTER_SERIAL,
                 PRINTER_CODE: options.realPrinter?.code ?? PRINTER_CODE,
                 PRINTER_IP: options.realPrinter?.ip ?? "127.0.0.1",
-                // Manual, so that nothing is created in the mock Spoolman until
-                // a button is pressed and every slot keeps showing its state.
-                MODE: "manual",
+                // Manual by default, so that nothing is created in the mock
+                // Spoolman until a button is pressed and every slot keeps
+                // showing its state. Automatic is for exercising the write
+                // paths, which no unit test reaches.
+                MODE: options.mode,
                 // The default of two minutes would mean one processed report per
                 // run. This is a scenario nobody is waiting on.
                 UPDATE_INTERVAL: "5000",
