@@ -21,15 +21,14 @@ theory or in tests. Ordered by how likely a user is to hit it.
   0.38 g that was booked. A finished print, as opposed to a cancelled one, has
   still not been observed, and neither has a booking onto the external spool
   holder, which needs a run past layer 170.
-- [ ] **A print running from remapped slots, after the matching moved.** The
-  decision which sliced filament comes out of which slot is one function now,
-  `matchConsumption()` in `src/ams.js`, shared by the booking and by
-  `/api/print`. What it does to a print the printer remapped is covered by tests
-  alone: the slot the printer named is off limits to every other filament, where
-  the booking could still reach it through the colour stage. It needs a print
-  started with a different spool selected than the one that was sliced, and a
-  look at whether the amount lands once, on the slot that was consumed. The
-  match itself has run against the printer, see below.
+- [ ] **The claim on a slot the printer named**, the one part of
+  `matchConsumption()` (`src/ams.js`) that tests alone cover. A slot the printer
+  named for one filament is off limits to every other, which stops a second one
+  reaching it through the colour stage. The booking has now run on hardware, see
+  below, but every filament of that print carried a slot from `print.mapping`,
+  so no fallback stage ran at all. It needs a print where at least one filament
+  has no reported slot while another one does, and a look at whether the amount
+  lands once.
 - [ ] **An AMS HT.** Nobody involved has one, so where its slots sit in Bambu
   Studio's filament list is unknown and `orderedAmsSlots()` leaves them out. It
   only matters for a printer that does not report `print.mapping`, which answers
@@ -119,8 +118,22 @@ at that moment:
   what the dashboard lists as required but not loaded.
 - No slot was claimed twice.
 
-Still unobserved on hardware: a booking on a terminal state through the new
-path, and a print the printer remapped.
+A print was then started and cancelled on the same printer, with the spools of
+that job in the test Spoolman, which closes the booking question:
+
+- The printer reported its slots as `["B1","A0",null,"External"]` and all three
+  filaments were booked against that, the external holder included. Its filament
+  sits at index 3 while index 2 is the unused one, so the sparse position
+  counted through correctly.
+- Cancelled on layer 0, so only one filament had an amount: `Booked 0.1g for
+  spool 16 (A0, GFA01 PLA #FFFFFF)`. Spoolman went from 999.8 g to 999.7 g on
+  that spool and left the other two untouched, which is the zero gram entries
+  being skipped rather than written as zero.
+- Two of the three ran from a slot holding a different colour than the sliced
+  one, and the booking followed the printer rather than the colour. That is the
+  substitution the field exists to report.
+- Every filament of that print had a slot from `print.mapping`, so no fallback
+  stage ran and the claim above was not part of this.
 
 Also seen: both 3rd party spools report `tray_info_idx` `GFL99`, the generic
 profile, which is exactly the collision described under the automatic creation
