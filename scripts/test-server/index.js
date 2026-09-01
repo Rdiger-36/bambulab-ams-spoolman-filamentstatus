@@ -80,7 +80,7 @@ function readOptions(argv) {
             case "--no-service": options.service = false; break;
             case "--spoolman":
                 if (!value || !/^https?:\/\//.test(value)) {
-                    console.error("--spoolman takes a base URL, for example http://192.168.1.9:30010");
+                    console.error("--spoolman takes a base URL, for example http://spoolman.example:7912");
                     process.exit(2);
                 }
                 options.spoolman = value.replace(/\/+$/, "");
