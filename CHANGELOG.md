@@ -1,4 +1,15 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0-dev.3
+   - Documentation:
+      - The README is rebuilt around G-code tracking, which is the default since 1.3.0
+         - Legacy mode has a section of its own and points at the README of v1.2.1 for the behaviour, the Web UI and the configuration it describes
+         - The environment variable table and the printers.json format are gone. Both still work, but a variable only seeds a setting that has never been saved, so "Deprecated configuration" says that and links the old README for the full list
+         - The three container level variables that have no field in the Web UI (TZ, DATA_DIR/LOG_DIR, SUPERVISOR) are listed separately, because they are not deprecated
+         - Fixed what no longer matched the code: the log example was legacy output, the state legend belonged to the classic AMS table that G-code mode replaces, tray_info_idx was wrong in the examples, and the Node badge said 18 while package.json requires 22
+         - Added what booking per print rather than per AMS report implies: a slot needs a link before anything is booked, nothing is written to Spoolman while the print runs, and without FTPS access nothing is booked at all
+      - New screenshots taken from 1.3.0, stored in docs/images next to the text instead of as uploaded attachments
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.2
    - New Features:
       - Filament consumption is now tracked from the sliced G-code instead of the AMS RFID remain percentage

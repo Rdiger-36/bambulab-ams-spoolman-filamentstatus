@@ -121,7 +121,7 @@ None of this involved real hardware, so it says nothing about the items above.
 ## Before the next official release
 
 The version deliberately stays on a `-dev` prerelease for now, currently
-`1.3.0-dev.2`.
+`1.3.0-dev.3`.
 
 - [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
   The publish workflow compares the tag against `package.json` and aborts on a
@@ -132,7 +132,7 @@ Tag behaviour, after the hardening in `c053561`:
 | Tag | Images | `:latest` |
 |---|---|---|
 | `v1.3.0` | `:1.3.0` and `:latest` | moved |
-| `v1.3.0-dev`, `v1.3.0-dev.2` | `:<version>` and `:dev` | untouched |
+| `v1.3.0-dev`, `v1.3.0-dev.2`, `v1.3.0-dev.3` | `:<version>` and `:dev` | untouched |
 | `v1.3.0-rc1` and other suffixes | `:<version>` only | untouched |
 
 Publishing from a branch is rejected outright, so the "Run workflow" button can
