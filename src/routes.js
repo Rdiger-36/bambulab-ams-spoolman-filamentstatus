@@ -284,8 +284,13 @@ export function registerRoutes(app, printers) {
         printer.monitoringEnabled = enabled;
 
         if (enabled) {
-            // Always restart MQTT immediately, regardless of MAX_RETRIES setting
+            // Always restart MQTT immediately, regardless of MAX_RETRIES setting.
+            // The cooldown in setupMqtt guards against retry storms, not against
+            // a deliberate reconnect, so clear it here as the printer edit does.
+            // Without this, resuming shortly after another reconnect did nothing
+            // and the printer only came back on the next monitor pass.
             printer.reconnectAttempts = 0;
+            printer.lastReconnectAttempt = 0;
             printer.mqttRunning = false;
             printer.mqttStatus = "Reconnecting";
             console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}, restarting MQTT...`);
@@ -361,6 +366,9 @@ export function registerRoutes(app, printers) {
             }
             printer.mqttRunning = false;
             printer.reconnectAttempts = 0;
+            // The cooldown in setupMqtt guards against retry storms, not against
+            // a deliberate reconnect, so clear it here.
+            printer.lastReconnectAttempt = 0;
             printer.mqttStatus = "Reconnecting";
             reconnected.push(printer.id);
             setupMqtt(printer);

@@ -25,9 +25,6 @@ theory or in tests. Ordered by how likely a user is to hit it.
   legacy mode limitation.
 - [ ] **A second printer.** Multiple AMS units on one printer work (A0 to A3 and
   B0 to B3 were addressed correctly). Two printers at once was never run.
-- [ ] **Reconnect and the global monitoring pause against real MQTT.** Both were
-  only seen against a printer that never connects, so the interesting half, an
-  established connection being torn down and rebuilt, has never run.
 - [ ] **The update check with a newer release.** Only the prerelease path was
   observed, where the running version is ahead of the latest release. The
   "version X is available" path has never been rendered against a real answer.
@@ -64,6 +61,17 @@ the access code and the Spoolman host name were all gone, in the log text, in
 `printers.json`, in the keys of `mappings.json` and in the log file name. The
 printer name, the spool names and the `tray_uuid` values were kept, which is
 what the design says they should be.
+
+Reconnect and the global monitoring pause were exercised against the same live
+connection. The reconnect tears the session down and is back within a second.
+Pausing disconnects immediately, and a second pause reports that it changed
+nothing rather than claiming success.
+
+That run also surfaced the cooldown defect described below, and one cosmetic
+oddity that was left alone: closing the connection logs "will retry within 20
+second(s) via the monitor loop" even when the reconnect has already been started,
+so the line appears just above the successful reconnect and reads as if nothing
+had happened yet.
 
 It also found a real defect, now fixed: the fallback pattern for a serial that
 is no longer in the printer list required a leading zero, matching the P1S
@@ -272,6 +280,15 @@ access code can appear inside a fifteen character Bambu serial; masking the code
 first cuts the serial into pieces that the serial pass no longer recognises, and
 the address in the same line then leaks in a different shape. `test/anonymize.test.js`
 holds the ordering.
+
+**An explicit reconnect clears the retry cooldown, the monitor loop does not.**
+`setupMqtt()` ignores a call within 30 seconds of the last attempt, which is what
+stops the monitor loop from hammering a printer that is off. A button the user
+pressed is not the monitor loop: resuming monitoring shortly after a reconnect
+did nothing at all and the printer only came back on the next monitor pass, up
+to half a minute later. The printer edit route already cleared the cooldown for
+exactly this reason; the monitoring and reconnect routes now do the same.
+`test/diagnostics.test.js` holds it, and both tests fail without the fix.
 
 **The deprecation of environment configuration is state driven, not version
 driven.** Nothing records which version an installation came from, and it would

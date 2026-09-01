@@ -117,8 +117,42 @@ test("an unknown monitoring action is refused", async () => {
     assert.equal(status, 404);
 });
 
+test("an explicit reconnect is not swallowed by the retry cooldown", async () => {
+    // setupMqtt ignores a call within 30 seconds of the last attempt, which is
+    // there so the monitor loop cannot hammer a printer. A button the user
+    // pressed is not the monitor loop: pressing reconnect twice in a row used to
+    // do nothing the second time, and the printer only came back on the next
+    // monitor pass, up to half a minute later.
+    const { printers } = await import("../src/printers.js");
+    const printer = printers[0];
+
+    await call(`${app.url}/api/monitoring/start`, "POST", {});
+
+    const blocked = Date.now();
+    printer.lastReconnectAttempt = blocked;
+    await call(`${app.url}/api/printers/reconnect`, "POST", {});
+
+    // setupMqtt stamps the field again when it actually runs, so an unchanged
+    // value is exactly what the cooldown having won looks like.
+    assert.notEqual(printer.lastReconnectAttempt, blocked);
+});
+
+test("resuming monitoring is not swallowed by it either", async () => {
+    const { printers } = await import("../src/printers.js");
+    const printer = printers[0];
+
+    await call(`${app.url}/api/monitoring/stop`, "POST", {});
+
+    const blocked = Date.now();
+    printer.lastReconnectAttempt = blocked;
+    await call(`${app.url}/api/monitoring/start`, "POST", {});
+
+    assert.notEqual(printer.lastReconnectAttempt, blocked);
+});
+
 test("a reconnect skips the printers whose monitoring is off", async () => {
-    // Left disabled by the test above, so nothing should be reconnected
+    await call(`${app.url}/api/monitoring/stop`, "POST", {});
+
     const { status, body } = await call(`${app.url}/api/printers/reconnect`, "POST", {});
 
     assert.equal(status, 200);
