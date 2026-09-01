@@ -5,7 +5,7 @@ import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, convertAMSandSlot } from "./utils.js";
+import { sleep, formatDate, formatInterval, convertAMSandSlot, slotColors } from "./utils.js";
 import {
     getSpoolmanSpools,
     getSpoolmanInternalFilaments,
@@ -149,6 +149,37 @@ function materialKey(type, color) {
 }
 
 /**
+ * Whether a slot really holds what the slice expected in it.
+ *
+ * The gate on stage 0. A slot label out of the sliced file is where the slicer
+ * meant a filament to come from, and the printer is free to have decided
+ * otherwise, so it counts only when the profile and the colours agree with what
+ * the AMS reports for that slot right now.
+ *
+ * Colours are compared as sorted sets, not as the single first colour: Bambu
+ * Studio and the RFID chip do not have to agree on which colour of a set comes
+ * first, and a comparison that depended on that would reject the very spools
+ * this is for. A side that reports one colour is compared as one colour, so an
+ * older slicer, which carries no colour set at all, simply does not confirm and
+ * the later stages take over.
+ *
+ * Exported for tests; bookConsumption is the only caller.
+ *
+ * @param {object} candidate - a bookable slot
+ * @param {object} info - one entry of the consumption map
+ * @returns {boolean}
+ */
+export function slotConfirmsSlice(candidate, info) {
+    if (!candidate.idx || candidate.idx !== info.tray_info_idx) return false;
+
+    const sliceColors = (info.colors?.length ? info.colors : [info.color]).map(normColor).filter(Boolean);
+    const slotColorSet = candidate.colors.map(normColor).filter(Boolean);
+    if (!sliceColors.length || !slotColorSet.length) return false;
+
+    return JSON.stringify([...sliceColors].sort()) === JSON.stringify([...slotColorSet].sort());
+}
+
+/**
  * Books the consumed grams in Spoolman for each filament of a finished print.
  *
  * A slot is only booked when we actually know which physical spool sits in it:
@@ -156,12 +187,25 @@ function materialKey(type, color) {
  * spools only) or through a manual assignment made in the UI. Filament
  * candidates that merely match by type are never touched.
  *
- * Slots are matched to slice filaments in three stages, most specific first:
- *   1. tray_info_idx + color: exact material profile, separates e.g. PLA Black
- *                             from PLA Jade White despite a shared profile
+ * Slots are matched to slice filaments in four stages, most specific first:
+ *   0. the slot the slice names, confirmed: the position of a filament in the
+ *      slicer's list is the AMS slot it was sliced for, and this takes it only
+ *      when that slot really holds the profile and the colours the slice
+ *      expects. It is the one stage that can tell two identical spools apart,
+ *      because nothing else can: they differ in nothing but where they sit
+ *   1. tray_info_idx + colours: the filament identity, which separates e.g.
+ *      PLA Black from PLA Jade White despite a shared profile, and a gradient
+ *      spool from the plain spool it shares both a profile and a first colour
+ *      with
  *   2. material type + color: for 3rd-party spools, which report no usable
  *                             tray_info_idx
  *   3. tray_info_idx alone:   colors did not line up but the profile is unique
+ *
+ * Stage 0 is deliberately a confirmation rather than a conclusion. The printer
+ * can remap slots when a job is sent and the sliced file is written before
+ * that, so an unconfirmed slot would book a real amount onto a real spool that
+ * the print never touched, silently. When it does not confirm, the stages below
+ * decide exactly as they did before it existed.
  *
  * Within a stage, manually assigned spools win over tag-connected ones: an
  * assignment is the user explicitly resolving what the automatic match cannot,
@@ -182,12 +226,14 @@ async function bookConsumption(printer, consumption) {
         if (!id) continue;
 
         const idx = uiSpool.slot?.tray_info_idx || null;
+        const colors = slotColors(uiSpool.slot);
         candidates.push({
             id,
             amsId:  uiSpool.amsId,
             mapped,
             idx,
-            key:    idx ? consumptionKey(idx, uiSpool.slot?.tray_color) : null,
+            colors,
+            key:    idx ? consumptionKey(idx, uiSpool.slot?.tray_color, colors) : null,
             matKey: materialKey(uiSpool.slot?.tray_type, uiSpool.slot?.tray_color),
         });
     }
@@ -203,11 +249,12 @@ async function bookConsumption(printer, consumption) {
         const { tray_info_idx: idx, color, type, grams } = info;
         if (grams <= 0) continue;
 
-        const wantedKey    = consumptionKey(idx, color);
+        const wantedKey    = consumptionKey(idx, color, info.colors);
         const wantedMatKey = materialKey(type, color);
 
         let matches = [];
         for (const predicate of [
+            c => info.amsId && c.amsId === info.amsId && slotConfirmsSlice(c, info),
             c => c.key === wantedKey,
             c => c.matKey === wantedMatKey,
             c => c.idx && c.idx === idx,
@@ -227,7 +274,17 @@ async function bookConsumption(printer, consumption) {
         if (mapped.length) matches = mapped;
 
         if (matches.length > 1) {
-            console.warn(printer.name, printer.logFilePath, `[Print] ${matches.length} spools are indistinguishable for ${idx} ${type} (${color}), booking the full ${grams}g to spool ${matches[0].id} (${matches[0].amsId}); assign the spools manually in the Web UI to split correctly`);
+            // console.error rather than console.warn: logger.js overrides log,
+            // error and debug, and a warn call lands on raw stdout with the two
+            // routing arguments printed as text, so the one line that admits to
+            // a guess never reached the log file it belongs in.
+            //
+            // Splitting is not on offer here, whatever is assigned. Two spools
+            // reach this point only when the sliced file could not separate
+            // them either, and their grams were added together before anything
+            // looked at the AMS. Assigning one of them decides which spool
+            // carries the total instead of leaving it to the slot order.
+            console.error(printer.name, printer.logFilePath, `[Print] ${matches.length} spools are indistinguishable for ${idx} ${type} (${color}), booking the full ${grams}g to spool ${matches[0].id} (${matches[0].amsId}); assign one of them in the Web UI to choose which spool carries it`);
         }
 
         const { id: spoolId } = matches[0];

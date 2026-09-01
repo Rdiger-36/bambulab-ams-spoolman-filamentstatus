@@ -11,6 +11,7 @@ import {
     calcPartialConsumption,
     normColor,
     consumptionKey,
+    sliceSlotLabel,
     bambuTlsOptions,
 } from "../src/gcode.js";
 
@@ -66,12 +67,15 @@ test("full consumption matches the total weight the slicer reported", () => {
     assert.equal(sum(calcFullConsumption(splitRanges)), 9.81);
 });
 
-test("two filaments sharing a profile are kept apart by colour", () => {
-    // Both 3rd party spools report the generic GFL99; without the colour in the
-    // key their consumption would be booked onto a single spool.
+test("two filaments sharing a profile are kept apart", () => {
+    // Both 3rd party spools report the generic GFL99, so nothing but where they
+    // sit separates them from each other. Filament ids 2 and 3 are the second
+    // and third entry of the slicer's list, which is A1 and A2.
     const full = calcFullConsumption(fourColours);
-    assert.equal(full["GFL99|0ACC38"].grams, 3.29);
-    assert.equal(full["GFL99|F98C36"].grams, 2.51);
+    assert.equal(full["A1"].grams, 3.29);
+    assert.equal(full["A2"].grams, 2.51);
+    assert.equal(full["A1"].tray_info_idx, "GFL99");
+    assert.equal(full["A2"].color, "#F98C36");
 });
 
 test("non-contiguous filament ids still index the right layer ranges", () => {
@@ -84,9 +88,11 @@ test("non-contiguous filament ids still index the right layer ranges", () => {
 
 test("a cancelled print books only the filaments that already ran", () => {
     // Layer 84 completed: the first filament is done, the second never started
+    // ids 1 and 6, so the first slot of the first AMS unit and the second of
+    // the next one. Both black, which is exactly the pair a colour key merged.
     const part = calcPartialConsumption(sparseIds, 84);
-    assert.equal(part["GFA00|000000"].grams, 7.76);
-    assert.equal(part["GFG02|000000"].grams, 0);
+    assert.equal(part["A0"].grams, 7.76);
+    assert.equal(part["B1"].grams, 0);
 });
 
 test("a filament that pauses and resumes is scaled over its own layers only", () => {
@@ -94,7 +100,7 @@ test("a filament that pauses and resumes is scaled over its own layers only", ()
     // them are done (14 + 14), which must not be confused with overall progress.
     assert.deepEqual(splitRanges.rangesByFilamentIdx[0], [[0, 13], [86, 127]]);
     const part = calcPartialConsumption(splitRanges, 99);
-    assert.equal(part["GFA00|000000"].grams, 2.15); // 4.29 * 0.5
+    assert.equal(part["A0"].grams, 2.15); // 4.29 * 0.5
 });
 
 test("partial consumption at the last layer equals the full print", () => {
@@ -106,7 +112,7 @@ test("partial consumption falls back to overall progress without layer data", ()
     const noRanges = { ...fourColours, rangesByFilamentIdx: {} };
     // 43 of 85 layers -> a bit over half of every filament
     const part = calcPartialConsumption(noRanges, 42);
-    assert.equal(part["GFA00|000000"].grams, 2.91); // 5.76 * 43/85
+    assert.equal(part["A0"].grams, 2.91); // 5.76 * 43/85
 });
 
 // The zip half of fetchSliceInfo has no coverage of its own, because the
@@ -189,4 +195,120 @@ test("the three multi colour filaments are still told apart", () => {
     const keys = multiColour.filaments.map(f => consumptionKey(f.tray_info_idx, f.color));
     assert.deepEqual(keys, ["GFA00|8EC9E9", "GFA05|0047BB", "GFA05|EC984C"]);
     assert.equal(new Set(keys).size, 3);
+});
+
+/* ---- The slot a filament was sliced for ---- */
+
+test("a filament id resolves to the AMS slot it was sliced for", () => {
+    // Verified against a real print: on a P2S with two AMS units, the ids 5, 7
+    // and 8 of the multi_colour fixture were the slots B0, B2 and B3.
+    assert.equal(sliceSlotLabel(1), "A0");
+    assert.equal(sliceSlotLabel(5), "B0");
+    assert.equal(sliceSlotLabel(7), "B2");
+    assert.equal(sliceSlotLabel(8), "B3");
+    assert.equal(sliceSlotLabel(16), "D3");
+});
+
+test("a filament id beyond the four slot units resolves to nothing", () => {
+    // An AMS HT, an external spool holder or a second extruder sit somewhere in
+    // the slicer's list that no observed file pins down. Guessing would book a
+    // real amount onto a real slot the print never touched.
+    assert.equal(sliceSlotLabel(17), null);
+    assert.equal(sliceSlotLabel(0), null);
+    assert.equal(sliceSlotLabel("nonsense"), null);
+});
+
+test("the real multi colour print resolves to the slots it was printed from", () => {
+    assert.deepEqual(multiColour.filaments.map(f => f.amsId), ["B0", "B2", "B3"]);
+});
+
+/* ---- The colour set out of project_settings.config ---- */
+
+// The sibling entry of the same archive, which is where the whole colour set
+// of a multi colour filament lives. Only the one key is read out of it.
+const multiColourSettings = JSON.stringify({
+    filament_colour: ["#F55A74", "#F98C36", "#FFFFFF", "#000000", "#8EC9E9", "#0ACC38", "#0047BB", "#EC984C"],
+    filament_multi_colour: [
+        "#F55A74", "#F98C36", "#FFFFFF", "#000000",
+        "#8EC9E9 #E7C1D5", "#0ACC38", "#0047BB #BB22A3", "#EC984C #6CD4BC #A66EB9 #D87694",
+    ],
+});
+
+test("the colour set is read for the filaments that have one", () => {
+    const info = parseSliceInfo(fixtureText("multi_colour"), multiColourSettings);
+    assert.deepEqual(info.filaments.map(f => f.colors), [
+        ["8EC9E9", "E7C1D5"],
+        ["0047BB", "BB22A3"],
+        ["EC984C", "6CD4BC", "A66EB9", "D87694"],
+    ]);
+});
+
+test("a single colour filament reports no set at all", () => {
+    // One colour is not a set, and treating it as one would put a redundant
+    // suffix on a key that has been stable since the first release.
+    const info = parseSliceInfo(fixtureText("four_colours"), multiColourSettings);
+    assert.deepEqual(info.filaments.map(f => f.colors), [null, null, null, null]);
+});
+
+test("a slicer that writes no project settings simply carries no set", () => {
+    const info = parseSliceInfo(fixtureText("multi_colour"), null);
+    assert.deepEqual(info.filaments.map(f => f.colors), [null, null, null]);
+    // The slot is read out of the filament list, so it survives either way
+    assert.deepEqual(info.filaments.map(f => f.amsId), ["B0", "B2", "B3"]);
+});
+
+/* ---- What the extended key and the slot key fix ---- */
+
+test("the colour set separates a gradient from the plain spool it hides behind", () => {
+    // Arctic Whisper, Solar Breeze and an ordinary white PLA Basic all report
+    // GFA00 and a first colour of FFFFFF, so all three were one key.
+    const arctic = consumptionKey("GFA00", "#FFFFFF", ["FFFFFF", "9CDBD9"]);
+    const solar  = consumptionKey("GFA00", "#FFFFFF", ["FFFFFF", "E94B3C"]);
+    const plain  = consumptionKey("GFA00", "#FFFFFF");
+
+    assert.equal(new Set([arctic, solar, plain]).size, 3);
+    // The plain spool keeps exactly the key it had before the set existed
+    assert.equal(plain, "GFA00|FFFFFF");
+});
+
+test("the colour set is compared sorted, because the sources disagree on order", () => {
+    // Bambu Studio writes Cotton Candy Cloud as "#8EC9E9 #E7C1D5" and SpoolmanDB
+    // stores it the other way round. Comparing unsorted would match nothing.
+    assert.equal(
+        consumptionKey("GFA00", "#8EC9E9", ["8EC9E9", "E7C1D5"]),
+        consumptionKey("GFA00", "#8EC9E9", ["e7c1d5", "8ec9e9"]),
+    );
+});
+
+test("two identical spools in different slots are no longer added together", () => {
+    // The defect this whole change is about. Both entries are the same profile
+    // and the same colour, so a key built from the filament identity merged
+    // them into one number before anything looked at the AMS, and the sum could
+    // not be split afterwards however the spools were identified.
+    const twoBlacks = {
+        filaments: [
+            { id: 1, index: 0, amsId: sliceSlotLabel(1), tray_info_idx: "GFA00", type: "PLA", color: "#000000", colors: null, used_g: 120 },
+            { id: 2, index: 1, amsId: sliceSlotLabel(2), tray_info_idx: "GFA00", type: "PLA", color: "#000000", colors: null, used_g: 45 },
+        ],
+        totalLayers: 100,
+        rangesByFilamentIdx: {},
+    };
+
+    const full = calcFullConsumption(twoBlacks);
+    assert.equal(full["A0"].grams, 120);
+    assert.equal(full["A1"].grams, 45);
+});
+
+test("a filament with no addressable slot still falls back to its identity", () => {
+    const beyondTheUnits = {
+        filaments: [
+            { id: 17, index: 16, amsId: sliceSlotLabel(17), tray_info_idx: "GFA00", type: "PLA", color: "#000000", colors: null, used_g: 30 },
+        ],
+        totalLayers: 100,
+        rangesByFilamentIdx: {},
+    };
+
+    const full = calcFullConsumption(beyondTheUnits);
+    assert.equal(full["GFA00|000000"].grams, 30);
+    assert.equal(full["GFA00|000000"].amsId, null);
 });

@@ -148,6 +148,29 @@ build their Spoolman payload from.
   `connectedViaTag` (Spoolman `extra.tag` == the slot's `tray_uuid`) or
   `connectedViaMapping` (explicit user assignment). Type/colour similarity alone
   never books.
+- **The sliced file names the slot, and that beats every colour comparison.**
+  The position of a filament in Bambu Studio's list is the AMS slot it was
+  sliced for, so `sliceSlotLabel()` turns `<filament id="5">` into `B0`,
+  verified against a real print on a P2S with two AMS units. It is the only
+  thing that separates two spools identical in profile and colour, and
+  `calcFullConsumption()` therefore keys by it: two entries in two slots stay
+  two entries, where a colour key added them together before anything looked at
+  the AMS and the sum could not be split afterwards. It is always a suggestion:
+  the printer can remap slots when a job is sent and the file is written before
+  that, so `slotConfirmsSlice()` gates it on the slot really holding that
+  profile and those colours, and everything unconfirmed falls through to the
+  stages that existed before. Only the four slot units are addressed; an AMS HT
+  or an external spool holder sits somewhere in that list that no observed file
+  pins down, so `sliceSlotLabel()` refuses rather than guesses.
+- **`consumptionKey()` carries the colour set, and `slotFingerprint()` too.**
+  A gradient spool is not a profile of its own: Bambu Studio slices PLA Basic
+  Gradient as `GFA00`, the same as plain PLA Basic, and `tray_color` is only its
+  first colour. Arctic Whisper, Solar Breeze and an ordinary white PLA Basic
+  were one key and one fingerprint. The set is sorted in both, because the
+  sources disagree on order (Studio writes Cotton Candy Cloud as
+  `#8EC9E9 #E7C1D5`, SpoolmanDB stores it the other way round) and an unsorted
+  comparison matches nothing rather than the wrong thing. A single colour
+  produces the string it always did, so nothing on disk needs migrating.
 - **A mapping carries a fingerprint** (`tray_type|colour`). When it stops
   matching, the assignment is dropped rather than booked onto the wrong spool.
 - **`mappings.json` is written temp-file-then-rename**, so a crash mid-write

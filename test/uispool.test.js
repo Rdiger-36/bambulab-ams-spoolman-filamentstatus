@@ -205,7 +205,9 @@ test("a multi colour slot carries its whole colour set to the client", () => {
     // Still sent, because the consumption key and the mapping fingerprint are
     // built from it on both sides and have to keep agreeing.
     assert.equal(client.slot.tray_color, "FF9425FF");
-    assert.equal(client.key, "GFA05|FF9425");
+    // The whole set is in the key, so this slot is no longer indistinguishable
+    // from a plain orange PLA Silk on the same profile.
+    assert.equal(client.key, "GFA05|FF9425|FCA2BF+FF9425");
 });
 
 test("a slot without cols still reports the one colour the printer sends", () => {

@@ -237,7 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const keyCount = {};
 	    for (const s of spools) {
 	        if (s.slotState === "Empty") continue;
-	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color);
+	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols);
 	        keyCount[key] = (keyCount[key] || 0) + 1;
 	    }
 	    const ctx = { keyCount };
@@ -875,9 +875,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    // A manual assignment resolves the ambiguity for this slot, so the warning
 	    // only applies while the slot still relies on the automatic match.
-	    const key = consumptionKeyJS(slot.tray_info_idx, slot.tray_color);
+	    const key = consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols);
 	    const ambiguous = (!isEmpty && !amsSpool.connectedViaMapping && ctx?.keyCount && ctx.keyCount[key] > 1)
-	        ? ` <span class="gc-warn" title="Another loaded spool is identical (same type AND color), consumption cannot be split automatically; assign the spools manually to split correctly">⚠</span>`
+	        ? ` <span class="gc-warn" title="Another loaded spool is identical in profile and colour. Consumption is still split correctly whenever the sliced file names the slot each filament was meant for. Where it does not, the whole amount goes to one of them; assign one to choose which.">⚠</span>`
 	        : "";
 
 	    return `
@@ -976,8 +976,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return String(color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 	}
 
-	function consumptionKeyJS(idx, color) {
-	    return `${idx || "?"}|${normColorJS(color)}`;
+	// Mirrors consumptionKey in src/gcode.js, including the colour set that
+	// separates a gradient spool from the plain spool it shares a profile and a
+	// first colour with. A single colour yields the key it always did.
+	function consumptionKeyJS(idx, color, colors = null) {
+	    const set = [...new Set((colors || []).map(normColorJS).filter(Boolean))];
+	    const suffix = set.length > 1 ? `|${set.sort().join("+")}` : "";
+	    return `${idx || "?"}|${normColorJS(color)}${suffix}`;
 	}
 
 	// Mirrors materialKey in src/mqtt.js, the fallback identity used for spools
@@ -1078,7 +1083,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const keyCount = {};
 	    for (const s of spools) {
 	        if (s.slotState === "Empty") continue;
-	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color);
+	        const key = consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols);
 	        keyCount[key] = (keyCount[key] || 0) + 1;
 	    }
 	    const ctx = { fullCons, partCons, keyCount, showBooking: true };
@@ -1119,15 +1124,38 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return tables;
 	}
 
-	// Looks up a slot's entry in a consumption map. Matches on the exact material
-	// profile first, then on material + color. 3rd-party spools report no usable
-	// tray_info_idx, mirroring the staged match in bookConsumption (src/mqtt.js).
-	function findConsumption(cons, slot) {
-	    const exact = cons[consumptionKeyJS(slot.tray_info_idx, slot.tray_color)];
+	// Looks up a slot's entry in a consumption map, mirroring the staged match in
+	// bookConsumption (src/mqtt.js): the slot the slice named, then the filament
+	// identity, then material + colour for 3rd-party spools, which report no
+	// usable tray_info_idx.
+	function findConsumption(cons, amsSpool) {
+	    const slot = amsSpool.slot || {};
+
+	    // The server keys an entry by slot wherever the sliced file named one, so
+	    // this is a direct hit rather than a search. Still confirmed against the
+	    // profile and the colours, because a slot the printer remapped would
+	    // otherwise show another slot's figures.
+	    const bySlot = cons[amsSpool.amsId];
+	    if (bySlot && slotConfirmsSliceJS(slot, bySlot)) return bySlot;
+
+	    const exact = cons[consumptionKeyJS(slot.tray_info_idx, slot.tray_color, slot.cols)];
 	    if (exact) return exact;
 
 	    const wanted = materialKeyJS(slot.tray_type, slot.tray_color);
 	    return Object.values(cons).find(e => materialKeyJS(e.type, e.color) === wanted) || null;
+	}
+
+	// Mirrors slotConfirmsSlice in src/mqtt.js. Colours are compared as sorted
+	// sets, because the slicer and the RFID chip need not agree on which colour
+	// of a set comes first.
+	function slotConfirmsSliceJS(slot, entry) {
+	    if (!slot.tray_info_idx || slot.tray_info_idx !== entry.tray_info_idx) return false;
+
+	    const sliceColors = (entry.colors?.length ? entry.colors : [entry.color]).map(normColorJS).filter(Boolean);
+	    const slotColors = slotColorsJS(slot);
+	    if (!sliceColors.length || !slotColors.length) return false;
+
+	    return [...sliceColors].sort().join("+") === [...slotColors].sort().join("+");
 	}
 
 	function createGcodeSpoolRow(amsSpool, ctx) {
@@ -1137,8 +1165,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    const slot   = amsSpool.slot || {};
 	    const isEmpty = amsSpool.slotState === "Empty";
-	    const needed = isEmpty ? 0 : (findConsumption(fullCons, slot)?.grams ?? 0);
-	    const used   = isEmpty ? 0 : (findConsumption(partCons, slot)?.grams ?? 0);
+	    const needed = isEmpty ? 0 : (findConsumption(fullCons, amsSpool)?.grams ?? 0);
+	    const used   = isEmpty ? 0 : (findConsumption(partCons, amsSpool)?.grams ?? 0);
 
 	    // On spool: Spoolman remaining/initial weight whenever we know which spool
 	    // this is (tag link or manual assignment), else the AMS-reported
@@ -1195,14 +1223,18 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const fullCons = printData.fullConsumption || {};
 	    const loaded = spools.filter(s => s.slotState !== "Empty");
 
-	    const loadedKeys = new Set(loaded.map(s => consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color)));
+	    const loadedKeys = new Set(loaded.map(s => consumptionKeyJS(s.slot?.tray_info_idx, s.slot?.tray_color, s.slot?.cols)));
 	    // 3rd-party spools report no usable tray_info_idx, so they'd always look
 	    // "not loaded" by profile alone, so fall back to material + color, the same
 	    // second-stage match the backend uses when booking.
 	    const loadedMaterials = new Set(loaded.map(s => materialKeyJS(s.slot?.tray_type, s.slot?.tray_color)));
 
+	    // An entry the server keyed by a slot that is loaded is by definition not
+	    // missing, so only the ones it could not place are candidates here.
+	    const loadedSlots = new Set(loaded.map(s => s.amsId));
 	    const missing = Object.values(fullCons).filter(
-	        e => !loadedKeys.has(consumptionKeyJS(e.tray_info_idx, e.color))
+	        e => !(e.amsId && loadedSlots.has(e.amsId))
+	          && !loadedKeys.has(consumptionKeyJS(e.tray_info_idx, e.color, e.colors))
 	          && !loadedMaterials.has(materialKeyJS(e.type, e.color))
 	    );
 	    if (!missing.length) return null;

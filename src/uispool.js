@@ -35,9 +35,9 @@ function orNull(value) {
  * The AMS slot fields the Web UI reads. Everything else stays on the server.
  *
  * `cols` carries every colour of the filament, `tray_color` only the first of
- * them. Both are sent: the colour swatch draws the whole set, while the
- * consumption key and the mapping fingerprint are built from the single field
- * on both sides and have to keep agreeing with the server.
+ * them. Both are sent, because both are read: the swatch draws the whole set,
+ * and the consumption key is built from the single colour plus the set, in the
+ * same order on both sides, so the two have to keep agreeing.
  */
 function pickSlot(slot) {
     if (!slot) return null;
@@ -142,12 +142,15 @@ export function toClientSpool(uiSpool) {
         error: uiSpool.error ?? false,
 
         // Derived once here rather than in every consumer: the readable name the
-        // dashboard prints, the Spoolman id it links to, and the consumption key
-        // that ties a slot to an entry of the sliced file.
+        // dashboard prints, the Spoolman id it links to, and the filament
+        // identity, which is what the dashboard counts to find two slots it
+        // cannot tell apart. It is no longer what ties a slot to an entry of
+        // the sliced file: that is the slot itself wherever the slice names one,
+        // and this identity is the fallback for where it does not.
         vendor: filament?.vendor?.name ?? matchingExternalFilament?.manufacturer ?? null,
         material: filament?.material ?? slot.tray_type ?? null,
         filamentName: filament?.name ?? matchingExternalFilament?.name ?? slot.tray_sub_brands ?? null,
         spoolmanId: existingSpool?.id ?? null,
-        key: consumptionKey(slot.tray_info_idx, slot.tray_color),
+        key: consumptionKey(slot.tray_info_idx, slot.tray_color, slot.cols),
     };
 }
