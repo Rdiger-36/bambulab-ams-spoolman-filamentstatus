@@ -805,7 +805,10 @@ document.addEventListener("DOMContentLoaded", () => {
 	        fil?.material     ?? slot.tray_type,
 	        fil?.name         ?? amsSpool.matchingExternalFilament?.name ?? slot.tray_sub_brands,
 	    ].filter(Boolean);
-	    const readable = isEmpty ? "Empty slot" : (nameParts.length ? nameParts.join(" · ") : "Unknown filament");
+	    // An empty slot the AMS is busy with is a spool going in or out, which
+	    // reports nothing the backend could tell from a truly empty slot.
+	    const emptyLabel = amsSpool.option === "Waiting for data" ? "Reading spool" : "Empty slot";
+	    const readable = isEmpty ? emptyLabel : (nameParts.length ? nameParts.join(" · ") : "Unknown filament");
 
 	    const color = (!isEmpty && slot.tray_color)
 	        ? `<span class="gc-swatch" style="background:#${normColorJS(slot.tray_color)}"></span>`

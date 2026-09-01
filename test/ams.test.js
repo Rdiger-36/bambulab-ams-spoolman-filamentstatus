@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, processData } from "../src/ams.js";
+import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, slotIsBusy, processData } from "../src/ams.js";
 
 test("correctRemainInt passes through a full-size spool unchanged", () => {
     assert.equal(correctRemainInt(63, 1000, "PLA"), 63);
@@ -220,4 +220,39 @@ test("findMergeableSpool skips the weight test when there is no reading", () => 
     assert.equal(findMergeableSpool(glowSlot(null), [half]), undefined);
     // An empty spool keeps matching on its own rule, unchanged
     assert.equal(findMergeableSpool(glowSlot(null), [empty])?.id, 15);
+});
+
+/* ---- Telling a slot being read from one that is simply empty ---- */
+
+// Captured on a P2S while pulling a spool and putting it back. The tray carries
+// two fields the whole time, so `state` is the only thing that moves:
+//   {"id":"0","state":10}  at rest, empty
+//   {"id":"0","state":17}  {"id":"0","state":5}  {"id":"0","state":21}  busy
+// then the full 23 field record arrives with state 11.
+test("slotIsBusy separates a slot being read from one at rest", () => {
+    assert.equal(slotIsBusy({ id: "0", state: 10 }), false);
+    assert.equal(slotIsBusy({ id: "0", state: 9 }), false);
+    assert.equal(slotIsBusy({ id: "0", state: 17 }), true);
+    assert.equal(slotIsBusy({ id: "0", state: 5 }), true);
+    assert.equal(slotIsBusy({ id: "0", state: 21 }), true);
+});
+
+test("slotIsBusy reads a state sent as a string", () => {
+    assert.equal(slotIsBusy({ id: "0", state: "17" }), true);
+    assert.equal(slotIsBusy({ id: "0", state: "10" }), false);
+});
+
+test("slotIsBusy calls an unseen state at rest, not busy", () => {
+    // The wrong way round would leave an empty slot claiming to read a spool
+    // for good. This way it says "Empty slot", which is what it says today.
+    assert.equal(slotIsBusy({ id: "0", state: 42 }), false);
+    assert.equal(slotIsBusy({ id: "0" }), false);
+    assert.equal(slotIsBusy(null), false);
+});
+
+test("slotIsBusy never fires on a slot that actually holds something", () => {
+    // Occupancy is decided by slotIsOccupied, which does not look at state, and
+    // a loaded slot must not be labelled as still being read.
+    assert.equal(slotIsBusy({ ...thirdParty, state: 17 }), false);
+    assert.equal(slotIsBusy({ ...bambuTray, state: 5 }), false);
 });

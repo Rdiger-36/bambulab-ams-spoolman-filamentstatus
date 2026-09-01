@@ -111,7 +111,14 @@ build their Spoolman payload from.
   read or not, while an empty one carries `id` and `state` alone. Never go back
   to reading `state`: on a P2S it is 9 or 10 when empty and 11 or 27 when
   loaded, so "non zero means occupied" marks every empty slot as a 3rd party
-  spool and freezes change detection for chipless slots.
+  spool and freezes change detection for chipless slots. `slotIsBusy()` is the
+  one remaining reader of `state`, and it decides a label and nothing else: a
+  slot the AMS is moving filament into reports `{ id, state }` and nothing else,
+  which is byte for byte an empty slot, so for the roughly 20 seconds until the
+  tray record arrives the dashboard would call it empty with the user watching
+  the spool sit in it. Its allow list holds the values seen while busy, not the
+  ones seen at rest, so an unseen value reads as empty rather than leaving a
+  slot claiming to read a spool for good.
 - **A spool is not created before the AMS reports how much is left.**
   `usedWeightFromSlot()` turns the percentage into `used_weight`, and without
   one it has to assume brand new, which is wrong for a partly used spool that

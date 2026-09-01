@@ -24,6 +24,7 @@ import {
     extractComparableTrayData,
     correctRemainInt,
     slotIsOccupied,
+    slotIsBusy,
     findExistingSpool,
     findMatchingExternalFilament,
     findMatchingInternalFilament,
@@ -788,7 +789,13 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     return mutated;
 }
 
-/** Builds the UI entry for an empty slot: nothing matched, no action offered. */
+/**
+ * Builds the UI entry for an empty slot: nothing matched, no action offered.
+ *
+ * A slot the AMS is currently reading looks exactly like an empty one until the
+ * tray record arrives, so it is still built here, but it says "Waiting for
+ * data" rather than claiming there is nothing to do. See `slotIsBusy()`.
+ */
 function buildEmptySpool(printer, amsId, slot) {
     return {
         amsId,
@@ -797,7 +804,7 @@ function buildEmptySpool(printer, amsId, slot) {
         matchingInternalFilament: null,
         matchingExternalFilament: null,
         existingSpool: null,
-        option: "No actions available",
+        option: slotIsBusy(slot) ? "Waiting for data" : "No actions available",
         enableButton: "false",
         printerName: printer.name,
         logFilePath: printer.logFilePath,

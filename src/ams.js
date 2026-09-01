@@ -207,6 +207,33 @@ export function slotIsOccupied(slot) {
     return Object.keys(slot).some(key => !EMPTY_TRAY_KEYS.has(key));
 }
 
+// The `state` values seen on a sparse tray while the AMS was moving filament in
+// or out of the slot, as opposed to 9 and 10, which it reports while a slot sits
+// there empty. Undocumented, so this is an observation on a P2S, not a
+// specification.
+const BUSY_EMPTY_STATES = new Set([1, 5, 17, 21]);
+
+/**
+ * Whether an empty looking slot is one the AMS is currently working on.
+ *
+ * Purely cosmetic, and the one place `state` is still read. It has to be: a
+ * spool being read reports `{ id, state }` and nothing else, byte for byte what
+ * an empty slot reports, so there is no field to tell them apart. The AMS takes
+ * around 20 seconds from the spool going in to the first tray record, and for
+ * that whole time the dashboard would otherwise call the slot empty while the
+ * user is watching the spool sit in it.
+ *
+ * Deliberately an allow list of values seen while busy, not of values seen at
+ * rest. A value nobody has observed yet reads as "at rest", so the slot says
+ * "Empty slot", which is what it says today. The other way round an empty slot
+ * could claim to be reading a spool for good. Nothing acts on this either way:
+ * occupancy comes from `slotIsOccupied()`, which does not look at `state`.
+ */
+export function slotIsBusy(slot) {
+    if (!slot || slotIsOccupied(slot)) return false;
+    return BUSY_EMPTY_STATES.has(Number(slot.state));
+}
+
 /**
  * Finds the Spoolman spool already connected to this slot.
  *
