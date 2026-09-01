@@ -366,3 +366,19 @@ test("extractComparableTrayData sees a colour set change that tray_color misses"
     assert.equal(before[0].tray[0].tray_color, after[0].tray[0].tray_color);
     assert.notDeepEqual(extractComparableTrayData(before), extractComparableTrayData(after));
 });
+
+test("processData substitutes the PETG Translucent colour in cols too", () => {
+    // The spool reports a fully transparent colour, which renders as nothing,
+    // so it is shown as white. Correcting only `tray_color` was enough while
+    // that was the only colour anything read. `cols` is read first now, and a
+    // transparent value left in it draws the spool black.
+    const [ams] = processData([{ id: "0", tray: [{
+        id: "0", state: 11, cols: ["00000000"], tray_type: "PETG",
+        tray_sub_brands: "PETG Translucent", tray_color: "00000000",
+        tray_weight: "1000", tray_uuid: "ABCD", remain: 80,
+    }] }]);
+
+    assert.equal(ams.tray[0].tray_color, "FFFFFF00");
+    assert.deepEqual(ams.tray[0].cols, ["FFFFFF00"]);
+    assert.deepEqual(slotColors(ams.tray[0]), ["ffffff"]);
+});

@@ -43,11 +43,14 @@ export function processData(amsData) {
             const rawRemain = Number(slot.remain);
             const remain = Number.isFinite(rawRemain) && rawRemain >= 0 ? rawRemain : null;
 
-            // The corrected colour, not the reported one, so the PETG
-            // Translucent substitution above cannot be undone by a fallback.
+            // The PETG Translucent substitution has to reach `cols` as well.
+            // It used to be enough to correct `tray_color`, because that was
+            // the only colour anything read. `cols` is read first now, so
+            // leaving the transparent value in it renders the spool black,
+            // which is the invisible colour turned into the wrong one.
             const reportedColors = Array.isArray(slot.cols) ? slot.cols.filter(Boolean) : [];
             const cols = reportedColors.length
-                ? reportedColors
+                ? reportedColors.map(color => (isPetgTranslucent && color === "00000000") ? "FFFFFF00" : color)
                 : (updatedTrayColor === "N/A" ? [] : [updatedTrayColor]);
 
             return {
