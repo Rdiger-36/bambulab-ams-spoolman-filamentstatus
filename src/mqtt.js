@@ -661,7 +661,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             const waitingForRemain = !existingSpool && !waitedLongEnoughForRemain(printer, amsId, slot);
 
             if (!existingSpool && waitingForRemain) {
-                console.debug(printer.name, printer.logFilePath, "    Waiting for the AMS to report the remaining percentage before creating a spool");
+                // Logged rather than debugged, and in both modes: in automatic
+                // nobody is looking at the button, so without this line the
+                // service just appears to ignore the slot for a minute.
+                const waits = printer.remainWaits?.[amsId]?.waits ?? 0;
+                console.log(printer.name, printer.logFilePath, `    Waiting for the AMS to report how much is left before creating a spool (${waits}/${MAX_REMAIN_WAITS})`);
                 option = "Waiting for data";
                 enableButton = "false";
             } else if (!existingSpool) {
