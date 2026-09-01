@@ -32,7 +32,7 @@ matter for them are below.
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
 | `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
-| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), the standalone `mqtt.js` probe, `capture-trays.js` (prints a printer's AMS tray records once and exits), and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
+| `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), the standalone `mqtt.js` probe, `capture-trays.js` (prints a printer's slots once and exits: the AMS trays, the external holder and the slots the running print reports), and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
 
 ## Global invariants
@@ -176,8 +176,9 @@ Not punctuation, and therefore allowed:
   the write paths: pointed at a real printer it seeds the mock with that
   printer's own spools, tags and all, which is what makes a real print bookable
   against a Spoolman nobody has to care about. `node scripts/capture-trays.js
-  <ip> <code> <serial>` prints the tray records alone when only the payload is
-  in question.
+  <ip> <code> <serial>` prints the slots alone when only the payload is in
+  question, including `print.mapping` decoded into slot labels, which is what a
+  question about a booking landing on the wrong spool starts from.
 - There is no linter, formatter or type checker configured. Match the
   surrounding style: 4-space indent in `src/`, double quotes, semicolons.
 - Comments in this codebase explain why, usually pointing at the bug the line

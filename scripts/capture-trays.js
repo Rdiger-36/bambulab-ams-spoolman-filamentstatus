@@ -1,16 +1,20 @@
 import mqtt from "mqtt";
 
+import { decodePrintMapping } from "../src/gcode.js";
+
 /**
- * Prints the AMS tray records of a printer once and exits.
+ * Prints what a printer says about its slots, once, and exits.
  *
  * `scripts/mqtt.js` prints the whole report, which is thousands of characters
  * of print state, temperatures and calibration for every message. This waits
- * for the first report that carries AMS data and prints only the trays, which
- * is what a question about a slot is ever about.
+ * for the first report that carries AMS data and prints only the three things a
+ * question about a slot is ever about:
  *
- * Written for reading the fields this service guesses at: `cols` on a multi
- * colour spool, and the `tray_info_idx` and `tray_sub_brands` of a filament
- * nobody here owns.
+ *   - the AMS trays, for `cols` on a multi colour spool and the
+ *     `tray_info_idx` and `tray_sub_brands` of a filament nobody here owns
+ *   - `vir_slot`, the external spool holder, which sits outside the AMS block
+ *   - `print.mapping`, which slot the running print takes each of its filaments
+ *     from, decoded into slot labels. Only meaningful during a print
  *
  * Usage: node scripts/capture-trays.js <ip> <code> <serial>
  *
@@ -47,18 +51,23 @@ client.on("connect", () => {
 });
 
 client.on("message", (_topic, message) => {
-    let units;
+    let print;
     try {
-        units = JSON.parse(message.toString())?.print?.ams?.ams;
+        print = JSON.parse(message.toString())?.print;
     } catch {
         return;
     }
-    if (!Array.isArray(units)) return;
+    if (!Array.isArray(print?.ams?.ams)) return;
 
     clearTimeout(timeout);
-    // Only the trays, and the unit id they sit in, so the output can be pasted
+    // Only the slots, and the unit ids they sit in, so the output can be pasted
     // somewhere without carrying the printer's serial number with it.
-    console.log(JSON.stringify(units.map(unit => ({ id: unit.id, tray: unit.tray })), null, 4));
+    console.log(JSON.stringify({
+        ams: print.ams.ams.map(unit => ({ id: unit.id, tray: unit.tray })),
+        vir_slot: print.vir_slot ?? print.vt_tray ?? null,
+        mapping: print.mapping ?? null,
+        mapping_decoded: decodePrintMapping(print.mapping),
+    }, null, 4));
     client.end();
     process.exit(0);
 });
