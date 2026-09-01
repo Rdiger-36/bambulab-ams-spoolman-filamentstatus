@@ -189,6 +189,15 @@ The Hardware supported by this image are:
 
 ## Environment Variables
 
+> [!NOTE]
+> Configuring the service through environment variables is **deprecated since
+> 1.3.0**. It keeps working and nothing has to change today, but the
+> [settings page](#settings) is the supported place for all of it now, and the
+> printer list is edited there rather than by hand in `printers.json`. An
+> installation that still relies on the variables says so once in the Web UI and
+> on every start in `docker logs`, naming the variables that are actually still
+> in charge. The hint disappears by itself once the values have been saved.
+
 Every variable below is also a field on the [settings page](#settings). A
 variable seeds its setting as long as the setting has never been saved in the
 Web UI. After the first save `printers/settings.json` owns the value and the
@@ -420,15 +429,44 @@ printer from another page opens it on the dashboard.
   restarted. The two tracking modes book consumption differently, so switching
   one into a running process would book a print in flight twice or not at all.
 
-- **Restart service**, in its own card at the bottom. The container runs a small
-  supervisor that starts the service again by itself, so this works whether or
-  not the container has a restart policy. The page waits for the service to come
-  back and reloads itself, or tells you when it does not. While a print is
-  running it asks first, because the consumption of that job is booked only when
-  it ends.
+- **Service**, the card at the very bottom, below Logging. It shows what a
+  support question usually asks for first: version, Node, platform, uptime,
+  memory, which tracking mode the process is actually running in, whether the
+  supervisor is on, and the state of the Spoolman connection. Under it:
+  - **Restart service.** The container runs a small supervisor that starts the
+    service again by itself, so this works whether or not the container has a
+    restart policy. The page waits for the service to come back and reloads
+    itself, or tells you when it does not. While a print is running it asks
+    first, because the consumption of that job is booked only when it ends.
+  - **Download diagnostics**, see [Diagnostics and privacy](#diagnostics-and-privacy).
+  - **Reconnect all printers.** Rebuilds the MQTT connections without ending the
+    process. This is the smaller hammer: unlike a restart it keeps the
+    consumption tracking of a running print, which lives in memory and is booked
+    when the job ends, so it does not have to ask first.
+  - **Pause all monitoring.** The global version of the per printer switch on the
+    dashboard. While it is paused no AMS report is processed and nothing is
+    written to Spoolman, which is what you want while Spoolman is being worked on.
+  - An **update check** against the GitHub releases of this project. Nothing is
+    downloaded or installed and nothing about the installation is sent; it is one
+    request for the latest version number, cached for six hours. Without internet
+    access the line says the check could not be made and nothing else changes.
 
 Everything is stored in `printers/settings.json` next to `printers.json`, so it
 survives a container update as long as that volume is mounted.
+
+Coming from 1.2.x, or from a setup written against an older README, the
+dashboard shows the move once and the startup log repeats it on every start:
+
+```
+[Deprecated] Configuring this service through environment variables is deprecated since 1.3.0.
+[Deprecated] It keeps working, but the settings page in the Web UI is the supported way now: http://<host>:4000/settings.html
+[Deprecated] Still taken from the environment: MODE, UPDATE_INTERVAL, DEBUG. ...
+```
+
+Dismissing the hint is stored on the server, in `settings.json` beside the
+values rather than among them, so it does not come back on the next browser and
+does not hand a single setting to the file. The hint stops appearing on its own
+as soon as nothing is left that the environment still decides.
 
 > [!IMPORTANT]
 > The Web UI has no authentication. It is meant for a trusted local network.
@@ -443,6 +481,46 @@ survives a container update as long as that volume is mounted.
 > you save on the settings page, `printers/settings.json` owns the values and
 > changing an add-on option has no effect any more. Either configure through the
 > add-on options or through the settings page, not both.
+
+## Diagnostics and privacy
+
+Logs and configuration end up attached to bug reports, and both describe a home
+network: the address of every printer and of Spoolman, the serial numbers, and
+in `printers.json` the access codes. So every download that can carry them asks
+first, and offers an anonymised variant.
+
+**Download diagnostics**, in the Service card, produces one archive with
+everything a report needs:
+
+```
+info.json        version, Node, platform, uptime, tracking mode, whether the
+                 environment still configures anything
+settings.json    the effective values and, per field, where each came from
+printers.json    the printer list
+mappings.json    the manual AMS slot to spool assignments, when there are any
+logs/            the server log and every printer log, rotated history included
+```
+
+**Download the log**, on the log page, asks the same question for that one log.
+
+What "anonymised" replaces:
+
+| | |
+|---|---|
+| IP addresses | the last octet, `192.168.1.42` becomes `192.168.1.XXX` |
+| Serial numbers | everything after the first five characters, in the file names as well |
+| Access codes | the whole value |
+| Spoolman host | the name, keeping the scheme, port and path |
+| Data and log paths | shortened to their last two segments |
+
+Printer names and spool data are kept. They are what makes a log readable and
+say nothing about the network; rename a printer before exporting if its name
+identifies you. The RFID tag ids of the spools are kept for the same reason:
+they identify a piece of filament, not a person.
+
+**The access code is never part of any export**, anonymised or not. The service
+does not write it to a log on purpose, and both variants replace it anyway.
+"Full" refers to the addresses, the serial numbers and the paths.
 
 ## Web UI
 Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:

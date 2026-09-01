@@ -305,12 +305,32 @@ export function describeSources(stored = {}, env = {}) {
 }
 
 /**
+ * The settings whose effective value still comes from an environment variable,
+ * meaning they have never been saved in the Web UI.
+ *
+ * Configuring the service through the environment is deprecated since 1.3.0. It
+ * keeps working, and this is what tells the log line and the Web UI hint which
+ * variables are actually still in charge, so neither of them warns about a
+ * variable the settings file has long since taken over.
+ *
+ * @returns {string[]} the variable names, in schema order
+ */
+export function envSeededKeys() {
+    const sources = describeSources(storedSettings, envSeed);
+    return Object.keys(SETTINGS_SCHEMA).filter(key => sources[key] === "environment");
+}
+
+/**
  * The shape version of `settings.json`. Bump it when a stored key is renamed or
  * its meaning changes, and handle the old value in `migrateStored()`.
  */
 export const SETTINGS_SCHEMA_VERSION = 1;
 
 let storedSettings = {};
+// Notices the user has dismissed in the Web UI, keyed by notice id. Stored
+// beside the values rather than among them, because acknowledging a hint must
+// not make the file own a setting; only a real save does that.
+let storedNotices = {};
 // Counts writes. The settings page sends back the revision it read, so a save
 // against a state somebody else has already replaced is refused rather than
 // silently overwriting it.
@@ -333,10 +353,13 @@ export function parseStoredFile(parsed) {
             values: parsed.values,
             revision: Number.isInteger(parsed.revision) ? parsed.revision : 0,
             schemaVersion: Number.isInteger(parsed.schemaVersion) ? parsed.schemaVersion : SETTINGS_SCHEMA_VERSION,
+            notices: parsed.notices && typeof parsed.notices === "object" && !Array.isArray(parsed.notices)
+                ? parsed.notices
+                : {},
         };
     }
 
-    return { values: parsed ?? {}, revision: 0, schemaVersion: 0 };
+    return { values: parsed ?? {}, revision: 0, schemaVersion: 0, notices: {} };
 }
 
 /**
@@ -365,6 +388,7 @@ function readStoredSettings() {
 
         const file = parseStoredFile(parsed);
         storedRevision = file.revision;
+        storedNotices = file.notices;
         return migrateStored(file.values, file.schemaVersion);
     } catch (err) {
         if (err.code !== "ENOENT") {
@@ -381,6 +405,7 @@ function persist() {
         schemaVersion: SETTINGS_SCHEMA_VERSION,
         revision: storedRevision,
         values: storedSettings,
+        notices: storedNotices,
     };
 
     fs.ensureDirSync(path.dirname(settingsPath));
@@ -401,6 +426,30 @@ function loadSettings() {
 }
 
 loadSettings();
+
+/**
+ * The notices the user has dismissed, keyed by notice id.
+ *
+ * @returns {Object<string, boolean>}
+ */
+export function getAcknowledgedNotices() {
+    return { ...storedNotices };
+}
+
+/**
+ * Records that a notice was dismissed in the Web UI and persists it.
+ *
+ * Writing this creates settings.json on an installation that has never saved
+ * anything. That is deliberate and harmless: the file is written with an empty
+ * value set, so every setting still resolves from its environment variable
+ * exactly as before.
+ *
+ * @param {string} id - the notice id
+ */
+export function acknowledgeNotice(id) {
+    storedNotices = { ...storedNotices, [id]: true };
+    persist();
+}
 
 /**
  * The tracking mode this process runs in, frozen at startup.

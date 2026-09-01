@@ -8,6 +8,13 @@ import { formatDateLog } from "./utils.js";
 /** The fields of a printer that live in printers.json. Everything else is runtime state. */
 const PERSISTED_FIELDS = ["id", "code", "ip", "name"];
 
+// Whether this start built the printer list from PRINTER_ID, PRINTER_CODE and
+// PRINTER_IP. Read by the deprecation notice, which has to tell "the variables
+// are seeding the list right now" apart from "they are set but printers.json
+// already owns the list" — and cannot do that by looking at the file, because
+// the seed is written to it during this very import.
+let seededFromEnvironment = false;
+
 /**
  * Builds the mutable runtime object every other module works with from a
  * printers.json entry.
@@ -122,6 +129,7 @@ export function loadPrintersConfig() {
 
         if (envPrinterSeed.id && envPrinterSeed.code && envPrinterSeed.ip) {
             console.log("Server", serverLogFilePath, "Seeding the printer list from the PRINTER_ID, PRINTER_CODE and PRINTER_IP variables...");
+            seededFromEnvironment = true;
             entries = [normalizePrinterEntry({
                 id: envPrinterSeed.id,
                 code: envPrinterSeed.code,
@@ -143,6 +151,11 @@ export function loadPrintersConfig() {
     }
 
     return runtime;
+}
+
+/** Whether the printer list of this run came from the PRINTER_* variables. */
+export function printerListSeededFromEnv() {
+    return seededFromEnvironment;
 }
 
 /**

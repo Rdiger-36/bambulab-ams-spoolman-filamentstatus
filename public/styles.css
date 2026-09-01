@@ -1354,6 +1354,21 @@ body.dark-mode .set-reset { color: #6fb0ec; }
 
 .btn-danger:hover:not(:disabled) { background: #fbe4e4; }
 
+/* Filled rather than outlined, for the one action on a page that ends the
+   process. .btn-danger is the quiet variant next to a table row; this one has
+   to be found without looking for it. */
+.btn-danger-solid {
+  background: #b3261e;
+  border-color: #b3261e;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-danger-solid:hover:not(:disabled) {
+  background: #8f1d17;
+  border-color: #8f1d17;
+}
+
 body.dark-mode .btn {
   background: #2c2c2c;
   border-color: #4a4a4a;
@@ -1378,6 +1393,17 @@ body.dark-mode .btn-danger {
 
 body.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
 
+body.dark-mode .btn-danger-solid {
+  background: #c4382f;
+  border-color: #c4382f;
+  color: #fff;
+}
+
+body.dark-mode .btn-danger-solid:hover:not(:disabled) {
+  background: #a32c25;
+  border-color: #a32c25;
+}
+
 /* ---- Action bar ---- */
 .set-actions {
   position: sticky;
@@ -1394,6 +1420,55 @@ body.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
 
 body.dark-mode .set-actions {
   background: #1e1e1e;
+}
+
+/* ---- Service card ---- */
+/* Named "facts", not "info": .set-info is already taken by the round tooltip
+   badge further up, and sharing the name left this list 16 px wide and round. */
+/* A definition list rather than a table: the facts are label and value pairs,
+   and the grid lets them reflow to one column on a phone without a card layout
+   of their own. */
+.set-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 20px;
+  margin: 14px 0 10px;
+}
+
+.set-fact dt {
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+}
+
+.set-fact dd {
+  margin: 2px 0 0;
+  font-size: 0.95em;
+}
+
+/* Its own row rather than .set-row-actions, which is built for a table cell and
+   never wraps. These are three full width labels and have to on a phone. */
+.set-service-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* Pushes the restart to the far end of the row, away from the three actions
+   that leave the process running. On a narrow screen the row wraps and it ends
+   up on its own line, still right aligned, which says the same thing. */
+.set-action-end {
+  margin-left: auto;
+}
+
+/* Used by the export dialog to spell out what anonymising replaces */
+.set-list {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+  font-size: 0.9em;
+  line-height: 1.6;
 }
 
 .set-actions-hint {

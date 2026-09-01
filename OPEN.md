@@ -25,6 +25,9 @@ theory or in tests. Ordered by how likely a user is to hit it.
   legacy mode limitation.
 - [ ] **A second printer.** Multiple AMS units on one printer work (A0 to A3 and
   B0 to B3 were addressed correctly). Two printers at once was never run.
+- [ ] **The update check with a newer release.** Only the prerelease path was
+  observed, where the running version is ahead of the latest release. The
+  "version X is available" path has never been rendered against a real answer.
 
 ## Verified against the printer
 
@@ -51,6 +54,30 @@ no write reached Spoolman at all, which was checked rather than assumed.
 - **Reconnect works.** Cutting the container off the network produced
   `Printer ... is unreachable. Next try in 20 second(s)`, and the monitor loop
   brought the connection back on its own one interval later.
+
+On 2026-09-01 the anonymised diagnostics bundle was pulled from the same
+instance, with `DEBUG=true` and the printer connected. The serial, the address,
+the access code and the Spoolman host name were all gone, in the log text, in
+`printers.json`, in the keys of `mappings.json` and in the log file name. The
+printer name, the spool names and the `tray_uuid` values were kept, which is
+what the design says they should be.
+
+Reconnect and the global monitoring pause were exercised against the same live
+connection. The reconnect tears the session down and is back within a second.
+Pausing disconnects immediately, and a second pause reports that it changed
+nothing rather than claiming success.
+
+That run also surfaced the cooldown defect described below and the misleading
+close line, both since fixed and re-checked against the same printer: reconnect,
+pause and resume in sequence now bring the connection back within a second, and
+the log says "Connection closed, reconnecting on request" and "Connection
+closed, monitoring was switched off" instead of announcing a retry by the
+monitor loop.
+
+It also found a real defect, now fixed: the fallback pattern for a serial that
+is no longer in the printer list required a leading zero, matching the P1S
+examples in the README. A P2S reports `22E8BJ581201877`, so every P2S serial
+slipped through it. Only the known list was covering them.
 
 Two observations that correct what is written below:
 
@@ -201,6 +228,9 @@ container run. Still unverified:
   its options as environment variables, and those stop having an effect once a
   user saves on the settings page, because the file owns the values from then
   on. The README of this repository says so; the add-on's does not.
+  Since environment configuration is deprecated the add-on also triggers the
+  deprecation hint on every start, which will look like a defect to an add-on
+  user until its README explains which of the two places owns the values.
 
 ### Decisions taken along the way
 
@@ -223,6 +253,69 @@ loops.
 supervisor could do it, and that is deliberately not built.
 
 **The Web UI still has no access protection**, see the entry under known gaps.
+
+**A shutdown button was considered and rejected.** The supervisor passes every
+exit code except the restart one straight through, so a shutdown lands on the
+container restart policy: with `unless-stopped` or `always`, the recommended
+setting, the container comes straight back and the button visibly does nothing;
+with `restart: no` it stays down and takes the Web UI with it, so the only way
+back is Docker or the Home Assistant UI. It works exactly in the configuration
+where it is hardest to undo. "Reconnect all printers" covers what people
+actually reach for the restart button for, and does it without losing the
+consumption tracking of a running print.
+
+**Anonymising an export masks the network, not the user's own labels.** Printer
+names and spool data are kept: they are what makes a log readable, and a name is
+chosen by the user rather than assigned by the network. The RFID tag ids are kept
+for the same reason, they identify a piece of filament. If this is revisited,
+the right shape is an extra "also replace the printer names" switch, not a
+different default.
+
+**The access code is masked in the full export as well.** The service never
+writes it to a log on purpose, but "on purpose" is not a guarantee worth handing
+out, and the code is the one value that is never useful in a bug report. "Full"
+therefore means the addresses, serials and paths, which is what the dialog says.
+
+**Serials are masked before access codes**, in `maskText()`. An eight character
+access code can appear inside a fifteen character Bambu serial; masking the code
+first cuts the serial into pieces that the serial pass no longer recognises, and
+the address in the same line then leaks in a different shape. `test/anonymize.test.js`
+holds the ordering.
+
+**Every deliberate disconnect goes through `closeMqtt()`.** The "close" handler
+cannot otherwise tell a connection the network dropped from one the service
+closed itself, and it announced that the monitor loop would retry within the
+offline check interval in both cases. That is wrong whenever a reconnect has
+already been started or the process is shutting down, and the line then sat in
+the log directly above the successful reconnect. The handler also ignores a close
+that arrives after the printer already has a newer client, which a deliberate
+reconnect can produce and which would otherwise tear the live connection back
+down.
+
+**An explicit reconnect clears the retry cooldown, the monitor loop does not.**
+`setupMqtt()` ignores a call within 30 seconds of the last attempt, which is what
+stops the monitor loop from hammering a printer that is off. A button the user
+pressed is not the monitor loop: resuming monitoring shortly after a reconnect
+did nothing at all and the printer only came back on the next monitor pass, up
+to half a minute later. The printer edit route already cleared the cooldown for
+exactly this reason; the monitoring and reconnect routes now do the same.
+`test/diagnostics.test.js` holds it, and both tests fail without the fix.
+
+**The deprecation of environment configuration is state driven, not version
+driven.** Nothing records which version an installation came from, and it would
+not help: a fresh install set up from an older README needs the same hint as one
+upgraded from 1.2.x. `deprecatedConfig()` asks instead which settings still
+resolve from the environment right now, so the hint and the log lines stop by
+themselves once the values have been saved. Deprecated means deprecated here, not
+scheduled for removal, and neither the hint nor the README names a version that
+would drop the variables.
+
+**The dismissal of that hint is stored beside the values in `settings.json`**,
+under `notices`, not among them. Acknowledging it writes the file on an
+installation that has never saved anything, and writing a value there is exactly
+what takes ownership away from the environment. Keeping the flag outside `values`
+is what lets the file exist with nothing in it, so every variable still seeds its
+setting. `test/notices.test.js` holds that guarantee.
 
 **Encrypting the access code at rest was rejected.** Without a key store the key
 ships in the same image, so it is obfuscation rather than protection. The README

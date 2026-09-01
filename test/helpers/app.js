@@ -16,12 +16,21 @@ import path from "path";
  *
  * @returns {Promise<{url: string, dataDir: string, close: function(): Promise<void>, readJson: function(string): object|null}>}
  */
-export async function startTestApp() {
+export async function startTestApp({ seedPrinters } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ams-test-"));
     process.env.DATA_DIR = path.join(dir, "printers");
     process.env.LOG_DIR = path.join(dir, "logs");
     fs.ensureDirSync(process.env.DATA_DIR);
     fs.ensureDirSync(process.env.LOG_DIR);
+
+    // Written before the import, so printers.js loads them the way a real start
+    // does. A test that needs a printer to exist without going through
+    // POST /api/printers wants this: adding one over the API also creates the
+    // log file, asynchronously and with a truncating write, which races anything
+    // the test wants to put in that file.
+    if (seedPrinters) {
+        fs.writeFileSync(path.join(process.env.DATA_DIR, "printers.json"), JSON.stringify(seedPrinters, null, 4));
+    }
 
     const { registerRoutes } = await import("../../src/routes.js");
     const { printers } = await import("../../src/printers.js");

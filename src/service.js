@@ -4,7 +4,7 @@ import { settingsLoadIssues, spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { printers, ensurePrinterLogFile } from "./printers.js";
 import { checkAndSetVendor, checkAndSetExtraField } from "./spoolman.js";
-import { monitorSpoolman, monitorSpoolmanBackground, monitorPrinters } from "./mqtt.js";
+import { closeMqtt, monitorSpoolman, monitorSpoolmanBackground, monitorPrinters } from "./mqtt.js";
 
 /**
  * Startup sequence and the parts of it that have to run again when the Spoolman
@@ -127,11 +127,7 @@ export function restartService({ delay = 300, exit = code => process.exit(code) 
     console.log("Server", serverLogFilePath, "Restart requested through the Web UI, ending the process...");
 
     for (const printer of printers) {
-        if (printer.mqttClient) {
-            printer.mqttClient.end(true);
-            printer.mqttClient = null;
-        }
-        printer.mqttRunning = false;
+        closeMqtt(printer, "the service is restarting", true);
     }
 
     return new Promise(resolve => {

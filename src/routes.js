@@ -1,9 +1,13 @@
 import AdmZip from "adm-zip";
-import { createReadStream } from "fs";
+import { promises as fsp } from "fs";
 import mime from "mime-types";
 import path from "path";
 import { serverLogFilePath, version } from "./config.js";
-import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode } from "./settings.js";
+import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
+import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
+import { buildDiagnosticsBundle, knownValues, systemInfo } from "./diagnostics.js";
+import { checkForUpdate } from "./update.js";
+import { maskCodes, maskSerial, maskText } from "./anonymize.js";
 import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
@@ -25,7 +29,7 @@ import {
     checkSpoolmanHealth,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection } from "./gcode.js";
-import { setupMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /**
@@ -184,11 +188,29 @@ export function registerRoutes(app, printers) {
 
     // Hands out the whole history, not only the current file: once a log has
     // rotated, the interesting lines are usually in <name>.log.1. A single file
-    // is streamed as it is, several become one zip, because that keeps the file
-    // boundaries and the order intact.
+    // is handed out as it is, several become one zip, because that keeps the
+    // file boundaries and the order intact.
+    //
+    // Read into memory rather than streamed, because both variants of the
+    // download rewrite the text: the anonymised one masks everything, the full
+    // one still masks the access codes. The size is bounded by the log settings
+    // either way.
     app.get("/api/logs/:printerId/download", async (req, res) => {
         try {
             const { printerId } = req.params;
+
+            // The page asks which of the two it should be, so the choice is
+            // explicit rather than a default nobody notices, and anonymised is
+            // what an unanswered request gets. Anonymised has to read the file
+            // instead of streaming it, which is what masking a stream would need
+            // a line splitter for; the size is bounded by the log settings
+            // either way.
+            const anonymize = req.query.anonymize !== "false";
+            const known = knownValues();
+            // The full download keeps the addresses and the serials but still
+            // loses the access codes, for the reason diagnostics.js gives.
+            const mask = text => (anonymize ? maskText(text, known) : maskCodes(text, known.codes));
+
             let filePath, baseName;
 
             if (printerId === "server") {
@@ -198,38 +220,45 @@ export function registerRoutes(app, printers) {
                 const printer = printers.find(p => p.id === printerId);
                 if (!printer) return res.status(404).json({ error: "Printer not found" });
                 filePath = printer.logFilePath;
-                baseName = `${printer.name.replace(/\s+/g, "_")}_${printer.id}`;
+                // The serial is in the file name as well, so it has to be masked
+                // there too. The printer name is kept, see anonymize.js.
+                const serial = anonymize ? maskSerial(printer.id) : printer.id;
+                baseName = `${printer.name.replace(/\s+/g, "_")}_${serial}`;
             }
+
+            const suffixed = anonymize ? baseName : `${baseName}_full`;
 
             const files = await logFileSet(filePath);
             if (files.length === 0) return res.status(404).json({ error: "No log file found" });
 
             if (files.length === 1) {
                 res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
-                res.setHeader("Content-Disposition", `attachment; filename="${baseName}.log"`);
-                const stream = createReadStream(files[0]);
-                stream.on("error", err => {
-                    console.error("Server", serverLogFilePath, `Failed to stream log: ${err.message}`);
-                    if (!res.headersSent) res.status(500).end("Failed to read log file");
-                });
-                return stream.pipe(res);
+                res.setHeader("Content-Disposition", `attachment; filename="${suffixed}.log"`);
+
+                return res.end(mask(await fsp.readFile(files[0], "utf-8")));
             }
 
             // The archive is built in memory. Its size is bounded by the log
             // settings, LOG_MAX_SIZE_MB times the number of kept files, and log
             // text compresses well, so this stays small for any sane setting.
             const zip = new AdmZip();
-            files.forEach((file, index) => {
+            for (const [index, file] of files.entries()) {
                 // Oldest first inside the archive, and numbered so the order
                 // survives a file listing that sorts by name.
                 const position = files.length - index;
                 const suffix = index === 0 ? "current" : `rotated.${index}`;
-                zip.addLocalFile(file, "", `${String(position).padStart(2, "0")}_${baseName}.${suffix}.log`);
-            });
+                const entry = `${String(position).padStart(2, "0")}_${baseName}.${suffix}.log`;
+
+                if (anonymize) {
+                    zip.addFile(entry, Buffer.from(maskText(await fsp.readFile(file, "utf-8"), known)));
+                } else {
+                    zip.addLocalFile(file, "", entry);
+                }
+            }
 
             const buffer = zip.toBuffer();
             res.setHeader("Content-Type", "application/zip");
-            res.setHeader("Content-Disposition", `attachment; filename="${baseName}_logs.zip"`);
+            res.setHeader("Content-Disposition", `attachment; filename="${suffixed}_logs.zip"`);
             res.setHeader("Content-Length", buffer.length);
             return res.end(buffer);
         } catch (err) {
@@ -238,51 +267,109 @@ export function registerRoutes(app, printers) {
         }
     });
 
+    /**
+     * Turns monitoring of one printer on or off.
+     *
+     * Written as a function because the Service card switches all of them at
+     * once and has to do exactly what the per printer toggle on the dashboard
+     * does, down to the SSE event the dashboard listens for.
+     *
+     * @param {object} printer - the runtime printer
+     * @param {boolean} enabled - the state to move to
+     * @returns {boolean} false when it was already in that state
+     */
+    function setMonitoring(printer, enabled) {
+        if (printer.monitoringEnabled === enabled) return false;
+
+        printer.monitoringEnabled = enabled;
+
+        if (enabled) {
+            // Always restart MQTT immediately, regardless of MAX_RETRIES setting.
+            // The cooldown in setupMqtt guards against retry storms, not against
+            // a deliberate reconnect, so clear it here as the printer edit does.
+            // Without this, resuming shortly after another reconnect did nothing
+            // and the printer only came back on the next monitor pass.
+            printer.reconnectAttempts = 0;
+            printer.lastReconnectAttempt = 0;
+            printer.mqttRunning = false;
+            printer.mqttStatus = "Reconnecting";
+            console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}, restarting MQTT...`);
+        } else {
+            // Actively close the existing MQTT connection instead of waiting for it to drop
+            closeMqtt(printer, "monitoring was switched off");
+            printer.mqttStatus = "Disabled";
+            console.log(printer.name, printer.logFilePath, `Monitoring disabled for ${printer.name} - ${printer.id}`);
+        }
+
+        broadcastSSE({ type: "monitoring_update", printer: printer.id, enabled });
+        if (enabled) setupMqtt(printer);
+
+        return true;
+    }
+
     app.post("/api/printer/:printerId/monitoring/stop", (req, res) => {
         const printer = printers.find(p => p.id === req.params.printerId);
         if (!printer) return res.status(404).json({ error: "Printer not found" });
 
-        if (printer.monitoringEnabled) {
-            printer.monitoringEnabled = false;
-
-            // Actively close the existing MQTT connection instead of waiting for it to drop
-            if (printer.mqttClient) {
-                printer.mqttClient.end();
-                printer.mqttClient = null;
-            }
-            printer.mqttRunning = false;
-            printer.mqttStatus = "Disabled";
-
-            state.clients.forEach(client => {
-                client.write(`data: ${JSON.stringify({ type: "monitoring_update", printer: printer.id, enabled: false })}\n\n`);
-            });
-            res.json({ ok: true, printer: printer.id, monitoringEnabled: false });
-            console.log(printer.name, printer.logFilePath, `Monitoring disabled for ${printer.name} - ${printer.id}`);
-        } else {
-            res.json({ ok: false, message: `Monitoring already disabled for ${printer.name} - ${printer.id}` });
+        if (!setMonitoring(printer, false)) {
+            return res.json({ ok: false, message: `Monitoring already disabled for ${printer.name} - ${printer.id}` });
         }
+
+        res.json({ ok: true, printer: printer.id, monitoringEnabled: false });
     });
 
     app.post("/api/printer/:printerId/monitoring/start", (req, res) => {
         const printer = printers.find(p => p.id === req.params.printerId);
         if (!printer) return res.status(404).json({ error: "Printer not found" });
 
-        if (printer.monitoringEnabled) {
-            res.json({ ok: false, message: `Monitoring already enabled for ${printer.name} - ${printer.id}` });
-        } else {
-            printer.monitoringEnabled = true;
-            state.clients.forEach(client => {
-                client.write(`data: ${JSON.stringify({ type: "monitoring_update", printer: printer.id, enabled: true })}\n\n`);
-            });
-            res.json({ ok: true, printer: printer.id, monitoringEnabled: true });
+        if (!setMonitoring(printer, true)) {
+            return res.json({ ok: false, message: `Monitoring already enabled for ${printer.name} - ${printer.id}` });
+        }
 
-            // Always restart MQTT immediately, regardless of MAX_RETRIES setting
+        res.json({ ok: true, printer: printer.id, monitoringEnabled: true });
+    });
+
+    // Every printer at once, for the Service card. Answers with what it actually
+    // changed rather than a bare ok, so the page can say "3 of 4 were already
+    // running" instead of implying it did something.
+    app.post("/api/monitoring/:action", (req, res) => {
+        const { action } = req.params;
+        if (action !== "start" && action !== "stop") {
+            return res.status(404).json({ ok: false, error: "Unknown action" });
+        }
+
+        const enabled = action === "start";
+        const changed = printers.filter(printer => setMonitoring(printer, enabled)).map(printer => printer.id);
+
+        console.log("Server", serverLogFilePath, `[Service] Monitoring ${enabled ? "enabled" : "disabled"} for ${changed.length} of ${printers.length} printers`);
+
+        res.json({ ok: true, enabled, changed, total: printers.length });
+    });
+
+    // Rebuilds the MQTT connections without ending the process. This is what
+    // most people reach for the restart button for, and unlike a restart it
+    // keeps the consumption tracking of a running print, which lives in memory
+    // and is booked when the job ends. So it needs no confirmation.
+    app.post("/api/printers/reconnect", (req, res) => {
+        const reconnected = [];
+
+        for (const printer of printers) {
+            if (!printer.monitoringEnabled) continue;
+
+            closeMqtt(printer, "reconnecting on request", true);
             printer.reconnectAttempts = 0;
-            printer.mqttRunning = false;
+            // The cooldown in setupMqtt guards against retry storms, not against
+            // a deliberate reconnect, so clear it here.
+            printer.lastReconnectAttempt = 0;
             printer.mqttStatus = "Reconnecting";
-            console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}, restarting MQTT...`);
+            reconnected.push(printer.id);
             setupMqtt(printer);
         }
+
+        console.log("Server", serverLogFilePath, `[Service] Reconnecting ${reconnected.length} printer(s) on request`);
+        broadcastSSE({ type: "printers_update" });
+
+        res.json({ ok: true, reconnected, skipped: printers.length - reconnected.length });
     });
 
     app.get("/api/print/:printerId", async (req, res) => {
@@ -562,6 +649,71 @@ export function registerRoutes(app, printers) {
     });
 
     // ---------------------------------------------------------------------
+    // Service
+    //
+    // What the Service card at the bottom of the settings page needs: the facts
+    // about this installation, the update check, and the support bundle.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/system", (req, res) => {
+        res.json(systemInfo());
+    });
+
+    app.get("/api/update", async (req, res) => {
+        res.json(await checkForUpdate({ force: req.query.force === "true" }));
+    });
+
+    // One archive with the logs, the configuration and the facts about the
+    // installation, which is what a bug report otherwise takes four rounds of
+    // questions to collect. Anonymised unless the caller says otherwise, and the
+    // access code is replaced in both variants; see anonymize.js.
+    app.get("/api/diagnostics/download", async (req, res) => {
+        try {
+            const anonymize = req.query.anonymize !== "false";
+            const { buffer, filename } = await buildDiagnosticsBundle({ anonymize });
+
+            console.log("Server", serverLogFilePath, `[Service] Diagnostics bundle created (${anonymize ? "anonymised" : "full"}, ${Math.round(buffer.length / 1024)} KB)`);
+
+            res.setHeader("Content-Type", "application/zip");
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Length", buffer.length);
+            res.end(buffer);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, `Diagnostics bundle failed: ${err.message}`);
+            res.status(500).json({ ok: false, error: "The bundle could not be built" });
+        }
+    });
+
+    // ---------------------------------------------------------------------
+    // Notices
+    //
+    // One entry so far: environment based configuration, deprecated since 1.3.0.
+    // The dashboard shows it once and the dismissal is stored server side, in
+    // settings.json beside the values, so it does not come back on the next
+    // browser. The notice disappears on its own once the values have been saved
+    // in the Web UI, which is why nothing here has to know the previous version.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/notices", (req, res) => {
+        res.json({ [ENV_CONFIG_NOTICE]: deprecatedConfig() });
+    });
+
+    app.post("/api/notices/:id/ack", (req, res) => {
+        if (req.params.id !== ENV_CONFIG_NOTICE) {
+            return res.status(404).json({ ok: false, error: "Unknown notice" });
+        }
+
+        try {
+            acknowledgeNotice(req.params.id);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not write settings.json:", err?.message);
+            return res.status(500).json({ ok: false, error: err?.message || "Could not store the acknowledgement" });
+        }
+
+        res.json({ ok: true });
+    });
+
+    // ---------------------------------------------------------------------
     // Printer management
     //
     // The access code is never sent to a client. An update without a code keeps
@@ -744,11 +896,7 @@ function publicPrinter(printer) {
 
 /** Closes the MQTT connection of a printer, if it has one. */
 function disconnectPrinter(printer) {
-    if (printer.mqttClient) {
-        printer.mqttClient.end();
-        printer.mqttClient = null;
-    }
-    printer.mqttRunning = false;
+    closeMqtt(printer, "the printer was changed or removed in the Web UI");
     printer.mqttStatus = "Disconnected";
 }
 

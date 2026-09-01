@@ -812,6 +812,31 @@ function pushSlotUpdate(printer, newUiSpool, prevByAmsId, slot) {
  *
  * @param {object} printer - the printer runtime object
  */
+/**
+ * Closes the MQTT connection of a printer on purpose.
+ *
+ * Every deliberate disconnect goes through here, so that the "close" handler can
+ * tell one from a connection the printer or the network dropped. Without that it
+ * announced that the monitor loop would retry within the offline check interval,
+ * which is wrong whenever a reconnect has already been started or the process is
+ * shutting down, and the line then sits in the log directly above the successful
+ * reconnect reading as though nothing had happened.
+ *
+ * @param {object} printer - the runtime printer
+ * @param {string} reason - completes "Connection closed, ..." in the log
+ * @param {boolean} [force] - end the client without waiting for the broker
+ */
+export function closeMqtt(printer, reason, force = false) {
+    printer.closingReason = reason;
+
+    if (printer.mqttClient) {
+        printer.mqttClient.end(force);
+        printer.mqttClient = null;
+    }
+
+    printer.mqttRunning = false;
+}
+
 export async function setupMqtt(printer) {
     const now = Date.now();
     const COOLDOWN_PERIOD = 30000;
@@ -847,9 +872,26 @@ export async function setupMqtt(printer) {
         });
 
         client.on("close", () => {
+            // A deliberate reconnect ends this client and builds a new one right
+            // away, so this can arrive when the printer already has a newer
+            // connection. Resetting the state then would tear down the live one
+            // and leave the monitor loop to pick the printer up again.
+            if (printer.mqttClient && printer.mqttClient !== client) return;
+
             printer.mqttStatus = "Disconnected";
             printer.mqttRunning = false;
             printer.mqttClient = null;
+
+            // Set by closeMqtt() when this close was asked for. Saying the
+            // monitor loop will retry is wrong then: either something is already
+            // reconnecting, or the process is on its way out.
+            const reason = printer.closingReason;
+            printer.closingReason = null;
+
+            if (reason) {
+                console.log(printer.name, printer.logFilePath, ` Connection closed, ${reason}`);
+                return;
+            }
 
             // No self-rescheduling here. monitorPrinters() is the single
             // place driving reconnect attempts (polls every offline check interval
