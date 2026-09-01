@@ -38,19 +38,23 @@
             <div class="set-card">
                 <div class="set-card-head">
                     <h2>Service</h2>
-                    <button class="btn btn-danger-solid" type="button" id="restart-service">Restart service</button>
                 </div>
-                <p class="set-note" id="restart-note"></p>
+                <p class="set-note">What this installation is running, and the actions that work on the
+                    running service itself rather than on a stored setting.</p>
 
                 <dl class="set-facts" id="system-info"></dl>
                 <p class="set-note" id="update-note"></p>
+                <p class="set-note" id="service-note"></p>
 
+                <!-- The restart sits at the end of this row, apart from the three
+                     that leave the process running. -->
                 <div class="set-service-actions">
                     <button class="btn" type="button" id="download-diagnostics">Download diagnostics...</button>
                     <button class="btn" type="button" id="reconnect-printers">Reconnect all printers</button>
                     <button class="btn" type="button" id="toggle-monitoring">Pause all monitoring</button>
+                    <button class="btn btn-danger-solid set-action-end" type="button" id="restart-service">Restart service</button>
                 </div>
-                <p class="set-note" id="service-note"></p>
+                <p class="set-note" id="restart-note"></p>
             </div>
 
             <div class="set-actions">

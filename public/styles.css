@@ -1453,7 +1453,14 @@ body.dark-mode .set-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 14px;
+}
+
+/* Pushes the restart to the far end of the row, away from the three actions
+   that leave the process running. On a narrow screen the row wraps and it ends
+   up on its own line, still right aligned, which says the same thing. */
+.set-action-end {
+  margin-left: auto;
 }
 
 /* Used by the export dialog to spell out what anonymising replaces */

@@ -336,19 +336,19 @@ async function toggleAllMonitoring() {
 /* ---- Restarting the service ---- */
 
 /**
- * The service card says what a restart will actually do on this installation.
+ * What a restart will actually do on this installation.
  *
- * Names the button rather than starting with "Ends the service": the card holds
- * four actions now, and an unattached sentence under the heading read as if it
- * described all of them.
+ * Sits under the action row rather than under the heading, where it read as if
+ * it described the whole card. Only the restart needs a warning: the other three
+ * actions leave the process running, which is what the last sentence says.
  */
 function renderRestartNote() {
     const note = document.getElementById("restart-note");
     if (!note) return;
 
     note.textContent = supervised
-        ? "Restart service ends the service and starts it again, which takes a few seconds. The page waits for it and reloads itself. Everything else on this card leaves the process running."
-        : "Restart service ends the process so that Docker or the Home Assistant supervisor starts it again. That only works when the container is set to restart, for example with restart: unless-stopped, otherwise the service stays down and has to be started by hand. Everything else on this card leaves the process running.";
+        ? "Restarting takes a few seconds; the page waits for it and reloads itself. The other three actions leave the process running."
+        : "Restarting ends the process so that Docker or the Home Assistant supervisor starts it again. That only works when the container is set to restart, for example with restart: unless-stopped, otherwise the service stays down and has to be started by hand. The other three actions leave the process running.";
 }
 
 async function confirmRestart() {
