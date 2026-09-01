@@ -9,23 +9,17 @@ import { startTestApp, call } from "./helpers/app.js";
 // Its own app so the bundle is built against a data directory this file owns.
 let app;
 
-const printer = { id: "01p00a000000042", code: "87654321", ip: "192.168.178.55", name: "Test printer" };
+const printer = { id: "01P00A000000042", code: "87654321", ip: "192.168.178.55", name: "Test printer" };
 
 before(async () => {
-    app = await startTestApp();
-    await call(`${app.url}/api/printers`, "POST", printer);
-
-    // Adding a printer creates its log file asynchronously. Writing the fixture
-    // before that lands loses it to the create, which is what made this file
-    // flaky, so wait for the file and append rather than replace it.
-    const logFile = path.join(process.env.LOG_DIR, "01P00A000000042.log");
-    for (let i = 0; i < 50 && !fs.existsSync(logFile); i++) {
-        await new Promise(resolve => setTimeout(resolve, 20));
-    }
+    // Seeded through the file rather than POST /api/printers: adding a printer
+    // over the API also creates its log file, with a truncating write that lands
+    // whenever it lands, and that race ate the fixture below.
+    app = await startTestApp({ seedPrinters: [printer] });
 
     // A log line carrying everything the masking is supposed to remove
-    fs.appendFileSync(
-        logFile,
+    fs.writeFileSync(
+        path.join(process.env.LOG_DIR, "01P00A000000042.log"),
         "Printer 01P00A000000042 with IP 192.168.178.55 and code 87654321 is unreachable\n",
     );
 });
