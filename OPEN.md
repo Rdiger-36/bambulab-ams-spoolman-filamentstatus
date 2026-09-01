@@ -129,11 +129,20 @@ The version deliberately stays on a `-dev` prerelease for now, currently
 
 Tag behaviour, after the hardening in `c053561`:
 
-| Tag | Images | `:latest` |
-|---|---|---|
-| `v1.3.0` | `:1.3.0` and `:latest` | moved |
-| `v1.3.0-dev`, `v1.3.0-dev.2`, `v1.3.0-dev.3` | `:<version>` and `:dev` | untouched |
-| `v1.3.0-rc1` and other suffixes | `:<version>` only | untouched |
+| Tag | Images | `:latest` | GitHub release |
+|---|---|---|---|
+| `v1.3.0` | `:1.3.0` and `:latest` | moved | release, marked Latest |
+| `v1.3.0-dev`, `v1.3.0-dev.2`, `v1.3.0-dev.3` | `:<version>` and `:dev` | untouched | pre-release |
+| `v1.3.0-rc1` and other suffixes | `:<version>` only | untouched | pre-release |
+
+One `case` decides all four columns, so the image tags and the release cannot
+disagree: whatever does not move `:latest` is a pre-release.
+
+The release is written after the image push, not before, because a release
+pointing at an image that never built sends people to a pull that fails. Its
+body is the section of `CHANGELOG.md` for exactly that version, so a release
+without a changelog entry says so instead of inventing notes. A re-run for a
+tag that already has a release edits it rather than failing.
 
 Publishing from a branch is rejected outright, so the "Run workflow" button can
 no longer overwrite `:latest` with whatever is on `main`.

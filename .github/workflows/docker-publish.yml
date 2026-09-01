@@ -15,7 +15,9 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # The release step writes to the repository's releases, the image push
+      # writes to the package registry.
+      contents: write
       packages: write
 
     steps:
@@ -69,15 +71,19 @@ jobs:
           # suffix additionally moves the rolling :dev tag, further iterations
           # (-dev.2 and so on) included. Any other suffix publishes its exact
           # version only, so an -rc or -beta cannot reach users on :latest.
+          # The same suffix that keeps a version off :latest also makes its
+          # GitHub release a pre-release, so the two cannot drift apart: an
+          # image that is not :latest is never the release users are pointed at.
           case "${VERSION}" in
-            *-dev|*-dev.*) TAGS="${IMAGE}:${VERSION},${IMAGE}:dev" ;;
-            *-*)           TAGS="${IMAGE}:${VERSION}" ;;
-            *)             TAGS="${IMAGE}:${VERSION},${IMAGE}:latest" ;;
+            *-dev|*-dev.*) TAGS="${IMAGE}:${VERSION},${IMAGE}:dev"    ; PRERELEASE=true  ;;
+            *-*)           TAGS="${IMAGE}:${VERSION}"                 ; PRERELEASE=true  ;;
+            *)             TAGS="${IMAGE}:${VERSION},${IMAGE}:latest" ; PRERELEASE=false ;;
           esac
 
-          echo "Publishing: ${TAGS}"
+          echo "Publishing: ${TAGS} (prerelease: ${PRERELEASE})"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "prerelease=${PRERELEASE}" >> $GITHUB_OUTPUT
           # Build time for the OCI created label. The repository's updated_at
           # was used here, which is when the repo last changed, not when this
           # image was built.
@@ -99,3 +105,71 @@ jobs:
             org.opencontainers.image.created=${{ steps.tags.outputs.created }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Runs after the push on purpose: a release that points at an image which
+      # never got built would send people to a pull that fails.
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.tags.outputs.version }}
+          PRERELEASE: ${{ steps.tags.outputs.prerelease }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          # The section of CHANGELOG.md for exactly this version: everything
+          # between its "Version <x>" line and the next separator. An exact
+          # string compare rather than a pattern, so 1.3.0 cannot match the
+          # heading of 1.3.0-dev.2. The separator is matched as "starts with
+          # ---" rather than by a counted interval, which mawk, the awk on the
+          # runner, does not support.
+          NOTES="$(awk -v v="Version ${VERSION}" '
+            $0 == v { found = 1; next }
+            found && /^---/ { exit }
+            found { print }
+          ' CHANGELOG.md)"
+
+          {
+            if [[ -n "${NOTES//[[:space:]]/}" ]]; then
+              # Fenced, because the changelog is indented plain text: as
+              # markdown its deeper levels would collapse into code blocks
+              # halfway and read as a mess.
+              echo '```'
+              printf '%s\n' "${NOTES}"
+              echo '```'
+            else
+              echo "No CHANGELOG.md section for ${VERSION}."
+            fi
+
+            echo
+            echo "### Docker"
+            echo
+            echo '```bash'
+            # Every tag this run published, so the notes cannot claim a tag that
+            # was not pushed: for a stable version that is :latest as well.
+            echo "${TAGS}" | tr ',' '\n' | while read -r tag; do
+              [[ -n "${tag}" ]] && echo "docker pull ${tag}"
+            done
+            echo '```'
+            if [[ "${PRERELEASE}" == "true" ]]; then
+              echo
+              echo "This is a pre-release. \`:latest\` still points at the last stable version."
+            fi
+          } > release-notes.md
+
+          # A re-run of the workflow for a tag that already has a release should
+          # update it rather than fail on the second attempt.
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" \
+              --notes-file release-notes.md \
+              --prerelease="${PRERELEASE}" \
+              --latest="$([[ "${PRERELEASE}" == "true" ]] && echo false || echo true)"
+            echo "Updated the existing release ${GITHUB_REF_NAME}."
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --notes-file release-notes.md \
+              --prerelease="${PRERELEASE}" \
+              --latest="$([[ "${PRERELEASE}" == "true" ]] && echo false || echo true)"
+            echo "Created the release ${GITHUB_REF_NAME} (prerelease: ${PRERELEASE})."
+          fi
