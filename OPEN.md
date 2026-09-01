@@ -21,6 +21,13 @@ theory or in tests. Ordered by how likely a user is to hit it.
   0.38 g that was booked. A finished print, as opposed to a cancelled one, has
   still not been observed, and neither has a booking onto the external spool
   holder, which needs a run past layer 170.
+- [ ] **An AMS HT.** Nobody involved has one, so where its slots sit in Bambu
+  Studio's filament list is unknown and `orderedAmsSlots()` leaves them out. It
+  only matters for a printer that does not report `print.mapping`, which answers
+  the same question. A single sliced file from a printer with one settles it:
+  compare `filament_colour` in `Metadata/project_settings.config` against the
+  slots the printer reports, position for position, the way the external holder
+  was settled.
 - [ ] **AMS Lite.** Everything was tested on a P2S with two AMS units. The AMS
   Lite was never in scope for G-code tracking; the README only documents its
   legacy mode limitation.
@@ -345,6 +352,39 @@ needs no change. It only calls `/api/printers`,
 `/api/printer/{id}/monitoring/start|stop` and `/api/status/{id}`, none of which
 changed, and it sets no environment variables of its own. The add-on wrapper is
 a different matter, see the note in the settings section above.
+
+## Next: the frontend mirrors the booking logic untested
+
+`findConsumption()` in `public/frontend.js` has to reach the same conclusion as
+`bookConsumption()` in `src/mqtt.js`: which sliced filament belongs to which
+slot. They are two separate implementations of one decision, and only the server
+side has tests, because `public/` has none at all.
+
+That is not theoretical. Both defects fixed at the end of PR #89 were in that
+mirror and neither was caught by the 233 tests:
+
+- The fallback stages claimed an amount that already belonged to a slot the
+  printer had named, so a print running from remapped slots showed every figure
+  on two rows, on the slot being consumed and on the slot merely holding the
+  colour the file was sliced with. Found by a user looking at the dashboard.
+- The exact stage had been dead since the consumption map was keyed by the
+  position of the filament rather than by its identity. It indexed the map with
+  a colour key and never hit anything, so only the loosest stage did any work.
+
+The four functions that mirror server logic, all in `public/frontend.js`:
+`consumptionKeyJS`, `materialKeyJS`, `slotConfirmsSliceJS` and
+`findConsumption`. Their counterparts are `consumptionKey` in `src/gcode.js`,
+`materialKey` and `slotConfirmsSlice` in `src/mqtt.js`.
+
+The constraint that makes this awkward: `public/` is deliberately dependency
+free, served straight from disk, no build step, and the whole file is one IIFE,
+so nothing in it can be imported by a test. Whatever is done must not change
+that. Worth checking whether the shared decision can move to a plain ES module
+under `public/` that both the page and `node:test` can import, since the browser
+loads modules natively and the repo already requires Node 22.
+
+Anything that reduces this to one implementation tested against one set of cases
+is better than what is there now.
 
 ## Known gaps, by design
 
