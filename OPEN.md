@@ -24,11 +24,12 @@ theory or in tests. Ordered by how likely a user is to hit it.
 - [ ] **A print running from remapped slots, after the matching moved.** The
   decision which sliced filament comes out of which slot is one function now,
   `matchConsumption()` in `src/ams.js`, shared by the booking and by
-  `/api/print`. Two things it does are covered by tests and by the mock server
-  only: a slot the printer named is off limits to every other filament, where
-  the booking used to let a second one match it by colour, and a slot serving
-  two filaments of one print now shows their amounts added up. The booking of a
-  straightforward print is unchanged and was re-checked against the mock.
+  `/api/print`. What it does to a print the printer remapped is covered by tests
+  alone: the slot the printer named is off limits to every other filament, where
+  the booking could still reach it through the colour stage. It needs a print
+  started with a different spool selected than the one that was sliced, and a
+  look at whether the amount lands once, on the slot that was consumed. The
+  match itself has run against the printer, see below.
 - [ ] **An AMS HT.** Nobody involved has one, so where its slots sit in Bambu
   Studio's filament list is unknown and `orderedAmsSlots()` leaves them out. It
   only matters for a printer that does not report `print.mapping`, which answers
@@ -101,6 +102,25 @@ Two observations that correct what is written below:
 - **`state` 11 is not proof of a read Bambu tag.** A chipless spool with an all
   zero `tray_uuid` reported 11 as well, so the value says the slot is loaded,
   not that it was identified.
+
+On 2026-09-01 the shared consumption match was run against the same P2S, with
+the mock Spoolman, so nothing was written anywhere. `/api/print?job=<name>`
+pulled one of the printer's own sliced files over FTPS, five filaments across
+two AMS units, and the match placed them on the nine slots the printer reported
+at that moment:
+
+- The black PLA Basic went to A3, not to A0 where the slicer's list order
+  estimated it and a pink spool actually sits. That is the confirmation doing
+  its work: the estimate was rejected and the filament identity found the slot.
+- The ABS and the PETG HF went to their own slots by identity, and the white
+  PLA to the matte white slot by material and colour, its profile being a
+  different one.
+- The fifth filament, a grey nobody has loaded, was placed on nothing and is
+  what the dashboard lists as required but not loaded.
+- No slot was claimed twice.
+
+Still unobserved on hardware: a booking on a terminal state through the new
+path, and a print the printer remapped.
 
 Also seen: both 3rd party spools report `tray_info_idx` `GFL99`, the generic
 profile, which is exactly the collision described under the automatic creation
