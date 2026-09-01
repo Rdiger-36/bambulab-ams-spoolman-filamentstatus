@@ -93,11 +93,16 @@ const SILK = { type: "PLA", material: "PLA Silk", idx: "GFA05", name: "A05-T1", 
 
 // PLA Basic Gradient. One colour fading into the next along the length of the
 // filament, which SpoolmanDB calls "longitudinal".
-// The profile id is made up: no gradient spool was available to read one off.
-const GRADIENT = { type: "PLA", material: "PLA Basic Gradient", idx: "GFA07", name: "A07-T0", nozzleMin: "190", nozzleMax: "230" };
+//
+// GFA00 and "PLA Basic" are read off a real slice: Bambu Studio writes
+// filament_ids GFA00 and filament_settings_id "Bambu PLA Basic @BBL P2S" for a
+// gradient spool, so it is not a profile of its own. That is what makes a
+// gradient collide with the plain spool of the same first colour, which C0 and
+// D1 below both do.
+const GRADIENT = { type: "PLA", material: "PLA Basic", idx: "GFA00", name: "A00-T0", nozzleMin: "190", nozzleMax: "230" };
 
 // TPU 90A, the datasheet with both kinds in it: two gradient colours and four
-// plain ones. The profile id is made up for the same reason.
+// plain ones. This profile id is still a guess, no TPU 90A spool was sliced.
 const TPU = { type: "TPU", material: "TPU 90A", idx: "GFU02", name: "U02-T0", nozzleMin: "200", nozzleMax: "240", bedTemp: "30" };
 
 /**
@@ -224,7 +229,7 @@ export const SEED_FILAMENTS = [
     {
         id: 3,
         name: "Arctic Whisper",
-        material: "PLA Basic Gradient",
+        material: "PLA Basic",
         density: 1.24,
         diameter: 1.75,
         weight: 1000,

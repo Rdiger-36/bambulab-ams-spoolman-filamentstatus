@@ -21,6 +21,10 @@ import {
 //                       project keeps its unused entries, so ids are not
 //                       contiguous and id-1 is what indexes the layer lists
 //   split_layer_ranges  a filament that prints, stops, and comes back later
+//   multi_colour        3 multi colour filaments: one PLA Basic Gradient, one
+//                       two colour PLA Silk and one four colour PLA Silk. Sliced
+//                       to answer whether the file carries a colour set. It does
+//                       not, see the tests at the end of this file
 const fixturePath = (name) =>
     path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", `${name}.config`);
 const fixtureText = (name) => fs.readFileSync(fixturePath(name), "utf-8");
@@ -142,4 +146,47 @@ test("every FTPS connection gets its own TLS options object", () => {
 
     first.host = "192.0.2.1";
     assert.equal(second.host, undefined);
+});
+
+/* ---- What a multi colour filament looks like in the sliced file ---- */
+
+// Sliced in Bambu Studio 02.08.02.61 with three multi colour filaments loaded,
+// to settle a question the other fixtures could not: they all used single
+// colour filaments, so "the sliced file carries one colour per filament" was an
+// assumption rather than something anybody had read.
+const multiColour = fixture("multi_colour");
+
+test("a multi colour filament is sliced with one colour, the first of its set", () => {
+    // Studio does know the whole set. It writes it into
+    // Metadata/project_settings.config as `filament_multi_colour`, where the
+    // three entries of this print read "#8EC9E9 #E7C1D5",
+    // "#0047BB #BB22A3" and "#EC984C #6CD4BC #A66EB9 #D87694".
+    // slice_info.config, the only file this service downloads, keeps the first
+    // colour of each and nothing else.
+    assert.deepEqual(multiColour.filaments.map(f => f.color), ["#8EC9E9", "#0047BB", "#EC984C"]);
+});
+
+test("PLA Basic Gradient carries the plain PLA Basic profile id", () => {
+    // GFA00 is PLA Basic. A gradient spool is not a profile of its own, which
+    // means a consumption key of profile id plus colour cannot separate a
+    // gradient filament from the plain spool it shares both with.
+    const [gradient] = multiColour.filaments;
+    assert.equal(gradient.tray_info_idx, "GFA00");
+    assert.equal(gradient.type, "PLA");
+});
+
+test("two filaments sharing a first colour and a profile id share a key", () => {
+    // The limit this file was sliced to measure. Arctic Whisper and Solar
+    // Breeze are both GFA00 and both start on #FFFFFF, so consumption cannot be
+    // split between them from the sliced file alone, and the dashboard marks
+    // the slots as ambiguous rather than booking onto a guess.
+    assert.equal(consumptionKey("GFA00", "#FFFFFF"), consumptionKey("GFA00", "#FFFFFF00"));
+});
+
+test("the three multi colour filaments are still told apart", () => {
+    // Two of them share the PLA Silk profile and differ only in colour, which
+    // is what the key is for. Nothing about this print is ambiguous.
+    const keys = multiColour.filaments.map(f => consumptionKey(f.tray_info_idx, f.color));
+    assert.deepEqual(keys, ["GFA00|8EC9E9", "GFA05|0047BB", "GFA05|EC984C"]);
+    assert.equal(new Set(keys).size, 3);
 });
