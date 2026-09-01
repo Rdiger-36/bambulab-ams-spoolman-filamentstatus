@@ -210,20 +210,22 @@ test("the three multi colour filaments are still told apart", () => {
 // Two AMS units, which is what both real prints below were sliced against.
 const twoUnits = ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3"];
 
-test("the printer's attached units decide the order, not a computed geometry", () => {
+test("the slots are ordered by ascending AMS unit id", () => {
     // Reported in whatever order the printer sends its units, and the slicer
     // lists them unit by unit and slot by slot.
     assert.deepEqual(orderedAmsSlots(["B1", "A0", "B0", "A2"]),
                      ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3"]);
 
-    // Every attached unit contributes all four positions even when only some of
-    // them reported. The slicer lists a slot whether or not it holds anything,
-    // so counting the reported ones would shift everything after an empty slot.
+    // Every attached four slot unit contributes all four positions even when
+    // only some of them reported. The slicer lists a slot whether or not it
+    // holds anything, so counting the reported ones would shift everything
+    // after an empty slot.
     assert.deepEqual(orderedAmsSlots(["A0"]), ["A0", "A1", "A2", "A3"]);
 
-    // AMS HT holds one spool per unit and its place in the slicer's list is
-    // unknown, so it is left out rather than shifting everything after it.
-    assert.deepEqual(orderedAmsSlots(["A0", "HT-A"]), ["A0", "A1", "A2", "A3"]);
+    // The printer numbers the four slot units 0 to 3, an AMS HT 128 to 135 and
+    // the external holder 255, so both sit after them and the holder last.
+    assert.deepEqual(orderedAmsSlots(["A0", "External", "HT-B", "HT-A"]),
+                     ["A0", "A1", "A2", "A3", "HT-A", "HT-B", "External"]);
     assert.deepEqual(orderedAmsSlots([]), []);
 });
 
@@ -235,16 +237,26 @@ test("the real multi colour print resolves to the slots it was printed from", ()
     ]);
 });
 
-test("a spool on the external holder is left unplaced", () => {
-    // The file that settled this: the same printer with a spool on the external
-    // holder lists nine filaments, and the ninth is that holder. Arithmetic on
-    // four slots per unit turns it into "C0", a unit this printer does not have.
-    const full = resolveSliceSlots(calcFullConsumption(externalSpool), twoUnits);
+test("a spool on the external holder gets the position after the AMS units", () => {
+    // The file that settled the ordering: the same printer with a spool on the
+    // external holder lists nine filaments, and its ninth colour is the one the
+    // printer reports for the holder. Arithmetic on four slots per unit turned
+    // that into "C0", a unit this printer does not have.
+    const full = resolveSliceSlots(calcFullConsumption(externalSpool),
+                                   orderedAmsSlots([...twoUnits, "External"]));
     assert.deepEqual(Object.values(full).map(e => [e.index, e.amsId, e.grams]), [
         [3, "A3", 30.49],
         [4, "B0", 67.29],
-        [8, null, 80.92],
+        [8, "External", 80.92],
     ]);
+});
+
+test("an empty holder leaves the position after the AMS units unfilled", () => {
+    // The holder is only reported as a slot while it carries something, so the
+    // ninth filament of that same file has nowhere to go and falls through to
+    // the stages that match on profile and colour.
+    const full = resolveSliceSlots(calcFullConsumption(externalSpool), orderedAmsSlots(twoUnits));
+    assert.deepEqual(Object.values(full).map(e => e.amsId), ["A3", "B0", null]);
 });
 
 test("the list length says nothing about the printer's layout", () => {

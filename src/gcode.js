@@ -2,6 +2,8 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
+import { EXTERNAL_SLOT } from "./utils.js";
+
 /**
  * TLS options for BambuLab's self-signed certificate. The printer presents a
  * cert with CN = serial number; we don't validate it (same as the MQTT
@@ -159,28 +161,42 @@ export function resolveSliceSlots(consumption, amsIds) {
 }
 
 /**
- * The printer's four slot AMS positions in the order Bambu Studio lists them,
- * which is unit by unit and slot by slot.
+ * The printer's slots in the order Bambu Studio lists them, which is by
+ * ascending AMS unit id and then by slot within the unit.
  *
- * Derived from which units are attached rather than from which slots came back,
- * and every attached unit contributes all four of its positions. The slicer
- * lists a unit's slots whether or not they hold anything, so counting only the
- * slots that reported would shift every position after an empty one onto the
- * wrong spool.
+ * That order is read off a printer rather than assumed. A P2S with two AMS
+ * units and a spool on the external holder produced a nine entry filament list
+ * whose colours matched, position for position, the slots the printer reported:
+ * unit 0 as positions 0 to 3, unit 1 as 4 to 7, and the holder, which the
+ * printer numbers 255, as position 8. Sorting by unit id reproduces exactly
+ * that, so an AMS HT, numbered 128 to 135, falls between the four slot units
+ * and the holder.
  *
- * AMS HT units are left out. They hold one spool each and where they sit in the
- * slicer's list is not pinned down by any file observed so far, so including
- * them would misplace every filament after the first one instead.
+ * The four slot units contribute all four of their positions whether or not a
+ * slot reported a spool, because the slicer lists an empty slot too and
+ * counting only the occupied ones would shift every position after one onto the
+ * wrong spool. An AMS HT and the holder are one position each.
+ *
+ * Where an AMS HT really sits is inference, not measurement: no observed file
+ * has one in it. It costs nothing to be wrong about, because `slotConfirmsSlice`
+ * refuses a position whose slot does not hold the expected profile and colours,
+ * and the stages below it then decide exactly as they did before positions were
+ * used at all.
  *
  * @param {string[]} amsIds - slot labels as `convertAMSandSlot` produces them
- * @returns {string[]} the addressable positions, ordered
+ * @returns {string[]} the positions, ordered
  */
 export function orderedAmsSlots(amsIds) {
+    const ids = (amsIds || []).filter(id => typeof id === "string");
     const units = ["A", "B", "C", "D"];
-    const attached = units.filter(unit =>
-        (amsIds || []).some(id => typeof id === "string" && id[0] === unit && /^[0-3]$/.test(id[1])));
 
-    return attached.flatMap(unit => [0, 1, 2, 3].map(slot => `${unit}${slot}`));
+    const attached = units.filter(unit => ids.some(id => id[0] === unit && /^[0-3]$/.test(id[1])));
+    const fourSlotUnits = attached.flatMap(unit => [0, 1, 2, 3].map(slot => `${unit}${slot}`));
+
+    const highTemperature = ids.filter(id => /^HT-[A-H]$/.test(id)).sort();
+    const external = ids.includes(EXTERNAL_SLOT) ? [EXTERNAL_SLOT] : [];
+
+    return [...fourSlotUnits, ...highTemperature, ...external];
 }
 
 /**
