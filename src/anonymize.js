@@ -22,10 +22,16 @@
 export const MASKED_CODE = "XXX";
 
 const IPV4 = /\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/g;
-// Bambu serial numbers are 15 characters and start with a zero. Specific enough
-// not to swallow anything else in a log line, and it catches the serial of a
-// printer that was removed from the list but is still in an older log file.
-const BAMBU_SERIAL = /\b0[0-9A-Z]{14}\b/g;
+// Bambu serial numbers are 15 upper case alphanumerics with at least one digit.
+// This is the fallback that catches the serial of a printer which was removed
+// from the list but is still in an older log file; a configured printer is
+// masked from the known list before this ever runs.
+//
+// It used to require a leading zero, which is what the P1S examples in the
+// README look like. A real P2S reports 22E8BJ581201877, so that pattern missed
+// every P2S. The tray_uuid of a spool is 32 characters and has no word boundary
+// inside it, so this cannot bite a piece of it out.
+const BAMBU_SERIAL = /\b(?=[0-9A-Z]{15}\b)[0-9A-Z]*\d[0-9A-Z]*\b/g;
 
 /** True for a string that is an IPv4 address and nothing else. */
 function isIpv4(value) {

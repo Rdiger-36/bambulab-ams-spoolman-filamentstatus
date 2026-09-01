@@ -86,6 +86,19 @@ test("a serial of a printer that is no longer configured is masked as well", () 
     assert.equal(maskText("old 01S00B987654321 gone", {}), "old 01S00XXXXXXXXXX gone");
 });
 
+test("a P2S serial is caught by the generic pattern, not only a P1S one", () => {
+    // The pattern used to require a leading zero, which the P1S examples in the
+    // README have. A real P2S reports 22E8BJ581201877 and slipped through.
+    assert.equal(maskText("Printer 22E8BJ581201877 offline", {}), "Printer 22E8BXXXXXXXXXX offline");
+});
+
+test("the generic pattern leaves the RFID tag of a spool alone", () => {
+    // 32 characters with no word boundary inside, so no 15 character run of it
+    // can match. The tag identifies a piece of filament, not a person.
+    const uuid = "18F1DE9B4FF74902A7CAA100D8F2CB5F";
+    assert.equal(maskText(`[A0] PLA Basic 000000FF [[ ${uuid} ]]`, {}), `[A0] PLA Basic 000000FF [[ ${uuid} ]]`);
+});
+
 test("every address in a log is masked, configured or not", () => {
     assert.equal(maskText("from 10.1.2.3 to 172.16.9.100", {}), "from 10.1.2.XXX to 172.16.9.XXX");
 });

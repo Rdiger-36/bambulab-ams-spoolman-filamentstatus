@@ -25,13 +25,6 @@ theory or in tests. Ordered by how likely a user is to hit it.
   legacy mode limitation.
 - [ ] **A second printer.** Multiple AMS units on one printer work (A0 to A3 and
   B0 to B3 were addressed correctly). Two printers at once was never run.
-- [ ] **The anonymised export against a real log.** The masking was exercised
-  against a synthetic log line and a container pointed at a fake printer, where
-  the only identifying values are the ones `knownValues()` already knows. A real
-  P2S with `DEBUG=true` writes far more: `tray_uuid`, job names, the Spoolman
-  address in shapes the settings do not carry. One run with debug logging on,
-  then grepping the anonymised bundle for the real serial, address and code, is
-  what would close this.
 - [ ] **Reconnect and the global monitoring pause against real MQTT.** Both were
   only seen against a printer that never connects, so the interesting half, an
   established connection being torn down and rebuilt, has never run.
@@ -64,6 +57,18 @@ no write reached Spoolman at all, which was checked rather than assumed.
 - **Reconnect works.** Cutting the container off the network produced
   `Printer ... is unreachable. Next try in 20 second(s)`, and the monitor loop
   brought the connection back on its own one interval later.
+
+On 2026-09-01 the anonymised diagnostics bundle was pulled from the same
+instance, with `DEBUG=true` and the printer connected. The serial, the address,
+the access code and the Spoolman host name were all gone, in the log text, in
+`printers.json`, in the keys of `mappings.json` and in the log file name. The
+printer name, the spool names and the `tray_uuid` values were kept, which is
+what the design says they should be.
+
+It also found a real defect, now fixed: the fallback pattern for a serial that
+is no longer in the printer list required a leading zero, matching the P1S
+examples in the README. A P2S reports `22E8BJ581201877`, so every P2S serial
+slipped through it. Only the known list was covering them.
 
 Two observations that correct what is written below:
 
