@@ -29,6 +29,11 @@ Unreleased
       - The log line that admits to a guess reaches the log file. It was written with console.warn, which is not one of the three overridden by the logger, so it went to raw stdout with the routing arguments printed as text and never into the printer log
       - The duplicate warning no longer promises what an assignment cannot do. Two spools reach that point only when the sliced file could not separate them either, so assigning both splits nothing; assigning one decides which spool carries the total
    - Development:
+      - The Web UI no longer decides for itself which sliced filament belongs to which slot. The browser held a second implementation of the booking match, untested because public/ has no tests, and both defects fixed in this release sat in it
+         - The decision is one function now, matchConsumption() in src/ams.js. The booking runs it over the spools it may book on, and /api/print runs it over every loaded slot and names the answer on each consumption entry as matchedAmsId, which is all the dashboard reads
+         - A slot that serves two filaments of one print shows their amounts added up, which is what the booking writes onto its spool
+         - The "Required but not loaded" list is what the server could not place, rather than a second guess at the same question
+         - public/ keeps its rules: no build step, no dependency, no module of its own
       - New test server under scripts/test-server: a mock printer over TLS on 8883, a mock Spoolman on 7912 and the service pointed at both, started with one command and writing to a temporary directory rather than to printers/
          - The scenario fills all 25 addressable positions (four AMS units, eight AMS HT units and the external spool holder) with the multi colour filaments from the Bambu Lab hex code tables, next to single colour, empty, being read and 3rd party slots
          - The catalogue it serves is copied from SpoolmanDB, so matching runs against the real ids, colour sets and directions

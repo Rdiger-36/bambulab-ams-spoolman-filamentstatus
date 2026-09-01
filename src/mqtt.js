@@ -5,7 +5,7 @@ import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, convertAMSandSlot, slotColors, EXTERNAL_SPOOL_ID } from "./utils.js";
+import { sleep, formatDate, formatInterval, convertAMSandSlot, EXTERNAL_SPOOL_ID } from "./utils.js";
 import {
     getSpoolmanSpools,
     getSpoolmanInternalFilaments,
@@ -17,7 +17,7 @@ import {
     patchSpoolLocation,
     useSpoolWeight,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, consumptionKey, normColor, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
 import {
     processData,
@@ -32,6 +32,8 @@ import {
     haveSpoolDataChanged,
     hasTrayDataChanged,
     hasSpoolUiChanged,
+    consumptionCandidate,
+    matchConsumption,
 } from "./ams.js";
 import { toClientSpool } from "./uispool.js";
 
@@ -156,14 +158,6 @@ async function handlePrintStateChange(printer, print) {
 }
 
 /**
- * Fallback identity for a filament, used when no tray_info_idx is available.
- * Mirrored client side in public/frontend.js.
- */
-function materialKey(type, color) {
-    return `${type || "?"}|${normColor(color)}`;
-}
-
-/**
  * The external spool holder as one more AMS unit, or nothing.
  *
  * The printer reports the holder outside the AMS block, as `print.vir_slot`, an
@@ -204,75 +198,16 @@ export function externalSpoolUnits(print) {
 }
 
 /**
- * Whether a slot really holds what the slice expected in it.
- *
- * The gate on stage 0. A slot label out of the sliced file is where the slicer
- * meant a filament to come from, and the printer is free to have decided
- * otherwise, so it counts only when the profile and the colours agree with what
- * the AMS reports for that slot right now.
- *
- * Colours are compared as sorted sets, not as the single first colour: Bambu
- * Studio and the RFID chip do not have to agree on which colour of a set comes
- * first, and a comparison that depended on that would reject the very spools
- * this is for. A side that reports one colour is compared as one colour, so an
- * older slicer, which carries no colour set at all, simply does not confirm and
- * the later stages take over.
- *
- * Exported for tests; bookConsumption is the only caller.
- *
- * @param {object} candidate - a bookable slot
- * @param {object} info - one entry of the consumption map
- * @returns {boolean}
- */
-export function slotConfirmsSlice(candidate, info) {
-    if (!candidate.idx || candidate.idx !== info.tray_info_idx) return false;
-
-    const sliceColors = (info.colors?.length ? info.colors : [info.color]).map(normColor).filter(Boolean);
-    const slotColorSet = candidate.colors.map(normColor).filter(Boolean);
-    if (!sliceColors.length || !slotColorSet.length) return false;
-
-    return JSON.stringify([...sliceColors].sort()) === JSON.stringify([...slotColorSet].sort());
-}
-
-/**
  * Books the consumed grams in Spoolman for each filament of a finished print.
  *
  * A slot is only booked when we actually know which physical spool sits in it:
  * either through the Spoolman extra.tag field (= the slot's tray_uuid, Bambu Lab
  * spools only) or through a manual assignment made in the UI. Filament
- * candidates that merely match by type are never touched.
+ * candidates that merely match by type are never touched, which is why only
+ * those slots become candidates here.
  *
- * Slots are matched to slice filaments in four stages, most specific first:
- *   0. the slot named for the filament: the printer reports which slot each of
- *      them is running from, and where it does not, the position in the
- *      slicer's list is the estimate. It is the one stage that can tell two
- *      identical spools apart, because nothing else can: they differ in nothing
- *      but where they sit
- *   1. tray_info_idx + colours: the filament identity, which separates e.g.
- *      PLA Black from PLA Jade White despite a shared profile, and a gradient
- *      spool from the plain spool it shares both a profile and a first colour
- *      with
- *   2. material type + color: for 3rd-party spools, which report no usable
- *                             tray_info_idx
- *   3. tray_info_idx alone:   colors did not line up but the profile is unique
- *
- * The two sources of that slot are trusted differently, which is the whole of
- * stage 0. What the printer reports is taken as it stands. What the list order
- * estimates has to be confirmed by `slotConfirmsSlice()`, because an unconfirmed
- * guess would book a real amount onto a real spool the print never touched.
- * When it does not confirm, the stages below decide as they did before stage 0
- * existed.
- *
- * Confirming what the printer reports would be wrong, and was: a print
- * configured to take a filament from a slot holding a different colour than the
- * sliced one is not a mistake to correct, it is the substitution the whole field
- * exists to report. Checking it against the sliced colour rejected the one
- * answer that was right and fell through to the colour stages, which found the
- * spool that was sliced instead of the spool that would have been consumed.
- *
- * Within a stage, manually assigned spools win over tag-connected ones: an
- * assignment is the user explicitly resolving what the automatic match cannot,
- * namely two connected spools identical in both profile and color.
+ * Which filament belongs to which of them is `matchConsumption()` in ams.js,
+ * shared with the dashboard route so both answer the question the same way.
  *
  * @param {object} printer - the runtime printer
  * @param {object} consumption - a map from calcFullConsumption or the partial one
@@ -300,26 +235,12 @@ async function bookConsumption(printer, consumption, state) {
     // field somebody reading this line is looking for.
     console.log(printer.name, printer.logFilePath, `[Print] ${state}, booking filament consumption:`, JSON.stringify(consumption));
 
-    const candidates = [];
-    for (const uiSpool of printer.spoolData) {
-        const mapped = !!uiSpool.connectedViaMapping;
-        if (!mapped && !uiSpool.connectedViaTag) continue;
-
-        const id = uiSpool.existingSpool?.id;
-        if (!id) continue;
-
-        const idx = uiSpool.slot?.tray_info_idx || null;
-        const colors = slotColors(uiSpool.slot);
-        candidates.push({
-            id,
-            amsId:  uiSpool.amsId,
-            mapped,
-            idx,
-            colors,
-            key:    idx ? consumptionKey(idx, uiSpool.slot?.tray_color, colors) : null,
-            matKey: materialKey(uiSpool.slot?.tray_type, uiSpool.slot?.tray_color),
-        });
-    }
+    // Only a slot whose physical spool is known can carry a booking, so nothing
+    // else is offered to the matcher.
+    const candidates = printer.spoolData
+        .filter(uiSpool => uiSpool.connectedViaMapping || uiSpool.connectedViaTag)
+        .map(consumptionCandidate)
+        .filter(candidate => candidate.id);
 
     if (!candidates.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools, nothing to book");
@@ -327,34 +248,19 @@ async function bookConsumption(printer, consumption, state) {
     }
 
     const lastUsed = new Date().toISOString();
+    const entries = Object.values(consumption);
+    const matched = matchConsumption(entries, candidates);
 
-    for (const info of Object.values(consumption)) {
+    for (const info of entries) {
         const { tray_info_idx: idx, color, type, grams } = info;
         if (grams <= 0) continue;
 
-        const wantedKey    = consumptionKey(idx, color, info.colors);
-        const wantedMatKey = materialKey(type, color);
-
-        let matches = [];
-        for (const predicate of [
-            c => info.amsId && c.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(c, info)),
-            c => c.key === wantedKey,
-            c => c.matKey === wantedMatKey,
-            c => c.idx && c.idx === idx,
-        ]) {
-            matches = candidates.filter(predicate);
-            if (matches.length) break;
-        }
+        const matches = matched.get(info) ?? [];
 
         if (!matches.length) {
             console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}), skipping ${grams}g (assign the spool in the Web UI to track it)`);
             continue;
         }
-
-        // A manual assignment is the user's explicit answer, so it outranks any
-        // automatic match found in the same stage.
-        const mapped = matches.filter(c => c.mapped);
-        if (mapped.length) matches = mapped;
 
         if (matches.length > 1) {
             // console.error rather than console.warn: logger.js overrides log,

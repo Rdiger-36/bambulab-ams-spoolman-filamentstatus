@@ -1,6 +1,7 @@
 import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
 import { slotColors } from "./utils.js";
+import { consumptionKey, normColor } from "./gcode.js";
 
 /**
  * Normalises the raw `print.ams.ams` payload so the rest of the pipeline sees
@@ -479,4 +480,169 @@ export async function haveSpoolDataChanged(spools, lastSpoolData) {
 export function hasSpoolUiChanged(next, prev) {
     if (!next || !prev) return true;
     return JSON.stringify(toClientSpool(next)) !== JSON.stringify(toClientSpool(prev));
+}
+
+/**
+ * Fallback identity for a filament, used where no tray_info_idx is available.
+ *
+ * Third party spools report the generic profile or none at all, so the material
+ * and the colour are all there is to compare them by.
+ */
+export function materialKey(type, color) {
+    return `${type || "?"}|${normColor(color)}`;
+}
+
+/**
+ * Turns the "N/A" placeholder into a real absence.
+ *
+ * `processData()` writes that literal into every field the printer left out,
+ * while `toClientSpool()` has already turned it back into null by the time the
+ * dashboard route builds its candidates. Both call `consumptionCandidate()`,
+ * so the two shapes have to produce the same keys: "N/A" normalises to the
+ * string "N/A" and null to the empty one, which would be two different keys for
+ * one slot depending on which side asked.
+ */
+function orNull(value) {
+    return value === "N/A" || value === "" || value == null ? null : value;
+}
+
+/**
+ * One slot in the shape `matchConsumption()` compares.
+ *
+ * Takes either a runtime UI spool or the client projection of one, which is
+ * what makes the booking and the dashboard ask the same question: the fields
+ * read here carry the same meaning in both.
+ *
+ * @param {object} uiSpool - a runtime UI spool or its `toClientSpool()` result
+ * @returns {object} the candidate record
+ */
+export function consumptionCandidate(uiSpool) {
+    const slot = uiSpool.slot || {};
+    const idx = orNull(slot.tray_info_idx);
+    const color = orNull(slot.tray_color);
+    const colors = slotColors(slot);
+
+    return {
+        id:     uiSpool.existingSpool?.id ?? null,
+        amsId:  uiSpool.amsId,
+        mapped: !!uiSpool.connectedViaMapping,
+        idx,
+        colors,
+        key:    idx ? consumptionKey(idx, color, colors) : null,
+        matKey: materialKey(orNull(slot.tray_type), color),
+    };
+}
+
+/**
+ * Whether a slot really holds what the slice expected in it.
+ *
+ * The gate on stage 0 of `matchConsumption()`. A slot label out of the sliced
+ * file is where the slicer meant a filament to come from, and the printer is
+ * free to have decided otherwise, so it counts only when the profile and the
+ * colours agree with what the AMS reports for that slot right now.
+ *
+ * Colours are compared as sorted sets, not as the single first colour: Bambu
+ * Studio and the RFID chip do not have to agree on which colour of a set comes
+ * first, and a comparison that depended on that would reject the very spools
+ * this is for. A side that reports one colour is compared as one colour, so an
+ * older slicer, which carries no colour set at all, simply does not confirm and
+ * the later stages take over.
+ *
+ * @param {object} candidate - a bookable slot
+ * @param {object} info - one entry of the consumption map
+ * @returns {boolean}
+ */
+export function slotConfirmsSlice(candidate, info) {
+    if (!candidate.idx || candidate.idx !== info.tray_info_idx) return false;
+
+    const sliceColors = (info.colors?.length ? info.colors : [info.color]).map(normColor).filter(Boolean);
+    const slotColorSet = candidate.colors.map(normColor).filter(Boolean);
+    if (!sliceColors.length || !slotColorSet.length) return false;
+
+    return JSON.stringify([...sliceColors].sort()) === JSON.stringify([...slotColorSet].sort());
+}
+
+/**
+ * Decides which slot each filament of a sliced print belongs to.
+ *
+ * The one implementation of that decision. `bookConsumption()` runs it over the
+ * spools it may book on, so a slot that is neither tag linked nor assigned
+ * cannot take an amount, and the dashboard route runs it over every loaded slot,
+ * so a slot nobody can book on still shows what the print needs from it. It used
+ * to exist twice, once here and once in the browser, and the two drifted apart:
+ * both defects fixed at the end of PR #89 sat in that copy.
+ *
+ * Slots are matched to slice filaments in four stages, most specific first:
+ *   0. the slot named for the filament: the printer reports which slot each of
+ *      them is running from, and where it does not, the position in the
+ *      slicer's list is the estimate. It is the one stage that can tell two
+ *      identical spools apart, because nothing else can: they differ in nothing
+ *      but where they sit
+ *   1. tray_info_idx + colours: the filament identity, which separates e.g.
+ *      PLA Black from PLA Jade White despite a shared profile, and a gradient
+ *      spool from the plain spool it shares both a profile and a first colour
+ *      with
+ *   2. material type + colour: for 3rd party spools, which report no usable
+ *      tray_info_idx
+ *   3. tray_info_idx alone: colours did not line up but the profile is unique
+ *
+ * The two sources of that slot are trusted differently, which is the whole of
+ * stage 0. What the printer reports is taken as it stands. What the list order
+ * estimates has to be confirmed by `slotConfirmsSlice()`, because an unconfirmed
+ * guess would book a real amount onto a real spool the print never touched.
+ * When it does not confirm, the stages below decide as they did before stage 0
+ * existed.
+ *
+ * Confirming what the printer reports would be wrong, and was: a print
+ * configured to take a filament from a slot holding a different colour than the
+ * sliced one is not a mistake to correct, it is the substitution the whole field
+ * exists to report. Checking it against the sliced colour rejected the one
+ * answer that was right and fell through to the colour stages, which found the
+ * spool that was sliced instead of the spool that would have been consumed.
+ *
+ * A slot the printer named for one filament is off limits to every other one.
+ * The fallback stages compare colours, and a print running from remapped slots
+ * has two of them agreeing on a colour: the slot being consumed and the slot
+ * that merely holds what the file was sliced with. Without this the second one
+ * claimed the same amount, which the dashboard showed on both rows and the
+ * booking would have written onto the wrong spool.
+ *
+ * Within a stage, manually assigned spools win over tag connected ones: an
+ * assignment is the user explicitly resolving what the automatic match cannot,
+ * namely two connected spools identical in both profile and colour.
+ *
+ * @param {object[]} entries - the consumption entries, after resolveSliceSlots()
+ * @param {object[]} candidates - slots from consumptionCandidate()
+ * @returns {Map<object, object[]>} every entry to its matching candidates, best
+ *   stage first and possibly empty. More than one means they are truly
+ *   indistinguishable; the caller decides what to do about it.
+ */
+export function matchConsumption(entries, candidates) {
+    const claimed = new Set(
+        entries.filter(entry => entry.amsIdFromPrinter && entry.amsId).map(entry => entry.amsId),
+    );
+    const unclaimed = candidates.filter(candidate => !claimed.has(candidate.amsId));
+
+    const result = new Map();
+
+    for (const info of entries) {
+        const wantedKey    = consumptionKey(info.tray_info_idx, info.color, info.colors);
+        const wantedMatKey = materialKey(info.type, info.color);
+
+        let matches = [];
+        for (const [pool, predicate] of [
+            [candidates, c => !!info.amsId && c.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(c, info))],
+            [unclaimed,  c => c.key === wantedKey],
+            [unclaimed,  c => c.matKey === wantedMatKey],
+            [unclaimed,  c => c.idx && c.idx === info.tray_info_idx],
+        ]) {
+            matches = pool.filter(predicate);
+            if (matches.length) break;
+        }
+
+        const mapped = matches.filter(c => c.mapped);
+        result.set(info, mapped.length ? mapped : matches);
+    }
+
+    return result;
 }

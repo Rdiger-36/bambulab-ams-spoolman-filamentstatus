@@ -29,6 +29,7 @@ import {
     checkSpoolmanHealth,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
+import { consumptionCandidate, matchConsumption } from "./ams.js";
 import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
@@ -48,6 +49,36 @@ function resolveSpoolData({ printerId, amsId }, printers, res) {
     const spoolData = (printer.spoolData || []).find(s => s.amsId === amsId);
     if (!spoolData) { res.status(404).json({ ok: false, error: "Spool not found" }); return null; }
     return spoolData;
+}
+
+/**
+ * Names the slot each sliced filament will actually be consumed from.
+ *
+ * The same decision `bookConsumption()` makes, through the same function, run
+ * over every loaded slot rather than only the bookable ones: the dashboard also
+ * has to show what a print needs from a slot that carries no booking yet.
+ *
+ * The answer is written onto the entry as `matchedAmsId`, next to `amsId`,
+ * which stays what the slice named. The two differ exactly where the printer
+ * remapped the job, and both are worth reading. The browser used to repeat this
+ * decision on the payload instead, and that second implementation drifted.
+ *
+ * @param {object} consumption - a map already through resolveSliceSlots()
+ * @param {object[]} loadedSpools - the client projection of the printer's slots
+ * @returns {object} the same map, for chaining
+ */
+function nameMatchedSlots(consumption, loadedSpools) {
+    const candidates = loadedSpools
+        .filter(spool => spool.slotState !== "Empty")
+        .map(consumptionCandidate);
+
+    const entries = Object.values(consumption);
+    const matched = matchConsumption(entries, candidates);
+
+    for (const entry of entries) {
+        entry.matchedAmsId = matched.get(entry)?.[0]?.amsId ?? null;
+    }
+    return consumption;
 }
 
 /**
@@ -421,11 +452,14 @@ export function registerRoutes(app, printers) {
             const slots = reported ?? orderedAmsSlots(loadedSpools.map(s => s.amsId));
             const from = { reportedByPrinter: !!reported };
 
-            fullConsumption = resolveSliceSlots(calcFullConsumption(sliceInfo), slots, from);
+            fullConsumption = nameMatchedSlots(resolveSliceSlots(calcFullConsumption(sliceInfo), slots, from), loadedSpools);
             if (state === "FINISH") {
                 consumption = fullConsumption;
             } else if (TERMINAL.has(state) || state === "RUNNING" || state === "PAUSE") {
-                consumption = resolveSliceSlots(calcPartialConsumption(sliceInfo, layerNum), slots, from);
+                consumption = nameMatchedSlots(
+                    resolveSliceSlots(calcPartialConsumption(sliceInfo, layerNum), slots, from),
+                    loadedSpools,
+                );
             }
         }
 
