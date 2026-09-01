@@ -256,3 +256,22 @@ test("slotIsBusy never fires on a slot that actually holds something", () => {
     assert.equal(slotIsBusy({ ...thirdParty, state: 17 }), false);
     assert.equal(slotIsBusy({ ...bambuTray, state: 5 }), false);
 });
+
+test("extractComparableTrayData notices a slot starting to be read", () => {
+    // {"id":"0","state":10} at rest and {"id":"0","state":17} while the AMS
+    // pulls the spool in are the same two fields. Without the busy flag nothing
+    // reprocesses the slot and the label never reaches a client.
+    const atRest = [{ id: "0", tray: [{ id: "0", state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" }] }];
+    const busy = [{ id: "0", tray: [{ id: "0", state: 17, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" }] }];
+
+    assert.notDeepEqual(extractComparableTrayData(atRest), extractComparableTrayData(busy));
+});
+
+test("extractComparableTrayData does not reprocess for every busy state", () => {
+    // The AMS cycles through 1, 5, 17 and 21 on the way in. They all mean the
+    // same thing, so they must cost one update between them, not one each.
+    const state = value => [{ id: "0", tray: [{ id: "0", state: value, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" }] }];
+
+    assert.deepEqual(extractComparableTrayData(state(1)), extractComparableTrayData(state(5)));
+    assert.deepEqual(extractComparableTrayData(state(5)), extractComparableTrayData(state(21)));
+});

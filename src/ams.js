@@ -80,6 +80,13 @@ export function extractComparableTrayData(amsArray) {
                     return {
                         id: t.id,
                         occupied: slotIsOccupied(t),
+                        // An empty slot and one the AMS is reading are the same
+                        // two fields, so without this the slot is not
+                        // reprocessed while the spool goes in and the "Reading
+                        // spool" label never reaches a client. It is a boolean,
+                        // so the states the AMS cycles through cost one update
+                        // between them, not one each.
+                        busy: slotIsBusy(t),
                         tray_type: t.tray_type ?? null,
                         tray_info_idx: t.tray_info_idx ?? null,
                         tray_color: t.tray_color,
@@ -222,6 +229,10 @@ const BUSY_EMPTY_STATES = new Set([1, 5, 17, 21]);
  * around 20 seconds from the spool going in to the first tray record, and for
  * that whole time the dashboard would otherwise call the slot empty while the
  * user is watching the spool sit in it.
+ *
+ * Compared by `extractComparableTrayData()`, so the slot is reprocessed when it
+ * starts and stops being busy. Without that the label would only ever reach a
+ * client when some other slot happened to change in the same update.
  *
  * Deliberately an allow list of values seen while busy, not of values seen at
  * rest. A value nobody has observed yet reads as "at rest", so the slot says
