@@ -323,9 +323,12 @@ note that the code sits in plain text in `printers.json` is the honest version.
 
 ## Documentation
 
-- [ ] The "How does it work" section of the README still describes only the RFID
+- [x] The "How does it work" section of the README still describes only the RFID
   based merge and create flows. The newer "Tracking modes" section above it
   explains G-code tracking, but the older section was never rewritten to match.
+  Done with the 1.3.0 rewrite: "How it works" now carries G-code tracking as its
+  own subsection, and legacy mode has a section of its own pointing at the v1.2.1
+  README.
 
 The Home Assistant integration in `ha-bambulab-ams-spoolman-filamentstatus`
 needs no change. It only calls `/api/printers`,

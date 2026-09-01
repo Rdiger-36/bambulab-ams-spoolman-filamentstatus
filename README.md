@@ -2,12 +2,12 @@
 
 <p align="center">
   Synchronize your Bambu Lab AMS filament spools with Spoolman, automatically.<br/>
-  Listens for MQTT updates from your printers and keeps spool usage in sync in real time.
+  Tracks what a print actually consumes and keeps Spoolman in sync in real time.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/v/release/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=version&color=blue" alt="version" />
-  <img src="https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-%E2%89%A522-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platform" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" alt="license" />
@@ -24,54 +24,42 @@
 
 ---
 
-This project is based on the idea of a script from [Diogo Resende](https://github.com/dresende) posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
+Based on the idea of a script from [Diogo Resende](https://github.com/dresende), posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
 
+## What changed in 1.3.0
 
-## !! Attention !!
-This Solution works with Bambu Lab Printers with a connected AMS for the P, H and X-Series.
+- **G-code tracking is the new default.** Filament consumption is read from the sliced file of the print instead of the AMS RFID remain percentage, so 3rd party spools without a tag are covered as well. The previous behaviour lives on as [Legacy mode](#legacy-mode).
+- **Everything is configured in the Web UI now.** The [settings page](#settings) holds every setting and the printer list.
+- **Environment variables and hand-written `printers.json` are deprecated.** They keep working, see [Deprecated configuration](#deprecated-configuration).
 
-Spool weight is tracked from the sliced G-code by default, which works for 3rd party spools without an RFID tag as well (see [Tracking modes](#tracking-modes)). Automatically creating and merging Spools and Filaments in Spoolman still relies on the RFID tag of original Bambu Lab spools; a 3rd party spool is linked to a Spoolman spool manually in the Web UI instead.
+## Attention
 
-In the legacy tracking mode (`LEGACY_MODE=true`) the AMS Lite is not supported for updating Spools on Spoolman, because it only reports 100% or 0% left on the Spool ([#Issue 4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)). It can still be used to Create Spools and Filaments on Spoolman and connect their serials with it.
+Works with Bambu Lab printers with a connected AMS of the A, P, H and X series.
 
-### Tracking modes at a glance
-<table>
-<tr>
-<td align="center"><b>MQTT Mode (Old)</b></td>
-<td align="center"><b>G-code Mode (New!)</b></td>
-</tr>
-<tr>
-<td><img src="https://github.com/user-attachments/assets/1498ea96-2bf5-49a9-a98e-b50776341efa" width="300"/></td>
-<td><img src="https://github.com/user-attachments/assets/35fd8251-5577-41e3-8510-ed41cf8a35b3" width="300"/></td>
-</tr>
-</table>
+Automatic creating and merging of spools and filaments in Spoolman relies on the RFID tag of original Bambu Lab spools. A 3rd party spool is linked to a Spoolman spool manually in the Web UI instead; its consumption is then tracked like any other.
 
-## Features
+### Supported hardware
 
-- Real-time AMS filament status updates for all possible AMS on one printer (12 AMS max --> max. 4 AMS Standard/2-Pro + 8 AMS HT)
-- Multiple Printer Support
-- Synchronizes spool usage with Spoolman
-- Tracks filament consumption from the sliced G-code, so 3rd party spools without an RFID tag are covered too
-- Manually assign a Spoolman spool to an AMS slot for spools the printer cannot identify by itself
-- Lightweight Docker container for easy deployment
-- Web UI for manually merge or create Spools and Filaments with collected data
-- Automatic Mode for automatically merge or create Spools and Filaments with collected data
-- Settings page in the Web UI for the configuration and the printer list, no container restart needed
+| Printer | Supported |
+| :---- | :---- |
+| A series with AMS Lite | ⚠️ read only in [legacy mode](#legacy-mode) |
+| A1 with AMS Standard / 2 Pro | ✅ |
+| P series | ✅ |
+| H series | ✅ |
+| X series | ✅ |
 
-## Getting Started
+| AMS | Supported |
+| :---- | :---- |
+| AMS | ✅ |
+| AMS 2 Pro | ✅ |
+| AMS HT | ✅ |
+| AMS Lite | ⚠️ read only in [legacy mode](#legacy-mode) |
 
-### Prerequisites
+Up to 12 AMS on one printer: max. 4 AMS Standard / 2 Pro plus 8 AMS HT.
 
-- A running instance of Spoolman
-- Access to your Bambu Lab printers with its **serial number**, **access code**, and **IP address**
-- Turn on the "Update remaining capacity" option in Bambu Studio:
-  ![Bildschirmfoto 2025-01-16 um 18 00 45](https://github.com/user-attachments/assets/fe6cf018-b211-4fd6-8931-1c895842d71b) ![Bildschirmfoto 2025-01-16 um 18 01 44](https://github.com/user-attachments/assets/23c60d83-e5ed-41af-9fbc-24cc9dd8ede7)
+### Supported architectures
 
-### Supported Architectures
-
-Simply pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` should retrieve the correct image for your arch.
-
-The architectures supported by this image are:
+Pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` retrieves the right image for your machine.
 
 | Docker platform | Also known as | Supported | Typical hardware |
 | :---- | :---- | :----: | :---- |
@@ -80,550 +68,315 @@ The architectures supported by this image are:
 | `linux/arm/v7` | armhf (Debian, Raspberry Pi OS), armv7 (Alpine) | ✅ | Raspberry Pi 2 and newer on a 32 bit OS, older ARM SBCs and NAS boxes |
 | `linux/arm/v6` | armhf (Alpine), armel | ❌ | Raspberry Pi 1, Pi Zero, Pi Zero W |
 
-A note on "armhf", because it means two different things. Debian and Raspberry
-Pi OS use it for 32 bit ARMv7, which is supported. Alpine uses it for ARMv6,
-which is not. Raspberry Pi OS additionally reports "armhf" on an ARMv6 Pi Zero,
-so the name alone does not tell you whether an image exists. The Docker platform
-in the first column is the one unambiguous identifier.
+"armhf" means two different things: Debian and Raspberry Pi OS use it for 32 bit ARMv7, which is supported, Alpine uses it for ARMv6, which is not. The Docker platform in the first column is the unambiguous identifier. A `no matching manifest for linux/arm/v6` on `docker pull` means the device is from the last row; those are not built.
 
-If `docker pull` reports `no matching manifest for linux/arm/v6`, the device is
-an ARMv6 one from the last row. Those are not built: a Pi Zero has a single
-1 GHz core and 512 MB of RAM, which this service would not run well on.
+## Features
 
-### Supported Hardware
+- Real-time AMS status for every connected AMS, on any number of printers
+- Consumption tracked from the sliced G-code, so 3rd party spools are covered too
+- Automatic merging and creating of spools and filaments in Spoolman, or manually per click
+- Manual assignment of a Spoolman spool to an AMS slot for spools the printer cannot identify
+- Web UI with print dashboard, printer management, settings and log viewer, no container restart needed
+- Lightweight Docker container, ready for x86-64, arm64 and arm/v7
 
-The Hardware supported by this image are:
-#### Printer Models
-| Hardware | Supported |
-| :----: | :----: |
-| A Series with AMS Lite | ⚠️ - no update status (read only) |
-| A 1 with AMS Standard/2-Pro | ✅ |
-| H Series | ✅ |
-| P Series | ✅ |
-| X Series | ✅ |
+## Getting started
 
-#### AMS Types
-| Hardware | Supported |
-| :----: | :----: |
-| AMS | ✅ |
-| AMS Lite | ⚠️ - no update status (read only) |
-| AMS 2 Pro | ✅ |
-| AMS HT | ✅ |
+### Prerequisites
 
+- A running Spoolman instance
+- Serial number, access code and IP address of every printer
+- LAN access to the printer on port **8883** (MQTT, AMS data) and **990** (FTPS, sliced file)
+- "Update remaining capacity" turned on in Bambu Studio. The consumption itself comes from the sliced file, but the remaining weight the AMS reports is what a spool is matched against when it is merged into an existing Spoolman spool, and it is the only source [legacy mode](#legacy-mode) has:
+  ![Bambu Studio setting](https://github.com/user-attachments/assets/fe6cf018-b211-4fd6-8931-1c895842d71b) ![Bambu Studio setting](https://github.com/user-attachments/assets/23c60d83-e5ed-41af-9fbc-24cc9dd8ede7)
 
 ### Installation
 
-1. Pull the Docker image:
-   ```bash
-   docker pull ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
-   ```
+```bash
+docker run -d \
+  -e TZ=Europe/Berlin \
+  -p 4000:4000 \
+  -v /path/to/your/config/printers:/app/printers \
+  -v /path/to/your/config/logs:/app/logs \
+  --name bambulab-ams-spoolman-filamentstatus \
+  ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
+```
 
-2. Create your /path/to/your/config/printers/printers.json:
-      ```bash
-      [
-          {
-              "name": "Printer 1",
-              "id": "01PXXXXXXXXXXXX",
-              "code": "AccessCode",
-              "ip": "192.168.1.X"
-          },
-          {
-              "name": "Printer 2",
-              "id": "01PXXXXXXXXXXXX",
-              "code": "AccessCode",
-              "ip": "192.168.1.X"
-          },
-          {
-              "name": "Printer 3",
-              "id": "01PXXXXXXXXXXXX",
-              "code": "AccessCode",
-              "ip": "192.168.1.X"
-          }
-      ]
-     ```
-   | Attributes | Printer |
-   | :--------: | :-----: |
-   | id         | Serial from Printer |
-   | code       | AccessCode from Printer |
+or as Docker Compose:
 
-   This file is optional. Start the container without it and add your printers
-   on the settings page of the Web UI instead, see [Settings](#settings). The
-   service writes the file itself from then on.
+```yaml
+services:
+  bambulab-ams-spoolman-filamentstatus:
+    image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
+    container_name: bambulab-ams-spoolman-filamentstatus
+    ports:
+      - 4000:4000
+    environment:
+      - TZ=Europe/Berlin
+    volumes:
+      - /path/to/your/config/printers:/app/printers
+      - /path/to/your/config/logs:/app/logs
+    restart: unless-stopped
+```
 
-2. Run the container:
-   ```bash
-   docker run -d \
-     -e SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>] \
-     -e UPDATE_INTERVAL=120000 \
-     -e MODE=automatic \
-     -e TZ=Europe/Berlin \
-     -p 4000:4000 \
-     -v /path/to/your/config/printers:/app/printers \
-     -v /path/to/your/config/logs:/app/logs \
-     --name bambulab-ams-spoolman-filamentstatus \
-    ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
-   ```
-   
-   or as Docker Compose:
-   ```bash
-   services:
-    bambulab-ams-spoolman-filamentstatus:
-      image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest
-      container_name: bambulab-ams-spoolman-filamentstatus
-      depends_on:
-        spoolman:
-          condition: service_started
-          restart: true
-      ports:
-        - 4000:4000
-      environment:
-        - SPOOLMAN_ENDPOINT=http(s)://<spoolman_ip_address>:<spoolman_port>[/<spoolman_subfolder>]
-        - UPDATE_INTERVAL=120000
-        - MODE=automatic
-        - TZ=Europe/Berlin
-      volumes:
-        - /path/to/your/config/printers:/app/printers
-        - /path/to/your/config/logs:/app/logs
-      restart: unless-stopped
-   ```
+Both volumes are worth mounting: `/app/printers` holds `printers.json`, `settings.json` and `mappings.json` and makes the configuration survive a container update, `/app/logs` keeps the logs.
 
-## Environment Variables
+`TZ` sets the time zone the log timestamps follow. Without it the container runs on UTC.
+
+### First start
+
+1. Open `http://<host>:4000` and follow the link to **Settings**.
+2. Enter the **Spoolman endpoint** and test the connection.
+3. Add your printers under **Printers**, each with name, serial number, IP and access code. The dialog tests MQTT and FTPS before saving.
+4. Pick the **operation mode**, `automatic` or `manual`, see [Operation modes](#operation-modes).
+
+Nothing has to be prepared in Spoolman. The vendor "Bambu Lab" and the extra field `tag` for spools are created by the service on the first start.
+
+## How it works
+
+The printers publish their state via MQTT, this service listens and talks to Spoolman through its API.
+
+From the AMS report it can:
+
+- **Merge spools** — a spool in the AMS whose material, colour and remaining weight match a spool in Spoolman that carries no tag is merged with it. The serial number of the AMS spool is written into the spool's extra field `tag`, which links the two from then on.
+- **Create spools** — a detected spool with a matching registered filament in Spoolman, but no spool, gets one created, tag included.
+- **Create filaments and spools** — with no matching filament either, the filament is imported from the SpoolmanDB, registered, and the spool created on top of it.
+
+### G-code tracking
+
+While a print is running, the sliced `.gcode.3mf` is downloaded from the printer via FTPS and the needed grams per filament are read from it. When the print reaches a final state, that amount is booked onto the matching Spoolman spool; a cancelled or failed print is booked proportionally to the layers that were actually printed.
+
+Because the numbers come from the slicer and not from the RFID chip, this works for 3rd party spools as well. Those carry no chip, so the printer cannot say which spool is loaded: link the slot to a Spoolman spool once in the Web UI and the consumption of that slot is booked onto it. The dialog offers both, picking a spool that already exists in Spoolman and creating filament and spool right there. The form starts from what the AMS does report, material and colour, and fills density and temperatures from Spoolman's material catalogue; manufacturers, materials and locations are pick-or-type and a value that does not exist yet is created on save. Full weight and remaining weight have to be entered by hand, a chipless spool cannot report them.
+
+The link is dropped automatically as soon as a different filament is detected in that slot. It also resolves the rare case of two loaded spools that are identical in material and colour, which the RFID tag alone cannot tell apart.
+
+Two things follow from booking per print rather than per AMS report:
+
+- **A slot needs a link before its consumption can be booked**, either the tag of a Bambu Lab spool or a manual assignment. A filament the print uses from a slot that has neither is named in the log and skipped, so it is visible which spool is missing its link rather than silently going untracked.
+- **Nothing is written to Spoolman while a print runs.** The whole amount is booked when the job reaches its final state, so a spool in Spoolman stands still during the print and then jumps. The Web UI shows the progress in the meantime, per spool as "on spool / needed / rest".
+
+The download needs LAN access to the printer on port 990 (FTPS) with the printer's access code, the same code MQTT already uses. Without it the print is logged as running but nothing is booked.
+
+### Operation modes
+
+| Mode | Behaviour |
+| :---- | :---- |
+| `automatic` | Merging and creating happen on their own, no interaction needed |
+| `manual` | Every merge or creation waits for a click in the Web UI (default) |
+
+Example of a merge in automatic mode:
+
+```bash
+  - [A0] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
+        - Found mergeable Spool => Spoolman Spool ID: 1, Material: PETG HF, Color: HF Black
+          merging Spool...
+          Spool successfully merged with Spool-ID 1 => HF Black
+```
+
+From then on the slot is linked and the consumption of every print is booked onto that spool.
+
+### AMS slot names
+
+| Slot in log | Slot on AMS | Slot in log | Slot on AMS |
+|--------------|----------------------|--------------|---------------------|
+| `A0` – `A3` | first AMS, slot 1 – 4 | `B0` – `B3` | second AMS, slot 1 – 4 |
+| `HT-A` | first AMS HT | `HT-B` | second AMS HT |
+
+Continues up to `D3` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT.
+
+## Web UI
+
+Reachable on `http://<host>:4000`. No authentication, see the warning under [Settings](#settings).
+
+The dashboard shows the running print, its layer progress, and every loaded spool joined with what the print needs from it: what is on the spool, how much this print takes, and what is left afterwards.
+
+![Dashboard](docs/images/dashboard.png)
+
+Under each spool stands whether its consumption can be booked:
+
+| Marker | Meaning |
+| :---- | :---- |
+| **tag-linked** | An original Bambu Lab spool, linked through the `tag` extra field. Booked automatically |
+| **assigned** | Linked by hand to a Spoolman spool. Booked onto that spool |
+| **not tracked** | Nothing links this slot to Spoolman yet. The print runs, but nothing is booked. Use **Assign Spool** |
+
+**Assign Spool** offers both ways of linking a slot the printer cannot identify — picking a spool that already exists in Spoolman:
+
+![Assign an existing spool](docs/images/assign-dialog.png)
+
+or creating filament and spool right there, pre-filled from what the AMS reports and from Spoolman's material catalogue:
+
+![Create a spool for a slot](docs/images/assign-dialog-create.png)
+
+In manual mode the merge and create actions of a Bambu Lab spool work the same way: a button per slot, opening a dialog with what would be written to Spoolman.
+
+One menu on every page carries the dashboard, the printers, the settings and the logs, with the dark and light mode switch on the right:
+
+![Menu](docs/images/menu.png)
+
+Logs are read per printer and for the server, across the rotated history, and can be downloaded:
+
+![Logs](docs/images/logs.png)
+
+Every page follows the dark mode switch:
+
+![Dashboard in dark mode](docs/images/dashboard-dark.png)
+
+### Settings
+
+Everything is stored in `printers/settings.json` and applied to the running service as soon as it is saved, unless a field says otherwise.
+
+![Settings](docs/images/settings.png)
+
+| Card | Holds |
+| :---- | :---- |
+| **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
+| **Tracking** | Operation mode and [legacy mode](#legacy-mode) |
+| **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool |
+| **Printer connection** | Offline check interval and the retry limit |
+| **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
+| **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
+| **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
+
+A new printer connects right away, a removed one is disconnected and its assignments are dropped. Removing a printer, or changing its address or access code, asks first while a print is running, because the consumption of a running job is booked only when it ends. The serial number cannot be changed, it keys the MQTT topic, the log file and the assignments. **Test connection** checks MQTT on port 8883 and FTPS on port 990 with the values in the form, so an address can be verified before it is saved:
+
+![Printer dialog](docs/images/printer-dialog.png)
+
+The access code is stored on the server and never sent back to the browser; leave the field empty while editing to keep the stored one.
+
+The **Service** card is what a support question usually asks for first, plus the actions that work on the running service rather than on a stored setting:
+
+![Service card](docs/images/settings-service.png)
+
+- **Restart service** — the container runs a small supervisor, so this works whether or not the container has a restart policy. While a print is running it asks first.
+- **Reconnect all printers** — rebuilds the MQTT connections without ending the process, so the consumption tracking of a running print is kept.
+- **Pause all monitoring** — nothing is processed and nothing written to Spoolman, for while Spoolman is being worked on.
+- **Download diagnostics** — see [Diagnostics and privacy](#diagnostics-and-privacy).
+- **Update check** against the GitHub releases. Nothing is downloaded or installed and nothing about the installation is sent, it is one request for the latest version number, cached for six hours.
+
+> [!IMPORTANT]
+> The Web UI has no authentication and is meant for a trusted local network. It can change the printer list and the Spoolman endpoint, so do not expose the port to the internet. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
+
+## Diagnostics and privacy
+
+Logs and configuration describe a home network: the address of every printer and of Spoolman, the serial numbers, and in `printers.json` the access codes. Every download that can carry them asks first and offers an anonymised variant.
+
+**Download diagnostics** produces one archive with everything a bug report needs: `info.json` (version, Node, platform, uptime, tracking mode), `settings.json` with the origin of each value, `printers.json`, `mappings.json` and `logs/` including the rotated history. **Download log** on the log page asks the same question for that one log.
+
+Anonymised replaces the last octet of every IP address, everything after the first five characters of a serial number (in file names as well), the whole access code, the Spoolman host name (keeping scheme, port and path), and shortens the data and log paths to their last two segments. Printer names, spool data and RFID tag ids are kept: they make a log readable and say nothing about the network.
+
+**The access code is never part of any export**, anonymised or not.
+
+## Legacy mode
+
+The tracking of 1.2.x and earlier: the remaining weight is read from the RFID chip's remain percentage on every AMS update and written to Spoolman. Enable it under **Settings → Tracking**. It is the one setting that needs a restart, and the page offers one — the two tracking modes book consumption differently, so switching under a running print would book it twice or not at all.
+
+What is different in this mode:
+
+- G-code tracking is off completely: no FTPS download and no consumption booking.
+- The Web UI shows the classic AMS table instead of the print dashboard.
+- Original Bambu Lab spools only. A 3rd party spool reports no remain percentage, so its slot is shown as loaded but offers no action, and manual assignment is unavailable — it exists to tell the G-code booking which spool to charge, and this mode books nothing. Assignments already saved stay on disk and take effect again as soon as G-code tracking is back on.
+- The **AMS Lite is not supported** for updating spools, it only reports 100% or 0% left ([#4](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues/4#issuecomment-2550571529)). Creating spools and filaments and linking their serials still works.
+
+The behaviour, the Web UI and the configuration of this mode are documented in the README of the last release before G-code tracking:
+
+➡️ **[README of v1.2.1](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/v1.2.1/README.md)**
+
+## Deprecated configuration
+
+Configuring this service through **environment variables** and a hand-written **`printers.json`** is deprecated since 1.3.0. Both keep working and nothing has to change today, but the [settings page](#settings) is the supported place now.
+
+- A variable only **seeds** a setting that has never been saved in the Web UI. After the first save `printers/settings.json` owns the value and the variable is ignored, so a value changed in the UI is not silently reverted by the container definition on the next start.
+- `printers.json` no longer has to exist before the first start. The service writes it itself, and the printer list is edited under **Settings → Printers**.
+- An installation that still relies on the variables says so once in the Web UI and on every start in `docker logs`, naming the ones that are actually still in charge:
+
+  ```
+  [Deprecated] Configuring this service through environment variables is deprecated since 1.3.0.
+  [Deprecated] It keeps working, but the settings page in the Web UI is the supported way now: http://<host>:4000/settings.html
+  [Deprecated] Still taken from the environment: MODE, UPDATE_INTERVAL, DEBUG. ...
+  ```
+
+  Dismissing the hint is stored on the server. It stops appearing on its own as soon as nothing is left that the environment still decides.
+
+The full list of variables and the `printers.json` format are documented in the **[README of v1.2.1](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/v1.2.1/README.md)**.
 
 > [!NOTE]
-> Configuring the service through environment variables is **deprecated since
-> 1.3.0**. It keeps working and nothing has to change today, but the
-> [settings page](#settings) is the supported place for all of it now, and the
-> printer list is edited there rather than by hand in `printers.json`. An
-> installation that still relies on the variables says so once in the Web UI and
-> on every start in `docker logs`, naming the variables that are actually still
-> in charge. The hint disappears by itself once the values have been saved.
+> **Home Assistant add-on users:** the add-on passes its options as environment variables, and those only seed a setting that has never been saved. As soon as you save on the settings page, `printers/settings.json` owns the values and changing an add-on option has no effect any more. Configure through the add-on options or through the settings page, not both.
 
-Every variable below is also a field on the [settings page](#settings). A
-variable seeds its setting as long as the setting has never been saved in the
-Web UI. After the first save `printers/settings.json` owns the value and the
-variable is ignored, so that a value changed in the UI is not silently reverted
-by the container definition on the next start.
+Three variables are container level and stay as they are, they have no field in the Web UI:
 
-| Variable             | Description                                   |
-|----------------------|-----------------------------------------------|
-| `SPOOLMAN_ENDPOINT`  | Provide Spoolman full endpoint (use http or https and optional subfolder) |
-| `SPOOLMAN_FQDN`      | Access Spoolman via a web link in the footer or from the button "Go to Spoolman" from "Show Info!" dialog (e.g., http(s)://spoolman.your.domain[/spoolman]) |
-| `UPDATE_INTERVAL`    | Time in ms for updating spools in Spoolman (default: 120000 ms -> 2 minutes) min. 5000 (5 sec), max 3000000 (5 min)|
-| `MODE`               | Set the mode of the service: "automatic" (or the shorthand "auto") or "manual" (default: manual). An unrecognised value falls back to manual and is reported at startup |
-| `NEVER_MERGE_IF_TAG` | Never merge spools if a tag is already set, even if the one is empty (default: "false") |
-| `SET_LOCATION`       | Automatically sync the spool location in Spoolman with the AMS slot (e.g. "Bambu Lab P1S - A0") when a spool is detected (default: "false") |
-| `LEGACY_MODE`        | Track spool weight from the AMS RFID remain % instead of the sliced G-code: "true" or "false" (default: "false"). See [Tracking modes](#tracking-modes) |
-| `DEBUG`              | Enable this to show more Logs for Debugging (not for WEB UI Logs): "true" or "false" (default: false)|
-| `OFFLINE_CHECK_INTERVAL` | Time in ms between two reachability checks of a disconnected printer (default: 20000 ms, min. 20000, max. 3600000) |
-| `MAX_RETRIES`        | Failed connection attempts before monitoring is disabled for a printer (default: 0, which retries forever) |
-| `PRINTER_ID`, `PRINTER_CODE`, `PRINTER_IP` | Single printer seed, used when no `printers.json` exists yet. The printer is written into `printers.json` on the first start |
-| `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live, and where the log files are written. Default to `/app/printers` and `/app/logs` in the container, which is what the volumes in the examples above mount. Only set these when you cannot mount those paths |
-| `LOG_MAX_SIZE_MB` | Size a log file may reach before it is rotated (default: 1 MB, max 100). The current file is renamed to `<name>.log.1` and an empty one takes its place |
-| `LOG_KEEP_SERVER`, `LOG_KEEP_PRINTER` | How many rotated files to keep, for the server log and per printer (default: 2 each, max 20). 0 starts the current file over instead of keeping a history. Every printer has its own file, so the printer value multiplies with the number of printers |
-| `TZ`           | Time zone of the container, for example `Europe/Berlin`. The log timestamps follow it. Without it the container runs on UTC, so the logs are offset against the clock of the machine reading them |
-| `SUPERVISOR`   | Set to "false" to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |
+| Variable | Description |
+|----------|-------------|
+| `TZ` | Time zone of the container, e.g. `Europe/Berlin`. The log timestamps follow it, without it the container runs on UTC |
+| `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live and where the logs are written. Default to `/app/printers` and `/app/logs`, which the volumes above mount. Only set these when you cannot mount those paths |
+| `SUPERVISOR` | Set to `false` to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |
 
-## Usage
-
-### Checking Logs
-Once the container is running, it will automatically connect to the Bambulab AMS system and Spoolman. Logs can be viewed using:
+## Checking logs
 
 ```bash
 docker logs -f bambulab-ams-spoolman-filamentstatus
 ```
 
-Example Output:
+Startup and the AMS report:
+
 ```bash
 [LOG] Server - Setting up configuration...
-[LOG] Server - Spoolman connection: true
-[LOG] Server - Checking Vendors...
-[LOG] Server - Vendor "Bambu Lab" exists: true
-[LOG] Server - Checking Extra Field "tag"...
-[LOG] Server - Spoolman Extra Field "tag" for Spool is set: true
 [LOG] Server - Backend running on http://localhost:4000
-[LOG] Bambu Lab P1S - MQTT not running for Printer: 01PXXXXXXXXXX, attempting to reconnect...
+[LOG] Server - Spoolman connected successfully!
+[LOG] Server - Vendor "Bambu Lab" exists: true
+[LOG] Server - Spoolman Extra Field "tag" for Spool is set: true
 [LOG] Bambu Lab P1S - Setting up MQTT connection for Printer: 01PXXXXXXXXXX...
-[LOG] Bambu Lab Test Printer A - MQTT not running for Printer: 0AX12345678, attempting to reconnect...
-[LOG] Bambu Lab Test Printer A - Setting up MQTT connection for Printer: 0AX12345678...
-[LOG] Bambu Lab Test Printer A - MQTT client connected for Printer: 0AX12345678
-[LOG] Bambu Lab Test Printer A - Waiting for MQTT messages for Printer: 0AX12345678...
 [LOG] Bambu Lab P1S - MQTT client connected for Printer: 01PXXXXXXXXXX
-[LOG] Bambu Lab P1S - Waiting for MQTT messages for Printer: 01PXXXXXXXXXX...
-[LOG] Bambu Lab Test Printer A - AMS [A] (hum: 5, temp: 0.0ºC)
-[LOG] Bambu Lab Test Printer A -     - [A0] ASA-CF 000000FF (85%) [[ XXXXXX000001 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 5 => Black
-[LOG] Bambu Lab Test Printer A -     - [A1] PETG Translucent D6ABFFFF (49%) [[ XXXXXX000002 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 6 => Translucent Purple
-[LOG] Bambu Lab Test Printer A -     - [A2] PLA Marble AD4E38FF (63%) [[ XXXXXX000003 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 7 => Red Granite
-[LOG] Bambu Lab Test Printer A -     - [A3] PLA Galaxy 594177FF (38%) [[ XXXXXX000004 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 8 => Purple Galaxy
-[LOG] Bambu Lab Test Printer A -     - [B0] PLA Basic F4EE2AFF (10%) [[ XXXXXX000005 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 9 => Yellow
-[LOG] Bambu Lab Test Printer A -     - [B1] TPU for AMS 90FF1AFF (27%) [[ XXXXXX000006 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 10 => For AMS Neon Green
-[LOG] Bambu Lab Test Printer A -     - [B2] PLA Basic 00AE42FF (98%) [[ XXXXXX000007 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 11 => Bambu Green
-[LOG] Bambu Lab Test Printer A -     - [B3] PLA Matte BB3D43FF (50%) [[ XXXXXX000008 ]]
-[LOG] Bambu Lab Test Printer A -         - Updated Spool-ID 12 => Matte Dark Red
-[LOG] Bambu Lab Test Printer A - 
 [LOG] Bambu Lab P1S - AMS [A] (hum: 5, temp: 0.0ºC)
-[LOG] Bambu Lab P1S -     - [A0] PLA Basic 000000FF (15%) [[ XXXXXX00000A ]]
-[LOG] Bambu Lab P1S -         - Updated Spool-ID 1 => Black
-[LOG] Bambu Lab P1S -     - [A1] PLA Matte 000000FF (32%) [[ XXXXXX00000B ]]
-[LOG] Bambu Lab P1S -         - Updated Spool-ID 2 => Matte Charcoal
-[LOG] Bambu Lab P1S -     - [A2] PLA Basic FFFFFFFF (100%) [[ XXXXXX00000C ]]
-[LOG] Bambu Lab P1S -         - Updated Spool-ID 3 => Jade White
-[LOG] Bambu Lab P1S -     - [A3] PLA Basic 000000FF (100%) [[ XXXXXX00000D ]]
-[LOG] Bambu Lab P1S -         - Updated Spool-ID 4 => Black
+[LOG] Bambu Lab P1S -     - [A0] PLA Basic 000000FF [[ XXXXXX00000A ]] => Spool-ID 1 (G-code mode)
 ```
 
-### How does it work
+A slot that is already linked is logged once, when the loaded filament changes. The remain percentage of the AMS is not logged for it, the weight does not come from there.
 
-The Bambu Lab Printers sends their data via MQTT. This Service catches the data and process it automatically to communicate with spoolman.
-For this, the container also request Spoolman an its build in API.
-
-The collected data can be used for:
-- Merging Spools:
-    - If a spool is detected in the AMS that has the same material, colour and remaining weight as a spool in Spoolman that does not have a tag, it can be merged with that spool. The spool's serial number is entered as a value called 'tag' in the spool's extra field. So when the AMS spool and the Spoolman spool are connected, the data is updated (remaining weight and time stamp of last use). 
-- Creating Spools:
-    - If a spool is detected in the AMS that has no spool in Spoolman, it can be created by using an existing registered filament in Spoolman. In this case, the spool will be created and the tag will also be set.
-- Creating Filaments and Spools:
-    - If a spool is detected in the AMS that, has no spool in Spoolman and has no matching registered filament, then it all can be created by importing a external filament from the SpoolmanDB that matches to the loaded spool in the AMS. After the filament is created an registered, the spool in Spoolman will be created and the tag will also be set.
-
-### Tracking modes
-
-There are two ways the remaining weight of a spool can be tracked.
-
-**G-code tracking (default)**
-
-While a print is running, the service downloads the sliced `.gcode.3mf` from the printer via FTPS and reads how many grams of each filament the print needs. When the print reaches a final state, that amount is booked onto the matching Spoolman spool. A cancelled or failed print is booked proportionally to the layers that were actually printed.
-
-Because the numbers come from the slicer and not from the RFID chip, this also works for 3rd party spools. Those spools carry no chip, so the printer cannot say which spool is loaded. Link it to a Spoolman spool once in the Web UI and the consumption of that slot is booked onto it. The action on such a slot offers both: picking a spool that already exists in Spoolman, or creating filament and spool right there. The form starts from what the AMS does report (material and colour) and fills density and temperatures from Spoolman's material catalogue; manufacturers, materials and locations are pick-or-type, and a value that does not exist yet is created on save. Everything a chipless spool cannot report, full weight and how much is left, has to be entered by hand.
-
-The link is dropped automatically as soon as a different filament is detected in the slot. It also resolves the rare case of two loaded spools that are identical in material and color, which the RFID tag alone cannot tell apart.
-
-Requirements: LAN access to the printer on port 990 (FTPS) with the printer's access code, which is the same code already used for MQTT.
-
-**Legacy tracking (`LEGACY_MODE=true`)**
-
-The behaviour of earlier versions: the remaining weight is read from the AMS RFID chip's remain percentage on every MQTT update and written to Spoolman. Original Bambu Lab spools only, and the AMS Lite is not supported (see [Attention](#-attention-)).
-
-In this mode G-code tracking is switched off completely, with no FTPS download and no consumption booking, and the Web UI shows the classic AMS table instead of the print dashboard.
-
-3rd party spools are not supported here. They carry no RFID chip, so they report no remain percentage, and this mode has nothing else to work from. Such a slot is shown as loaded but offers no action, exactly as it did before G-code tracking existed. Manual assignment is unavailable for the same reason: it exists to tell the G-code booking which spool to charge, and this mode books nothing. Assignments already saved are left on disk untouched and take effect again as soon as G-code tracking is back on.
-
-### Mode:
-There are two modes you can run this container: automatic and manual
-- automatic:
-    - The above functions are all performed automatically, you dont need to interact with the container
-      Preview on console:
-      ```bash
-          - [A0] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
-                - A new Filament and Spool can be created:
-                  Material: PETG, Color: HF Black
-                  creating Filament and Spool...
-                  Filament and Spool successfully created for Spool in AMS Slot => A0!
-                                            
-                                            ⬇
-                                            
-          - [A0] PETG HF 000000FF (17%) [[ A012456878ABCDEF ]]
-                - Updated Spool-ID 1 => HF Black
-
-        --------------------------------------------------------------------------------------------------
-
-          - [A0] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
-                - Found mergeable Spool => Spoolman Spool ID: 1, Material: PETG HF, Color: HF Black
-                  merging Spool...
-                  Spool successfully merged with Spool-ID 1 => HF Black
-                                                              
-                                            ⬇
-                                            
-          - [A0] PETG HF 000000FF (17%) [[ A012456878ABCDEF ]]
-                - Updated Spool-ID 1 => HF Black
-
-        --------------------------------------------------------------------------------------------------
-        
-          - [A0] PETG HF 000000FF (18%) [[ 1CEC14C7DB18404FB71B61DBC4549322 ]]
-                - A new Spool can be created with following Filament:
-                  Material: PETG HF, Color: HF Black
-                  creating Spool...
-                  Spool successfully created for Spool in AMS Slot => A0!
-                                                              
-                                            ⬇
-                                            
-          - [A0] PETG HF 000000FF (17%) [[ A012456878ABCDEF ]]
-                - Updated Spool-ID 1 => HF Black
-      ```
-
-      The above functions can also be accessed by a Web UI which is reachable on http://localhost:4000
-      You will find more infos about it on te Web UI section
-
-- manual:
-      Link to WEB UI
-
-### AMS Infos
-
-| Slot in Log  | Slot on AMS          | Slot in Log  | Slot on AMS         |
-|--------------|----------------------|--------------|---------------------|
-| `A0`         | first AMS, Slot 1    |`B0`          |second AMS, Slot 1   |
-| `A1`         | first AMS, Slot 2    |`B1`          |second AMS, Slot 2   |
-| `A2`         | first AMS, Slot 3    |`B2`          |second AMS, Slot 3   |
-| `A3`         | first AMS, Slot 4    |`B3`          |second AMS, Slot 4   |
-| `HT-A`       | first AMS-HT, Slot 1 |`HT-B`        |second AMS-HT, Slot 1|
-
-This will be expanded till D on normal AMS (max. 4 AMS on one Printer) and from HT-A till HT-H for all connected AMS-HT
-
-
-## Spoolman Spool Configuration
-
-There is no configuration needed for your Spoolman Service.
-
-The needed Extra Filed "tag" and the manufacrurer "Bambu Lab" will be automatically created at the start of the container:
+A print, from start to booking:
 
 ```bash
-Setting up configuration...
-Spoolman connection: true
-Checking Vendors...
-Vendor "Bambu Lab" exists: false
-Creating Vendor "Bambu Lab"...
-Vendor "Bambu Lab" successfully created!
-Checking Extra Field "tag"...
-Spoolman Extra Field "tag" for Spool is set: false
-Create Extra Filed "tag" for Spools in Spoolman
-Extra Field "tag" successfully created!
+[LOG] Bambu Lab P1S - [Print] Print running: "bracket.gcode.3mf", fetching slice info via FTPS...
+[LOG] Bambu Lab P1S - [Print] Slice info loaded: 2 filament(s), 260 layers
+[LOG] Bambu Lab P1S - [Print] FINISH, booking filament consumption: {"GFA00|000000":{"tray_info_idx":"GFA00","color":"#000000","type":"PLA","grams":24.7}, ...}
+[LOG] Bambu Lab P1S - [Print] Booked 24.7g for spool 1 (A0, GFA00 PLA #000000)
+[LOG] Bambu Lab P1S - [Print] Booked 3.1g for spool 7 (A2, GFA01 PLA #FFFFFF, manually assigned)
 ```
 
-## Settings
+A slot that is neither tag-linked nor manually assigned is named and skipped, so the log says which spool is missing its link:
 
-The **Settings** entry in the menu opens a page that holds everything the
-environment variables cover, plus the printer list. The same menu is on every
-page and carries the dashboard, the printer list and the log views; picking a
-printer from another page opens it on the dashboard.
-
-- **Printers**: add, edit and remove printers. A new printer connects right
-  away, a removed one is disconnected and its spool assignments are dropped.
-  Removing a printer, or changing its address or access code, asks first while
-  a print is running: the consumption of a running job is booked when it ends,
-  so dropping the connection before that loses it.
-  The serial number cannot be changed, it keys the MQTT topic, the log file and
-  the assignments. The access code is stored on the server and never sent back
-  to the browser; leave the field empty while editing to keep the stored one.
-- **Test connection**, in the printer dialog and under the Spoolman endpoint.
-  The printer test checks both connections the service needs: MQTT on port 8883
-  for the AMS data, and FTPS on port 990 for the sliced file the consumption is
-  read from. It waits for a report on the topic of the serial number, so a
-  serial that does not belong to that address is reported as unconfirmed
-  instead of passing. Both tests use the values in the form, so an address can
-  be verified before it is saved.
-- **Spoolman connection**: only the endpoint is shown, host, port, subfolder
-  and the public URL sit in a collapsed section below it. The line under the
-  field says which URL the service actually talks to, subfolder included.
-- **Tracking, synchronisation, printer connection and logging**: one card each,
-  applied to the running service as soon as they are saved. Changing the
-  endpoint reconnects and runs the vendor and extra field setup against the new
-  instance.
-- **Legacy mode** is the one field that needs a restart. The value is saved
-  right away, but the running service keeps the mode it started with, and the
-  page keeps saying so, with a "Restart now" next to it, until the service is
-  restarted. The two tracking modes book consumption differently, so switching
-  one into a running process would book a print in flight twice or not at all.
-
-- **Service**, the card at the very bottom, below Logging. It shows what a
-  support question usually asks for first: version, Node, platform, uptime,
-  memory, which tracking mode the process is actually running in, whether the
-  supervisor is on, and the state of the Spoolman connection. Under it:
-  - **Restart service.** The container runs a small supervisor that starts the
-    service again by itself, so this works whether or not the container has a
-    restart policy. The page waits for the service to come back and reloads
-    itself, or tells you when it does not. While a print is running it asks
-    first, because the consumption of that job is booked only when it ends.
-  - **Download diagnostics**, see [Diagnostics and privacy](#diagnostics-and-privacy).
-  - **Reconnect all printers.** Rebuilds the MQTT connections without ending the
-    process. This is the smaller hammer: unlike a restart it keeps the
-    consumption tracking of a running print, which lives in memory and is booked
-    when the job ends, so it does not have to ask first.
-  - **Pause all monitoring.** The global version of the per printer switch on the
-    dashboard. While it is paused no AMS report is processed and nothing is
-    written to Spoolman, which is what you want while Spoolman is being worked on.
-  - An **update check** against the GitHub releases of this project. Nothing is
-    downloaded or installed and nothing about the installation is sent; it is one
-    request for the latest version number, cached for six hours. Without internet
-    access the line says the check could not be made and nothing else changes.
-
-Everything is stored in `printers/settings.json` next to `printers.json`, so it
-survives a container update as long as that volume is mounted.
-
-Coming from 1.2.x, or from a setup written against an older README, the
-dashboard shows the move once and the startup log repeats it on every start:
-
-```
-[Deprecated] Configuring this service through environment variables is deprecated since 1.3.0.
-[Deprecated] It keeps working, but the settings page in the Web UI is the supported way now: http://<host>:4000/settings.html
-[Deprecated] Still taken from the environment: MODE, UPDATE_INTERVAL, DEBUG. ...
+```bash
+[LOG] Bambu Lab P1S - [Print] No connected or assigned Spoolman spool for GFG00 PETG (#1E88E5), skipping 12.4g (assign the spool in the Web UI to track it)
 ```
 
-Dismissing the hint is stored on the server, in `settings.json` beside the
-values rather than among them, so it does not come back on the next browser and
-does not hand a single setting to the file. The hint stops appearing on its own
-as soon as nothing is left that the environment still decides.
-
-> [!IMPORTANT]
-> The Web UI has no authentication. It is meant for a trusted local network.
-> With the settings page it can now change the printer list and the Spoolman
-> endpoint, so do not expose the port to the internet. The access code of a
-> printer is stored in plain text in `printers/printers.json`, the same as
-> before, and is never sent back to the browser.
-
-> [!NOTE]
-> **Home Assistant add-on users:** the add-on passes its options as environment
-> variables, and those only seed a setting that has never been saved. As soon as
-> you save on the settings page, `printers/settings.json` owns the values and
-> changing an add-on option has no effect any more. Either configure through the
-> add-on options or through the settings page, not both.
-
-## Diagnostics and privacy
-
-Logs and configuration end up attached to bug reports, and both describe a home
-network: the address of every printer and of Spoolman, the serial numbers, and
-in `printers.json` the access codes. So every download that can carry them asks
-first, and offers an anonymised variant.
-
-**Download diagnostics**, in the Service card, produces one archive with
-everything a report needs:
-
-```
-info.json        version, Node, platform, uptime, tracking mode, whether the
-                 environment still configures anything
-settings.json    the effective values and, per field, where each came from
-printers.json    the printer list
-mappings.json    the manual AMS slot to spool assignments, when there are any
-logs/            the server log and every printer log, rotated history included
-```
-
-**Download the log**, on the log page, asks the same question for that one log.
-
-What "anonymised" replaces:
-
-| | |
-|---|---|
-| IP addresses | the last octet, `192.168.1.42` becomes `192.168.1.XXX` |
-| Serial numbers | everything after the first five characters, in the file names as well |
-| Access codes | the whole value |
-| Spoolman host | the name, keeping the scheme, port and path |
-| Data and log paths | shortened to their last two segments |
-
-Printer names and spool data are kept. They are what makes a log readable and
-say nothing about the network; rename a printer before exporting if its name
-identifies you. The RFID tag ids of the spools are kept for the same reason:
-they identify a piece of filament, not a person.
-
-**The access code is never part of any export**, anonymised or not. The service
-does not write it to a log on purpose, and both variants replace it anyway.
-"Full" refers to the addresses, the serial numbers and the paths.
-
-## Web UI
-Main Menu with loaded Bambu Lab Spools, 3rd Party Spools and empty Slots:
-![Dashboard](https://github.com/user-attachments/assets/9e77a5c6-d3a8-4a77-996c-5af866b32824)
-
-
-The State column indicates the behavoir of the loaded spool and its data.
-- ✅ (Checkmark) → Spools recognized correctly and can be processed.
-- ⚠️ (Warning) → Empty slot or non-BambuLab spool loaded.
-- ❗ (Error) → Filament check failed for BambuLab spools.
-
-If there is an error and you click on the Button "Show Info!", a dialog appears:
-![image](https://github.com/user-attachments/assets/aae0bdab-54ce-4f38-aeac-898d882ae80c)
-
-After you followed the guide and its all setup correctly, the table should look like this:
-![image](https://github.com/user-attachments/assets/34fb14c4-7e3f-44e6-9979-ed577d4d2ba6)
-
-if you are runing this container in manual mode the filament and spool creation and the spool merging will not be done automatically. For this you can use the buttons and a dialog appears like this;
-![Bildschirmfoto 2025-01-04 um 01 33 10](https://github.com/user-attachments/assets/85d9ab66-5afa-45a1-822e-e226c089bc78)
-
-
-Menubar with one menu holding the dashboard, the printers, the settings and the logs, and the dark and light mode button on the right:
-![image](https://github.com/user-attachments/assets/c93c95bf-551b-459e-ae8b-b027b37b067d)
-
-Logs can be accessed over the Backend Logs Menubutton (it only display the logs of the selected Printer from the Main Menu):
-![Bildschirmfoto 2025-01-19 um 22 38 12](https://github.com/user-attachments/assets/848e35de-ad8a-4826-8264-6a21f5070765)
+The same logs are readable in the Web UI, per printer and for the server.
 
 ## Debug-Printers CLI
-You have the ability to check the network and MQTT status of your printer directly from the docker containers build in script.
-To use this script, just connect to your intenal CLI of your docker container like this:
+
+The container ships a script that checks the network and MQTT status of a printer from inside the container:
 
 ```bash
-docker exec -it CONTAINER_NAME /bin/sh
+docker exec -it CONTAINER_NAME debug-printers
 ```
 
-Then you can run the following command
+Pick a printer by number, then choose between subscribing to its MQTT messages, which prints everything the printer sends including the AMS spool data, and a reachability check on port 8883:
 
 ```bash
-debug-printers
-```
-
-Now you can type in the number of your printer and hit enter to select your printer
-
-```bash
---- Printer Selection ---
-1. Bambu Lab P1S - 01PXXXXXXXXXX - 192.168.XXX.XXX
-Choose a printer (number): 
-```
-
-After that you can choose between 3 options (option 3 is to go back to the main menu):
-
-```bash
- 
 --- Options for Bambu Lab P1S ---
 1. Subscribe to MQTT messages
 2. Check reachability
 3. Back to main menu
- 
-Choose a option (number): 
 ```
-
-Option 1, "Subscribe to MQTT messages," connects to your printer and displays all MQTT messages it sends (the long message contains the AMS spool data):
-
-```bash
-Receiving MQTT messages from 01PXXXXXXXXXX... (Press Ctrl+C to stop)
-Client null sending CONNECT
-Client null received CONNACK (0)
-Client null sending SUBSCRIBE (Mid: 1, Topic: device/01PXXXXXXXXXX/report, QoS: 0, Options: 0x00)
-Client null received SUBACK
-Subscribed (mid: 1): 0
-Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (110 bytes))
-{"print":{"bed_temper":11.96875,"wifi_signal":"-67dBm","command":"push_status","msg":1,"sequence_id":"40941"}}
-Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (104 bytes))
-{"print":{"bed_temper":12,"wifi_signal":"-68dBm","command":"push_status","msg":1,"sequence_id":"40942"}}
-Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (4416 bytes))
-{"print":{"ipcam":{"ipcam_dev":"1","ipcam_record":"disable","timelapse":"disable","resolution":"","tutk_server":"disable","mode_bits":3},"upload":{"status":"idle","progress":0,"message":""},"net":{"conf":0,"info":[{"ip":XXXXXX,"mask":XXXXXXX}]},"nozzle_temper":15.0625,"nozzle_target_temper":0,"bed_temper":12,"bed_target_temper":0,"chamber_temper":5,"mc_print_stage":"1","heatbreak_fan_speed":"0","cooling_fan_speed":"0","big_fan1_speed":"0","big_fan2_speed":"0","mc_percent":100,"mc_remaining_time":0,"ams_status":0,"ams_rfid_status":0,"hw_switch_state":0,"spd_mag":100,"spd_lvl":2,"print_error":0,"lifecycle":"product","wifi_signal":"-68dBm","gcode_state":"FINISH","gcode_file_prepare_percent":"100","queue_number":0,"queue_total":0,"queue_est":0,"queue_sts":0,"project_id":"XXXXX","profile_id":"XXXXX","task_id":"XXXXX","subtask_id":"XXXXX","subtask_name":"XXXXXXX","gcode_file":"","stg":[],"stg_cur":255,"print_type":"idle","home_flag":24331672,"mc_print_line_number":"0","mc_print_sub_stage":0,"sdcard":true,"force_upgrade":false,"mess_production_state":"active","layer_num":260,"total_layer_num":260,"s_obj":[],"filam_bak":[],"fan_gear":0,"nozzle_diameter":"0.4","nozzle_type":"hardened_steel","cali_version":0,"k":"0.0200","flag3":15,"upgrade_state":{"sequence_id":0,"progress":"","status":"IDLE","consistency_request":false,"dis_state":0,"err_code":0,"force_upgrade":false,"message":"0%, 0B/s","module":"","new_version_state":2,"cur_state_code":0,"idx2":3954728311,"new_ver_list":[]},"hms":[],"online":{"ahb":false,"rfid":false,"version":408456019},"ams":{"ams":[{"id":"0","humidity":"5","temp":"0.0","tray":[{"id":"0","remain":83,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-P5","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"5E43B7FF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"1","bed_temp":"35","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["5E43B7FF"]},{"id":"1","remain":100,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-B9","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"0A2989FF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["0A2989FF"]},{"id":"2","remain":100,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-R0","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"C12E1FFF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["C12E1FFF"]},{"id":"3","remain":100,"k":0.019999999552965164,"n":1,"cali_idx":-1,"tag_uid":"XXXXXXXXXXXXXXXXXXXXXXX","tray_id_name":"A00-K0","tray_info_idx":"GFA00","tray_type":"PLA","tray_sub_brands":"PLA Basic","tray_color":"000000FF","tray_weight":"1000","tray_diameter":"1.75","tray_temp":"55","tray_time":"8","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"230","nozzle_temp_min":"190","xcam_info":"XXXXXXXXXXXXXXXXXXXXXXX","tray_uuid":"XXXXXXXXXXXXXXXXXXXXXXX","ctype":0,"cols":["000000FF"]}]}],"ams_exist_bits":"1","tray_exist_bits":"f","tray_is_bbl_bits":"f","tray_tar":"255","tray_now":"255","tray_pre":"255","tray_read_done_bits":"f","tray_reading_bits":"0","version":103,"insert_flag":true,"power_on_flag":true},"vt_tray":{"id":"254","tag_uid":"0000000000000000","tray_id_name":"","tray_info_idx":"","tray_type":"","tray_sub_brands":"","tray_color":"00000000","tray_weight":"0","tray_diameter":"0.00","tray_temp":"0","tray_time":"0","bed_temp_type":"0","bed_temp":"0","nozzle_temp_max":"0","nozzle_temp_min":"0","xcam_info":"000000000000000000000000","tray_uuid":"00000000000000000000000000000000","remain":0,"k":0.019999999552965164,"n":1,"cali_idx":-1},"lights_report":[{"node":"chamber_light","mode":"off"}],"command":"push_status","msg":0,"sequence_id":"40943"}}
-Client null received PUBLISH (d0, q0, r0, m0, 'device/01PXXXXXXXXXX/report', ... (87 bytes))
-```
-
-Option 2, "Check reachability," checks if the printer is reachable from your docker container:
-
-```bash
-Checking if printer (192.168.XXX.XXX - 01PXXXXXXXXXX) is reachable on port 8883...
-Printer (192.168.XXX.XXX - 01PXXXXXXXXXX) is reachable on port 8883.
-
-Press Enter to continue...
-```
-
 
 ## FAQ
-Q: I can not merge my existing Spool to Spoolman. I can only create a new Spool or the container creates it automatically.
 
-A: Please check your filament, not spool, in spoolman. The material must be the same material from the Web UI or Logs. For example PETG HF could be set as PETG.
+**I cannot merge my existing spool, only create a new one, or the container creates it automatically.**
 
+Check the *filament* in Spoolman, not the spool. The material has to match the one shown in the Web UI or the logs exactly — `PETG HF` is not the same as `PETG`.
 
-## Things and Features I'm Working on
+## Feedback
 
-| Type | Feature/Bug | Available in dev build | Available in latest release | Status/Info |
-|------|-------------|------------------------|-----------------------------|-------------|
-|Feature|Control settings via Web UI like printer profiles, server powermanagement (shutdown, restart) and other settings|❌|❌|in developement |
+Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues).
 
+## Support me
 
-If you find some bugs/issues/improvements let me know!
-
-## Support Me
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/Rdiger36)
