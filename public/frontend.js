@@ -247,9 +247,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	    // Split AMS types:
 	    // Normal AMS = up to 4 slots per unit
-	    // AMS HT = 1 slot per unit, each should have its own table
-	    const normalAMS = spools.filter(s => !s.amsId.startsWith("HT-"));
-	    const htAMS = spools.filter(s => s.amsId.startsWith("HT-"));
+	    // AMS HT and the external spool holder = 1 slot each, own table
+	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
+	    const htAMS = spools.filter(s => isSingleSlotUnit(s.amsId));
 
 	    // Render normal AMS units in tables of four (original behavior)
 	    for (let i = 0; i < normalAMS.length; i += 4) {
@@ -970,6 +970,16 @@ document.addEventListener("DOMContentLoaded", () => {
 	    }, 1000);
 	}
 
+	// The label the server gives the external spool holder. It reports one spool
+	// and gets a table of its own, like an AMS HT unit, because it belongs to no
+	// four slot unit and would otherwise break their grouping.
+	const EXTERNAL_SLOT = "External";
+
+	// Slots that stand alone rather than filling a four slot AMS unit.
+	function isSingleSlotUnit(amsId) {
+	    return amsId === EXTERNAL_SLOT || amsId.startsWith("HT-");
+	}
+
 	// Mirrors normColor in src/gcode.js: slice colors carry a leading "#" and AMS
 	// colors carry a trailing alpha byte, so both are trimmed to bare 6-digit hex.
 	function normColorJS(color) {
@@ -1105,15 +1115,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	    };
 
 	    const tables = [];
-	    const normalAMS = spools.filter(s => !s.amsId.startsWith("HT-"));
-	    const htAMS     = spools.filter(s => s.amsId.startsWith("HT-"));
+	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
+	    const singles   = spools.filter(s => isSingleSlotUnit(s.amsId));
 
 	    // Normal AMS: up to 4 slots per unit/table
 	    for (let i = 0; i < normalAMS.length; i += 4) {
 	        tables.push(makeTable(normalAMS.slice(i, i + 4)));
 	    }
-	    // AMS HT: one slot per table
-	    for (const ht of htAMS) tables.push(makeTable([ht]));
+	    // AMS HT and the external spool holder: one slot per table
+	    for (const single of singles) tables.push(makeTable([single]));
 
 	    if (!tables.length) {
 	        const empty = makeTable([]);

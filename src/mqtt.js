@@ -5,7 +5,7 @@ import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, convertAMSandSlot, slotColors } from "./utils.js";
+import { sleep, formatDate, formatInterval, convertAMSandSlot, slotColors, EXTERNAL_SPOOL_ID } from "./utils.js";
 import {
     getSpoolmanSpools,
     getSpoolmanInternalFilaments,
@@ -146,6 +146,42 @@ async function handlePrintStateChange(printer, print) {
  */
 function materialKey(type, color) {
     return `${type || "?"}|${normColor(color)}`;
+}
+
+/**
+ * The external spool holder as one more AMS unit, or nothing.
+ *
+ * The printer reports the holder outside the AMS block, as `print.vir_slot`, an
+ * array whose entry is field for field a chipless AMS tray: an all zero
+ * `tray_uuid`, empty `tray_sub_brands`, `tray_weight` "0" and `remain` 0. That
+ * is why it is handed to the same pipeline as a unit of its own rather than
+ * given a branch: `processSlot` then classifies it as the 3rd party spool it
+ * is, and it becomes assignable like any other. Measured on a P2S, `vir_slot`
+ * was present in all 24 reports that carried AMS data and in none of the ones
+ * that carried none, so a missing key needs no memory of the last value.
+ *
+ * `vt_tray` is the same thing on older firmware, a single object rather than an
+ * array. The P2S measured here no longer sends the key at all.
+ *
+ * Only emitted for a holder that actually carries something. What the printer
+ * reports for an empty holder has not been observed, and an entry full of empty
+ * strings would reach `slotIsOccupied()` carrying its temperature fields and
+ * read as a loaded spool nobody can identify. Leaving the row out until there
+ * is something in it is the answer that cannot be wrong in the meantime.
+ *
+ * @param {object} print - `data.print` from an MQTT report
+ * @returns {object[]} zero or one unit, shaped like an entry of `print.ams.ams`
+ */
+export function externalSpoolUnits(print) {
+    const reported = Array.isArray(print?.vir_slot)
+        ? print.vir_slot
+        : (print?.vt_tray ? [print.vt_tray] : []);
+
+    const loaded = reported.filter(tray =>
+        tray && (tray.tray_type || tray.tray_info_idx || tray.cols?.length));
+
+    if (!loaded.length) return [];
+    return [{ id: String(EXTERNAL_SPOOL_ID), tray: loaded }];
 }
 
 /**
@@ -383,7 +419,12 @@ async function handleMqttMessage(printer, topic, message) {
                         let internalFilaments = await getSpoolmanInternalFilaments();
 
                         const spoolsChanged = await haveSpoolDataChanged(spools, state.lastSpoolData);
-                        const processedAmsData = processData(data.print.ams.ams);
+                        // Legacy mode leaves the holder out. Its weight comes
+                        // from the RFID remain percentage and the holder has no
+                        // chip, so there would be nothing to write, which is the
+                        // same reason a 3rd party slot is read-only there.
+                        const externalUnits = legacyMode() ? [] : externalSpoolUnits(data.print);
+                        const processedAmsData = processData([...data.print.ams.ams, ...externalUnits]);
                         const newTrayData = extractComparableTrayData(processedAmsData);
                         const lastTrayData = extractComparableTrayData(printer.lastAmsData || []);
                         const trayDataChanged = hasTrayDataChanged(newTrayData, lastTrayData);

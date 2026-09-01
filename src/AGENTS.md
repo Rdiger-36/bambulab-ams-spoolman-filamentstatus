@@ -139,6 +139,19 @@ build their Spoolman payload from.
   spool. Merging is deliberately not held back, it writes only the tag. The
   wait resolves itself because `hasTrayDataChanged()` treats the arrival of the
   first reading as a change.
+- **The external spool holder is a slot like any other, in G-code mode only.**
+  The printer reports it outside the AMS block as `print.vir_slot`, an array
+  whose entry is field for field a chipless AMS tray, so `externalSpoolUnits()`
+  hands it to the same pipeline as a unit of id 255 and `processSlot` classifies
+  it as the 3rd party spool it is. `convertAMSandSlot()` labels it `External`,
+  which is also the key an assignment is stored under, so changing the label
+  orphans what is on disk. Legacy mode leaves it out for the reason it leaves
+  every chipless spool read-only: it writes the RFID remain percentage and the
+  holder has no chip. Older firmware called it `vt_tray` and sent a single
+  object; a P2S on 2026 firmware does not send that key at all. Only a holder
+  that carries something is emitted, because what an empty one reports has not
+  been observed and an entry of empty strings would still reach
+  `slotIsOccupied()` carrying its temperature fields.
 - **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to

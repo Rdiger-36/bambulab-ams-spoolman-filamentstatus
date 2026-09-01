@@ -17,6 +17,11 @@ Version 1.3.0-dev.4
       - A gradient spool is no longer confused with a plain spool of the same first colour
          - Bambu Studio slices PLA Basic Gradient under GFA00, the same profile as plain PLA Basic, and the AMS reports only the first colour of a set in tray_color. Arctic Whisper, Solar Breeze and an ordinary white PLA Basic were one and the same for consumption matching, for the duplicate warning in the dashboard, and for a manual assignment, which survived a spool swap it should have been dropped for
          - The whole colour set is part of all three now, sorted, because Bambu Studio and SpoolmanDB do not agree on the order. A single colour spool is unchanged in every one of them, so nothing stored has to be migrated
+      - A spool on the external spool holder is shown and can be assigned, in G-code mode
+         - The printer reports it outside the AMS block, as vir_slot, and this service ignored the field. Its consumption therefore landed on whichever AMS slot happened to match by material and colour
+         - It appears as a slot of its own called External, in a table of its own like an AMS HT unit, classified as the 3rd party spool it is because the holder has no RFID chip. Assigning a Spoolman spool to it is what makes its consumption bookable
+         - Legacy mode leaves it out, for the same reason it shows every chipless spool read-only: it derives the weight from the RFID remain percentage and there is no chip to read
+         - Firmware that reports the holder as vt_tray instead is read as well
       - The log line that admits to a guess reaches the log file. It was written with console.warn, which is not one of the three overridden by the logger, so it went to raw stdout with the routing arguments printed as text and never into the printer log
       - The duplicate warning no longer promises what an assignment cannot do. Two spools reach that point only when the sliced file could not separate them either, so assigning both splits nothing; assigning one decides which spool carries the total
    - Development:

@@ -47,8 +47,13 @@ export function formatInterval(ms) {
  *
  * Regular AMS units are 0 to 3 and carry four slots each, giving `A0` to `D3`.
  * The single slot AMS HT units are 128 to 135 and have no slot number of their
- * own, giving `HT-A` to `HT-H`. Anything outside both ranges yields `Z`, which
+ * own, giving `HT-A` to `HT-H`. 255 is the external spool holder, which the
+ * printer reports outside the AMS block altogether and which has no slot number
+ * either, giving `External`. Anything outside those ranges yields `Z`, which
  * marks a unit this service does not know how to address.
+ *
+ * The label is not only shown: it is the key an assignment is stored under in
+ * `mappings.json`, so changing one orphans the assignments already on disk.
  *
  * @param {number|string} amsID  - AMS unit id from `print.ams.ams[].id`
  * @param {number|string|null} slotID - slot id within the unit, null for none
@@ -62,8 +67,17 @@ export function convertAMSandSlot(amsID, slotID) {
 
     if (amsID >= 0 && amsID <= 3) return letters[amsID] + slotID;
     if (amsID >= 128 && amsID <= 135) return `HT-${letters[amsID - 128]}`;
+    if (amsID === EXTERNAL_SPOOL_ID) return EXTERNAL_SLOT;
     return "Z";
 }
+
+/**
+ * The unit id the external spool holder is addressed under, and the label it
+ * produces. The printer reports the holder as `print.vir_slot`, whose entry
+ * carries `id` 255, so the number is the printer's rather than an invention.
+ */
+export const EXTERNAL_SPOOL_ID = 255;
+export const EXTERNAL_SLOT = "External";
 
 /**
  * The colour set of an AMS slot as bare six digit lowercase hex.
