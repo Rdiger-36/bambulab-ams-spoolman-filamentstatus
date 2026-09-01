@@ -1,4 +1,4 @@
-import { settings } from "./settings.js";
+import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
 
 /**
@@ -11,9 +11,9 @@ import { toClientSpool } from "./uispool.js";
  * printer read no RFID chip and is treated the same as a missing one.
  *
  * `remain` becomes null when the printer does not know it. The AMS reports -1
- * for the first 15 to 20 seconds after a spool is inserted, while it has the
- * RFID tag but not yet the remaining percentage, and a chipless spool reports
- * -1 for good. That was clamped to 0, which is a real reading meaning "empty",
+ * after a spool is inserted, while it has the RFID tag but not yet the
+ * remaining percentage, measured on a P2S at anything from 17 seconds to over a
+ * minute, and a chipless spool reports -1 for good. That was clamped to 0, which is a real reading meaning "empty",
  * so a spool created inside that window was booked as fully used and came out
  * at 0 g left.
  *
@@ -97,6 +97,38 @@ export function extractComparableTrayData(amsArray) {
             })
             .sort((a, b) => a.id - b.id),
     })).sort((a, b) => a.id - b.id);
+}
+
+/**
+ * Whether the tray data changed in a way that should trigger reprocessing.
+ *
+ * Legacy mode compares the projections as they are: the remaining percentage is
+ * what it writes to Spoolman, so every tick of it matters.
+ *
+ * G-code mode takes the weight from the sliced file instead, so a drifting
+ * percentage there would mean endless reprocessing and log output for nothing.
+ * The value is dropped, but whether there is one at all is kept. The AMS
+ * answers -1, which `processData` turns into null, for anything from 17 seconds
+ * to well over a minute after a spool goes in, and that transition has to be
+ * noticed: `printer.spoolData` is the snapshot the create and merge actions
+ * build their Spoolman payload from, and while it still says "no reading" they
+ * fall back to creating a full spool. A spool inserted at 53 % and created from
+ * the UI was stored as untouched, because nothing had refreshed the snapshot
+ * between the insert and the click.
+ *
+ * @param {object[]} nextTrayData - output of extractComparableTrayData
+ * @param {object[]} lastTrayData - the same projection of the previous report
+ * @returns {boolean}
+ */
+export function hasTrayDataChanged(nextTrayData, lastTrayData) {
+    if (legacyMode()) return JSON.stringify(nextTrayData) !== JSON.stringify(lastTrayData);
+
+    const project = data => data.map(ams => ({
+        ...ams,
+        tray: ams.tray.map(({ remain, ...tray }) => ({ ...tray, remainKnown: remain != null })),
+    }));
+
+    return JSON.stringify(project(nextTrayData)) !== JSON.stringify(project(lastTrayData));
 }
 
 /**

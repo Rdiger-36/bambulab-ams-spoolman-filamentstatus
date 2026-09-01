@@ -29,6 +29,7 @@ import {
     findMatchingInternalFilament,
     findMergeableSpool,
     haveSpoolDataChanged,
+    hasTrayDataChanged,
     hasSpoolUiChanged,
 } from "./ams.js";
 import { toClientSpool } from "./uispool.js";
@@ -322,13 +323,7 @@ async function handleMqttMessage(printer, topic, message) {
                         const processedAmsData = processData(data.print.ams.ams);
                         const newTrayData = extractComparableTrayData(processedAmsData);
                         const lastTrayData = extractComparableTrayData(printer.lastAmsData || []);
-                        // In G-code mode the AMS remain % is irrelevant (weight is
-                        // tracked from the slice), so don't let it trigger reprocessing
-                        // and log output. Only react to real identity/weight changes.
-                        const stripRemain = (d) => legacyMode() ? d
-                            : d.map(a => ({ ...a, tray: a.tray.map(({ remain, ...t }) => t) }));
-                        const trayDataChanged =
-                            JSON.stringify(stripRemain(newTrayData)) !== JSON.stringify(stripRemain(lastTrayData));
+                        const trayDataChanged = hasTrayDataChanged(newTrayData, lastTrayData);
 
                         if (isValidAmsData && (spoolsChanged || trayDataChanged)) {
                             console.debug(printer.name, printer.logFilePath, "Loaded AMS Spools:");

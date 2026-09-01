@@ -50,9 +50,12 @@ Legacy mode also has no 3rd party support and no manual assignment. Both exist
 only to serve the G-code booking, which does not run here, so a chipless slot is
 read-only and the mapping endpoints answer 409.
 
-Consequence: in G-code mode the `remain` field is deliberately stripped before
-change detection, so a drifting RFID percentage does not trigger endless
-reprocessing.
+Consequence: in G-code mode the `remain` value is deliberately dropped before
+change detection (`hasTrayDataChanged()`), so a drifting RFID percentage does
+not trigger endless reprocessing. Whether there is a reading at all is kept:
+the transition from "not reported" to a real percentage has to refresh
+`printer.spoolData`, because that is the snapshot the create and merge actions
+build their Spoolman payload from.
 
 ## Contracts & invariants
 
@@ -90,8 +93,9 @@ reprocessing.
   (`correctRemainInt`) instead. Mutating it desyncs change detection forever for
   any spool whose `tray_weight != 1000`.
 - **A `remain` of `null` means "not reported", never "empty".** The AMS answers
-  `-1` for the 15 to 20 seconds between a spool going in and its RFID
-  percentage arriving, and forever for a chipless one. `processData()` turns
+  `-1` between a spool going in and its RFID percentage arriving, measured on
+  a P2S at anything from 17 seconds to over a minute, and forever for a
+  chipless one. `processData()` turns
   that into `null` and `correctRemainInt()` passes the `null` through, so every
   caller has to decide for itself: create the spool full, skip the legacy PATCH,
   skip the weight test when looking for a mergeable spool, render a dash. A `0`

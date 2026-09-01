@@ -12,10 +12,10 @@ import { correctRemainInt } from "./ams.js";
  * if they were brand new. Otherwise a spool found at e.g. 32% remaining would
  * be created at 100% (used_weight 0) and immediately drift out of sync.
  *
- * No reading means brand new. For the first 15 to 20 seconds after a spool is
- * inserted the AMS knows the tag but not the percentage, and a spool created
- * in that window used to be booked as fully used, ending up at 0 g left with
- * nothing in G-code mode to correct it afterwards. Starting such a spool full
+ * No reading means brand new. For up to a minute after a spool is inserted the
+ * AMS knows the tag but not the percentage, and a spool created in that window
+ * used to be booked as fully used, ending up at 0 g left with nothing in G-code
+ * mode to correct it afterwards. Starting such a spool full
  * is the recoverable direction: a print books what it consumes.
  *
  * @param {object} slot - a normalised AMS slot

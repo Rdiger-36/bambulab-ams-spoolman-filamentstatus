@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, processData } from "../src/ams.js";
+import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, processData } from "../src/ams.js";
 
 test("correctRemainInt passes through a full-size spool unchanged", () => {
     assert.equal(correctRemainInt(63, 1000, "PLA"), 63);
@@ -80,6 +80,32 @@ test("correctRemainInt reports an unknown remain as null, never as 0", () => {
     assert.equal(correctRemainInt(0, "1000", "PLA"), 0);
     assert.equal(correctRemainInt(100, "1000", "PLA"), 100);
     assert.equal(correctRemainInt(25, "250", "PLA"), 100);
+});
+
+// G-code mode ignores the remain percentage, but not whether there is one.
+const comparable = remain => [{ id: "0", tray: [
+    { id: "0", tray_uuid: "A6A4F33B", tray_weight: "1000", tray_sub_brands: "PLA Glow", tray_color: "7AC0E9FF", remain },
+] }];
+
+test("hasTrayDataChanged notices the first remain reading arriving", () => {
+    // Captured on a P2S: the slot sat at -1 (null here) for 74 seconds after
+    // the spool went in, then reported 53. Without this the snapshot the create
+    // action reads keeps saying "no reading" and stores the spool as untouched.
+    assert.equal(hasTrayDataChanged(comparable(53), comparable(null)), true);
+});
+
+test("hasTrayDataChanged ignores a drifting remain in G-code mode", () => {
+    // The weight comes from the sliced file there, so a ticking percentage must
+    // not reprocess and log the slot over and over.
+    assert.equal(hasTrayDataChanged(comparable(53), comparable(52)), false);
+    assert.equal(hasTrayDataChanged(comparable(53), comparable(53)), false);
+});
+
+test("hasTrayDataChanged still sees a real change next to a remain tick", () => {
+    const before = comparable(53);
+    const after = comparable(52);
+    after[0].tray[0].tray_color = "FFFFFFFF";
+    assert.equal(hasTrayDataChanged(after, before), true);
 });
 
 // Real tray payloads captured from a P2S with two AMS 2 Pro units. A loaded
