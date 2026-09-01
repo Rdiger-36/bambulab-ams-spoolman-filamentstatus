@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, processData } from "../src/ams.js";
+import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, processData } from "../src/ams.js";
 
 test("correctRemainInt passes through a full-size spool unchanged", () => {
     assert.equal(correctRemainInt(63, 1000, "PLA"), 63);
@@ -177,4 +177,47 @@ test("extractComparableTrayData still tracks identified spools by their data", (
 
     const same = [{ id: "0", tray: [{ ...bambuTray, id: "0", remain: 50 }] }];
     assert.deepEqual(extractComparableTrayData(a), extractComparableTrayData(same));
+});
+
+/* ---- Merging an untracked spool, with and without a remain reading ---- */
+
+const glowSlot = remain => ({
+    tray_sub_brands: "PLA Glow",
+    tray_type: "PLA",
+    tray_color: "7AC0E9FF",
+    tray_weight: "1000",
+    cols: ["7AC0E9FF"],
+    remain,
+});
+
+const mergeCandidate = (overrides = {}) => ({
+    id: 15,
+    initial_weight: 1000,
+    remaining_weight: 1000,
+    used_weight: 0,
+    extra: {},
+    filament: { material: "PLA Glow", color_hex: "7AC0E9" },
+    ...overrides,
+});
+
+test("findMergeableSpool matches on weight when the AMS reported one", () => {
+    const half = mergeCandidate({ remaining_weight: 500, used_weight: 500 });
+    assert.equal(findMergeableSpool(glowSlot(50), [half])?.id, 15);
+    // 100 % against a spool that is half gone is outside the 15 % tolerance,
+    // and it has been used, so nothing else lets it through either
+    assert.equal(findMergeableSpool(glowSlot(100), [half]), undefined);
+});
+
+test("findMergeableSpool skips the weight test when there is no reading", () => {
+    // Treating the missing value as 0 made the expected remaining weight 0,
+    // which matched every empty spool in the instance.
+    const empty = mergeCandidate({ remaining_weight: 0, used_weight: 1000 });
+    const half = mergeCandidate({ remaining_weight: 500, used_weight: 500 });
+
+    // An untouched spool still merges: never used carries it, not the weight
+    assert.equal(findMergeableSpool(glowSlot(null), [mergeCandidate()])?.id, 15);
+    // A half used one no longer does, because nothing confirms the guess
+    assert.equal(findMergeableSpool(glowSlot(null), [half]), undefined);
+    // An empty spool keeps matching on its own rule, unchanged
+    assert.equal(findMergeableSpool(glowSlot(null), [empty])?.id, 15);
 });
