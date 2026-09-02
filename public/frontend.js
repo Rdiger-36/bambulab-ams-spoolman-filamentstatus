@@ -864,12 +864,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // that length is what picking a manufacturer first avoids. Every step is
 	    // an input with its own suggestions, so a name can also just be typed.
 	    //
-	    // Entries are ordered by how close their colour is to the one the printer
-	    // reports for the slot. A chipless spool tells the AMS its colour and
-	    // nothing else, so that is the strongest hint available, and picking an
-	    // entry fills in the density, the temperatures and the weights that
-	    // cannot be read off the spool at all.
-	    const slotColorSet = slotColors(slot);
+	    // Picking an entry fills in the colours, the density, the temperatures and
+	    // the weights, none of which can be read off a chipless spool at all.
 	    const catalogue = new Map();
 	    // Answers can come back out of order, and the first load is the slowest
 	    // one: without this the unfiltered list of the initial load landed after
@@ -918,18 +914,23 @@ document.addEventListener("DOMContentLoaded", () => {
 	        if (!entries || request !== pending.entries) return;
 
 	        const ordered = [...entries].sort((a, b) =>
-	            colorSetDistance(slotColorSet, catalogueColors(a)) - colorSetDistance(slotColorSet, catalogueColors(b)));
+	            String(a.name ?? "").localeCompare(String(b.name ?? "")));
 
 	        catalogue.clear();
 	        for (const entry of ordered) {
-	            // Names repeat across manufacturers, so the label carries all
-	            // three parts and is what the input is matched against.
-	            catalogue.set([entry.manufacturer, entry.material, entry.name].filter(Boolean).join(" · "), entry);
+	            // The name alone, because the two steps above already said which
+	            // manufacturer and which material this is. Names do repeat across
+	            // them, so one that is taken carries what tells the two apart.
+	            const name = entry.name ?? "";
+	            const label = catalogue.has(name)
+	                ? [name, entry.manufacturer, entry.material].filter(Boolean).join(" · ")
+	                : name;
+	            catalogue.set(label, entry);
 	        }
 
 	        fillDatalist("sp-cat-filaments", [...catalogue.keys()]);
 	        $("sp-catalogue-hint").textContent = ordered.length
-	            ? `${ordered.length}${ordered.length === 500 ? "+" : ""} entries, closest colour to this slot first`
+	            ? `${ordered.length}${ordered.length === 500 ? "+" : ""} entries, by name`
 	            : "Nothing in the catalogue matches this manufacturer and material";
 	    };
 
