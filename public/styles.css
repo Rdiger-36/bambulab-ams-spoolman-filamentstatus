@@ -83,18 +83,18 @@ h1 {
 .pill-legacy{ background: #fdf0db; color: #9a6a00; }
 
 /* ---- Dark mode ---- */
-body.dark-mode .status-card {
+.dark-mode .status-card {
   background: #1e1e1e;
   border-color: #3a3a3a;
   box-shadow: none;
 }
-body.dark-mode .status-head { border-bottom-color: #333; }
-body.dark-mode .status-label { color: #999; }
-body.dark-mode .status-value { color: #f1f1f1; }
-body.dark-mode .pill-ok    { background: #14331f; color: #5fd089; }
-body.dark-mode .pill-bad   { background: #3a1b1a; color: #f08a82; }
-body.dark-mode .pill-gcode { background: #16293c; color: #6fb0ec; }
-body.dark-mode .pill-legacy{ background: #34290f; color: #e0b65f; }
+.dark-mode .status-head { border-bottom-color: #333; }
+.dark-mode .status-label { color: #999; }
+.dark-mode .status-value { color: #f1f1f1; }
+.dark-mode .pill-ok    { background: #14331f; color: #5fd089; }
+.dark-mode .pill-bad   { background: #3a1b1a; color: #f08a82; }
+.dark-mode .pill-gcode { background: #16293c; color: #6fb0ec; }
+.dark-mode .pill-legacy{ background: #34290f; color: #e0b65f; }
 
 /* ---- G-code dashboard inline indicators (dark-mode readable) ---- */
 .gc-link     { color: #1c6fd6; text-decoration: none; }
@@ -105,11 +105,11 @@ body.dark-mode .pill-legacy{ background: #34290f; color: #e0b65f; }
 .gc-muted    { opacity: 0.6; }
 .gc-required { color: #b3261e; }
 
-body.dark-mode .gc-link     { color: #6fb0ec; }
-body.dark-mode .gc-ok       { color: #5fd089; }
-body.dark-mode .gc-bad      { color: #f08a82; }
-body.dark-mode .gc-warn     { color: #e0b65f; }
-body.dark-mode .gc-required { color: #f08a82; }
+.dark-mode .gc-link     { color: #6fb0ec; }
+.dark-mode .gc-ok       { color: #5fd089; }
+.dark-mode .gc-bad      { color: #f08a82; }
+.dark-mode .gc-warn     { color: #e0b65f; }
+.dark-mode .gc-required { color: #f08a82; }
 
 /* ---- G-code print card ---- */
 .gc-card {
@@ -142,11 +142,11 @@ body.dark-mode .gc-required { color: #f08a82; }
 .gc-state-error   { background: #fbe4e4; color: #b3261e; }
 .gc-state-paused  { background: #fdf0db; color: #9a6a00; }
 
-body.dark-mode .gc-state         { background: #2b2b2b; color: #c9c9c9; }
-body.dark-mode .gc-state-running { background: #14331f; color: #5fd089; }
-body.dark-mode .gc-state-done    { background: #16293c; color: #6fb0ec; }
-body.dark-mode .gc-state-error   { background: #3a1b1a; color: #f08a82; }
-body.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
+.dark-mode .gc-state         { background: #2b2b2b; color: #c9c9c9; }
+.dark-mode .gc-state-running { background: #14331f; color: #5fd089; }
+.dark-mode .gc-state-done    { background: #16293c; color: #6fb0ec; }
+.dark-mode .gc-state-error   { background: #3a1b1a; color: #f08a82; }
+.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
 
 /* ---- Layer progress ---- */
 .gc-progress { margin-top: 10px; }
@@ -167,7 +167,7 @@ body.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
   height: 100%;
   background: #1e7e44;
 }
-body.dark-mode .gc-progress-bar { background: #5fd089; }
+.dark-mode .gc-progress-bar { background: #5fd089; }
 
 /* ---- Spool assignment / creation dialog ----
    Follows the settings page: bold field labels, the same input shape and the
@@ -202,7 +202,7 @@ body.dark-mode .gc-progress-bar { background: #5fd089; }
   border-bottom-color: #1c6fd6;
 }
 
-body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
+.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
 
 /* The dialog is capped in height, so the form scrolls rather than the page */
 .sp-scroll {
@@ -273,8 +273,8 @@ body.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
   border-color: #1c6fd6;
 }
 
-body.dark-mode .sp-field input:focus,
-body.dark-mode .sp-field select:focus {
+.dark-mode .sp-field input:focus,
+.dark-mode .sp-field select:focus {
   border-color: #6fb0ec;
 }
 
@@ -305,7 +305,7 @@ body.dark-mode .sp-field select:focus {
 
 .sp-pick:hover { background: #8881; }
 .sp-pick:has(input:checked) { background: #e3f0fb; }
-body.dark-mode .sp-pick:has(input:checked) { background: #16293c; }
+.dark-mode .sp-pick:has(input:checked) { background: #16293c; }
 
 .sp-scroll > .sp-pick { grid-column: 1 / -1; }
 
@@ -398,10 +398,10 @@ body.show-footer #spool-list {
 
   /* Dark mode card borders. The border is reset for the same reason as on the
      desktop table: the generic dark rules would draw one around every cell. */
-  body.dark-mode .spool-table tr { border-color: #444; background: #2a2a2a; }
-  body.dark-mode .spool-table td { border: none; border-bottom: 1px solid #3a3a3a; }
-  body.dark-mode .spool-table td:last-child { border-bottom: none; }
-  body.dark-mode .spool-table td::before { color: #999; }
+  .dark-mode .spool-table tr { border-color: #444; background: #2a2a2a; }
+  .dark-mode .spool-table td { border: none; border-bottom: 1px solid #3a3a3a; }
+  .dark-mode .spool-table td:last-child { border-bottom: none; }
+  .dark-mode .spool-table td::before { color: #999; }
 }
 
 table th, table td {
@@ -457,7 +457,7 @@ table td.color-cell {
 }
 
 /* Dark mode */
-body.dark-mode .spool-table {
+.dark-mode .spool-table {
   background: #1e1e1e;
   border-color: #3a3a3a;
   box-shadow: none;
@@ -465,30 +465,33 @@ body.dark-mode .spool-table {
 /* The generic dark table rules set all four borders on every cell, which drew
    a full grid over the card. Reset them so dark shows the same row separators
    as light. */
-body.dark-mode .spool-table th,
-body.dark-mode .spool-table td {
+.dark-mode .spool-table th,
+.dark-mode .spool-table td {
   border: none;
   border-bottom: 1px solid #333;
   background: transparent;
 }
 
-body.dark-mode .spool-table tbody tr:last-child td {
+.dark-mode .spool-table tbody tr:last-child td {
   border-bottom: none;
 }
-body.dark-mode .spool-table thead th {
+.dark-mode .spool-table thead th {
   background: #2a2a2a;
   color: #aaa;
 }
-body.dark-mode .spool-table tbody tr:hover td {
+.dark-mode .spool-table tbody tr:hover td {
   background: #262626;
 }
 
 
-body.transition-enabled {
+html.transition-enabled,
+html.transition-enabled body {
   transition: background-color 0.3s, color 0.3s;
 }
 
-body.dark-mode {
+/* The class sits on <html> so the theme is set before the first paint. */
+html.dark-mode,
+html.dark-mode body {
   background-color: #1e1e1e;
   color: #f1f1f1;
 }
@@ -498,17 +501,17 @@ table th {
   color: #333;
 }
 
-body.dark-mode table {
+.dark-mode table {
   background-color: #2e2e2e;
 }
 
-body.dark-mode table th {
+.dark-mode table th {
   background-color: #444;
   color: #ccc;
   border: 1px solid #555;
 }
 
-body.dark-mode table td {
+.dark-mode table td {
   background-color: #333;
   border: 1px solid #555;
 }
@@ -533,7 +536,7 @@ dialog button {
   margin-top: 20px;
 }
 
-body.dark-mode dialog {
+.dark-mode dialog {
   background-color: #1e1e1e;
   color: #f1f1f1;
   border: 1px solid #555;
@@ -563,7 +566,7 @@ button, .btn {
 }
 
 
-body.dark-mode #log-box {
+.dark-mode #log-box {
   background-color: #2e2e2e;
   border: 1px solid #555;
   color: #f1f1f1;
@@ -575,7 +578,7 @@ body.dark-mode #log-box {
   color: #333;
 }
 
-body.dark-mode #logs {
+.dark-mode #logs {
   color: #ccc;
 }
 
@@ -605,7 +608,7 @@ body.settings-page #menubar {
   box-sizing: border-box;
 }
 
-body.dark-mode #menubar {
+.dark-mode #menubar {
   background: #1f1f1f;
   border-color: #3a3a3a;
   box-shadow: none;
@@ -661,15 +664,15 @@ body.dark-mode #menubar {
   background: #eee;
 }
 
-body.dark-mode .dropdown-button {
+.dark-mode .dropdown-button {
   background: #2c2c2c;
   color: #f1f1f1;
   border-color: #4a4a4a;
 }
 
-body.dark-mode .dropdown-button:hover,
-body.dark-mode .dropdown:hover .dropdown-button,
-body.dark-mode .dropdown.open .dropdown-button {
+.dark-mode .dropdown-button:hover,
+.dark-mode .dropdown:hover .dropdown-button,
+.dark-mode .dropdown.open .dropdown-button {
   background: #3a3a3a;
 }
 
@@ -703,8 +706,8 @@ body.dark-mode .dropdown.open .dropdown-button {
   height: 7px;
 }
 
-body.dark-mode .dropdown-content,
-body.dark-mode .submenu-content {
+.dark-mode .dropdown-content,
+.dark-mode .submenu-content {
   background: #262626;
   border-color: #3a3a3a;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
@@ -723,9 +726,9 @@ body.dark-mode .submenu-content {
   white-space: nowrap;
 }
 
-body.dark-mode .dropdown-content a,
-body.dark-mode .submenu-content a,
-body.dark-mode .submenu-label {
+.dark-mode .dropdown-content a,
+.dark-mode .submenu-content a,
+.dark-mode .submenu-label {
   color: #f1f1f1;
 }
 
@@ -736,10 +739,10 @@ body.dark-mode .submenu-label {
   background: #eee;
 }
 
-body.dark-mode .dropdown-content a:hover,
-body.dark-mode .submenu-content a:hover,
-body.dark-mode .submenu:hover > .submenu-label,
-body.dark-mode .submenu.open > .submenu-label {
+.dark-mode .dropdown-content a:hover,
+.dark-mode .submenu-content a:hover,
+.dark-mode .submenu:hover > .submenu-label,
+.dark-mode .submenu.open > .submenu-label {
   background: #3a3a3a;
 }
 
@@ -772,10 +775,10 @@ body.dark-mode .submenu.open > .submenu-label {
   outline-offset: -2px;
 }
 
-body.dark-mode .dropdown-button:focus-visible,
-body.dark-mode .submenu-label:focus-visible,
-body.dark-mode .dropdown-content a:focus-visible,
-body.dark-mode .submenu-content a:focus-visible {
+.dark-mode .dropdown-button:focus-visible,
+.dark-mode .submenu-label:focus-visible,
+.dark-mode .dropdown-content a:focus-visible,
+.dark-mode .submenu-content a:focus-visible {
   outline-color: #6fb0ec;
 }
 
@@ -876,13 +879,13 @@ input:checked + .slider:before {
 
 .log-button:hover { background: #eee; }
 
-body.dark-mode .log-button {
+.dark-mode .log-button {
   background: #2c2c2c;
   color: #f1f1f1;
   border-color: #4a4a4a;
 }
 
-body.dark-mode .log-button:hover { background: #3a3a3a; }
+.dark-mode .log-button:hover { background: #3a3a3a; }
 
 .footer {
   position: fixed;
@@ -897,7 +900,7 @@ body.dark-mode .log-button:hover { background: #3a3a3a; }
   color: #333;
 }
 
-body.dark-mode .footer {
+.dark-mode .footer {
   background-color: #1e1e1e;
   color: #f1f1f1;
 }
@@ -949,7 +952,7 @@ body.dark-mode .footer {
   margin: 14px 0;
 }
 
-body.dark-mode .set-card {
+.dark-mode .set-card {
   background: #1f1f1f;
   border-color: #3a3a3a;
   box-shadow: none;
@@ -1027,8 +1030,8 @@ body.dark-mode .set-card {
   border-color: #1c6fd6;
 }
 
-body.dark-mode .set-field input:focus,
-body.dark-mode .set-field select:focus {
+.dark-mode .set-field input:focus,
+.dark-mode .set-field select:focus {
   border-color: #6fb0ec;
 }
 
@@ -1088,7 +1091,7 @@ body.dark-mode .set-field select:focus {
 
 .set-switch input:checked + .set-switch-track { background-color: #2ea35c; }
 .set-switch input:checked + .set-switch-track::before { transform: translateX(18px); }
-body.dark-mode .set-switch-track { background-color: #555; }
+.dark-mode .set-switch-track { background-color: #555; }
 
 /* ---- A switch that belongs to the whole card, in its header ---- */
 .set-head-field {
@@ -1159,7 +1162,7 @@ body.dark-mode .set-switch-track { background-color: #555; }
   visibility: visible;
 }
 
-body.dark-mode .set-info::after {
+.dark-mode .set-info::after {
   background: #3a3a3a;
 }
 
@@ -1238,12 +1241,12 @@ body.dark-mode .set-info::after {
 /* The global dark table rules set all four borders and a lighter table
    background, which would draw a full grid on a panel of its own. Reset both so
    dark looks exactly like light. */
-body.dark-mode .data-table {
+.dark-mode .data-table {
   background: transparent;
 }
 
-body.dark-mode .data-table th,
-body.dark-mode .data-table td {
+.dark-mode .data-table th,
+.dark-mode .data-table td {
   background: transparent;
   color: inherit;
   border: none;
@@ -1251,10 +1254,10 @@ body.dark-mode .data-table td {
   border-bottom: 1px solid #8882;
 }
 
-body.dark-mode .data-table tbody tr:last-child td,
-body.dark-mode .data-table tbody tr:last-child th,
-body.dark-mode .data-table tr:last-child td,
-body.dark-mode .data-table tr:last-child th { border-bottom: none; }
+.dark-mode .data-table tbody tr:last-child td,
+.dark-mode .data-table tbody tr:last-child th,
+.dark-mode .data-table tr:last-child td,
+.dark-mode .data-table tr:last-child th { border-bottom: none; }
 
 /* The "required but not loaded" list sits inside the print card, so it stays
    tighter than a table of its own. */
@@ -1312,7 +1315,7 @@ body.dark-mode .data-table tr:last-child th { border-bottom: none; }
 }
 
 .set-reset:hover { opacity: 1; }
-body.dark-mode .set-reset { color: #6fb0ec; }
+.dark-mode .set-reset { color: #6fb0ec; }
 
 /* ---- Buttons ---- */
 .btn {
@@ -1369,37 +1372,37 @@ body.dark-mode .set-reset { color: #6fb0ec; }
   border-color: #8f1d17;
 }
 
-body.dark-mode .btn {
+.dark-mode .btn {
   background: #2c2c2c;
   border-color: #4a4a4a;
   color: #f1f1f1;
 }
 
-body.dark-mode .btn:hover:not(:disabled) { background: #3a3a3a; }
+.dark-mode .btn:hover:not(:disabled) { background: #3a3a3a; }
 
-body.dark-mode .btn-primary {
+.dark-mode .btn-primary {
   background: #2f6fc4;
   border-color: #2f6fc4;
   color: #fff;
 }
 
-body.dark-mode .btn-primary:hover:not(:disabled) { background: #26599e; }
+.dark-mode .btn-primary:hover:not(:disabled) { background: #26599e; }
 
-body.dark-mode .btn-danger {
+.dark-mode .btn-danger {
   color: #f08a82;
   border-color: #6b3a36;
   background: #2c2c2c;
 }
 
-body.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
+.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
 
-body.dark-mode .btn-danger-solid {
+.dark-mode .btn-danger-solid {
   background: #c4382f;
   border-color: #c4382f;
   color: #fff;
 }
 
-body.dark-mode .btn-danger-solid:hover:not(:disabled) {
+.dark-mode .btn-danger-solid:hover:not(:disabled) {
   background: #a32c25;
   border-color: #a32c25;
 }
@@ -1418,7 +1421,7 @@ body.dark-mode .btn-danger-solid:hover:not(:disabled) {
   box-shadow: 0 -6px 10px -6px rgba(0, 0, 0, 0.25);
 }
 
-body.dark-mode .set-actions {
+.dark-mode .set-actions {
   background: #1e1e1e;
 }
 
@@ -1523,7 +1526,7 @@ body.dark-mode .set-actions {
 }
 
 .set-test-failed { color: #b3261e; opacity: 1; }
-body.dark-mode .set-test-failed { color: #f08a82; }
+.dark-mode .set-test-failed { color: #f08a82; }
 
 #printer-test-result {
   margin-top: 12px;
@@ -1548,7 +1551,7 @@ body.dark-mode .set-test-failed { color: #f08a82; }
   opacity: 1;
 }
 
-body.dark-mode .set-note-warn { color: #e0b65f; }
+.dark-mode .set-note-warn { color: #e0b65f; }
 
 .set-error {
   color: #b3261e;
@@ -1556,7 +1559,7 @@ body.dark-mode .set-note-warn { color: #e0b65f; }
   margin: 10px 0 0;
 }
 
-body.dark-mode .set-error { color: #f08a82; }
+.dark-mode .set-error { color: #f08a82; }
 .set-error:empty { display: none; }
 
 .set-banner {
@@ -1571,9 +1574,9 @@ body.dark-mode .set-error { color: #f08a82; }
 .set-banner-warn { background: #fdf0db; color: #9a6a00; }
 .set-banner-bad  { background: #fbe4e4; color: #b3261e; }
 
-body.dark-mode .set-banner-ok   { background: #14331f; color: #5fd089; }
-body.dark-mode .set-banner-warn { background: #34290f; color: #e0b65f; }
-body.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
+.dark-mode .set-banner-ok   { background: #14331f; color: #5fd089; }
+.dark-mode .set-banner-warn { background: #34290f; color: #e0b65f; }
+.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
 
 #printer-dialog {
   min-width: min(560px, 86vw);
@@ -1582,4 +1585,4 @@ body.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
 /* Links outside the footer and the menus, currently the pointer to the
    settings page shown on an empty dashboard. */
 #spool-list a { color: #1c6fd6; }
-body.dark-mode #spool-list a { color: #6fb0ec; }
+.dark-mode #spool-list a { color: #6fb0ec; }
