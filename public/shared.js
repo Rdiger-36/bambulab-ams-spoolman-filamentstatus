@@ -151,3 +151,66 @@ export function spoolWeightLimit(spool) {
 
     return candidates.length ? Math.max(...candidates) : null;
 }
+
+/**
+ * Formats a date for display as `DD.MM.YYYY HH:MM:SS`.
+ *
+ * The dashboard prints the timestamps the server sends and used to carry its
+ * own copy of this, character for character the same as the one in `utils.js`.
+ * Both read it from here now, so the two cannot drift into two formats for one
+ * value.
+ *
+ * @param {Date} date - the date to format
+ * @returns {string} the formatted timestamp
+ */
+export function formatDate(date) {
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+    return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+}
+
+/**
+ * The unit id the external spool holder is addressed under, and the label it
+ * produces. The printer reports the holder as `print.vir_slot`, whose entry
+ * carries `id` 255, so the number is the printer's rather than an invention.
+ *
+ * The label is not only shown: it is the key an assignment is stored under in
+ * `mappings.json`, and it is what tells the dashboard that this slot belongs to
+ * no four slot unit and needs a table of its own. Changing it orphans what is
+ * on disk, which is why both sides read the same constant.
+ */
+export const EXTERNAL_SPOOL_ID = 255;
+export const EXTERNAL_SLOT = "External";
+
+/**
+ * The print states in which a job is in flight.
+ *
+ * Its consumption is booked only when it ends, so both sides have to know them:
+ * the server refuses to reconnect, restart or take a corrected weight while one
+ * of these is on, and the detail dialog does not offer the correction in the
+ * first place. Two lists would let the dialog offer what the route then refuses.
+ */
+export const ACTIVE_PRINT_STATES = ["PREPARE", "RUNNING", "PAUSE"];
+
+/**
+ * The actions a slot can offer, as `option` on the UI spool.
+ *
+ * The server decides which one a slot gets and the dashboard turns it into a
+ * button label, so the string is a contract between the two rather than a piece
+ * of UI copy. It was spelled out at nine places across both sides, where a typo
+ * on either one silently produces a dead button.
+ */
+export const SLOT_OPTIONS = {
+    NONE: "No actions available",
+    WAITING: "Waiting for data",
+    CREATE: "Create Spool",
+    CREATE_WITH_FILAMENT: "Create Filament & Spool",
+    MERGE: "Merge Spool",
+    ASSIGN: "Assign Spool",
+    UNASSIGN: "Unassign Spool",
+    SHOW_INFO: "Show Info!",
+};

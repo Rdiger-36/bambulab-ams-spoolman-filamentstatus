@@ -29,6 +29,60 @@ function usedWeightFromSlot(slot) {
 }
 
 /**
+ * The log target for a write that belongs to no printer: the bootstrap ones.
+ */
+const SERVER = { printerName: "Server", logFilePath: serverLogFilePath };
+
+/**
+ * Logs a failed Spoolman write in the block the log viewer looks for.
+ *
+ * The write paths all fail the same way and used to spell this block out one by
+ * one. Four of those copies read the status off `error.filamentResponse`,
+ * `error.spoolResponse` and `error.manufacturerResponse`, none of which a got
+ * error carries, so exactly the lines meant to say why a write failed printed
+ * "undefined undefined" plus a stack trace instead of the Spoolman response.
+ *
+ * @param {object} target - a UI spool, or SERVER, for the name and the log file
+ * @param {string} what - what failed, e.g. "Spool creation"
+ * @param {Error} error - the got error
+ */
+export function logSpoolmanFailure(target, what, error) {
+    const { printerName, logFilePath } = target;
+
+    console.error(printerName, logFilePath, "    #####");
+    console.error(printerName, logFilePath, `    ${what} failed:`, error.message);
+    console.error(printerName, logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
+    console.error(printerName, logFilePath, "    #####");
+}
+
+/**
+ * Logs a failed write and describes it for whoever asked for it.
+ *
+ * The three actions never throw, because one slot that cannot be written must
+ * not abort the remaining slots of the same AMS update. That left the Web UI
+ * with no way to tell a write that happened from one that did not: the route
+ * answered `ok` either way. They report instead.
+ *
+ * Spoolman's own message is preferred over the got one, which says only that
+ * the request failed with a status code.
+ *
+ * @returns {{ok: false, error: string}}
+ */
+function failed(target, what, error) {
+    logSpoolmanFailure(target, what, error);
+
+    // A body arrives as a string unless the call asked for JSON, and stringifying
+    // one of those escapes it a second time, which is how a Spoolman message
+    // ends up in the browser wrapped in quotes and backslashes.
+    const body = error.response?.body;
+    const detail = body == null || body === ""
+        ? error.message
+        : (typeof body === "string" ? body : JSON.stringify(body));
+
+    return { ok: false, error: `${what} failed: ${detail}` };
+}
+
+/**
  * Fetches all spools. Updates the connection status as a side effect and
  * returns an empty list on failure, so a Spoolman outage pauses processing
  * instead of crashing the service.
@@ -133,10 +187,29 @@ export const getSpoolmanMaterials = () => getJson("/api/v1/material", "materials
  */
 export const getSpoolmanExternalMaterials = () => getJson("/api/v1/external/material", "external materials");
 
-/** Creates a vendor by name and returns the created record. */
-export async function createNamedVendor(name) {
+/**
+ * Creates a vendor and returns the created record.
+ *
+ * `external_id` is the manufacturer string as the SpoolmanDB catalogue writes
+ * it, which is what ties the vendor to the catalogue; Spoolman stores its own
+ * imported vendors the same way. `empty_spool_weight` is the vendor default a
+ * spool falls back on when its filament names no weight, and the catalogue
+ * carries it per entry. Both are left out when nothing knows them, rather than
+ * sent as null, so a vendor typed by hand stays a vendor typed by hand.
+ *
+ * @param {object} vendor
+ * @param {string} vendor.name - the manufacturer name
+ * @param {string|null} [vendor.externalId] - the catalogue's manufacturer string
+ * @param {number|null} [vendor.emptySpoolWeight] - grams of the empty spool
+ * @returns {Promise<object>} the created vendor
+ */
+export async function createVendor({ name, externalId = null, emptySpoolWeight = null }) {
+    const payload = { name };
+    if (externalId) payload.external_id = externalId;
+    if (Number.isFinite(emptySpoolWeight)) payload.empty_spool_weight = emptySpoolWeight;
+
     const response = await got.post(`${spoolmanUrl()}/api/v1/vendor`, {
-        json: { name },
+        json: payload,
         responseType: "json",
     });
     return response.body;
@@ -160,67 +233,68 @@ export async function createSpoolRecord(payload) {
     return response.body;
 }
 
+/** The manufacturer every filament built from a Bambu Lab profile belongs to. */
+const BAMBU_VENDOR = "Bambu Lab";
+
 /**
- * Makes sure the "Bambu Lab" vendor exists and caches its id in shared state.
+ * The id of the "Bambu Lab" vendor, creating it when this Spoolman has none.
  *
- * Runs once at startup. Every filament this service creates is attached to that
- * vendor, so without it nothing can be created at all.
+ * Spoolman ships no vendors and creates none on its own: `POST /api/v1/filament`
+ * takes a `vendor_id` and nothing else, and the SpoolmanDB catalogue names the
+ * manufacturer as a string with no id behind it. So a filament built from a
+ * catalogue entry has no manufacturer unless this vendor exists here. Verified
+ * against Spoolman 0.26.1.
  *
- * @returns {Promise<boolean>} whether the vendor is available
+ * Asked at the point of use rather than at startup. It is needed by one thing,
+ * `createFilamentAndSpool()`, and holding the whole service back for it stopped
+ * the monitor loops over a vendor that merging, tag linking, the G-code booking
+ * and every manual assignment do not need. The answer is cached in
+ * `state.vendorID` and cleared when the endpoint changes, so the lookup happens
+ * once per Spoolman instance rather than once per filament.
+ *
+ * @returns {Promise<number>} the vendor id
+ * @throws when Spoolman cannot be read or the vendor cannot be created
  */
-export async function checkAndSetVendor() {
+export async function ensureVendor() {
+    if (state.vendorID) return state.vendorID;
+
     console.log("Server", serverLogFilePath, "Checking Vendors...");
+    let vendors;
     try {
         const response = await got(`${spoolmanUrl()}/api/v1/vendor`);
-        const vendors = JSON.parse(response.body);
-
-        for (const vendor of vendors) {
-            if (vendor.name === "Bambu Lab" || vendor.external_id === "Bambu Lab") {
-                state.vendorID = vendor.id;
-                break;
-            }
-        }
-
-        if (!state.vendorID) {
-            console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: false');
-            return await createVendor();
-        } else {
-            console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: true');
-            return true;
-        }
+        vendors = JSON.parse(response.body);
     } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error);
         state.spoolmanStatus = "Disconnected";
         throw error;
     }
-}
 
-/** Creates the "Bambu Lab" vendor and stores its id in shared state. */
-async function createVendor() {
+    const existing = vendors.find(vendor => vendor.name === BAMBU_VENDOR || vendor.external_id === BAMBU_VENDOR);
+    if (existing) {
+        state.vendorID = existing.id;
+        console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: true');
+        return state.vendorID;
+    }
+
+    console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: false');
     console.log("Server", serverLogFilePath, 'Creating Vendor "Bambu Lab"...');
-    try {
-        const manufacturerPayload = {
-            name: "Bambu Lab",
-            external_id: "Bambu Lab",
-            empty_spool_weight: 250,
-        };
 
-        const manufacturerResponse = await got.post(`${spoolmanUrl()}/api/v1/vendor`, {
-            json: manufacturerPayload,
-            responseType: "json",
+    try {
+        // 250 g is what a Bambu Lab spool weighs empty, and it is what every
+        // Bambu entry of the catalogue reports as its spool weight.
+        const created = await createVendor({
+            name: BAMBU_VENDOR,
+            externalId: BAMBU_VENDOR,
+            emptySpoolWeight: 250,
         });
 
-        if (manufacturerResponse.body.id) {
-            state.vendorID = manufacturerResponse.body.id;
-            console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" successfully created!');
-            return true;
-        }
-        return false;
+        if (!created.id) throw new Error("Spoolman created the vendor but answered without an id");
+
+        state.vendorID = created.id;
+        console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" successfully created!');
+        return state.vendorID;
     } catch (error) {
-        console.error("Server", serverLogFilePath, "#####");
-        console.error("Server", serverLogFilePath, "Vendor creation failed:", error.message);
-        console.error("Server", serverLogFilePath, "Error details:", error.manufacturerResponse?.statusCode, error.manufacturerResponse?.body || error.stack);
-        console.error("Server", serverLogFilePath, "#####");
+        logSpoolmanFailure(SERVER, "Vendor creation", error);
         throw error;
     }
 }
@@ -266,10 +340,7 @@ async function createExtraField() {
         console.log("Server", serverLogFilePath, 'Extra Field "tag" successfully created!');
         return true;
     } catch (error) {
-        console.error("Server", serverLogFilePath, "#####");
-        console.error("Server", serverLogFilePath, 'Extra Field "tag" creation failed:', error.message);
-        console.error("Server", serverLogFilePath, "Error details:", error.manufacturerResponse?.statusCode, error.manufacturerResponse?.body || error.stack);
-        console.error("Server", serverLogFilePath, "#####");
+        logSpoolmanFailure(SERVER, 'Extra Field "tag" creation', error);
         throw error;
     }
 }
@@ -278,10 +349,11 @@ async function createExtraField() {
  * Creates a spool for an AMS slot whose filament already exists in Spoolman,
  * tagged with the slot's tray_uuid so it is recognised from then on.
  *
- * Failures are logged, not thrown: one slot that cannot be created must not
+ * Failures are reported, not thrown: one slot that cannot be created must not
  * abort the remaining slots of the same AMS update.
  *
  * @param {object} spoolData - the UI spool, carrying slot and matched filament
+ * @returns {Promise<{ok: boolean, error?: string}>} what became of the write
  */
 export async function createSpool(spoolData) {
     const postData = buildSpoolPayload(spoolData, spoolData.matchingInternalFilament.id);
@@ -292,11 +364,9 @@ export async function createSpool(spoolData) {
     try {
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
+        return { ok: true };
     } catch (error) {
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Spool creation failed:", error.message);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+        return failed(spoolData, "Spool creation", error);
     }
 }
 
@@ -363,12 +433,26 @@ export function buildFilamentPayload(spoolData) {
  * the catalogue entry matched but no filament exists in Spoolman yet.
  *
  * The spool is only attempted once the filament came back with an id. As in
- * createSpool, failures are logged rather than thrown.
+ * createSpool, failures are reported rather than thrown.
  *
  * @param {object} spoolData - the UI spool, carrying slot and catalogue entry
+ * @returns {Promise<{ok: boolean, error?: string}>} what became of the write
  */
 export async function createFilamentAndSpool(spoolData) {
     let filamentId;
+
+    try {
+        // The one caller that needs the vendor, so the lookup lives here rather
+        // than in the startup sequence. Cached after the first filament.
+        await ensureVendor();
+    } catch {
+        // ensureVendor has already logged what Spoolman answered. This says
+        // what it cost: this slot keeps its button and the next AMS update
+        // tries again, while everything that does not need a vendor carries on.
+        const error = `The "Bambu Lab" vendor could not be resolved, so no filament was created`;
+        console.error(spoolData.printerName, spoolData.logFilePath, `    Filament for ${spoolData.amsId} not created: ${error}`);
+        return { ok: false, error };
+    }
 
     try {
         const filamentPayload = buildFilamentPayload(spoolData);
@@ -382,27 +466,23 @@ export async function createFilamentAndSpool(spoolData) {
         });
         filamentId = filamentResponse.body.id;
     } catch (error) {
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Filament creation failed:", error.message);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.filamentResponse?.statusCode, error.filamentResponse?.body || error.stack);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+        return failed(spoolData, "Filament creation", error);
     }
 
-    if (filamentId) {
-        try {
-            const spoolPayload = buildSpoolPayload(spoolData, filamentId);
+    try {
+        const spoolPayload = buildSpoolPayload(spoolData, filamentId);
 
-            console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
-            console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
+        console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
+        console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
 
-            await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
-            console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
-        } catch (error) {
-            console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-            console.error(spoolData.printerName, spoolData.logFilePath, "    Spool creation failed:", error.message);
-            console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.spoolResponse?.statusCode, error.spoolResponse?.body || error.stack);
-            console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        }
+        await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
+        console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
+        return { ok: true };
+    } catch (error) {
+        // The filament is there and the spool is not, which is the one half
+        // done outcome of the three. It is named as such, because the next
+        // attempt finds that filament and only has to create the spool.
+        return failed(spoolData, `Spool creation for the new filament ${filamentId}`, error);
     }
 }
 
@@ -411,6 +491,7 @@ export async function createFilamentAndSpool(spoolData) {
  * slot's tray_uuid into its extra.tag. Nothing else about the spool is touched.
  *
  * @param {object} spoolData - the UI spool, carrying slot and mergeableSpool
+ * @returns {Promise<{ok: boolean, error?: string}>} what became of the write
  */
 export async function mergeSpool(spoolData) {
     const postData = { extra: { tag: `\"${spoolData.slot.tray_uuid}\"` } };
@@ -421,11 +502,9 @@ export async function mergeSpool(spoolData) {
     try {
         await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully merged with Spool-ID ${spoolData.mergeableSpool.id} => ${spoolData.mergeableSpool.filament.name}`);
+        return { ok: true };
     } catch (error) {
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Spool merge failed:", error.message);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+        return failed(spoolData, "Spool merge", error);
     }
 }
 

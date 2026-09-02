@@ -1,6 +1,11 @@
 // Settings page. Renders the fields the backend describes in /api/settings, so
 // a new setting only has to be added to the schema in src/settings.js, and
 // manages the printer list through /api/printers.
+//
+// A module, so the HTTP and escaping helpers can be shared with the dashboard
+// rather than kept as a second copy here. The menu bar and the export dialog
+// stay classic scripts and are read off the global scope.
+import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 
 // Order and headline of the field groups. The group key comes from the schema,
 // the fields the schema marks as advanced go into the collapsed part.
@@ -66,34 +71,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.type === "settings_update" && !formDirty) loadSettings();
     };
 });
-
-/* ---- HTTP helpers ---- */
-
-async function fetchJson(url, options) {
-    const res = await fetch(url, options);
-    const body = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-        const error = new Error(body.error || `HTTP ${res.status}`);
-        error.conflict = !!body.conflict;
-        error.printInFlight = !!body.printInFlight;
-        throw error;
-    }
-
-    return body;
-}
-
-function sendJson(url, method, payload) {
-    return fetchJson(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
-}
-
-function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
 
 /* ---- Banner and dirty state ---- */
 

@@ -16,7 +16,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 |---|---|
 | `config.js` | The on-disk paths (overridable with `DATA_DIR` and `LOG_DIR`), the port, the version, and the raw environment values that seed the two config files. The only module allowed to read `process.env`. |
 | `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()`, the frozen `legacyMode()` and the persistence of `printers/settings.json`, including its schema version and write counter. Must not import `logger.js`, which reads DEBUG from here. |
-| `service.js` | The startup sequence, the Spoolman reconnect that the settings API triggers when the endpoint changes, and `restartService()`, which ends the process with the restart exit code. |
+| `service.js` | The startup sequence, the Spoolman reconnect that the settings API triggers when the endpoint changes, and `restartService()`, which ends the process with the restart exit code. The `tag` extra field is the only bootstrap that gates it; the vendor is resolved at the point of use. |
 | `supervisor.js` | The decision `entrypoint.js` makes when the service ends, and the exit code it looks for. Deliberately free of imports so it can be tested without spawning a process. |
 | `logger.js` | The `console.*` overrides, the serialised per-file write queue, `tailLogLines()` for the log viewer, which reads across the rotated files, and the size based rotation itself. |
 | `printers.js` | Loads and writes `printers/printers.json` (or seeds it from the `PRINTER_*` env vars), seeds the mutable per-printer runtime object, and owns add, update and remove. |
@@ -274,6 +274,14 @@ when the running process cannot adopt it, and handle the live application in the
 Respond `{ ok: false, error }` with a 4xx/5xx for failures; the frontend's
 `fetchJson()` expects that shape. Never build a Spoolman payload inline. Add a
 function to `spoolman.js`.
+
+**The three write actions report, they do not throw.** `createSpool()`,
+`createFilamentAndSpool()` and `mergeSpool()` answer `{ ok, error }`, because
+the automatic mode calls them per slot and one slot that cannot be written must
+not abort the rest of the same AMS update. Both callers read that answer: the
+route turns it into the response, and `processSlot()` counts only a write that
+happened as a reason to refetch the Spoolman lists. A new one keeps the shape,
+or the Web UI goes back to reporting success for a write that never landed.
 
 **Adding matching logic:** put the decision in `ams.js` as a pure function and
 call it from `mqtt.js`. That is what makes it testable: `test/ams.test.js`

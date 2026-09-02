@@ -1,20 +1,20 @@
 import { materialFamily } from "../public/materials.js";
+// Imported rather than only re-exported: `convertAMSandSlot()` below reads them,
+// and a bare re-export does not bring a name into this module's scope.
+import { EXTERNAL_SPOOL_ID, EXTERNAL_SLOT } from "../public/shared.js";
 
 /** Resolves after the given number of milliseconds. */
 export function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/** Formats a date for display as `DD.MM.YYYY HH:MM:SS`. */
-export function formatDate(date) {
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    const seconds = String(date.getSeconds()).padStart(2, "0");
-    return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
-}
+/**
+ * Formats a date for display as `DD.MM.YYYY HH:MM:SS`.
+ *
+ * In `public/shared.js` because the dashboard prints the same timestamps and
+ * used to carry its own copy. Re-exported so the callers here keep their import.
+ */
+export { formatDate } from "../public/shared.js";
 
 /**
  * Formats a date for a log line as `YYYY-MM-DD_HH:MM:SS`.
@@ -75,11 +75,14 @@ export function convertAMSandSlot(amsID, slotID) {
 
 /**
  * The unit id the external spool holder is addressed under, and the label it
- * produces. The printer reports the holder as `print.vir_slot`, whose entry
- * carries `id` 255, so the number is the printer's rather than an invention.
+ * produces.
+ *
+ * In `public/shared.js` as well: the dashboard has to know which slots stand
+ * alone rather than filling a four slot unit, and it had the label as a second
+ * constant of its own. The label is the key an assignment is stored under, so
+ * the two drifting apart orphans what is on disk.
  */
-export const EXTERNAL_SPOOL_ID = 255;
-export const EXTERNAL_SLOT = "External";
+export { EXTERNAL_SPOOL_ID, EXTERNAL_SLOT };
 
 /**
  * The colour set of an AMS slot as bare six digit lowercase hex, and the colour
@@ -94,6 +97,28 @@ export const EXTERNAL_SLOT = "External";
 export { slotColors, filamentColors } from "../public/shared.js";
 
 /**
+ * Turns the "N/A" placeholder into a real absence.
+ *
+ * `processData()` writes that literal into every field the printer left out,
+ * because the backend branches on it. It is a marker, not a value: a client
+ * that receives it renders it, which is how an emptied slot came to be labelled
+ * "N/A" and how its colour swatch ended up styled `#N/A`. An empty string is
+ * squashed for the same reason.
+ *
+ * It lives here because both readers need it and have to agree. `toClientSpool()`
+ * has already turned the marker into null by the time the dashboard route builds
+ * its candidates, while `consumptionCandidate()` is also called on the runtime
+ * shape, which still carries it: two implementations would key one slot two ways
+ * depending on which side asked.
+ *
+ * @param {*} value - a field of an AMS slot
+ * @returns {*} the value, or null where there was none
+ */
+export function orNull(value) {
+    return value === "N/A" || value === "" || value == null ? null : value;
+}
+
+/**
  * The upper bound for a remaining weight corrected by hand.
  *
  * Also in `public/shared.js`: the detail dialog refuses the same number before
@@ -101,6 +126,16 @@ export { slotColors, filamentColors } from "../public/shared.js";
  * cannot drift apart.
  */
 export { spoolWeightLimit } from "../public/shared.js";
+
+/**
+ * The slot actions and the active print states, both of them agreements between
+ * this side and the dashboard rather than values of one side alone.
+ *
+ * In `public/shared.js` for the reason the colour helpers are: the browser has
+ * to be able to load them unbuilt. Re-exported here so a module under `src/`
+ * has one place to import from.
+ */
+export { SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "../public/shared.js";
 
 /**
  * The material family rules the dashboard uses, so the catalogue query answers

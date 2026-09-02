@@ -1,9 +1,137 @@
+/* ---- Colour tokens ----
+   Every colour that differs between light and dark used to be written twice:
+   once in the rule and once again in a `.dark-mode` copy of that rule, which is
+   what made a third of this file a second copy of the other two thirds. The
+   pairs live here instead, so a rule names the role and the theme decides the
+   value.
+
+   A colour that is the same in both themes stays a literal in its rule. There
+   is nothing for a token to decide about it. */
+:root {
+  /* Text */
+  --text: #333;
+  --text-soft: #333;
+  --text-muted: #888;
+  --text-quiet: #777;
+  --text-state: #444;
+
+  /* Surfaces */
+  --page-bg: #f4f4f4;
+  --card-bg: #fff;
+  --panel-bg: #fff;
+  --menu-bg: #fff;
+  --control-bg: #fff;
+  --control-hover-bg: #eee;
+  --input-bg: #fff;
+  --row-bg: #fff;
+  --row-hover-bg: #f6f9fc;
+  --head-bg: #f7f7f7;
+  --state-bg: #ececec;
+  --log-bg: #f9f9f9;
+  --tooltip-bg: #2c2c2c;
+  --track-bg: #bbb;
+
+  /* Borders */
+  --border: #e0e0e0;
+  --border-strong: #ccc;
+  --border-control: #bbb;
+  --border-input: #bbb;
+  --border-soft: #eee;
+  --border-row: #eee;
+  --border-card: #ddd;
+
+  /* Accent */
+  --accent: #1c6fd6;
+  --accent-text: #1c5fa8;
+  --accent-bg: #1c6fd6;
+  --accent-bg-hover: #1559ad;
+
+  /* Meaning */
+  --ok: #1e7e44;
+  --ok-bg: #e3f6e9;
+  --bad: #b3261e;
+  --bad-bg: #fbe4e4;
+  --warn: #9a6a00;
+  --warn-bg: #fdf0db;
+  --info-bg: #e3f0fb;
+  --danger-solid: #b3261e;
+  --danger-solid-hover: #8f1d17;
+  --danger-border: #d9a5a1;
+
+  /* The plain tables of the older pages */
+  --table-bg: transparent;
+  --table-th-bg: #eee;
+  --table-td-bg: transparent;
+  --table-cell-border: none;
+
+  /* Shadows. Dark drops the card shadow entirely and deepens the others. */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-menu: 0 4px 14px rgba(0, 0, 0, 0.12);
+  --shadow-dialog: 0px 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode {
+  --text: #f1f1f1;
+  --text-soft: #ccc;
+  --text-muted: #999;
+  --text-quiet: #aaa;
+  --text-state: #c9c9c9;
+
+  --page-bg: #1e1e1e;
+  --card-bg: #1e1e1e;
+  --panel-bg: #1f1f1f;
+  --menu-bg: #262626;
+  --control-bg: #2c2c2c;
+  --control-hover-bg: #3a3a3a;
+  --input-bg: #2a2a2a;
+  --row-bg: #2a2a2a;
+  --row-hover-bg: #262626;
+  --head-bg: #2a2a2a;
+  --state-bg: #2b2b2b;
+  --log-bg: #2e2e2e;
+  --tooltip-bg: #3a3a3a;
+  --track-bg: #555;
+
+  --border: #3a3a3a;
+  --border-strong: #555;
+  --border-control: #4a4a4a;
+  --border-input: #555;
+  --border-soft: #333;
+  --border-row: #3a3a3a;
+  --border-card: #444;
+
+  --accent: #6fb0ec;
+  --accent-text: #6fb0ec;
+  --accent-bg: #2f6fc4;
+  --accent-bg-hover: #26599e;
+
+  --ok: #5fd089;
+  --ok-bg: #14331f;
+  --bad: #f08a82;
+  --bad-bg: #3a1b1a;
+  --warn: #e0b65f;
+  --warn-bg: #34290f;
+  --info-bg: #16293c;
+  --danger-solid: #c4382f;
+  --danger-solid-hover: #a32c25;
+  --danger-border: #6b3a36;
+
+  --table-bg: #2e2e2e;
+  --table-th-bg: #444;
+  --table-td-bg: #333;
+  --table-cell-border: 1px solid #555;
+
+  --shadow-card: none;
+  --shadow-menu: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-dialog: 0px 4px 6px rgba(0, 0, 0, 0.6);
+}
+
 body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 20px;
-  background-color: #f4f4f4;
-  color: #333;
+  background-color: var(--page-bg);
+  color: var(--text);
 }
 
 h1 {
@@ -16,11 +144,11 @@ h1 {
 
 /* ---- Status card ---- */
 .status-card {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--card-bg);
   padding: 14px 18px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-card);
 }
 
 .status-head {
@@ -30,7 +158,7 @@ h1 {
   flex-wrap: wrap;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .status-head .monitoring-align {
@@ -57,13 +185,13 @@ h1 {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #888;
+  color: var(--text-muted);
 }
 
 .status-value {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #333;
+  color: var(--text);
   word-break: break-word;
 }
 
@@ -77,39 +205,20 @@ h1 {
   line-height: 1.4;
   white-space: nowrap;
 }
-.pill-ok    { background: #e3f6e9; color: #1e7e44; }
-.pill-bad   { background: #fbe4e4; color: #b3261e; }
-.pill-gcode { background: #e3f0fb; color: #1c5fa8; }
-.pill-legacy{ background: #fdf0db; color: #9a6a00; }
-
-/* ---- Dark mode ---- */
-.dark-mode .status-card {
-  background: #1e1e1e;
-  border-color: #3a3a3a;
-  box-shadow: none;
-}
-.dark-mode .status-head { border-bottom-color: #333; }
-.dark-mode .status-label { color: #999; }
-.dark-mode .status-value { color: #f1f1f1; }
-.dark-mode .pill-ok    { background: #14331f; color: #5fd089; }
-.dark-mode .pill-bad   { background: #3a1b1a; color: #f08a82; }
-.dark-mode .pill-gcode { background: #16293c; color: #6fb0ec; }
-.dark-mode .pill-legacy{ background: #34290f; color: #e0b65f; }
+.pill-ok    { background: var(--ok-bg);   color: var(--ok); }
+.pill-bad   { background: var(--bad-bg);  color: var(--bad); }
+.pill-gcode { background: var(--info-bg); color: var(--accent-text); }
+.pill-legacy{ background: var(--warn-bg); color: var(--warn); }
 
 /* ---- G-code dashboard inline indicators (dark-mode readable) ---- */
-.gc-link     { color: #1c6fd6; text-decoration: none; }
+.gc-link     { color: var(--accent); text-decoration: none; }
 .gc-link:hover { text-decoration: underline; }
-.gc-ok       { color: #1e7e44; font-weight: 600; }
-.gc-bad      { color: #b3261e; font-weight: 600; }
-.gc-warn     { color: #9a6a00; }
+.gc-ok       { color: var(--ok); font-weight: 600; }
+.gc-bad      { color: var(--bad); font-weight: 600; }
+.gc-warn     { color: var(--warn); }
 .gc-muted    { opacity: 0.6; }
-.gc-required { color: #b3261e; }
+.gc-required { color: var(--bad); }
 
-.dark-mode .gc-link     { color: #6fb0ec; }
-.dark-mode .gc-ok       { color: #5fd089; }
-.dark-mode .gc-bad      { color: #f08a82; }
-.dark-mode .gc-warn     { color: #e0b65f; }
-.dark-mode .gc-required { color: #f08a82; }
 
 /* ---- G-code print card ---- */
 .gc-card {
@@ -134,19 +243,14 @@ h1 {
   border-radius: 10px;
   font-size: 0.85em;
   font-weight: 600;
-  background: #ececec;
-  color: #444;
+  background: var(--state-bg);
+  color: var(--text-state);
 }
-.gc-state-running { background: #e3f6e9; color: #1e7e44; }
-.gc-state-done    { background: #e3f0fb; color: #1c5fa8; }
-.gc-state-error   { background: #fbe4e4; color: #b3261e; }
-.gc-state-paused  { background: #fdf0db; color: #9a6a00; }
+.gc-state-running { background: var(--ok-bg);   color: var(--ok); }
+.gc-state-done    { background: var(--info-bg); color: var(--accent-text); }
+.gc-state-error   { background: var(--bad-bg);  color: var(--bad); }
+.gc-state-paused  { background: var(--warn-bg); color: var(--warn); }
 
-.dark-mode .gc-state         { background: #2b2b2b; color: #c9c9c9; }
-.dark-mode .gc-state-running { background: #14331f; color: #5fd089; }
-.dark-mode .gc-state-done    { background: #16293c; color: #6fb0ec; }
-.dark-mode .gc-state-error   { background: #3a1b1a; color: #f08a82; }
-.dark-mode .gc-state-paused  { background: #34290f; color: #e0b65f; }
 
 /* ---- Layer progress ---- */
 .gc-progress { margin-top: 10px; }
@@ -165,9 +269,8 @@ h1 {
 }
 .gc-progress-bar {
   height: 100%;
-  background: #1e7e44;
+  background: var(--ok);
 }
-.dark-mode .gc-progress-bar { background: #5fd089; }
 
 /* ---- Spool assignment / creation dialog ----
    Follows the settings page: bold field labels, the same input shape and the
@@ -199,10 +302,9 @@ h1 {
   opacity: 1;
   font-weight: 600;
   background: none;
-  border-bottom-color: #1c6fd6;
+  border-bottom-color: var(--accent);
 }
 
-.dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
 
 /* The picker searches a whole inventory, so the field sits above the list it
    filters rather than inside the scrolling area. */
@@ -215,9 +317,9 @@ h1 {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px;
-  border: 1px solid #bbb;
+  border: 1px solid var(--border-input);
   border-radius: 6px;
-  background: #fff;
+  background: var(--input-bg);
   color: inherit;
   font-family: inherit;
   font-size: 0.9em;
@@ -225,16 +327,11 @@ h1 {
 
 .sp-search input:focus {
   outline: none;
-  border-color: #1c6fd6;
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px #1c6fd633;
 }
 
-.dark-mode .sp-search input {
-  background: #2a2a2a;
-  border-color: #555;
-}
 
-.dark-mode .sp-search input:focus { border-color: #6fb0ec; }
 
 /* The dialog is capped in height, so the form scrolls rather than the page */
 .sp-scroll {
@@ -315,13 +412,9 @@ h1 {
 .sp-field input:focus,
 .sp-field select:focus {
   outline: none;
-  border-color: #1c6fd6;
+  border-color: var(--accent);
 }
 
-.dark-mode .sp-field input:focus,
-.dark-mode .sp-field select:focus {
-  border-color: #6fb0ec;
-}
 
 .sp-field small {
   opacity: 0.7;
@@ -391,18 +484,14 @@ h1 {
 
 .sp-colour-actions select {
   padding: 4px 8px;
-  border: 1px solid #bbb;
+  border: 1px solid var(--border-input);
   border-radius: 6px;
-  background: #fff;
+  background: var(--input-bg);
   color: inherit;
   font-family: inherit;
   font-size: 0.85em;
 }
 
-.dark-mode .sp-colour-actions select {
-  background: #2a2a2a;
-  border-color: #555;
-}
 
 .sp-colour { display: flex; gap: 6px; align-items: center; }
 .sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
@@ -422,8 +511,7 @@ h1 {
 }
 
 .sp-pick:hover { background: #8881; }
-.sp-pick:has(input:checked) { background: #e3f0fb; }
-.dark-mode .sp-pick:has(input:checked) { background: #16293c; }
+.sp-pick:has(input:checked) { background: var(--info-bg); }
 
 .sp-scroll > .sp-pick { grid-column: 1 / -1; }
 
@@ -442,6 +530,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
+  background-color: var(--table-bg);
 }
 
 /* Keep content clear of the fixed footer so the last table isn't overlapped */
@@ -481,16 +570,16 @@ body.show-footer #spool-list {
   }
 
   .spool-table tr {
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-card);
     border-radius: 8px;
     margin-bottom: 14px;
     overflow: hidden;
-    background: #fff;
+    background: var(--row-bg);
   }
 
   .spool-table td {
     border: none;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-row);
     padding: 9px 12px;
     text-align: left !important;
   }
@@ -503,7 +592,7 @@ body.show-footer #spool-list {
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: #888;
+    color: var(--text-muted);
     font-weight: 600;
     margin-bottom: 2px;
   }
@@ -513,25 +602,19 @@ body.show-footer #spool-list {
     min-height: 38px;
     padding: 6px 14px;
   }
-
-  /* Dark mode card borders. The border is reset for the same reason as on the
-     desktop table: the generic dark rules would draw one around every cell. */
-  .dark-mode .spool-table tr { border-color: #444; background: #2a2a2a; }
-  .dark-mode .spool-table td { border: none; border-bottom: 1px solid #3a3a3a; }
-  .dark-mode .spool-table td:last-child { border-bottom: none; }
-  .dark-mode .spool-table td::before { color: #999; }
 }
 
 table th, table td {
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-strong);
+  background-color: var(--table-td-bg);
   padding: 10px;
   text-align: left;
   transition: background-color 0.3s, color 0.3s;
 }
 
 table th {
-  background-color: #eee;
-  color: #333;
+  background-color: var(--table-th-bg);
+  color: var(--text-soft);
 }
 
 
@@ -542,27 +625,32 @@ table td.color-cell {
 
 /* ---- Card-styled spool tables (desktop) ---- */
 .spool-table {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 10px;
   border-collapse: separate;
   border-spacing: 0;
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
 }
 
+/* The generic table rules above paint every cell, which would draw a full grid
+   over the card and a header background on every row. The card wants row
+   separators alone, so both are reset here rather than a second time per
+   theme. */
 .spool-table th,
 .spool-table td {
   border: none;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
 }
 
 .spool-table thead th {
-  background: #f7f7f7;
+  background: var(--head-bg);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #777;
+  color: var(--text-quiet);
   font-weight: 600;
 }
 
@@ -571,34 +659,7 @@ table td.color-cell {
 }
 
 .spool-table tbody tr:hover td {
-  background: #f6f9fc;
-}
-
-/* Dark mode */
-.dark-mode .spool-table {
-  background: #1e1e1e;
-  border-color: #3a3a3a;
-  box-shadow: none;
-}
-/* The generic dark table rules set all four borders on every cell, which drew
-   a full grid over the card. Reset them so dark shows the same row separators
-   as light. */
-.dark-mode .spool-table th,
-.dark-mode .spool-table td {
-  border: none;
-  border-bottom: 1px solid #333;
-  background: transparent;
-}
-
-.dark-mode .spool-table tbody tr:last-child td {
-  border-bottom: none;
-}
-.dark-mode .spool-table thead th {
-  background: #2a2a2a;
-  color: #aaa;
-}
-.dark-mode .spool-table tbody tr:hover td {
-  background: #262626;
+  background: var(--row-hover-bg);
 }
 
 
@@ -607,42 +668,26 @@ html.transition-enabled body {
   transition: background-color 0.3s, color 0.3s;
 }
 
-/* The class sits on <html> so the theme is set before the first paint. */
-html.dark-mode,
-html.dark-mode body {
-  background-color: #1e1e1e;
-  color: #f1f1f1;
+/* The class sits on <html> so the theme is set before the first paint, and it
+   paints the root itself so the canvas has a colour before the body has any
+   height. The body takes the same two values from the tokens. */
+html.dark-mode {
+  background-color: var(--page-bg);
+  color: var(--text);
 }
 
-table th {
-  background-color: #eee;
-  color: #333;
-}
 
-.dark-mode table {
-  background-color: #2e2e2e;
-}
 
-.dark-mode table th {
-  background-color: #444;
-  color: #ccc;
-  border: 1px solid #555;
-}
-
-.dark-mode table td {
-  background-color: #333;
-  border: 1px solid #555;
-}
 
 dialog {
-  background-color: #f4f4f4;
-  color: #333;
-  border: 1px solid #ccc;
+  background-color: var(--page-bg);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 20px;
   max-width: 800px;
   text-align: left;
-  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-dialog);
   transition: background-color 0.3s, color 0.3s;
 }
 
@@ -654,12 +699,6 @@ dialog button {
   margin-top: 20px;
 }
 
-.dark-mode dialog {
-  background-color: #1e1e1e;
-  color: #f1f1f1;
-  border: 1px solid #555;
-  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.6);
-}
 
 .button-container {
   display: flex;
@@ -668,7 +707,9 @@ dialog button {
   margin-top: 10px;
 }
 
-button, .btn {
+/* `.btn` sits on a button on every page, and the .btn rule further down sets
+   its own size, so this is the plain button that carries no class. */
+button {
   font-family: Arial, sans-serif;
   font-size: 14px;
 }
@@ -676,29 +717,22 @@ button, .btn {
 #log-box {
   margin-top: 15px;
   padding: 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background-color: #f9f9f9;
+  background-color: var(--log-bg);
+  color: var(--text);
   max-height: calc(100vh - 100px);
   overflow-y: auto;
 }
 
 
-.dark-mode #log-box {
-  background-color: #2e2e2e;
-  border: 1px solid #555;
-  color: #f1f1f1;
-}
 
 #logs {
   font-family: monospace;
   font-size: 14px;
-  color: #333;
+  color: var(--text-soft);
 }
 
-.dark-mode #logs {
-  color: #ccc;
-}
 
 /* ---- Menu bar ----
    Same card language as the panels below it: light surface, soft border,
@@ -709,10 +743,11 @@ button, .btn {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--panel-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-card);
   padding: 8px 12px;
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
@@ -726,12 +761,6 @@ body.settings-page #menubar {
   box-sizing: border-box;
 }
 
-.dark-mode #menubar {
-  background: #1f1f1f;
-  border-color: #3a3a3a;
-  box-shadow: none;
-  color: #f1f1f1;
-}
 
 #dark-mode-toggle {
   background: none;
@@ -758,9 +787,9 @@ body.settings-page #menubar {
 }
 
 .dropdown-button {
-  background: #fff;
-  color: #333;
-  border: 1px solid #bbb;
+  background: var(--control-bg);
+  color: var(--text);
+  border: 1px solid var(--border-control);
   border-radius: 6px;
   padding: 6px 14px;
   font-size: 0.88em;
@@ -779,30 +808,20 @@ body.settings-page #menubar {
 .dropdown-button:hover,
 .dropdown:hover .dropdown-button,
 .dropdown.open .dropdown-button {
-  background: #eee;
+  background: var(--control-hover-bg);
 }
 
-.dark-mode .dropdown-button {
-  background: #2c2c2c;
-  color: #f1f1f1;
-  border-color: #4a4a4a;
-}
 
-.dark-mode .dropdown-button:hover,
-.dark-mode .dropdown:hover .dropdown-button,
-.dark-mode .dropdown.open .dropdown-button {
-  background: #3a3a3a;
-}
 
 /* ---- Menu panels ---- */
 .dropdown-content,
 .submenu-content {
   display: none;
   position: absolute;
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--menu-bg);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-menu);
   padding: 4px;
   min-width: 170px;
   z-index: 1000;
@@ -824,12 +843,6 @@ body.settings-page #menubar {
   height: 7px;
 }
 
-.dark-mode .dropdown-content,
-.dark-mode .submenu-content {
-  background: #262626;
-  border-color: #3a3a3a;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-}
 
 .dropdown-content a,
 .submenu-content a,
@@ -838,31 +851,20 @@ body.settings-page #menubar {
   display: block;
   padding: 7px 10px;
   border-radius: 6px;
-  color: #333;
+  color: var(--text);
   font-size: 0.88em;
   text-decoration: none;
   white-space: nowrap;
 }
 
-.dark-mode .dropdown-content a,
-.dark-mode .submenu-content a,
-.dark-mode .submenu-label {
-  color: #f1f1f1;
-}
 
 .dropdown-content a:hover,
 .submenu-content a:hover,
 .submenu:hover > .submenu-label,
 .submenu.open > .submenu-label {
-  background: #eee;
+  background: var(--control-hover-bg);
 }
 
-.dark-mode .dropdown-content a:hover,
-.dark-mode .submenu-content a:hover,
-.dark-mode .submenu:hover > .submenu-label,
-.dark-mode .submenu.open > .submenu-label {
-  background: #3a3a3a;
-}
 
 .dropdown:hover > .dropdown-content,
 .dropdown.open > .dropdown-content {
@@ -889,16 +891,10 @@ body.settings-page #menubar {
 .submenu-label:focus-visible,
 .dropdown-content a:focus-visible,
 .submenu-content a:focus-visible {
-  outline: 2px solid #1c6fd6;
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-.dark-mode .dropdown-button:focus-visible,
-.dark-mode .submenu-label:focus-visible,
-.dark-mode .dropdown-content a:focus-visible,
-.dark-mode .submenu-content a:focus-visible {
-  outline-color: #6fb0ec;
-}
 
 .submenu-label::after {
   content: "\203A";
@@ -985,9 +981,9 @@ input:checked + .slider:before {
 
 
 .log-button {
-  background: #fff;
-  color: #333;
-  border: 1px solid #bbb;
+  background: var(--control-bg);
+  color: var(--text);
+  border: 1px solid var(--border-control);
   border-radius: 6px;
   padding: 6px 14px;
   font-size: 0.88em;
@@ -995,15 +991,9 @@ input:checked + .slider:before {
   transition: background-color 0.2s, border-color 0.2s;
 }
 
-.log-button:hover { background: #eee; }
+.log-button:hover { background: var(--control-hover-bg); }
 
-.dark-mode .log-button {
-  background: #2c2c2c;
-  color: #f1f1f1;
-  border-color: #4a4a4a;
-}
 
-.dark-mode .log-button:hover { background: #3a3a3a; }
 
 .footer {
   position: fixed;
@@ -1014,14 +1004,10 @@ input:checked + .slider:before {
   text-align: center;
   padding: 10px 0;
   width: 99%;
-  background-color: #f4f4f4;
-  color: #333;
+  background-color: var(--page-bg);
+  color: var(--text);
 }
 
-.dark-mode .footer {
-  background-color: #1e1e1e;
-  color: #f1f1f1;
-}
 
 .footer .row {
   justify-content: center;
@@ -1062,19 +1048,14 @@ input:checked + .slider:before {
 }
 
 .set-card {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel-bg);
   padding: 12px 16px 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-card);
   margin: 14px 0;
 }
 
-.dark-mode .set-card {
-  background: #1f1f1f;
-  border-color: #3a3a3a;
-  box-shadow: none;
-}
 
 .set-card-head {
   display: flex;
@@ -1145,13 +1126,9 @@ input:checked + .slider:before {
 .set-field input:focus,
 .set-field select:focus {
   outline: none;
-  border-color: #1c6fd6;
+  border-color: var(--accent);
 }
 
-.dark-mode .set-field input:focus,
-.dark-mode .set-field select:focus {
-  border-color: #6fb0ec;
-}
 
 .set-field small {
   opacity: 0.7;
@@ -1189,7 +1166,7 @@ input:checked + .slider:before {
 .set-switch-track {
   position: absolute;
   inset: 0;
-  background-color: #bbb;
+  background-color: var(--track-bg);
   border-radius: 999px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -1209,7 +1186,6 @@ input:checked + .slider:before {
 
 .set-switch input:checked + .set-switch-track { background-color: #2ea35c; }
 .set-switch input:checked + .set-switch-track::before { transform: translateX(18px); }
-.dark-mode .set-switch-track { background-color: #555; }
 
 /* ---- A switch that belongs to the whole card, in its header ---- */
 .set-head-field {
@@ -1258,7 +1234,7 @@ input:checked + .slider:before {
   max-width: 280px;
   padding: 7px 10px;
   border-radius: 8px;
-  background: #2c2c2c;
+  background: var(--tooltip-bg);
   color: #f1f1f1;
   font: inherit;
   font-size: 0.78rem;
@@ -1280,9 +1256,6 @@ input:checked + .slider:before {
   visibility: visible;
 }
 
-.dark-mode .set-info::after {
-  background: #3a3a3a;
-}
 
 /* ---- Collapsed part of a group ---- */
 .set-advanced {
@@ -1356,26 +1329,6 @@ input:checked + .slider:before {
 
 .data-table td:first-child { font-weight: 600; }
 
-/* The global dark table rules set all four borders and a lighter table
-   background, which would draw a full grid on a panel of its own. Reset both so
-   dark looks exactly like light. */
-.dark-mode .data-table {
-  background: transparent;
-}
-
-.dark-mode .data-table th,
-.dark-mode .data-table td {
-  background: transparent;
-  color: inherit;
-  border: none;
-  /* Same separator as in light mode, on purpose */
-  border-bottom: 1px solid #8882;
-}
-
-.dark-mode .data-table tbody tr:last-child td,
-.dark-mode .data-table tbody tr:last-child th,
-.dark-mode .data-table tr:last-child td,
-.dark-mode .data-table tr:last-child th { border-bottom: none; }
 
 /* The "required but not loaded" list sits inside the print card, so it stays
    tighter than a table of its own. */
@@ -1426,28 +1379,27 @@ input:checked + .slider:before {
   font: inherit;
   font-size: 0.78rem;
   font-weight: 400;
-  color: #1c6fd6;
+  color: var(--accent);
   opacity: 0.8;
   cursor: pointer;
   text-decoration: underline;
 }
 
 .set-reset:hover { opacity: 1; }
-.dark-mode .set-reset { color: #6fb0ec; }
 
 /* ---- Buttons ---- */
 .btn {
   padding: 6px 14px;
-  border: 1px solid #bbb;
+  border: 1px solid var(--border-control);
   border-radius: 6px;
-  background: #fff;
-  color: #333;
+  background: var(--control-bg);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.88em;
   transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
 }
 
-.btn:hover:not(:disabled) { background: #eee; }
+.btn:hover:not(:disabled) { background: var(--control-hover-bg); }
 
 .btn:disabled {
   opacity: 0.45;
@@ -1460,70 +1412,43 @@ input:checked + .slider:before {
 }
 
 .btn-primary {
-  background: #1c6fd6;
-  border-color: #1c6fd6;
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
   color: #fff;
   font-weight: 600;
 }
 
-.btn-primary:hover:not(:disabled) { background: #1559ad; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-bg-hover); }
 
 .btn-danger {
-  color: #b3261e;
-  border-color: #d9a5a1;
+  color: var(--bad);
+  border-color: var(--danger-border);
 }
 
-.btn-danger:hover:not(:disabled) { background: #fbe4e4; }
+.btn-danger:hover:not(:disabled) { background: var(--bad-bg); }
 
 /* Filled rather than outlined, for the one action on a page that ends the
    process. .btn-danger is the quiet variant next to a table row; this one has
    to be found without looking for it. */
 .btn-danger-solid {
-  background: #b3261e;
-  border-color: #b3261e;
+  background: var(--danger-solid);
+  border-color: var(--danger-solid);
   color: #fff;
   font-weight: 600;
 }
 
 .btn-danger-solid:hover:not(:disabled) {
-  background: #8f1d17;
-  border-color: #8f1d17;
+  background: var(--danger-solid-hover);
+  border-color: var(--danger-solid-hover);
 }
 
-.dark-mode .btn {
-  background: #2c2c2c;
-  border-color: #4a4a4a;
-  color: #f1f1f1;
-}
 
-.dark-mode .btn:hover:not(:disabled) { background: #3a3a3a; }
 
-.dark-mode .btn-primary {
-  background: #2f6fc4;
-  border-color: #2f6fc4;
-  color: #fff;
-}
 
-.dark-mode .btn-primary:hover:not(:disabled) { background: #26599e; }
 
-.dark-mode .btn-danger {
-  color: #f08a82;
-  border-color: #6b3a36;
-  background: #2c2c2c;
-}
 
-.dark-mode .btn-danger:hover:not(:disabled) { background: #3a1b1a; }
 
-.dark-mode .btn-danger-solid {
-  background: #c4382f;
-  border-color: #c4382f;
-  color: #fff;
-}
 
-.dark-mode .btn-danger-solid:hover:not(:disabled) {
-  background: #a32c25;
-  border-color: #a32c25;
-}
 
 /* ---- Action bar ---- */
 .set-actions {
@@ -1533,15 +1458,12 @@ input:checked + .slider:before {
   align-items: center;
   gap: 12px;
   padding: 12px 0 16px;
-  background: #f4f4f4;
+  background: var(--page-bg);
   border-top: 1px solid #8882;
   /* Lifts the bar off the card it scrolls over */
   box-shadow: 0 -6px 10px -6px rgba(0, 0, 0, 0.25);
 }
 
-.dark-mode .set-actions {
-  background: #1e1e1e;
-}
 
 /* ---- Service card ---- */
 /* Named "facts", not "info": .set-info is already taken by the round tooltip
@@ -1643,8 +1565,7 @@ input:checked + .slider:before {
   margin-left: 6px;
 }
 
-.set-test-failed { color: #b3261e; opacity: 1; }
-.dark-mode .set-test-failed { color: #f08a82; }
+.set-test-failed { color: var(--bad); opacity: 1; }
 
 #printer-test-result {
   margin-top: 12px;
@@ -1665,19 +1586,17 @@ input:checked + .slider:before {
 }
 
 .set-note-warn {
-  color: #9a6a00;
+  color: var(--warn);
   opacity: 1;
 }
 
-.dark-mode .set-note-warn { color: #e0b65f; }
 
 .set-error {
-  color: #b3261e;
+  color: var(--bad);
   font-size: 0.88em;
   margin: 10px 0 0;
 }
 
-.dark-mode .set-error { color: #f08a82; }
 .set-error:empty { display: none; }
 
 .set-banner {
@@ -1688,13 +1607,10 @@ input:checked + .slider:before {
 }
 
 .set-banner:empty { display: none; }
-.set-banner-ok   { background: #e3f6e9; color: #1e7e44; }
-.set-banner-warn { background: #fdf0db; color: #9a6a00; }
-.set-banner-bad  { background: #fbe4e4; color: #b3261e; }
+.set-banner-ok   { background: var(--ok-bg);   color: var(--ok); }
+.set-banner-warn { background: var(--warn-bg); color: var(--warn); }
+.set-banner-bad  { background: var(--bad-bg);  color: var(--bad); }
 
-.dark-mode .set-banner-ok   { background: #14331f; color: #5fd089; }
-.dark-mode .set-banner-warn { background: #34290f; color: #e0b65f; }
-.dark-mode .set-banner-bad  { background: #3a1b1a; color: #f08a82; }
 
 #printer-dialog {
   min-width: min(560px, 86vw);
@@ -1702,8 +1618,7 @@ input:checked + .slider:before {
 
 /* Links outside the footer and the menus, currently the pointer to the
    settings page shown on an empty dashboard. */
-#spool-list a { color: #1c6fd6; }
-.dark-mode #spool-list a { color: #6fb0ec; }
+#spool-list a { color: var(--accent); }
 
 /* ---- Spool detail dialog ----
    The filament name in both tables is the control that opens it, so it has to
@@ -1778,11 +1693,10 @@ input:checked + .slider:before {
   letter-spacing: 0.02em;
   margin: 26px 0 10px;
   padding-bottom: 6px;
-  border-bottom: 2px solid #1c6fd6;
+  border-bottom: 2px solid var(--accent);
 }
 
 .sd-scroll > .sd-section:first-child { margin-top: 6px; }
-.dark-mode .sd-section { border-bottom-color: #6fb0ec; }
 
 .sd-grid {
   display: grid;
@@ -1844,9 +1758,8 @@ input:checked + .slider:before {
 
 .sd-edit:hover { opacity: 1; }
 
-.sd-confirm { color: #1c6fd6; }
+.sd-confirm { color: var(--accent); }
 .sd-cancel { opacity: 0.6; }
-.dark-mode .sd-confirm { color: #6fb0ec; }
 
 /* A row being edited gives its whole width to the input, and stacks the reason
    a value was refused under it rather than beside it. */
@@ -1872,9 +1785,9 @@ input:checked + .slider:before {
   min-width: 0;
   max-width: 240px;
   padding: 5px 8px;
-  border: 1px solid #bbb;
+  border: 1px solid var(--border-input);
   border-radius: 6px;
-  background: #fff;
+  background: var(--input-bg);
   color: inherit;
   font-size: 1em;
   font-family: inherit;
@@ -1882,18 +1795,13 @@ input:checked + .slider:before {
 
 .sd-input:focus {
   outline: none;
-  border-color: #1c6fd6;
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px #1c6fd633;
 }
 
 .sd-input:disabled { opacity: 0.55; }
 
-.dark-mode .sd-input {
-  background: #2a2a2a;
-  border-color: #555;
-}
 
-.dark-mode .sd-input:focus { border-color: #6fb0ec; }
 
 /* Sits under the input, in the row itself, so the reason stays next to the
    value it is about. */

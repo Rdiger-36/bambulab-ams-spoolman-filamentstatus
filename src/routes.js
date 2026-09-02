@@ -13,7 +13,7 @@ import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { tailLogLines, logFileSet } from "./logger.js";
 import { toClientSpool } from "./uispool.js";
-import { catalogueFacet, filterCatalogue, spoolWeightLimit } from "./utils.js";
+import { catalogueFacet, filterCatalogue, spoolWeightLimit, SLOT_OPTIONS } from "./utils.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -24,7 +24,7 @@ import {
     getSpoolmanMaterials,
     getSpoolmanExternalMaterials,
     getSpoolmanInternalFilaments,
-    createNamedVendor,
+    createVendor,
     createFilament,
     createSpoolRecord,
     checkSpoolmanHealth,
@@ -38,6 +38,41 @@ import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnec
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 
 /**
+ * Looks up a printer, answering with a 404 and returning null when there is
+ * none. Callers must stop on null; the response has already been sent.
+ *
+ * Nearly every handler starts with this lookup, and the ones that wrote it out
+ * had drifted into two answer shapes, one of them without the `ok` field the
+ * frontend's fetchJson() expects.
+ *
+ * @param {string} printerId - the printer id from the route or the body
+ * @param {object[]} printers - the printer list
+ * @param {object} res - the Express response, used for the 404
+ * @returns {object|null} the runtime printer, or null
+ */
+function resolvePrinter(printerId, printers, res) {
+    const printer = printers.find(p => p.id === printerId);
+    if (!printer) { res.status(404).json({ ok: false, error: "Printer not found" }); return null; }
+    return printer;
+}
+
+/**
+ * Looks up one cached UI spool of a printer, answering with a 404 and returning
+ * null when the slot is not among them.
+ *
+ * @param {object} printer - the runtime printer
+ * @param {string} amsId - the slot label
+ * @param {object} res - the Express response, used for the 404
+ * @param {string} missing - what to call the slot in the error message
+ * @returns {object|null} the cached UI spool, or null
+ */
+function resolveUiSpool(printer, amsId, res, missing = "AMS slot not found") {
+    const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
+    if (!uiSpool) { res.status(404).json({ ok: false, error: missing }); return null; }
+    return uiSpool;
+}
+
+/**
  * Looks up the cached UI spool for a printer and slot, answering with a 404 and
  * returning null when either does not exist. Callers must stop on null; the
  * response has already been sent.
@@ -48,11 +83,9 @@ import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./m
  * @returns {object|null} the cached UI spool, or null
  */
 function resolveSpoolData({ printerId, amsId }, printers, res) {
-    const printer = printers.find(p => p.id === printerId);
-    if (!printer) { res.status(404).json({ ok: false, error: "Printer not found" }); return null; }
-    const spoolData = (printer.spoolData || []).find(s => s.amsId === amsId);
-    if (!spoolData) { res.status(404).json({ ok: false, error: "Spool not found" }); return null; }
-    return spoolData;
+    const printer = resolvePrinter(printerId, printers, res);
+    if (!printer) return null;
+    return resolveUiSpool(printer, amsId, res, "Spool not found");
 }
 
 /**
@@ -154,8 +187,8 @@ function printerPrintingWithSpool(printers, spoolId) {
  */
 export function registerRoutes(app, printers) {
     app.get("/api/status/:printerId", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
 
         res.json({
             spoolmanStatus: state.spoolmanStatus,
@@ -178,8 +211,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.get("/api/spools/:printerId", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
         res.json((printer.spoolData || []).map(toClientSpool));
     });
 
@@ -187,41 +220,41 @@ export function registerRoutes(app, printers) {
         res.json(printers.map(({ id, name }) => ({ id, name })));
     });
 
-    app.post("/api/mergeSpool", async (req, res) => {
-        const spoolData = resolveSpoolData(req.body, printers, res);
-        if (!spoolData) return;
-        try {
-            await mergeSpool(spoolData);
-            res.status(200).json({ ok: true });
-        } catch (err) {
-            console.error("Server", serverLogFilePath, "mergeSpool failed:", err?.message);
-            res.status(500).json({ ok: false, error: err?.message || "mergeSpool failed" });
-        }
-    });
+    /**
+     * Registers one of the three Spoolman write actions the dashboard button
+     * triggers. All three take the same body, look up the same cached slot and
+     * answer the same way; only the Spoolman call in the middle differs.
+     *
+     * The three never throw, because the automatic mode calls them per slot and
+     * one slot that cannot be written must not abort the rest of the same AMS
+     * update. They report instead, and that answer is what reaches the browser:
+     * a failed write used to be answered with `ok` and the user was told the
+     * action had been sent.
+     *
+     * @param {string} path - the route
+     * @param {string} what - the action, used in the log line and the error
+     * @param {function(object): Promise<{ok: boolean, error?: string}>} run - the spoolman.js call
+     */
+    const spoolAction = (path, what, run) => {
+        app.post(path, async (req, res) => {
+            const spoolData = resolveSpoolData(req.body, printers, res);
+            if (!spoolData) return;
+            try {
+                const result = await run(spoolData);
+                if (result?.ok === false) {
+                    return res.status(502).json({ ok: false, error: result.error || `${what} failed` });
+                }
+                res.status(200).json({ ok: true });
+            } catch (err) {
+                console.error("Server", serverLogFilePath, `${what} failed:`, err?.message);
+                res.status(500).json({ ok: false, error: err?.message || `${what} failed` });
+            }
+        });
+    };
 
-    app.post("/api/createSpool", async (req, res) => {
-        const spoolData = resolveSpoolData(req.body, printers, res);
-        if (!spoolData) return;
-        try {
-            await createSpool(spoolData);
-            res.status(200).json({ ok: true });
-        } catch (err) {
-            console.error("Server", serverLogFilePath, "createSpool failed:", err?.message);
-            res.status(500).json({ ok: false, error: err?.message || "createSpool failed" });
-        }
-    });
-
-    app.post("/api/createSpoolWithFilament", async (req, res) => {
-        const spoolData = resolveSpoolData(req.body, printers, res);
-        if (!spoolData) return;
-        try {
-            await createFilamentAndSpool(spoolData);
-            res.status(200).json({ ok: true });
-        } catch (err) {
-            console.error("Server", serverLogFilePath, "createSpoolWithFilament failed:", err?.message);
-            res.status(500).json({ ok: false, error: err?.message || "createSpoolWithFilament failed" });
-        }
-    });
+    spoolAction("/api/mergeSpool", "mergeSpool", mergeSpool);
+    spoolAction("/api/createSpool", "createSpool", createSpool);
+    spoolAction("/api/createSpoolWithFilament", "createSpoolWithFilament", createFilamentAndSpool);
 
     app.get("/api/events", (req, res) => {
         res.setHeader("Content-Type", "text/event-stream");
@@ -246,8 +279,8 @@ export function registerRoutes(app, printers) {
 
             let filePath = serverLogFilePath;
             if (req.params.printerId !== "server") {
-                const printer = printers.find(p => p.id === req.params.printerId);
-                if (!printer) return res.status(404).json({ error: "Printer not found" });
+                const printer = resolvePrinter(req.params.printerId, printers, res);
+                if (!printer) return;
                 filePath = printer.logFilePath;
             }
 
@@ -293,8 +326,8 @@ export function registerRoutes(app, printers) {
                 filePath = serverLogFilePath;
                 baseName = "server";
             } else {
-                const printer = printers.find(p => p.id === printerId);
-                if (!printer) return res.status(404).json({ error: "Printer not found" });
+                const printer = resolvePrinter(printerId, printers, res);
+                if (!printer) return;
                 filePath = printer.logFilePath;
                 // The serial is in the file name as well, so it has to be masked
                 // there too. The printer name is kept, see anonymize.js.
@@ -384,8 +417,8 @@ export function registerRoutes(app, printers) {
     }
 
     app.post("/api/printer/:printerId/monitoring/stop", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
 
         if (!setMonitoring(printer, false)) {
             return res.json({ ok: false, message: `Monitoring already disabled for ${printer.name} - ${printer.id}` });
@@ -395,8 +428,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.post("/api/printer/:printerId/monitoring/start", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
 
         if (!setMonitoring(printer, true)) {
             return res.json({ ok: false, message: `Monitoring already enabled for ${printer.name} - ${printer.id}` });
@@ -449,8 +482,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.get("/api/print/:printerId", async (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
 
         // Allow ?job=<name> to test the FTPS fetch for a specific file manually
         const jobName   = req.query.job || printer.currentJobName || null;
@@ -633,8 +666,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.get("/api/mappings/:printerId", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
         res.json(getMappings(printer.id));
     });
 
@@ -642,16 +675,16 @@ export function registerRoutes(app, printers) {
         if (rejectInLegacyMode(res)) return;
 
         const { printerId, amsId } = req.params;
-        const printer = printers.find(p => p.id === printerId);
-        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+        const printer = resolvePrinter(printerId, printers, res);
+        if (!printer) return;
 
         const spoolId = Number(req.body?.spoolId);
         if (!Number.isInteger(spoolId) || spoolId <= 0) {
             return res.status(400).json({ ok: false, error: "spoolId must be a positive integer" });
         }
 
-        const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
-        if (!uiSpool) return res.status(404).json({ ok: false, error: "AMS slot not found" });
+        const uiSpool = resolveUiSpool(printer, amsId, res);
+        if (!uiSpool) return;
 
         try {
             const spools = await getSpoolmanSpools();
@@ -734,11 +767,11 @@ export function registerRoutes(app, printers) {
         if (rejectInLegacyMode(res)) return;
 
         const { printerId, amsId } = req.params;
-        const printer = printers.find(p => p.id === printerId);
-        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+        const printer = resolvePrinter(printerId, printers, res);
+        if (!printer) return;
 
-        const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
-        if (!uiSpool) return res.status(404).json({ ok: false, error: "AMS slot not found" });
+        const uiSpool = resolveUiSpool(printer, amsId, res);
+        if (!uiSpool) return;
 
         const { filamentId, filament, spool = {} } = req.body || {};
 
@@ -751,7 +784,16 @@ export function registerRoutes(app, printers) {
 
                 let vendorId = Number(filament.vendorId) || null;
                 if (!vendorId && filament.vendorName?.trim()) {
-                    const vendor = await createNamedVendor(filament.vendorName.trim());
+                    // A manufacturer the dialog filled in from the catalogue
+                    // brings the two fields Spoolman keeps on a vendor: the
+                    // catalogue's own name for it and the weight of its empty
+                    // spool. One typed by hand brings neither, and then the
+                    // vendor is created with its name alone.
+                    const vendor = await createVendor({
+                        name: filament.vendorName.trim(),
+                        externalId: String(filament.vendorExternalId ?? "").trim() || null,
+                        emptySpoolWeight: numberOrNull(filament.vendorSpoolWeight),
+                    });
                     vendorId = vendor.id;
                     console.log(printer.name, printer.logFilePath, `[Spool] Created vendor "${vendor.name}" (${vendorId})`);
                 }
@@ -809,8 +851,8 @@ export function registerRoutes(app, printers) {
         if (rejectInLegacyMode(res)) return;
 
         const { printerId, amsId } = req.params;
-        const printer = printers.find(p => p.id === printerId);
-        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+        const printer = resolvePrinter(printerId, printers, res);
+        if (!printer) return;
 
         const existed = clearMapping(printerId, amsId);
 
@@ -961,8 +1003,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.put("/api/printers/:printerId", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
 
         // Only an address or credential change drops the connection, a rename
         // does not, so only that needs the print in flight to be confirmed.
@@ -994,8 +1036,8 @@ export function registerRoutes(app, printers) {
     });
 
     app.delete("/api/printers/:printerId", (req, res) => {
-        const printer = printers.find(p => p.id === req.params.printerId);
-        if (!printer) return res.status(404).json({ ok: false, error: "Printer not found" });
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
 
         if (printBlocks(printer, req.body)) {
             return respondPrintInFlight(res, printer, "Removing the printer disconnects it");
@@ -1205,7 +1247,7 @@ function refreshCachedSpool(printers, spool) {
 function applyMappingToUiSpool(printer, uiSpool, spool) {
     uiSpool.existingSpool        = spool;
     uiSpool.connectedViaMapping  = !!spool;
-    uiSpool.option               = spool ? "Unassign Spool" : "Assign Spool";
+    uiSpool.option               = spool ? SLOT_OPTIONS.UNASSIGN : SLOT_OPTIONS.ASSIGN;
     uiSpool.enableButton         = "true";
     // correctedWeight came from the assigned spool, so it has to go with it.
     // 3rd-party slots report tray_weight 0 and have no weight of their own.

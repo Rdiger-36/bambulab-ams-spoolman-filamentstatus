@@ -1,5 +1,5 @@
 import { consumptionKey } from "./gcode.js";
-import { slotColors } from "./utils.js";
+import { orNull, slotColors, SLOT_OPTIONS } from "./utils.js";
 
 /**
  * The one projection from an internal UI spool to what a client sees.
@@ -16,20 +16,6 @@ import { slotColors } from "./utils.js";
  * without the UI showing it, which is what lets `hasSpoolUiChanged()` compare
  * the projection itself instead of a hand-maintained key list.
  */
-
-/**
- * Turns the "N/A" placeholder into a real absence.
- *
- * `processData` writes that literal into every field the printer left out,
- * because the backend branches on it. It is a marker, not a value, and it must
- * not leave the server: a client that receives it renders it, which is how an
- * emptied slot came to be labelled "N/A" and how its colour swatch ended up
- * styled `#N/A`. An empty string is squashed for the same reason.
- */
-function orNull(value) {
-    if (value === "N/A" || value === "") return null;
-    return value ?? null;
-}
 
 /**
  * The AMS slot fields the Web UI reads. Everything else stays on the server.
@@ -137,7 +123,7 @@ export function toClientSpool(uiSpool) {
         connectedViaMapping: uiSpool.connectedViaMapping ?? false,
         correctedRemain: uiSpool.correctedRemain ?? null,
         correctedWeight: uiSpool.correctedWeight ?? null,
-        option: uiSpool.option ?? "No actions available",
+        option: uiSpool.option ?? SLOT_OPTIONS.NONE,
         enableButton: uiSpool.enableButton ?? "false",
         error: uiSpool.error ?? false,
 
