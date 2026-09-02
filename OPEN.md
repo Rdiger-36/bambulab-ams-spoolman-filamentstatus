@@ -166,7 +166,9 @@ The version deliberately stays on a `-dev` prerelease for now, currently
 
 - [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
   The publish workflow compares the tag against `package.json` and aborts on a
-  mismatch, so a bump in only one of them fails the build.
+  mismatch, so a bump in only one of them fails the build. Not to be done ahead
+  of time: the bump happens when the release is actually wanted, and Niklas says
+  when that is.
 
 Tag behaviour, after the hardening in `c053561`:
 
@@ -188,7 +190,7 @@ tag that already has a release edits it rather than failing.
 Publishing from a branch is rejected outright, so the "Run workflow" button can
 no longer overwrite `:latest` with whatever is on `main`.
 
-## Deadline: armv7 and Node 22
+## Decided: armv7 stays, on Node 22
 
 Node 22 entered maintenance on 2025-10-21 and reaches end of life on
 **2027-04-30**. It is also the last Node that exists on 32 bit ARM at all, so
@@ -206,13 +208,15 @@ package:
 | unofficial-builds.nodejs.org | armv6 only for 22, nothing for 24 and later |
 | Alpine's own `nodejs` package, armhf | 22.23.2, so no way forward either |
 
-So there is no supported path to Node 24 or later on 32 bit ARM. When Node 22
-goes end of life the choice is:
+So there is no supported path to Node 24 or later on 32 bit ARM. The choice was
+to drop `linux/arm/v7` from the publish matrix on 2027-04-30, or to keep
+shipping on a Node that no longer gets security fixes.
 
-- [ ] Decide before 2027-04-30: drop `linux/arm/v7` from the publish matrix and
-  leave 32 bit users on the last image built for them, or keep shipping on an
-  end of life Node with no security fixes. There is no third option, so this is
-  a decision rather than a task.
+**Decided on 2026-09-02: keep shipping on Node 22 and keep `linux/arm/v7`.** A
+32 bit user is left with a working image rather than with none, and the service
+talks to a printer and a Spoolman instance on the user's own LAN rather than to
+the internet. Revisit only if a Node 22 vulnerability actually reaches this
+service; there is nothing to do before then.
 
 A 64 bit OS sidesteps it entirely. A Raspberry Pi 3B and newer are all 64 bit
 capable, and `linux/arm64` stays supported.
@@ -271,16 +275,6 @@ container run. Still unverified:
 - [ ] **A restart through the Web UI during a running print.** The guard asks
   first and the booking of that job is lost when it is forced, which is what the
   dialog says, but it was never observed on a real print.
-
-### Still open
-
-- [ ] **The Home Assistant add-on repository needs a note.** The add-on passes
-  its options as environment variables, and those stop having an effect once a
-  user saves on the settings page, because the file owns the values from then
-  on. The README of this repository says so; the add-on's does not.
-  Since environment configuration is deprecated the add-on also triggers the
-  deprecation hint on every start, which will look like a defect to an add-on
-  user until its README explains which of the two places owns the values.
 
 ### Decisions taken along the way
 
@@ -380,11 +374,11 @@ note that the code sits in plain text in `printers.json` is the honest version.
   own subsection, and legacy mode has a section of its own pointing at the v1.2.1
   README.
 
-The Home Assistant integration in `ha-bambulab-ams-spoolman-filamentstatus`
-needs no change. It only calls `/api/printers`,
-`/api/printer/{id}/monitoring/start|stop` and `/api/status/{id}`, none of which
-changed, and it sets no environment variables of its own. The add-on wrapper is
-a different matter, see the note in the settings section above.
+The Home Assistant side is out of scope for this repository. The integration in
+`ha-bambulab-ams-spoolman-filamentstatus` only drives the AMS monitoring toggle
+per printer, through `/api/printers`,
+`/api/printer/{id}/monitoring/start|stop` and `/api/status/{id}`. None of those
+changed and it sets no environment variables, so nothing here is a task for it.
 
 ## Known gaps, by design
 

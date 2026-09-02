@@ -299,9 +299,6 @@ Configuring this service through **environment variables** and a hand-written **
 
 The full list of variables and the `printers.json` format are documented in the **[README of v1.2.1](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/v1.2.1/README.md)**.
 
-> [!NOTE]
-> **Home Assistant add-on users:** the add-on passes its options as environment variables, and those only seed a setting that has never been saved. As soon as you save on the settings page, `printers/settings.json` owns the values and changing an add-on option has no effect any more. Configure through the add-on options or through the settings page, not both.
-
 Three variables are container level and stay as they are, they have no field in the Web UI:
 
 | Variable | Description |
