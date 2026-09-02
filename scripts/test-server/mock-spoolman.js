@@ -39,7 +39,7 @@ function expandSpool(spool, filaments) {
         location: spool.location ?? null,
         lot_nr: spool.lot_nr ?? null,
         comment: spool.comment ?? null,
-        archived: false,
+        archived: spool.archived ?? false,
         extra: spool.extra ?? {},
     };
 }
@@ -110,7 +110,15 @@ export function createMockSpoolman(log) {
         res.status(201).json(filament);
     });
 
-    app.get("/api/v1/spool", (_req, res) => res.json(store.spools.map(s => expandSpool(s, store.filaments))));
+    // Spoolman leaves archived spools out of this list unless they are asked
+    // for. That is what archiving is for, and what the service's tag lookup for
+    // an archived spool still sitting in a slot rests on, so the mock has to do
+    // the same or the guard cannot be exercised here.
+    app.get("/api/v1/spool", (req, res) => {
+        const allowArchived = String(req.query.allow_archived) === "true";
+        const spools = store.spools.filter(spool => allowArchived || !spool.archived);
+        res.json(spools.map(s => expandSpool(s, store.filaments)));
+    });
     app.post("/api/v1/spool", (req, res) => {
         const spool = { id: nextSpoolId++, registered: new Date().toISOString(), ...req.body };
         store.spools.push(spool);

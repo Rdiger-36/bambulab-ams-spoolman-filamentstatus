@@ -1,4 +1,19 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - New Features:
+      - A spool that runs empty is archived in Spoolman on its own, off by default (issue #65)
+         - "Archive empty spools" in the sync settings turns it on, "Empty threshold" says how many grams left still count as empty, zero by default
+         - The weight it acts on is what Spoolman holds after a booking, never the AMS remain percentage: the percentage is an estimate and reaches 0 while there is still filament on the spool. In legacy mode the two are the same number, because that mode has no other source
+         - Archiving is reversible and nothing is deleted. The location of the archived spool is cleared, so it does not keep naming a slot it is about to leave
+         - An archived spool that is still sitting in its slot is recognised by its tag and left alone. Without that the spool would be gone from Spoolman's spool list, and the automatic mode would create a second record for the same spool on the very next update. The slot says "Loaded (archived)" and offers no action until the spool is taken out or restored
+         - An assignment pointing at a spool that was archived survives. It used to be dropped as "no longer exists in Spoolman", which restoring the spool could not undo
+      - The spool dialog archives and restores a spool by hand, in the row that already showed whether it is archived
+   - Development:
+      - PATCH /api/spoolman/spool/:id takes the archived flag, as a real boolean only, so a string of "false" cannot archive a spool
+      - test/archive.test.js covers the empty decision, including the unknown weight that must never read as used up
+      - The mock Spoolman of scripts/test-server answers like the real one about archived spools: it leaves them out of the spool list unless allow_archived is asked for, and it reports the flag it was given instead of always false. Both were needed to exercise the guard at all
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.6
    - Fixes:
       - The Spoolman location of a spool follows the AMS slot it is really in. SET_LOCATION was written from two places under two different conditions, and cleared from a third that checked nothing, so most of the mechanism did not work:

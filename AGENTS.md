@@ -138,7 +138,8 @@ Not punctuation, and therefore allowed:
   config through `src/printers.js`. Never call a Spoolman URL or read
   `printers/` from anywhere else.
 - **When changing the shape of the UI spool object**, update all of its builders
-  in `src/mqtt.js` (`buildEmptySpool`, `buildThirdPartySpool` and the Bambu Lab
+  in `src/mqtt.js` (`buildEmptySpool`, `buildThirdPartySpool`, `buildArchivedSpool`
+  and the Bambu Lab
   branch of `processSlot`), `toClientSpool()` in `src/uispool.js`, and the
   frontend that reads it. A field the projection does not carry never reaches a
   client, and change detection does not see it either: `hasSpoolUiChanged()`

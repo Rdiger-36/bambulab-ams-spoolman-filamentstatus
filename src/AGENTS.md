@@ -152,6 +152,21 @@ build their Spoolman payload from.
   that carries something is emitted, because what an empty one reports has not
   been observed and an entry of empty strings would still reach
   `slotIsOccupied()` carrying its temperature fields.
+- **An archived spool is looked up separately, and only by its tag.** Spoolman
+  leaves archived spools out of `/api/v1/spool`, so a spool this service
+  archived when it ran empty is gone from the list while it is still sitting in
+  its slot, and the automatic mode would create a second record for the same tag
+  on the next update. `getArchivedSpoolmanSpools()` fetches them with
+  `allow_archived=true` and `processSlot()` checks that list before it merges or
+  creates anything. They are never merge candidates, never get a location and
+  never carry a booking: an archived spool is one the user has taken out of the
+  inventory. The fetch only happens while `ARCHIVE_EMPTY_SPOOLS` is on, so the
+  guard costs nothing where nothing archives.
+- **Emptiness comes from Spoolman, not from the AMS.** `spoolIsEmpty()` reads
+  the weight written by the consumption booking, or by the legacy weight patch,
+  which is the only source in that mode. The RFID remain percentage reaches 0
+  while there is still filament on the spool, and archiving on it would take a
+  spool out of the inventory the user is still printing from.
 - **Manual assignment is a G-code mode feature.** `legacyMode()` gates it in
   three places: the 3rd party branch and the Bambu fallback in `processSlot`,
   and `rejectInLegacyMode()` on the mutating routes. A new entry point has to

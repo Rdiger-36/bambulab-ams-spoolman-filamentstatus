@@ -98,6 +98,23 @@ export const SETTINGS_SCHEMA = {
         label: "Write AMS slot as location",
         description: "Stores printer name and AMS slot as the location of the spool in Spoolman.",
     },
+    ARCHIVE_EMPTY_SPOOLS: {
+        type: "boolean",
+        default: false,
+        group: "sync",
+        label: "Archive empty spools",
+        description: "Archives a spool in Spoolman as soon as its remaining weight reaches the empty threshold. Archiving is reversible, nothing is deleted.",
+    },
+    EMPTY_SPOOL_THRESHOLD: {
+        type: "integer",
+        default: 0,
+        min: 0,
+        max: 100,
+        group: "sync",
+        advanced: true,
+        label: "Empty threshold",
+        description: "Grams left at which a spool counts as empty. Only used when empty spools are archived.",
+    },
     NEVER_MERGE_IF_TAG: {
         type: "boolean",
         default: false,

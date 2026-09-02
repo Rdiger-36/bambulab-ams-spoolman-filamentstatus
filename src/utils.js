@@ -237,3 +237,28 @@ export function catalogueFacet(entries, field, query = {}) {
 
     return [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b)));
 }
+
+/**
+ * Whether a spool counts as empty, and may therefore be archived.
+ *
+ * The weight comes from Spoolman, never from the AMS remain percentage: the
+ * percentage is an estimate the RFID chip reports and it reaches 0 while there
+ * is still filament on the spool, which would archive a spool the user is still
+ * printing from. What Spoolman holds is what this service booked, so it is the
+ * only number an irreversible looking action may rest on.
+ *
+ * A missing weight is never empty. Spoolman leaves `remaining_weight` null for
+ * a spool whose filament has no weight recorded, and "unknown" must not read as
+ * "used up".
+ *
+ * @param {number|null|undefined} remainingWeight - grams Spoolman holds
+ * @param {number} threshold - grams at or below which the spool counts as empty
+ * @returns {boolean}
+ */
+export function spoolIsEmpty(remainingWeight, threshold = 0) {
+    const grams = typeof remainingWeight === "number" ? remainingWeight : Number.NaN;
+    if (!Number.isFinite(grams)) return false;
+
+    const limit = Number(threshold);
+    return grams <= (Number.isFinite(limit) ? limit : 0);
+}

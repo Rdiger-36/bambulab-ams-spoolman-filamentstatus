@@ -52,12 +52,21 @@ test("a negative remaining weight is refused", async () => {
 });
 
 test("a request that carries no editable field is refused", async () => {
-    // Everything but the three editable fields is dropped, so a payload of only
+    // Everything but the four editable fields is dropped, so a payload of only
     // unknown fields must not reach Spoolman as an empty patch.
-    const { status, body } = await call(`${app.url}/api/spoolman/spool/${SPOOL_ID}`, "PATCH", { archived: true, price: 5 });
+    const { status, body } = await call(`${app.url}/api/spoolman/spool/${SPOOL_ID}`, "PATCH", { price: 5, vendor: "someone" });
 
     assert.equal(status, 400);
     assert.equal(body.error, "Nothing to change");
+});
+
+test("the archived flag has to be a boolean", async () => {
+    // A form that sends "false" as a string would otherwise archive the spool,
+    // because every non empty string is truthy.
+    const { status, body } = await call(`${app.url}/api/spoolman/spool/${SPOOL_ID}`, "PATCH", { archived: "false" });
+
+    assert.equal(status, 400);
+    assert.match(body.error, /archived flag/i);
 });
 
 test("the remaining weight cannot be changed while the spool is in a running print", async () => {

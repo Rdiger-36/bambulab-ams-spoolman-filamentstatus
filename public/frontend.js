@@ -31,6 +31,7 @@ let printerGcodeState = "IDLE";
 // identity line of the row and on the warning triangle in the State column,
 // which names no reason by itself.
 const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.";
+const ARCHIVED_HINT = "This spool is archived in Spoolman because it ran empty. Take it out of the slot, or restore it in the spool details.";
 
 // The payload behind every rendered row, by AMS slot id. The detail dialog is
 // opened from a delegated listener, which sees the clicked element rather than
@@ -1550,7 +1551,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     ["Registered", detailDate(spool.registered)],
                     ["First used", detailDate(spool.first_used)],
                     ["Last used", detailDate(spool.last_used)],
-                    ["Archived", spool.archived ? "yes" : "no"],
+                    ["Archived", spool.archived ? "yes" : "no", textField("archived")],
                     ["Lot number", detailText(spool.lot_nr), textField("lotNr")],
                     ["Comment", detailText(spool.comment), textField("comment")],
                     ["Tag", detailExtra(spool.extra?.tag)],
@@ -1595,6 +1596,15 @@ document.addEventListener("DOMContentLoaded", () => {
             value: spool => spool.comment ?? "",
             check: raw => ({ value: raw.trim() }),
         },
+        // Archiving is what the service does by itself for an empty spool, and
+        // this row is both the manual way there and the way back from one that
+        // was archived too early.
+        archived: {
+            type: "select",
+            options: [["false", "no"], ["true", "yes"]],
+            value: spool => (spool.archived ? "true" : "false"),
+            check: raw => ({ value: raw === "true" }),
+        },
     };
 
     // Turns one row into an input in place. The row is rebuilt from the record
@@ -1607,10 +1617,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const before = value.innerHTML;
 
         row.classList.add("sd-row-editing");
+        // A select rather than an input for a field with a fixed set of values:
+        // the same class, so the confirm, cancel and key handling below do not
+        // have to know which of the two they are driving.
+        const control = spec.type === "select"
+            ? `<select class="sd-input">${spec.options
+                .map(([option, label]) => `<option value="${option}"${spec.value(spool) === option ? " selected" : ""}>${label}</option>`)
+                .join("")}</select>`
+            : `<input class="sd-input" type="${spec.type}" ${spec.type === "number" ? 'min="0" step="1"' : 'autocomplete="off"'}
+                    value="${escapeHtml(spec.value(spool))}">`;
+
         value.innerHTML = `
             <span class="sd-editing">
-                <input class="sd-input" type="${spec.type}" ${spec.type === "number" ? 'min="0" step="1"' : 'autocomplete="off"'}
-                    value="${escapeHtml(spec.value(spool))}">
+                ${control}
                 ${spec.unit ? `<span class="gc-muted">${spec.unit}</span>` : ""}
                 <button type="button" class="sd-confirm" title="Save">✓</button>
                 <button type="button" class="sd-cancel" title="Cancel">✕</button>
@@ -1652,7 +1671,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         input.focus();
-        input.select();
+        if (typeof input.select === "function") input.select();
     }
 
     async function saveSpoolField(field, value, amsSpool, spool) {
@@ -1748,6 +1767,12 @@ document.addEventListener("DOMContentLoaded", () => {
             ? ` · <span class="gc-warn" title="${THIRD_PARTY_HINT}">3rd party</span>`
             : "";
 
+        // The spool is still in the slot, so the row is not an empty one, but
+        // nothing is offered for it until it is taken out or restored.
+        const archived = amsSpool.archived
+            ? ` · <span class="gc-muted" title="${ARCHIVED_HINT}">archived</span>`
+            : "";
+
         const spoolman = amsSpool.existingSpool?.id
             ? `<a class="gc-link" href="${spoolmanBase()}/spool/show/${amsSpool.existingSpool.id}" target="_blank">Spoolman #${amsSpool.existingSpool.id}</a>`
             : `<span class="gc-muted">not linked</span>`;
@@ -1778,7 +1803,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return `
             ${color}${name}${ambiguous}<br>
             <span style="font-size:0.82em">
-                <span class="gc-muted">${amsSpool.amsId} · <code>${isEmpty ? "—" : (slot.tray_info_idx ?? "—")}</code></span>${thirdParty} · ${spoolman}${booking}
+                <span class="gc-muted">${amsSpool.amsId} · <code>${isEmpty ? "—" : (slot.tray_info_idx ?? "—")}</code></span>${thirdParty}${archived} · ${spoolman}${booking}
             </span>`;
     }
 
@@ -2330,6 +2355,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Set status icon for spool behavior
     function setIcon(status, slotState) {
         if (slotState === "Loaded (Bambu Lab)") return status ? "❗️" : "✅";
+        if (slotState === "Loaded (archived)") return `<span title="${ARCHIVED_HINT}">📦</span>`;
         // Everything else is a warning triangle, so it carries the reason as a
         // tooltip: an untagged 3rd party spool is a normal state, not a fault.
         const title = slotState === "Loaded (3rd party)"

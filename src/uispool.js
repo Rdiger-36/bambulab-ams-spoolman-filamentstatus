@@ -51,6 +51,7 @@ function pickSpool(spool) {
     const filament = spool.filament || null;
     return {
         id: spool.id ?? null,
+        archived: spool.archived ?? false,
         remaining_weight: spool.remaining_weight ?? null,
         remaining_percentage: spool.remaining_percentage ?? null,
         initial_weight: spool.initial_weight ?? null,
@@ -121,6 +122,10 @@ export function toClientSpool(uiSpool) {
         matchingExternalFilament,
         connectedViaTag: uiSpool.connectedViaTag ?? false,
         connectedViaMapping: uiSpool.connectedViaMapping ?? false,
+        // The slot holds a spool Spoolman has archived. The dashboard says so
+        // rather than offering an action, and `hasSpoolUiChanged()` compares
+        // this projection, so archiving one reaches the UI as a change.
+        archived: uiSpool.archived ?? false,
         correctedRemain: uiSpool.correctedRemain ?? null,
         correctedWeight: uiSpool.correctedWeight ?? null,
         option: uiSpool.option ?? SLOT_OPTIONS.NONE,
