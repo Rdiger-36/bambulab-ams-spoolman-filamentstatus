@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - The Web UI no longer flashes the light theme when a page is opened in dark mode. The class that carries the theme was set by menu.js at the end of the body, so the browser painted the light stylesheet first and switched afterwards, on every page change. A small script in each page head now sets it on the html element before the first paint, and the stylesheet matches it there
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.4
    - Fixes:
       - Multi colour spools (PLA Silk Multi-Color, PLA Basic Gradient, TPU 90A Blaze and Frozen) show all of their colours again instead of only the first one
