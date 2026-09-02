@@ -162,7 +162,7 @@ None of this involved real hardware, so it says nothing about the items above.
 ## Before the next official release
 
 The version deliberately stays on a `-dev` prerelease for now, currently
-`1.3.0-dev.5`.
+`1.3.0-dev.6`.
 
 - [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
   The publish workflow compares the tag against `package.json` and aborts on a
@@ -175,7 +175,7 @@ Tag behaviour, after the hardening in `c053561`:
 | Tag | Images | `:latest` | GitHub release |
 |---|---|---|---|
 | `v1.3.0` | `:1.3.0` and `:latest` | moved | release, marked Latest |
-| `v1.3.0-dev`, `v1.3.0-dev.2`, `v1.3.0-dev.3`, `v1.3.0-dev.4`, `v1.3.0-dev.5` | `:<version>` and `:dev` | untouched | pre-release |
+| `v1.3.0-dev`, `v1.3.0-dev.2`, `v1.3.0-dev.3`, `v1.3.0-dev.4`, `v1.3.0-dev.5`, `v1.3.0-dev.6` | `:<version>` and `:dev` | untouched | pre-release |
 | `v1.3.0-rc1` and other suffixes | `:<version>` only | untouched | pre-release |
 
 One `case` decides all four columns, so the image tags and the release cannot
