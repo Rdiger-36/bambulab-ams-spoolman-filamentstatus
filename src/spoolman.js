@@ -56,6 +56,33 @@ export function logSpoolmanFailure(target, what, error) {
 }
 
 /**
+ * Logs a failed write and describes it for whoever asked for it.
+ *
+ * The three actions never throw, because one slot that cannot be written must
+ * not abort the remaining slots of the same AMS update. That left the Web UI
+ * with no way to tell a write that happened from one that did not: the route
+ * answered `ok` either way. They report instead.
+ *
+ * Spoolman's own message is preferred over the got one, which says only that
+ * the request failed with a status code.
+ *
+ * @returns {{ok: false, error: string}}
+ */
+function failed(target, what, error) {
+    logSpoolmanFailure(target, what, error);
+
+    // A body arrives as a string unless the call asked for JSON, and stringifying
+    // one of those escapes it a second time, which is how a Spoolman message
+    // ends up in the browser wrapped in quotes and backslashes.
+    const body = error.response?.body;
+    const detail = body == null || body === ""
+        ? error.message
+        : (typeof body === "string" ? body : JSON.stringify(body));
+
+    return { ok: false, error: `${what} failed: ${detail}` };
+}
+
+/**
  * Fetches all spools. Updates the connection status as a side effect and
  * returns an empty list on failure, so a Spoolman outage pauses processing
  * instead of crashing the service.
@@ -322,10 +349,11 @@ async function createExtraField() {
  * Creates a spool for an AMS slot whose filament already exists in Spoolman,
  * tagged with the slot's tray_uuid so it is recognised from then on.
  *
- * Failures are logged, not thrown: one slot that cannot be created must not
+ * Failures are reported, not thrown: one slot that cannot be created must not
  * abort the remaining slots of the same AMS update.
  *
  * @param {object} spoolData - the UI spool, carrying slot and matched filament
+ * @returns {Promise<{ok: boolean, error?: string}>} what became of the write
  */
 export async function createSpool(spoolData) {
     const postData = buildSpoolPayload(spoolData, spoolData.matchingInternalFilament.id);
@@ -336,8 +364,9 @@ export async function createSpool(spoolData) {
     try {
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
+        return { ok: true };
     } catch (error) {
-        logSpoolmanFailure(spoolData, "Spool creation", error);
+        return failed(spoolData, "Spool creation", error);
     }
 }
 
@@ -404,9 +433,10 @@ export function buildFilamentPayload(spoolData) {
  * the catalogue entry matched but no filament exists in Spoolman yet.
  *
  * The spool is only attempted once the filament came back with an id. As in
- * createSpool, failures are logged rather than thrown.
+ * createSpool, failures are reported rather than thrown.
  *
  * @param {object} spoolData - the UI spool, carrying slot and catalogue entry
+ * @returns {Promise<{ok: boolean, error?: string}>} what became of the write
  */
 export async function createFilamentAndSpool(spoolData) {
     let filamentId;
@@ -419,9 +449,9 @@ export async function createFilamentAndSpool(spoolData) {
         // ensureVendor has already logged what Spoolman answered. This says
         // what it cost: this slot keeps its button and the next AMS update
         // tries again, while everything that does not need a vendor carries on.
-        console.error(spoolData.printerName, spoolData.logFilePath,
-            `    Filament for ${spoolData.amsId} not created: the "Bambu Lab" vendor could not be resolved`);
-        return;
+        const error = `The "Bambu Lab" vendor could not be resolved, so no filament was created`;
+        console.error(spoolData.printerName, spoolData.logFilePath, `    Filament for ${spoolData.amsId} not created: ${error}`);
+        return { ok: false, error };
     }
 
     try {
@@ -436,21 +466,23 @@ export async function createFilamentAndSpool(spoolData) {
         });
         filamentId = filamentResponse.body.id;
     } catch (error) {
-        logSpoolmanFailure(spoolData, "Filament creation", error);
+        return failed(spoolData, "Filament creation", error);
     }
 
-    if (filamentId) {
-        try {
-            const spoolPayload = buildSpoolPayload(spoolData, filamentId);
+    try {
+        const spoolPayload = buildSpoolPayload(spoolData, filamentId);
 
-            console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
-            console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
+        console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
+        console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
 
-            await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
-            console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
-        } catch (error) {
-            logSpoolmanFailure(spoolData, "Spool creation", error);
-        }
+        await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
+        console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
+        return { ok: true };
+    } catch (error) {
+        // The filament is there and the spool is not, which is the one half
+        // done outcome of the three. It is named as such, because the next
+        // attempt finds that filament and only has to create the spool.
+        return failed(spoolData, `Spool creation for the new filament ${filamentId}`, error);
     }
 }
 
@@ -459,6 +491,7 @@ export async function createFilamentAndSpool(spoolData) {
  * slot's tray_uuid into its extra.tag. Nothing else about the spool is touched.
  *
  * @param {object} spoolData - the UI spool, carrying slot and mergeableSpool
+ * @returns {Promise<{ok: boolean, error?: string}>} what became of the write
  */
 export async function mergeSpool(spoolData) {
     const postData = { extra: { tag: `\"${spoolData.slot.tray_uuid}\"` } };
@@ -469,8 +502,9 @@ export async function mergeSpool(spoolData) {
     try {
         await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully merged with Spool-ID ${spoolData.mergeableSpool.id} => ${spoolData.mergeableSpool.filament.name}`);
+        return { ok: true };
     } catch (error) {
-        logSpoolmanFailure(spoolData, "Spool merge", error);
+        return failed(spoolData, "Spool merge", error);
     }
 }
 

@@ -275,6 +275,14 @@ Respond `{ ok: false, error }` with a 4xx/5xx for failures; the frontend's
 `fetchJson()` expects that shape. Never build a Spoolman payload inline. Add a
 function to `spoolman.js`.
 
+**The three write actions report, they do not throw.** `createSpool()`,
+`createFilamentAndSpool()` and `mergeSpool()` answer `{ ok, error }`, because
+the automatic mode calls them per slot and one slot that cannot be written must
+not abort the rest of the same AMS update. Both callers read that answer: the
+route turns it into the response, and `processSlot()` counts only a write that
+happened as a reason to refetch the Spoolman lists. A new one keeps the shape,
+or the Web UI goes back to reporting success for a write that never landed.
+
 **Adding matching logic:** put the decision in `ams.js` as a pure function and
 call it from `mqtt.js`. That is what makes it testable: `test/ams.test.js`
 covers exactly this seam.

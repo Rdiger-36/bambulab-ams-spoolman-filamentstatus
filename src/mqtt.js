@@ -705,6 +705,9 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         // The preview is what the slot would look like once the action has run:
         // a slot that has not changed since the last pass must not be written a
         // second time, which is what would create the same spool twice.
+        //
+        // Answers whether Spoolman was mutated, which is what tells the caller
+        // its cached lists are stale.
         const runAutomatically = async (chosen, action) => {
             if (!automatic) return false;
 
@@ -712,8 +715,13 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: chosen, enableButton, slotState: "", error };
             if (prev && !hasSpoolUiChanged(preview, prev)) return false;
 
-            await action({ amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
-            return true;
+            const result = await action({ amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
+
+            // Only a write that happened makes the cached Spoolman lists stale.
+            // A failed one used to count as one, which sent the caller off to
+            // refetch a list that had not changed and let this slot look up a
+            // spool that was never created.
+            return result?.ok !== false;
         };
 
         mergeableSpool = spools.length !== 0 ? findMergeableSpool(slot, spools) : null;

@@ -225,16 +225,25 @@ export function registerRoutes(app, printers) {
      * triggers. All three take the same body, look up the same cached slot and
      * answer the same way; only the Spoolman call in the middle differs.
      *
+     * The three never throw, because the automatic mode calls them per slot and
+     * one slot that cannot be written must not abort the rest of the same AMS
+     * update. They report instead, and that answer is what reaches the browser:
+     * a failed write used to be answered with `ok` and the user was told the
+     * action had been sent.
+     *
      * @param {string} path - the route
      * @param {string} what - the action, used in the log line and the error
-     * @param {function(object): Promise} run - the spoolman.js call to make
+     * @param {function(object): Promise<{ok: boolean, error?: string}>} run - the spoolman.js call
      */
     const spoolAction = (path, what, run) => {
         app.post(path, async (req, res) => {
             const spoolData = resolveSpoolData(req.body, printers, res);
             if (!spoolData) return;
             try {
-                await run(spoolData);
+                const result = await run(spoolData);
+                if (result?.ok === false) {
+                    return res.status(502).json({ ok: false, error: result.error || `${what} failed` });
+                }
                 res.status(200).json({ ok: true });
             } catch (err) {
                 console.error("Server", serverLogFilePath, `${what} failed:`, err?.message);
