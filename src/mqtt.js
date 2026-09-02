@@ -16,6 +16,7 @@ import {
     patchSpoolWeight,
     patchSpoolLocation,
     useSpoolWeight,
+    logSpoolmanFailure,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
@@ -546,19 +547,20 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     const amsId = convertAMSandSlot(ams.id, slot.id);
     const validSlot = Object.keys(slot).length > 6;
 
-    if (!validSlot) {
-        console.debug(printer.name, printer.logFilePath, "No Data found in Slots");
-        const newUiSpool = buildEmptySpool(printer, amsId, slot);
-        await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
-        pushSlotUpdate(printer, newUiSpool, prevByAmsId);
-        return false;
-    }
+    // Two ways for a slot to be empty: a payload too short to carry a tray
+    // record at all, and a full record whose fields are all placeholders. An
+    // unidentified spool shares every placeholder field with the second one, so
+    // an occupied slot must not be swallowed by it. Only `slotIsOccupied()`
+    // tells the two apart.
+    const emptyWithPlaceholders = (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A")
+        && (slot.tray_weight === 0 || slot.tray_weight === "0")
+        && (!slot.tray_type || slot.tray_type === "")
+        && !slotIsOccupied(slot);
 
-    // An unidentified spool shares every placeholder field with an empty slot,
-    // so an occupied slot must not be swallowed by this branch. Only
-    // `slotIsOccupied()` tells the two apart.
-    if ((slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") && (slot.tray_weight === 0 || slot.tray_weight === "0") && (!slot.tray_type || slot.tray_type === "") && !slotIsOccupied(slot)) {
-        console.debug(printer.name, printer.logFilePath, "No Data found in Slots (empty slot with N/A values)");
+    if (!validSlot || emptyWithPlaceholders) {
+        console.debug(printer.name, printer.logFilePath, validSlot
+            ? "No Data found in Slots (empty slot with N/A values)"
+            : "No Data found in Slots");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
         await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
         pushSlotUpdate(printer, newUiSpool, prevByAmsId);
@@ -666,10 +668,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${currRemain}%) [[ ${slot.tray_uuid} ]]`);
                         console.log(printer.name, printer.logFilePath, `    Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
                     } catch (err) {
-                        console.error(printer.name, printer.logFilePath, "   #####");
-                        console.error(printer.name, printer.logFilePath, "   Spool update failed:", err.message);
-                        console.error(printer.name, printer.logFilePath, "   Error details:", err.response?.statusCode, err.response?.body || err.stack);
-                        console.error(printer.name, printer.logFilePath, "   #####");
+                        logSpoolmanFailure({ printerName: printer.name, logFilePath: printer.logFilePath }, "Spool update", err);
                     }
 
                     printer.lastUpdateTime = currentTime;
@@ -699,6 +698,22 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         console.debug(printer.name, printer.logFilePath, " Connected Spool not found, process with merging and creation logic");
         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain == null ? "remain unknown" : `${slot.remain}%`}) [[ ${slot.tray_uuid} ]]`);
 
+        // The three automatic actions differ only in the option they stand for
+        // and the Spoolman call they make, so they are run through one place.
+        // The preview is what the slot would look like once the action has run:
+        // a slot that has not changed since the last pass must not be written a
+        // second time, which is what would create the same spool twice.
+        const runAutomatically = async (chosen, action) => {
+            if (!automatic) return false;
+
+            const prev = prevByAmsId[amsId];
+            const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: chosen, enableButton, slotState: "", error };
+            if (prev && !hasSpoolUiChanged(preview, prev)) return false;
+
+            await action({ amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
+            return true;
+        };
+
         mergeableSpool = spools.length !== 0 ? findMergeableSpool(slot, spools) : null;
 
         if (!mergeableSpool) {
@@ -724,26 +739,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 if (matchingInternalFilament) {
                     console.log(printer.name, printer.logFilePath, "    Filament exists, create a Spool with this Data");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
-                    if (automatic) {
-                        const prev = prevByAmsId[amsId];
-                        const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Create Spool", enableButton, slotState: "", error };
-                        if (!prev || hasSpoolUiChanged(preview, prev)) {
-                            await createSpool({ amsId, slot, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
-                            mutated = true;
-                        }
-                    }
+                    if (await runAutomatically("Create Spool", createSpool)) mutated = true;
                     option = "Create Spool";
                 } else if (matchingExternalFilament) {
                     console.log(printer.name, printer.logFilePath, "    Filament does not exist. Create a new Filament");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingExternalFilament.material}, Color: ${matchingExternalFilament.name}`);
-                    if (automatic) {
-                        const prev = prevByAmsId[amsId];
-                        const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Create Filament & Spool", enableButton, slotState: "", error };
-                        if (!prev || hasSpoolUiChanged(preview, prev)) {
-                            await createFilamentAndSpool({ amsId, slot, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
-                            mutated = true;
-                        }
-                    }
+                    if (await runAutomatically("Create Filament & Spool", createFilamentAndSpool)) mutated = true;
                     option = "Create Filament & Spool";
                 } else {
                     console.error(printer.name, printer.logFilePath, "    No matching Filament found in Database, please check manually!");
@@ -752,14 +753,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             }
         } else {
             console.log(printer.name, printer.logFilePath, `    Found mergeable Spool => Spoolman Spool ID: ${mergeableSpool.id}, Material: ${mergeableSpool.filament.material}, Color: ${mergeableSpool.filament.name}`);
-            if (automatic) {
-                const prev = prevByAmsId[amsId];
-                const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: "Merge Spool", enableButton, slotState: "", error };
-                if (!prev || hasSpoolUiChanged(preview, prev)) {
-                    await mergeSpool({ amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
-                    mutated = true;
-                }
-            }
+            if (await runAutomatically("Merge Spool", mergeSpool)) mutated = true;
             option = "Merge Spool";
         }
 

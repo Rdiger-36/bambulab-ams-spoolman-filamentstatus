@@ -29,6 +29,28 @@ function usedWeightFromSlot(slot) {
 }
 
 /**
+ * Logs a failed Spoolman write in the block the log viewer looks for.
+ *
+ * The write paths all fail the same way and used to spell this block out one by
+ * one. Two of those copies read the status off `error.filamentResponse` and
+ * `error.spoolResponse`, neither of which a got error carries, so exactly the
+ * lines meant to say why a creation failed printed "undefined undefined" plus a
+ * stack trace.
+ *
+ * @param {object} spoolData - the UI spool, for the printer name and log file
+ * @param {string} what - what failed, e.g. "Spool creation"
+ * @param {Error} error - the got error
+ */
+export function logSpoolmanFailure(spoolData, what, error) {
+    const { printerName, logFilePath } = spoolData;
+
+    console.error(printerName, logFilePath, "    #####");
+    console.error(printerName, logFilePath, `    ${what} failed:`, error.message);
+    console.error(printerName, logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
+    console.error(printerName, logFilePath, "    #####");
+}
+
+/**
  * Fetches all spools. Updates the connection status as a side effect and
  * returns an empty list on failure, so a Spoolman outage pauses processing
  * instead of crashing the service.
@@ -293,10 +315,7 @@ export async function createSpool(spoolData) {
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
     } catch (error) {
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Spool creation failed:", error.message);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+        logSpoolmanFailure(spoolData, "Spool creation", error);
     }
 }
 
@@ -382,10 +401,7 @@ export async function createFilamentAndSpool(spoolData) {
         });
         filamentId = filamentResponse.body.id;
     } catch (error) {
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Filament creation failed:", error.message);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.filamentResponse?.statusCode, error.filamentResponse?.body || error.stack);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+        logSpoolmanFailure(spoolData, "Filament creation", error);
     }
 
     if (filamentId) {
@@ -398,10 +414,7 @@ export async function createFilamentAndSpool(spoolData) {
             await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
             console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
         } catch (error) {
-            console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-            console.error(spoolData.printerName, spoolData.logFilePath, "    Spool creation failed:", error.message);
-            console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.spoolResponse?.statusCode, error.spoolResponse?.body || error.stack);
-            console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+            logSpoolmanFailure(spoolData, "Spool creation", error);
         }
     }
 }
@@ -422,10 +435,7 @@ export async function mergeSpool(spoolData) {
         await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`, { json: postData });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully merged with Spool-ID ${spoolData.mergeableSpool.id} => ${spoolData.mergeableSpool.filament.name}`);
     } catch (error) {
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Spool merge failed:", error.message);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    Error details:", error.response?.statusCode, error.response?.body || error.stack);
-        console.error(spoolData.printerName, spoolData.logFilePath, "    #####");
+        logSpoolmanFailure(spoolData, "Spool merge", error);
     }
 }
 

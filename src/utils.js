@@ -94,6 +94,28 @@ export const EXTERNAL_SLOT = "External";
 export { slotColors, filamentColors } from "../public/shared.js";
 
 /**
+ * Turns the "N/A" placeholder into a real absence.
+ *
+ * `processData()` writes that literal into every field the printer left out,
+ * because the backend branches on it. It is a marker, not a value: a client
+ * that receives it renders it, which is how an emptied slot came to be labelled
+ * "N/A" and how its colour swatch ended up styled `#N/A`. An empty string is
+ * squashed for the same reason.
+ *
+ * It lives here because both readers need it and have to agree. `toClientSpool()`
+ * has already turned the marker into null by the time the dashboard route builds
+ * its candidates, while `consumptionCandidate()` is also called on the runtime
+ * shape, which still carries it: two implementations would key one slot two ways
+ * depending on which side asked.
+ *
+ * @param {*} value - a field of an AMS slot
+ * @returns {*} the value, or null where there was none
+ */
+export function orNull(value) {
+    return value === "N/A" || value === "" || value == null ? null : value;
+}
+
+/**
  * The upper bound for a remaining weight corrected by hand.
  *
  * Also in `public/shared.js`: the detail dialog refuses the same number before

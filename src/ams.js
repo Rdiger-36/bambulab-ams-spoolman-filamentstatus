@@ -1,6 +1,6 @@
 import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
-import { slotColors, filamentColors } from "./utils.js";
+import { orNull, slotColors, filamentColors } from "./utils.js";
 import { consumptionKey, normColor } from "./gcode.js";
 
 /**
@@ -463,20 +463,6 @@ export function hasSpoolUiChanged(next, prev) {
  */
 export function materialKey(type, color) {
     return `${type || "?"}|${normColor(color)}`;
-}
-
-/**
- * Turns the "N/A" placeholder into a real absence.
- *
- * `processData()` writes that literal into every field the printer left out,
- * while `toClientSpool()` has already turned it back into null by the time the
- * dashboard route builds its candidates. Both call `consumptionCandidate()`,
- * so the two shapes have to produce the same keys: "N/A" normalises to the
- * string "N/A" and null to the empty one, which would be two different keys for
- * one slot depending on which side asked.
- */
-function orNull(value) {
-    return value === "N/A" || value === "" || value == null ? null : value;
 }
 
 /**
