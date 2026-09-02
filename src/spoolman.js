@@ -512,15 +512,18 @@ export async function mergeSpool(spoolData) {
  * Sets a spool's remaining weight directly. This is the legacy mode write path,
  * where the weight comes from the AMS RFID remain percentage.
  *
+ * The location used to ride along in this payload, which meant legacy mode and
+ * G-code mode wrote it from two different places under two different
+ * conditions. `src/location.js` owns it in both modes now.
+ *
  * @param {number} spoolId - Spoolman spool id
  * @param {number} remainingWeight - grams left on the spool
  * @param {string} lastUsed - ISO timestamp
- * @param {string|null} location - AMS slot label, only sent when the location setting is on
  */
-export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed, location = null) {
-    const payload = { remaining_weight: remainingWeight, last_used: lastUsed };
-    if (location !== null) payload.location = location;
-    return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: payload });
+export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed) {
+    return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, {
+        json: { remaining_weight: remainingWeight, last_used: lastUsed },
+    });
 }
 
 /**

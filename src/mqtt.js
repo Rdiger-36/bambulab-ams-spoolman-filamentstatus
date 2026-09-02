@@ -14,12 +14,12 @@ import {
     createFilamentAndSpool,
     mergeSpool,
     patchSpoolWeight,
-    patchSpoolLocation,
     useSpoolWeight,
     logSpoolmanFailure,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
+import { createLocationSync } from "./location.js";
 import {
     processData,
     extractComparableTrayData,
@@ -389,6 +389,11 @@ async function handleMqttMessage(printer, topic, message) {
                             );
                             printer.spoolData = [];
 
+                            // Collected across every slot and applied below, so a
+                            // spool moved between two slots is not cleared by the
+                            // slot it left after the slot it entered claimed it.
+                            const locationSync = createLocationSync(printer);
+
                             for (const ams of processedAmsData) {
                                 if (!Array.isArray(ams.tray)) {
                                     console.debug(printer.name, printer.logFilePath, "Data from Slots are not valid");
@@ -396,7 +401,7 @@ async function handleMqttMessage(printer, topic, message) {
                                 }
 
                                 for (const slot of ams.tray) {
-                                    const mutated = await processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime);
+                                    const mutated = await processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime, locationSync);
 
                                     // Only refetch when this slot actually created/merged a
                                     // spool or filament in Spoolman. Otherwise the cached
@@ -409,6 +414,8 @@ async function handleMqttMessage(printer, topic, message) {
                                     }
                                 }
                             }
+
+                            await locationSync.flush();
 
                             state.lastSpoolData = spools;
                             printer.lastMqttAmsUpdate = new Date();
@@ -460,21 +467,24 @@ async function handleMqttMessage(printer, topic, message) {
 }
 
 /**
- * Clears the Spoolman location of the spool that used to sit in this slot when
- * a different one is there now, so a removed spool does not keep claiming an
- * AMS slot as its location. No-op unless the location setting is on.
+ * Hands the location sync the spool a slot used to hold, so it is released
+ * unless some slot of this AMS update claims it again.
+ *
+ * The cached record is only used for its id: its `location` is whatever
+ * Spoolman said when the record was fetched, and the ownership check that
+ * decides whether the location may be cleared has to read the current one.
+ *
+ * @param {object} locationSync - the collector for this AMS update
+ * @param {string} amsId - slot label
+ * @param {object} prevByAmsId - the previous UI spools, keyed by slot label
+ * @param {object[]} spools - Spoolman spools, as fetched for this AMS update
  */
-async function clearLocationIfSpoolChanged(printer, amsId, currentSpoolId, prevByAmsId) {
-    if (!settings.SET_LOCATION) return;
+function releasePreviousSpool(locationSync, amsId, prevByAmsId, spools) {
     const prevSpoolId = prevByAmsId[amsId]?.existingSpool?.id ?? null;
-    if (prevSpoolId && prevSpoolId !== currentSpoolId) {
-        try {
-            await patchSpoolLocation(prevSpoolId, "");
-            console.log(printer.name, printer.logFilePath, `    Cleared location for Spool-ID ${prevSpoolId} (removed from ${amsId})`);
-        } catch (err) {
-            console.error(printer.name, printer.logFilePath, `    Failed to clear location for Spool-ID ${prevSpoolId}:`, err.message);
-        }
-    }
+    if (!prevSpoolId) return;
+
+    const current = (spools || []).find(s => s.id === prevSpoolId);
+    locationSync.release(current ?? prevByAmsId[amsId].existingSpool);
 }
 
 // How many AMS updates a slot may wait for its remain reading before a spool is
@@ -542,10 +552,12 @@ export function waitedLongEnoughForRemain(printer, amsId, slot) {
  * @param {object[]} internalFilaments - filaments in this Spoolman instance
  * @param {object} prevByAmsId - the previous UI spools, keyed by slot label
  * @param {Date} currentTime - timestamp shared across this AMS update
+ * @param {object} locationSync - collects the location changes of this update,
+ *   which are applied once every slot has been seen
  * @returns {Promise<boolean>} whether Spoolman was mutated, which tells the
  *   caller its cached lists are stale and have to be refetched
  */
-async function processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime) {
+async function processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime, locationSync) {
     const amsId = convertAMSandSlot(ams.id, slot.id);
     const validSlot = Object.keys(slot).length > 6;
 
@@ -564,7 +576,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             ? "No Data found in Slots (empty slot with N/A values)"
             : "No Data found in Slots");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
-        await clearLocationIfSpoolChanged(printer, amsId, null, prevByAmsId);
+        releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
         pushSlotUpdate(printer, newUiSpool, prevByAmsId);
         return false;
     }
@@ -587,7 +599,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         // read-only exactly as it was before assignments existed.
         const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
-        await clearLocationIfSpoolChanged(printer, amsId, mappedSpool?.id ?? null, prevByAmsId);
+        // The assignment is the only link a chipless spool has, so it is also
+        // the only thing that can give it a location. Nothing did before, which
+        // is why an assigned 3rd party spool never got one at all.
+        locationSync.claim(amsId, mappedSpool);
+        releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
         if (hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
             broadcastSlotUpdate(printer.id, newUiSpool);
             // No uuid to print, so the line says what the slot is instead: the
@@ -660,13 +676,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                     }
 
                     const remainingWeight = Math.round((currRemain / 100) * slot.tray_weight);
-                    const newLocation = settings.SET_LOCATION ? `${printer.name} - ${amsId}` : null;
 
                     console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spool.id}`);
-                    console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime, ...(newLocation && { location: newLocation }) }));
+                    console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime }));
 
                     try {
-                        await patchSpoolWeight(spool.id, remainingWeight, currentTime, newLocation);
+                        await patchSpoolWeight(spool.id, remainingWeight, currentTime);
                         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${currRemain}%) [[ ${slot.tray_uuid} ]]`);
                         console.log(printer.name, printer.logFilePath, `    Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
                     } catch (err) {
@@ -676,18 +691,12 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                     printer.lastUpdateTime = currentTime;
                 } else {
                     // Default: weight is tracked from the sliced G-code on print
-                    // completion (see handlePrintStateChange). Here we only log /
-                    // sync location on real identity changes, not on remain ticks.
+                    // completion (see handlePrintStateChange). Nothing is written
+                    // here, and the line is held back on remain ticks so a spool
+                    // that only reports a new percentage does not repeat itself.
+                    // The location is claimed once for the whole update below.
                     if (meaningfulChange) {
                         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} [[ ${slot.tray_uuid} ]] => Spool-ID ${spool.id} (G-code mode)`);
-
-                        if (settings.SET_LOCATION) {
-                            try {
-                                await patchSpoolLocation(spool.id, `${printer.name} - ${amsId}`);
-                            } catch (err) {
-                                console.error(printer.name, printer.logFilePath, "   Location update failed:", err.message);
-                            }
-                        }
                     }
                 }
 
@@ -815,7 +824,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         enableButton = "true";
     }
 
-    await clearLocationIfSpoolChanged(printer, amsId, existingSpool?.id ?? null, prevByAmsId);
+    // Only a spool this slot is really connected to may claim it. `existingSpool`
+    // can also be a mere merge/creation candidate found by filament match, which
+    // is not in the AMS at all and must not be given its location.
+    if (found || mappedSpool) locationSync.claim(amsId, existingSpool);
+    releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
 
     const newUiSpool = {
         amsId,

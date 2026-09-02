@@ -36,6 +36,13 @@ import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsCo
 import { consumptionCandidate, matchConsumption } from "./ams.js";
 import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
+import {
+    claimSlotLocation,
+    releaseSlotLocation,
+    releasePrinterLocations,
+    renamePrinterLocations,
+    slotLocation,
+} from "./location.js";
 
 /**
  * Looks up a printer, answering with a 404 and returning null when there is
@@ -692,6 +699,17 @@ export function registerRoutes(app, printers) {
             if (!spool) return res.status(404).json({ ok: false, error: `Spool ${spoolId} not found in Spoolman` });
 
             const mapping = setMapping(printerId, amsId, spoolId, uiSpool.slot);
+
+            // The spool that was assigned here up to now leaves the slot, so it
+            // gives its location back before the new one takes it. Waiting for
+            // the next AMS update was not an option: by then the cached slot
+            // already names the new spool and the old one is nowhere to be found.
+            const previous = uiSpool.existingSpool;
+            if (previous && previous.id !== spoolId) {
+                await releaseSlotLocation(printer, spools.find(s => s.id === previous.id) ?? previous);
+            }
+            await claimSlotLocation(printer, amsId, spool);
+
             applyMappingToUiSpool(printer, uiSpool, spool);
             console.log(printer.name, printer.logFilePath, `[Mapping] ${amsId} assigned to Spoolman spool ${spoolId} (${spool.filament?.name ?? "?"})`);
 
@@ -827,7 +845,12 @@ export function registerRoutes(app, printers) {
                 first_used: Date.now(),
                 initial_weight: numberOrNull(spool.initialWeight),
                 remaining_weight: numberOrNull(spool.remainingWeight),
-                location: spool.location?.trim() || null,
+                // The dialog prefills the slot, but a user who clears the field
+                // still ends up with a spool that is demonstrably in this slot,
+                // so the slot is what it gets. Only with the setting on: with it
+                // off nothing else writes a location either.
+                location: spool.location?.trim()
+                    || (settings.SET_LOCATION ? slotLocation(printer.name, amsId) : null),
                 lot_nr: spool.lotNr?.trim() || null,
                 comment: spool.comment?.trim() || null,
             };
@@ -847,16 +870,29 @@ export function registerRoutes(app, printers) {
         }
     });
 
-    app.delete("/api/mappings/:printerId/:amsId", (req, res) => {
+    app.delete("/api/mappings/:printerId/:amsId", async (req, res) => {
         if (rejectInLegacyMode(res)) return;
 
         const { printerId, amsId } = req.params;
         const printer = resolvePrinter(printerId, printers, res);
         if (!printer) return;
 
+        const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
+        // Read before the mapping goes, and before the cached slot is cleared:
+        // afterwards nothing says which spool used to sit here, which is why an
+        // unassigned spool kept naming this slot as its location forever.
+        const assigned = uiSpool?.connectedViaMapping ? uiSpool.existingSpool : null;
+
         const existed = clearMapping(printerId, amsId);
 
-        const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
+        if (assigned) {
+            // Straight from Spoolman rather than from the cache: the ownership
+            // check may only clear a location this service wrote, and the
+            // cached record carries whatever it said when it was fetched.
+            const current = await getSpoolmanSpool(assigned.id).catch(() => assigned);
+            await releaseSlotLocation(printer, current);
+        }
+
         if (uiSpool) applyMappingToUiSpool(printer, uiSpool, null);
         if (existed) console.log(printer.name, printer.logFilePath, `[Mapping] ${amsId} assignment removed`);
 
@@ -1002,9 +1038,13 @@ export function registerRoutes(app, printers) {
         res.json({ ok: true, printer: publicPrinter(result.printer) });
     });
 
-    app.put("/api/printers/:printerId", (req, res) => {
+    app.put("/api/printers/:printerId", async (req, res) => {
         const printer = resolvePrinter(req.params.printerId, printers, res);
         if (!printer) return;
+
+        // Read before the update, because the locations already in Spoolman
+        // carry this name and nothing would recognise them afterwards.
+        const previousName = printer.name;
 
         // Only an address or credential change drops the connection, a rename
         // does not, so only that needs the print in flight to be confirmed.
@@ -1018,6 +1058,10 @@ export function registerRoutes(app, printers) {
         if (!result.ok) {
             const status = result.error === "Printer not found" ? 404 : 400;
             return res.status(status).json({ ok: false, error: result.error });
+        }
+
+        if (result.printer.name !== previousName) {
+            await renamePrinterLocations(result.printer, previousName);
         }
 
         console.log(result.printer.name, result.printer.logFilePath, `[Printer] Updated ${result.printer.name} (${result.printer.id})`);
@@ -1035,7 +1079,7 @@ export function registerRoutes(app, printers) {
         res.json({ ok: true, printer: publicPrinter(result.printer), reconnected: result.reconnect });
     });
 
-    app.delete("/api/printers/:printerId", (req, res) => {
+    app.delete("/api/printers/:printerId", async (req, res) => {
         const printer = resolvePrinter(req.params.printerId, printers, res);
         if (!printer) return;
 
@@ -1045,6 +1089,11 @@ export function registerRoutes(app, printers) {
 
         printer.monitoringEnabled = false;
         disconnectPrinter(printer);
+
+        // Before the printer goes: its name is what the ownership check matches
+        // on, so once it is removed nothing can tell its locations apart from
+        // the ones a user set by hand.
+        await releasePrinterLocations(printer);
 
         const result = removePrinter(printer.id);
         if (!result.ok) return res.status(404).json({ ok: false, error: result.error });

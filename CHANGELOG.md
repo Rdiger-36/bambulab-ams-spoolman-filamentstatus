@@ -41,6 +41,13 @@ Version 1.3.0-dev.5
       - A manufacturer created from the create-spool form carries what the catalogue knows about it, its external id and the weight of its empty spool, instead of its name alone, and nothing but the name when the name was typed over
       - "None configured" in the printer menu is readable in dark mode. It was the one entry left out of the dark rule that colours the menu text, so it was near black on a dark background
       - Seven routes answered without the ok field the Web UI reads, so a failure they reported was seen as neither success nor error
+      - The Spoolman location of a spool follows the AMS slot it is really in. SET_LOCATION was written from two places under two different conditions, and cleared from a third that checked nothing, so most of the mechanism did not work:
+         - Assigning a spool wrote no location at all and unassigning cleared none, so a spool the printer cannot identify never got a location, and one that was unassigned kept naming the slot it had left for good. Both endpoints write it now, and reassigning a slot moves the location from the old spool to the new one
+         - A spool created or merged by the automatic mode got no location either: the only write happened when a slot's filament identity changed, which is exactly what it does not do on the update after the spool was created. The location is now written whenever it does not already say what the slot says, which also corrects one that was changed in Spoolman by hand
+         - A location the user set themselves is no longer wiped. Every spool that left a slot was patched with an empty location, "Shelf A" included, for no reason other than having been in an AMS once. Only a location naming this printer is cleared
+         - A spool moved between two slots keeps its location. The slot it entered wrote the new one and the slot it left cleared it again moments later, decided purely by which slot came first in the AMS report. The changes of an AMS update are collected and applied once at the end, so a spool that ends up in any slot is claimed by it and only a spool in none of them is released
+         - Renaming a printer rewrites the locations it had written, and removing a printer clears them, instead of leaving "OldName - A0" behind on spools nothing would ever recognise again
+         - Creating a spool for a 3rd party slot from the dialog stores the slot as its location when the field was cleared, rather than leaving it empty
    - Development:
       - The container image no longer carries the test server or the script that regenerates the filament profile table. Neither has anything to run in a container, and the scripts that do, debug.sh, mqtt.js and capture-trays.js, are still there
       - public/materials.js holds the Bambu Studio filament ids the AMS reports as tray_info_idx, each with the material its profile prints, plus the rule for which materials count as the same stuff
@@ -54,6 +61,8 @@ Version 1.3.0-dev.5
          - The four bugs above are what those copies were hiding: a field missing from one of them, a status read off the wrong object in five of them, a colour missing from one theme
       - styles.css names the role of a colour rather than its value. Every rule whose colour differs between the themes was written out a second time as a dark mode copy of itself, 70 rules of it, so a colour occurring in fifteen rules had to be found in thirty. 265 colour literals become 117, of which 85 are the palette, and 102 lines mentioning dark mode become 7, with the computed style of both themes unchanged
       - frontend.js is indented like the other 25 JavaScript files, four spaces throughout, where it mixed 1568 tab indented lines with 483 using spaces
+      - src/location.js is the single place that writes a Spoolman location. It was spread over three call sites in two files, one of them riding along in the legacy weight PATCH, which is what let the conditions drift apart
+         - test/location.test.js and test/routes.mappings.location.test.js cover the ownership rule, the slot move, the printer rename and removal, and the assign and unassign endpoints, against a throwaway Spoolman that records what was written
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.4
