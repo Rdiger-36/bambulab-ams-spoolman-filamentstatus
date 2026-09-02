@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.5
    - New Features:
       - Clicking the filament name of a slot opens a dialog with everything the printer and Spoolman hold about it
          - Tab "Spool": the whole Spoolman record, remaining and used weight, initial and empty spool weight, location, price, the dates and the extra.tag, next to what the AMS reports for the slot, its profile, material, colours, serial number and RFID remain
@@ -34,6 +34,13 @@ Unreleased
       - A slot holding a spool the printer cannot identify no longer draws a swatch out of the placeholder the printer sends. The dashboard turned the literal "N/A" into a colour and handed "#N/A" to CSS, where the server had always dropped it
       - The classic AMS table (legacy MQTT mode) uses the full width of the page again. Only the first four columns were width-synced across the tables, so the action column was the only one left without a fixed width and swallowed all the leftover space of the full-width table: the button sat in the middle of a wide empty cell while the other columns were crammed against the left edge. The action column is synced with the rest now, the same way the G-code table already did it
       - A spool the printer cannot identify is labelled "3rd party" in both views. The classic table marked it with nothing but the warning triangle in its State column, which names no reason, and the G-code view did not mark it at all. The triangle now carries the reason as a tooltip as well
+      - A Spoolman write that failed is no longer answered with success. The three spool actions never throw, because automatic mode calls them per slot and one unwritable slot must not abort the rest of the AMS update, and their callers could not tell a refusal from a write that landed: the route answered ok for a creation that never happened, the dashboard said the action had been sent, and only the log carried the refusal
+         - A refused write is a 502 now and the notification names what Spoolman said, rather than the status code the HTTP client reports. A filament that was created while its spool was not says so, because the next attempt only has to create the spool
+      - Spoolman is reachable again for everything that does not need the "Bambu Lab" vendor. The vendor was resolved during startup and a failure there stopped the whole bootstrap, monitor loops included, although only the creation of a filament from the catalogue needs it. It is asked for at that point now, once per Spoolman instance, while merging, tag linking, the G-code booking and every manual assignment carry on
+      - A creation that Spoolman refuses is readable in the log. Five copies of the failure block read the status off fields the HTTP client does not set, so the line meant to say why a filament, spool or vendor could not be created printed "undefined undefined" and a stack trace instead of the Spoolman response body
+      - A manufacturer created from the create-spool form carries what the catalogue knows about it, its external id and the weight of its empty spool, instead of its name alone, and nothing but the name when the name was typed over
+      - "None configured" in the printer menu is readable in dark mode. It was the one entry left out of the dark rule that colours the menu text, so it was near black on a dark background
+      - Seven routes answered without the ok field the Web UI reads, so a failure they reported was seen as neither success nor error
    - Development:
       - The container image no longer carries the test server or the script that regenerates the filament profile table. Neither has anything to run in a container, and the scripts that do, debug.sh, mqtt.js and capture-trays.js, are still there
       - public/materials.js holds the Bambu Studio filament ids the AMS reports as tray_info_idx, each with the material its profile prints, plus the rule for which materials count as the same stuff
@@ -43,6 +50,10 @@ Unreleased
          - It sits under public/ because that is the half that cannot import from anywhere else: no build step, no dependencies, served straight from disk. The server imports it from there, so the arrow points one way and there is nothing to keep in step
          - test/shared.test.js covers it with plain node:test, which is the first coverage anything in public/ has had. It also asserts that the server re-exports those functions rather than holding a copy, and that public/frontend.js still imports them
          - public/index.html loads frontend.js as a module, which is what lets it import at all. Nothing else about the frontend changed: no build step, no bundler, no framework
+      - One copy of what both sides do: public/shared.js gained the date format, the slot labels, the print states and the slot options, each of which existed two to nine times across the server and the dashboard, and the new public/ui.js holds the fetch and escape helpers the two pages had a copy of each. Fifteen route handlers opened with the same printer lookup and its 404, the three spool actions were identical down to the log line, and the two views built their tables from three copies of one header
+         - The four bugs above are what those copies were hiding: a field missing from one of them, a status read off the wrong object in five of them, a colour missing from one theme
+      - styles.css names the role of a colour rather than its value. Every rule whose colour differs between the themes was written out a second time as a dark mode copy of itself, 70 rules of it, so a colour occurring in fifteen rules had to be found in thirty. 265 colour literals become 117, of which 85 are the palette, and 102 lines mentioning dark mode become 7, with the computed style of both themes unchanged
+      - frontend.js is indented like the other 25 JavaScript files, four spaces throughout, where it mixed 1568 tab indented lines with 483 using spaces
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.4
