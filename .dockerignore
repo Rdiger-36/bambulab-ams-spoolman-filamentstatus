@@ -26,3 +26,4 @@ test/
 # capture-trays.js stay, they talk to the printer and are used inside the image.
 scripts/test-server/
 scripts/extract-bambu-profiles.js
+docker-compose.yml
