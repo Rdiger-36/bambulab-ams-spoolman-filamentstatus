@@ -3,7 +3,7 @@ import { RESTART_EXIT_CODE } from "./supervisor.js";
 import { settingsLoadIssues, spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { printers, ensurePrinterLogFile } from "./printers.js";
-import { checkAndSetVendor, checkAndSetExtraField } from "./spoolman.js";
+import { checkAndSetExtraField } from "./spoolman.js";
 import { closeMqtt, monitorSpoolman, monitorSpoolmanBackground, monitorPrinters } from "./mqtt.js";
 
 /**
@@ -11,14 +11,14 @@ import { closeMqtt, monitorSpoolman, monitorSpoolmanBackground, monitorPrinters 
  * endpoint changes at runtime.
  *
  * Kept out of backend.js because the settings API needs the same sequence: a
- * new endpoint means a new health check and a fresh vendor and extra field
- * bootstrap, and it may be the point at which a service that started without a
- * reachable Spoolman becomes usable.
+ * new endpoint means a new health check and a fresh extra field bootstrap, and
+ * it may be the point at which a service that started without a reachable
+ * Spoolman becomes usable.
  */
 
 /**
- * Waits for Spoolman, prepares the vendor and the "tag" extra field, then
- * starts the monitor loops.
+ * Waits for Spoolman, prepares the "tag" extra field, then starts the monitor
+ * loops.
  *
  * Never runs twice in parallel. Repeatedly changing the endpoint while the
  * health check is still waiting would otherwise stack loops that all keep
@@ -31,8 +31,14 @@ async function bootstrapSpoolman() {
     try {
         await monitorSpoolman();
 
-        if (!(await checkAndSetVendor()) || !(await checkAndSetExtraField())) {
-            console.error("Server", serverLogFilePath, "Error: Vendor or Extra Field 'tag' could not be set!");
+        // The "tag" extra field is the only link between a physical spool and
+        // its Spoolman record, so nothing this service does works without it.
+        // The "Bambu Lab" vendor used to be checked here too and held the
+        // monitor loops back when it could not be set, although only one thing
+        // needs it: see ensureVendor() in spoolman.js, which asks for it when a
+        // filament is actually created.
+        if (!(await checkAndSetExtraField())) {
+            console.error("Server", serverLogFilePath, "Error: Extra Field 'tag' could not be set!");
             return;
         }
 

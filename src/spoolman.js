@@ -29,20 +29,25 @@ function usedWeightFromSlot(slot) {
 }
 
 /**
+ * The log target for a write that belongs to no printer: the bootstrap ones.
+ */
+const SERVER = { printerName: "Server", logFilePath: serverLogFilePath };
+
+/**
  * Logs a failed Spoolman write in the block the log viewer looks for.
  *
  * The write paths all fail the same way and used to spell this block out one by
- * one. Two of those copies read the status off `error.filamentResponse` and
- * `error.spoolResponse`, neither of which a got error carries, so exactly the
- * lines meant to say why a creation failed printed "undefined undefined" plus a
- * stack trace.
+ * one. Four of those copies read the status off `error.filamentResponse`,
+ * `error.spoolResponse` and `error.manufacturerResponse`, none of which a got
+ * error carries, so exactly the lines meant to say why a write failed printed
+ * "undefined undefined" plus a stack trace instead of the Spoolman response.
  *
- * @param {object} spoolData - the UI spool, for the printer name and log file
+ * @param {object} target - a UI spool, or SERVER, for the name and the log file
  * @param {string} what - what failed, e.g. "Spool creation"
  * @param {Error} error - the got error
  */
-export function logSpoolmanFailure(spoolData, what, error) {
-    const { printerName, logFilePath } = spoolData;
+export function logSpoolmanFailure(target, what, error) {
+    const { printerName, logFilePath } = target;
 
     console.error(printerName, logFilePath, "    #####");
     console.error(printerName, logFilePath, `    ${what} failed:`, error.message);
@@ -183,41 +188,58 @@ export async function createSpoolRecord(payload) {
 }
 
 /**
- * Makes sure the "Bambu Lab" vendor exists and caches its id in shared state.
+ * The id of the "Bambu Lab" vendor, creating it when this Spoolman has none.
  *
- * Runs once at startup. Every filament this service creates is attached to that
- * vendor, so without it nothing can be created at all.
+ * Spoolman ships no vendors and creates none on its own: `POST /api/v1/filament`
+ * takes a `vendor_id` and nothing else, and the SpoolmanDB catalogue names the
+ * manufacturer as a string with no id behind it. So a filament built from a
+ * catalogue entry has no manufacturer unless this vendor exists here. Verified
+ * against Spoolman 0.26.1.
  *
- * @returns {Promise<boolean>} whether the vendor is available
+ * Asked at the point of use rather than at startup. It is needed by one thing,
+ * `createFilamentAndSpool()`, and holding the whole service back for it stopped
+ * the monitor loops over a vendor that merging, tag linking, the G-code booking
+ * and every manual assignment do not need. The answer is cached in
+ * `state.vendorID` and cleared when the endpoint changes, so the lookup happens
+ * once per Spoolman instance rather than once per filament.
+ *
+ * @returns {Promise<number>} the vendor id
+ * @throws when Spoolman cannot be read or the vendor cannot be created
  */
-export async function checkAndSetVendor() {
+export async function ensureVendor() {
+    if (state.vendorID) return state.vendorID;
+
     console.log("Server", serverLogFilePath, "Checking Vendors...");
+    let vendors;
     try {
         const response = await got(`${spoolmanUrl()}/api/v1/vendor`);
-        const vendors = JSON.parse(response.body);
-
-        for (const vendor of vendors) {
-            if (vendor.name === "Bambu Lab" || vendor.external_id === "Bambu Lab") {
-                state.vendorID = vendor.id;
-                break;
-            }
-        }
-
-        if (!state.vendorID) {
-            console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: false');
-            return await createVendor();
-        } else {
-            console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: true');
-            return true;
-        }
+        vendors = JSON.parse(response.body);
     } catch (error) {
         console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error);
         state.spoolmanStatus = "Disconnected";
         throw error;
     }
+
+    const existing = vendors.find(vendor => vendor.name === "Bambu Lab" || vendor.external_id === "Bambu Lab");
+    if (existing) {
+        state.vendorID = existing.id;
+        console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: true');
+        return state.vendorID;
+    }
+
+    console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: false');
+    return await createVendor();
 }
 
-/** Creates the "Bambu Lab" vendor and stores its id in shared state. */
+/**
+ * Creates the "Bambu Lab" vendor and stores its id in shared state.
+ *
+ * The empty spool weight is the vendor default the catalogue entries rely on:
+ * a Bambu Lab spool weighs 250 g, and a filament created from the catalogue
+ * carries no weight of its own for a spool to fall back on.
+ *
+ * @returns {Promise<number>} the id of the created vendor
+ */
 async function createVendor() {
     console.log("Server", serverLogFilePath, 'Creating Vendor "Bambu Lab"...');
     try {
@@ -232,17 +254,15 @@ async function createVendor() {
             responseType: "json",
         });
 
-        if (manufacturerResponse.body.id) {
-            state.vendorID = manufacturerResponse.body.id;
-            console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" successfully created!');
-            return true;
+        if (!manufacturerResponse.body.id) {
+            throw new Error("Spoolman created the vendor but answered without an id");
         }
-        return false;
+
+        state.vendorID = manufacturerResponse.body.id;
+        console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" successfully created!');
+        return state.vendorID;
     } catch (error) {
-        console.error("Server", serverLogFilePath, "#####");
-        console.error("Server", serverLogFilePath, "Vendor creation failed:", error.message);
-        console.error("Server", serverLogFilePath, "Error details:", error.manufacturerResponse?.statusCode, error.manufacturerResponse?.body || error.stack);
-        console.error("Server", serverLogFilePath, "#####");
+        logSpoolmanFailure(SERVER, "Vendor creation", error);
         throw error;
     }
 }
@@ -288,10 +308,7 @@ async function createExtraField() {
         console.log("Server", serverLogFilePath, 'Extra Field "tag" successfully created!');
         return true;
     } catch (error) {
-        console.error("Server", serverLogFilePath, "#####");
-        console.error("Server", serverLogFilePath, 'Extra Field "tag" creation failed:', error.message);
-        console.error("Server", serverLogFilePath, "Error details:", error.manufacturerResponse?.statusCode, error.manufacturerResponse?.body || error.stack);
-        console.error("Server", serverLogFilePath, "#####");
+        logSpoolmanFailure(SERVER, 'Extra Field "tag" creation', error);
         throw error;
     }
 }
@@ -390,6 +407,10 @@ export async function createFilamentAndSpool(spoolData) {
     let filamentId;
 
     try {
+        // The one caller that needs the vendor, so the lookup lives here rather
+        // than in the startup sequence. Cached after the first filament.
+        await ensureVendor();
+
         const filamentPayload = buildFilamentPayload(spoolData);
 
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/filament`);
