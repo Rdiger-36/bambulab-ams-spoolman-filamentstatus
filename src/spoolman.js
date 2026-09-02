@@ -99,6 +99,30 @@ export async function getSpoolmanSpools() {
     }
 }
 
+/**
+ * Fetches the archived spools alone.
+ *
+ * Spoolman leaves archived spools out of `/api/v1/spool`, which is what makes
+ * archiving useful in the first place, and exactly what would make this service
+ * create a second spool for a spool it archived while it still sits in the AMS.
+ * The tag lookup therefore has to see them, and only them: an archived spool is
+ * never a merge candidate and never gets a location.
+ *
+ * Returns an empty list on failure, like `getSpoolmanSpools()`, because it runs
+ * beside it in the same update and a Spoolman outage already pauses processing.
+ */
+export async function getArchivedSpoolmanSpools() {
+    try {
+        const response = await got(`${spoolmanUrl()}/api/v1/spool`, {
+            searchParams: { allow_archived: "true" },
+        });
+        return JSON.parse(response.body).filter(spool => spool.archived);
+    } catch (error) {
+        console.error("Server", serverLogFilePath, "Error fetching archived spools from Spoolman:", error);
+        return [];
+    }
+}
+
 /** Fetches the filaments created in this Spoolman instance, empty on failure. */
 export async function getSpoolmanInternalFilaments() {
     try {
@@ -558,6 +582,20 @@ export async function patchSpoolFields(spoolId, payload) {
     return response.body;
 }
 
+/**
+ * Archives or restores a spool. Rethrows, so a caller can say what failed.
+ *
+ * @param {number} spoolId - Spoolman spool id
+ * @param {boolean} archived - true archives it, false brings it back
+ */
+export async function setSpoolArchived(spoolId, archived) {
+    const response = await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, {
+        json: { archived },
+        responseType: "json",
+    });
+    return response.body;
+}
+
 /** Sets a spool's location, or clears it when passed an empty string. */
 export async function patchSpoolLocation(spoolId, location) {
     return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: { location } });
@@ -575,6 +613,7 @@ export async function patchSpoolLocation(spoolId, location) {
 export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
     const result = await got.put(`${spoolmanUrl()}/api/v1/spool/${spoolId}/use`, {
         json: { use_weight: usedGrams },
+        responseType: "json",
     });
 
     // The /use endpoint only accepts use_weight and use_length. A last_used sent
@@ -587,7 +626,10 @@ export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
         console.error("Server", serverLogFilePath, `Booked consumption for spool ${spoolId}, but could not set last_used:`, error.message);
     }
 
-    return result;
+    // The updated record, which is what the caller needs to see how much the
+    // booking left on the spool. Reading it back with a second request would
+    // race the next booking of a multi filament print.
+    return result.body;
 }
 
 /**

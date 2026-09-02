@@ -5,9 +5,10 @@ import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, convertAMSandSlot, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
+import { sleep, formatDate, formatInterval, convertAMSandSlot, spoolIsEmpty, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
     getSpoolmanSpools,
+    getArchivedSpoolmanSpools,
     getSpoolmanInternalFilaments,
     getSpoolmanExternalFilaments,
     createSpool,
@@ -15,11 +16,12 @@ import {
     mergeSpool,
     patchSpoolWeight,
     useSpoolWeight,
+    setSpoolArchived,
     logSpoolmanFailure,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
-import { createLocationSync } from "./location.js";
+import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
     processData,
     extractComparableTrayData,
@@ -201,6 +203,42 @@ export function externalSpoolUnits(print) {
 }
 
 /**
+ * Archives a spool that has just run empty, when the setting asks for it.
+ *
+ * Runs on the two places a weight is written: the consumption booking of a
+ * finished print and the legacy mode weight patch. Both already know what the
+ * spool holds afterwards, so nothing is read back and no AMS percentage is
+ * consulted, see `spoolIsEmpty()`.
+ *
+ * The location is cleared first. An archived spool drops out of
+ * `getSpoolmanSpools()`, so no later AMS update sees it in a slot and nothing
+ * would ever release the location it was given while it was in one.
+ *
+ * Failures are logged and swallowed: the weight it archives is already written,
+ * and losing the archive flag must not lose the booking.
+ *
+ * @param {object} printer - the runtime printer, for the log
+ * @param {object|null} spool - the Spoolman record as it is after the write
+ * @returns {Promise<boolean>} whether the spool was archived
+ */
+async function archiveWhenEmpty(printer, spool) {
+    if (!settings.ARCHIVE_EMPTY_SPOOLS) return false;
+    if (!spool?.id || spool.archived) return false;
+    if (!spoolIsEmpty(spool.remaining_weight, settings.EMPTY_SPOOL_THRESHOLD)) return false;
+
+    try {
+        await releaseSlotLocation(printer, spool);
+        await setSpoolArchived(spool.id, true);
+        spool.archived = true;
+        console.log(printer.name, printer.logFilePath, `    Spool-ID ${spool.id} is empty (${Math.round(spool.remaining_weight)}g left), archived in Spoolman`);
+        return true;
+    } catch (err) {
+        console.error(printer.name, printer.logFilePath, `    Failed to archive empty Spool-ID ${spool.id}:`, err.message);
+        return false;
+    }
+}
+
+/**
  * Books the consumed grams in Spoolman for each filament of a finished print.
  *
  * A slot is only booked when we actually know which physical spool sits in it:
@@ -281,8 +319,9 @@ async function bookConsumption(printer, consumption, state) {
 
         const { id: spoolId } = matches[0];
         try {
-            await useSpoolWeight(spoolId, grams, lastUsed);
+            const booked = await useSpoolWeight(spoolId, grams, lastUsed);
             console.log(printer.name, printer.logFilePath, `[Print] Booked ${grams}g for spool ${spoolId} (${matches[0].amsId}, ${idx} ${type} ${color}${matches[0].mapped ? ", manually assigned" : ""})`);
+            await archiveWhenEmpty(printer, booked);
         } catch (err) {
             console.error(printer.name, printer.logFilePath, `[Print] Failed to book consumption for spool ${spoolId}: ${err.message}`);
         }
@@ -368,6 +407,10 @@ async function handleMqttMessage(printer, topic, message) {
 
                         let externalFilaments = await getSpoolmanExternalFilaments();
                         let internalFilaments = await getSpoolmanInternalFilaments();
+                        // Only fetched when the setting can produce archived
+                        // spools in the first place, so an install that does not
+                        // archive pays nothing for the guard.
+                        let archivedSpools = settings.ARCHIVE_EMPTY_SPOOLS ? await getArchivedSpoolmanSpools() : [];
 
                         const spoolsChanged = await haveSpoolDataChanged(spools, state.lastSpoolData);
                         // Legacy mode leaves the holder out. Its weight comes
@@ -401,7 +444,7 @@ async function handleMqttMessage(printer, topic, message) {
                                 }
 
                                 for (const slot of ams.tray) {
-                                    const mutated = await processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime, locationSync);
+                                    const mutated = await processSlot(printer, ams, slot, spools, archivedSpools, externalFilaments, internalFilaments, prevByAmsId, currentTime, locationSync);
 
                                     // Only refetch when this slot actually created/merged a
                                     // spool or filament in Spoolman. Otherwise the cached
@@ -411,6 +454,7 @@ async function handleMqttMessage(printer, topic, message) {
                                         spools = await getSpoolmanSpools();
                                         externalFilaments = await getSpoolmanExternalFilaments();
                                         internalFilaments = await getSpoolmanInternalFilaments();
+                                        if (settings.ARCHIVE_EMPTY_SPOOLS) archivedSpools = await getArchivedSpoolmanSpools();
                                     }
                                 }
                             }
@@ -548,6 +592,8 @@ export function waitedLongEnoughForRemain(printer, amsId, slot) {
  * @param {object} ams - the AMS unit the slot belongs to
  * @param {object} slot - the normalised slot
  * @param {object[]} spools - Spoolman spools, as fetched for this AMS update
+ * @param {object[]} archivedSpools - the archived spools, empty unless the
+ *     archive setting is on
  * @param {object[]} externalFilaments - the SpoolmanDB catalogue
  * @param {object[]} internalFilaments - filaments in this Spoolman instance
  * @param {object} prevByAmsId - the previous UI spools, keyed by slot label
@@ -557,7 +603,7 @@ export function waitedLongEnoughForRemain(printer, amsId, slot) {
  * @returns {Promise<boolean>} whether Spoolman was mutated, which tells the
  *   caller its cached lists are stale and have to be refetched
  */
-async function processSlot(printer, ams, slot, spools, externalFilaments, internalFilaments, prevByAmsId, currentTime, locationSync) {
+async function processSlot(printer, ams, slot, spools, archivedSpools, externalFilaments, internalFilaments, prevByAmsId, currentTime, locationSync) {
     const amsId = convertAMSandSlot(ams.id, slot.id);
     const validSlot = Object.keys(slot).length > 6;
 
@@ -597,12 +643,14 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         // Legacy mode has no use for one: it takes the weight from the RFID
         // percentage, which a chipless spool does not report, so the slot stays
         // read-only exactly as it was before assignments existed.
-        const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
+        const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools, archivedSpools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         // The assignment is the only link a chipless spool has, so it is also
         // the only thing that can give it a location. Nothing did before, which
-        // is why an assigned 3rd party spool never got one at all.
-        locationSync.claim(amsId, mappedSpool);
+        // is why an assigned 3rd party spool never got one at all. An archived
+        // spool is left without one on purpose: archiving cleared it, and no
+        // later update would clear it a second time.
+        if (!mappedSpool?.archived) locationSync.claim(amsId, mappedSpool);
         releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
         if (hasSpoolUiChanged(newUiSpool, prevByAmsId[newUiSpool.amsId])) {
             broadcastSlotUpdate(printer.id, newUiSpool);
@@ -684,6 +732,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                         await patchSpoolWeight(spool.id, remainingWeight, currentTime);
                         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${currRemain}%) [[ ${slot.tray_uuid} ]]`);
                         console.log(printer.name, printer.logFilePath, `    Updated Spool-ID ${spool.id} => ${spool.filament.name}`);
+                        // The record is the one this pass keeps working with, so
+                        // what was just written has to be on it before anything
+                        // decides whether the spool is empty.
+                        spool.remaining_weight = remainingWeight;
+                        await archiveWhenEmpty(printer, spool);
                     } catch (err) {
                         logSpoolmanFailure({ printerName: printer.name, logFilePath: printer.logFilePath }, "Spool update", err);
                     }
@@ -703,6 +756,23 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 break;
             }
         }
+    }
+
+    // An archived spool is gone from `spools`, which is what archiving is for,
+    // and the slot it still sits in would therefore look like a spool Spoolman
+    // has never seen: automatic mode would create a second record for the same
+    // tag on the very next update. The archived list is checked before any of
+    // that, and the slot is left alone.
+    const archivedSpool = found ? null : spoolWithTag(archivedSpools, slot.tray_uuid);
+
+    if (archivedSpool) {
+        const newUiSpool = buildArchivedSpool(printer, amsId, slot, archivedSpool);
+        releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
+        if (hasSpoolUiChanged(newUiSpool, prevByAmsId[amsId])) {
+            console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} [[ ${slot.tray_uuid} ]] => Spool-ID ${archivedSpool.id} (archived, empty)`);
+        }
+        pushSlotUpdate(printer, newUiSpool, prevByAmsId);
+        return false;
     }
 
     if (!found) {
@@ -813,7 +883,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // booking which spool to charge, and legacy books nothing: it writes the
     // weight straight onto the tag-connected spool. Offering it there would be
     // a button that changes nothing.
-    const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
+    const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools, archivedSpools);
     if (mappedSpool) {
         existingSpool = mappedSpool;
         option = SLOT_OPTIONS.UNASSIGN;
@@ -827,7 +897,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     // Only a spool this slot is really connected to may claim it. `existingSpool`
     // can also be a mere merge/creation candidate found by filament match, which
     // is not in the AMS at all and must not be given its location.
-    if (found || mappedSpool) locationSync.claim(amsId, existingSpool);
+    if ((found || mappedSpool) && !existingSpool?.archived) locationSync.claim(amsId, existingSpool);
     releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
 
     const newUiSpool = {
@@ -843,6 +913,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
         // candidates (findExistingSpool).
         connectedViaTag: found,
         connectedViaMapping: !!mappedSpool,
+        archived: !!existingSpool?.archived,
         option,
         enableButton,
         printerName: printer.name,
@@ -901,6 +972,7 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // assignment below, not from an RFID tag.
         connectedViaTag: false,
         connectedViaMapping: !!mappedSpool,
+        archived: !!mappedSpool?.archived,
         correctedWeight,
         // Legacy mode offers nothing here. Its weight comes from the RFID
         // percentage, which this spool does not report, so there is no action
@@ -915,16 +987,77 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
 }
 
 /**
+ * The spool in `list` whose Spoolman `extra.tag` holds this slot's `tray_uuid`.
+ *
+ * The tag is stored JSON encoded, and a hand edited one that is not decodes to
+ * nothing rather than throwing here, which would otherwise take down the whole
+ * AMS update for one bad record.
+ *
+ * @param {object[]} list - Spoolman spools to search
+ * @param {string} trayUuid - the slot's tag
+ * @returns {object|null}
+ */
+function spoolWithTag(list, trayUuid) {
+    if (!trayUuid) return null;
+
+    return (list || []).find(spool => {
+        if (!spool?.extra?.tag) return false;
+        try {
+            return JSON.parse(spool.extra.tag) === trayUuid;
+        } catch {
+            return false;
+        }
+    }) || null;
+}
+
+/**
+ * Builds the UI entry for a slot still holding a spool that was archived
+ * because it ran empty.
+ *
+ * No action is offered: creating or merging would give the same physical spool
+ * a second record, and assigning another spool to a slot that reports its own
+ * tag is not what the mapping is for. Taking the spool out is the answer, and
+ * restoring it in Spoolman is what brings the slot back to normal.
+ */
+function buildArchivedSpool(printer, amsId, slot, archivedSpool) {
+    return {
+        amsId,
+        slot,
+        mergeableSpool: null,
+        matchingInternalFilament: null,
+        matchingExternalFilament: null,
+        existingSpool: archivedSpool,
+        // Deliberately not a connection: a booking onto an archived spool would
+        // bring it back into the numbers the user just archived away, and the
+        // location sync would hand it the slot it is sitting in again.
+        connectedViaTag: false,
+        connectedViaMapping: false,
+        archived: true,
+        correctedWeight: archivedSpool.remaining_weight ?? null,
+        option: SLOT_OPTIONS.NONE,
+        enableButton: "false",
+        printerName: printer.name,
+        logFilePath: printer.logFilePath,
+        slotState: "Loaded (archived)",
+        error: false,
+    };
+}
+
+/**
  * Looks up the manually assigned Spoolman spool for a slot. Returns null when
  * nothing is assigned, when the assignment went stale (different filament in
  * the slot now, getMapping drops it), or when the assigned spool no longer
  * exists in Spoolman.
  */
-function resolveMappedSpool(printer, amsId, slot, spools) {
+function resolveMappedSpool(printer, amsId, slot, spools, archivedSpools) {
     const mapping = getMapping(printer.id, amsId, slot);
     if (!mapping) return null;
 
-    const spool = (spools || []).find(s => s.id === mapping.spoolId);
+    // The archived list is searched as well, or archiving an assigned spool
+    // would read as "the spool is gone from Spoolman" and throw the assignment
+    // away, which is not something the user asked for and cannot be undone by
+    // restoring the spool.
+    const spool = [...(spools || []), ...(archivedSpools || [])].find(s => s.id === mapping.spoolId);
     if (!spool) {
         console.log(printer.name, printer.logFilePath, `[Mapping] ${amsId}: assigned spool ${mapping.spoolId} no longer exists in Spoolman, dropping assignment`);
         clearMapping(printer.id, amsId);

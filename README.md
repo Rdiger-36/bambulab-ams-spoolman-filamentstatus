@@ -185,6 +185,16 @@ From then on the slot is linked and the consumption of every print is booked ont
 
 Continues up to `D3` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT.
 
+### Archiving empty spools
+
+Off by default. **Settings → Synchronisation → Archive empty spools** archives a spool in Spoolman as soon as it runs empty, so a used up spool leaves the inventory without being deleted. **Empty threshold** (collapsed, advanced) says how many grams left still count as empty; zero by default.
+
+What counts is the weight Spoolman holds after this service wrote to it: the consumption booked at the end of a print, or, in legacy mode, the weight derived from the RFID reading. The AMS remain percentage is never the trigger on its own. It is an estimate and reaches 0 % while there is still filament on the spool, which is why the default threshold is the weight itself rather than the percentage.
+
+Nothing is deleted. An archived spool can be restored in Spoolman, or in the spool dialog of the Web UI, which archives and restores by hand in the same row.
+
+A spool archived while it is still in its slot keeps being recognised by its RFID tag. The slot then reads **Loaded (archived)** and offers no action until the spool is taken out or restored, so the automatic mode cannot create a second record for it.
+
 ## Web UI
 
 Reachable on `http://<host>:4000`. No authentication, see the warning under [Settings](#settings).
@@ -243,7 +253,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | :---- | :---- |
 | **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
 | **Tracking** | Operation mode and [legacy mode](#legacy-mode) |
-| **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool |
+| **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool, [archiving empty spools](#archiving-empty-spools) |
 | **Printer connection** | Offline check interval and the retry limit |
 | **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |

@@ -605,7 +605,7 @@ export function registerRoutes(app, printers) {
         }
     });
 
-    // The three fields the detail dialog may correct by hand. Everything else
+    // The four fields the detail dialog may correct by hand. Everything else
     // about a spool is either derived, owned by this service, or belongs to the
     // filament, so it is edited in Spoolman itself.
     app.patch("/api/spoolman/spool/:id", async (req, res) => {
@@ -641,6 +641,17 @@ export function registerRoutes(app, printers) {
 
         if (req.body?.comment !== undefined) payload.comment = String(req.body.comment).trim();
         if (req.body?.lotNr !== undefined) payload.lot_nr = String(req.body.lotNr).trim();
+
+        // Archiving by hand is the counterpart of the automatic one, and the way
+        // back from it: a spool archived too early is restored from the same
+        // row. Only a real boolean is taken, so a string of "false" cannot
+        // archive a spool.
+        if (req.body?.archived !== undefined) {
+            if (typeof req.body.archived !== "boolean") {
+                return res.status(400).json({ ok: false, error: "The archived flag must be true or false" });
+            }
+            payload.archived = req.body.archived;
+        }
 
         if (!Object.keys(payload).length) {
             return res.status(400).json({ ok: false, error: "Nothing to change" });
@@ -1283,6 +1294,9 @@ function refreshCachedSpool(printers, spool) {
             // Legacy mode owns this field from the AMS reading, and the edit is
             // refused there, so following the spool is right in both modes.
             if (uiSpool.correctedWeight != null) uiSpool.correctedWeight = spool.remaining_weight ?? null;
+            // Archiving or restoring by hand changes what the slot says about
+            // itself, and the next AMS update is up to two minutes away.
+            uiSpool.archived = !!spool.archived;
             broadcastSlotUpdate(printer.id, uiSpool);
         }
     }
