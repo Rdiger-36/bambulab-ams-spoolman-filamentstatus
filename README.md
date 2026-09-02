@@ -75,7 +75,9 @@ Pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` retrieve
 - Real-time AMS status for every connected AMS, on any number of printers
 - Consumption tracked from the sliced G-code, so 3rd party spools are covered too
 - Automatic merging and creating of spools and filaments in Spoolman, or manually per click
-- Manual assignment of a Spoolman spool to an AMS slot for spools the printer cannot identify
+- Manual assignment of a Spoolman spool to an AMS slot for spools the printer cannot identify, checked against the material the printer reports
+- A detail dialog per slot: everything Spoolman holds about the spool and its filament, next to what the printer reports, with the remaining weight, lot number and comment editable in place
+- New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
 - Web UI with print dashboard, printer management, settings and log viewer, no container restart needed
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
 
@@ -206,6 +208,12 @@ Under each spool stands whether its consumption can be booked:
 or creating filament and spool right there, pre-filled from what the AMS reports and from Spoolman's material catalogue:
 
 ![Create a spool for a slot](docs/images/assign-dialog-create.png)
+
+The picker opens on the spools that fit the slot, same material and closest colour first, and searches the rest by name, vendor, material or location. A spool of another material can still be chosen, and says so: the material a slot reports can be wrong, and only you know what is really in there.
+
+The creation form fills a new filament in from the SpoolmanDB catalogue, narrowed down in three steps, manufacturer, material and then the filament itself. Picking one fills in the colours, the density, the diameter, the temperatures and both weights, none of which a chipless spool reports. A filament that already exists in your Spoolman is used instead of created a second time. Multi colour spools are entered as what they are, one row per colour plus the direction they run in.
+
+Clicking the filament name of a slot opens what Spoolman and the printer each hold about it. The Spool tab carries the whole Spoolman record next to the AMS side of the slot, the Filament tab the filament behind it, and both link to their Spoolman page. Remaining weight, lot number and comment can be corrected in place, each behind a pencil in its row. The remaining weight stays read only while something else is about to write it, in legacy mode and while a print is running, and it cannot be set above what the spool can hold.
 
 In manual mode the merge and create actions of a Bambu Lab spool work the same way: a button per slot, opening a dialog with what would be written to Spoolman.
 

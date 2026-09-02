@@ -1,11 +1,43 @@
 -----------------------------------------------------------------------------------------------
 Unreleased
+   - New Features:
+      - Clicking the filament name of a slot opens a dialog with everything the printer and Spoolman hold about it
+         - Tab "Spool": the whole Spoolman record, remaining and used weight, initial and empty spool weight, location, price, the dates and the extra.tag, next to what the AMS reports for the slot, its profile, material, colours, serial number and RFID remain
+         - Tab "Filament": the filament behind it, material, colours, density, diameter, temperatures and both weights. Read only, because a filament is shared by every spool of its kind and belongs in Spoolman itself
+         - Each tab links to its own Spoolman page
+         - The remaining weight, the lot number and the comment can be corrected in place, each behind a pencil in its row
+         - The remaining weight is refused where something else is about to write it: legacy mode writes it from the AMS RFID reading on the next slot change, and a running print books its consumption onto the spool when the job ends. Both are enforced in the route as well, so a direct call cannot do what the dialog hides
+         - A corrected weight cannot exceed what the spool can hold, checked against the filament's full weight and the spool's own initial weight, in the browser and again on the server
+         - An edited spool is written into the cached slot data and pushed over SSE, so the table shows the new weight instead of the one from before the edit
+      - A spool assignment is checked against the material the printer reports for the slot
+         - Nothing stopped a PLA slot from being linked to an ABS spool, and the consumption of that slot was then booked onto it. The picker marks a spool whose material does not fit and names the difference once one is selected
+         - It stays a warning: the material a slot reports can be wrong, and only the user knows what is really in there
+         - Materials are compared as families, so "PLA" fits "PLA Silk", "PLA+" and "PLA-CF", and "PETG" fits "PETG-CF". PA6 and PA12 are one family while PPA is not one of them, and PET-CF is not PETG
+         - The material behind the profile the AMS reports comes from the Bambu Studio filament ids, which is the finer of the two: the AMS says "PLA" for a carbon filled spool as well, its profile says "PLA-CF"
+         - The dialog names both sides, Material (AMS) against Material (Spoolman) and Colour (AMS) against Colour (Spoolman), and marks the AMS one when the two disagree
+      - The assignment picker opens on the spools that fit the slot instead of on the whole inventory
+         - Suggested first: same material family, closest colour, at most six. Colour distance is measured in RGB, every colour against the nearest one on the other side and in both directions, so a two colour spool does not count as identical to a single colour one because one of its colours matches
+         - Everything else follows under "Other spools", and a search field covers id, vendor, material, name, location, lot number and comment
+         - Only a fitting material is ever suggested: sorting a whole inventory by colour alone would put an ABS spool at the top of a PLA slot
+      - A new filament can be filled in from the SpoolmanDB catalogue
+         - Narrowed down in three steps, manufacturer, then the materials that manufacturer sells, then its entries, each an input with its own suggestions rather than one list of seven thousand
+         - Picking an entry fills in manufacturer, material, name, colours, density, diameter, temperatures and both weights, none of which can be read off a chipless spool
+         - What this Spoolman already holds wins: an entry that exists here is selected instead of created a second time, and a filament of the same name that only differs in its material is named rather than quietly duplicated. The manufacturer and material lists work the same way round, local first and the catalogue behind it
+         - Filtering happens on the server, the catalogue is a few megabytes, and it is fetched once and reused for ten minutes rather than pulled per keystroke
+      - Multi colour filaments can be created
+         - The colour field is a list with one row per colour plus the direction they run in, prefilled from every colour the AMS reports for the slot rather than from the first one alone, which created a plain black filament for a spool that is black and red
+         - Written as multi_color_hexes plus the direction for more than one colour, with color_hex left empty, which is the shape Spoolman accepts
+      - The colour swatches follow the linked Spoolman spool where there is one and the AMS colours where there is not, so a linked slot no longer disagrees with the spool page it links to
    - Fixes:
+      - A confirmation dialog opens with its button usable. The dialog is shared by every action in the table, the create form disables its button while it saves and then closes the dialog, so after creating a filament and spool the Unassign dialog opened, said the right thing and did nothing at all until the page was reloaded
       - The Web UI no longer flashes the light theme when a page is opened in dark mode. The class that carries the theme was set by menu.js at the end of the body, so the browser painted the light stylesheet first and switched afterwards, on every page change. A small script in each page head now sets it on the html element before the first paint, and the stylesheet matches it there
       - A slot holding a spool the printer cannot identify no longer draws a swatch out of the placeholder the printer sends. The dashboard turned the literal "N/A" into a colour and handed "#N/A" to CSS, where the server had always dropped it
       - The classic AMS table (legacy MQTT mode) uses the full width of the page again. Only the first four columns were width-synced across the tables, so the action column was the only one left without a fixed width and swallowed all the leftover space of the full-width table: the button sat in the middle of a wide empty cell while the other columns were crammed against the left edge. The action column is synced with the rest now, the same way the G-code table already did it
       - A spool the printer cannot identify is labelled "3rd party" in both views. The classic table marked it with nothing but the warning triangle in its State column, which names no reason, and the G-code view did not mark it at all. The triangle now carries the reason as a tooltip as well
    - Development:
+      - public/materials.js holds the Bambu Studio filament ids the AMS reports as tray_info_idx, each with the material its profile prints, plus the rule for which materials count as the same stuff
+         - Read out of an installed Bambu Studio by scripts/extract-bambu-profiles.js, so the table can be regenerated when Bambu ships new filaments
+         - test/materials.test.js covers the family rules and the table, test/catalogue.test.js the catalogue filter and its facets
       - The colour and weight rules the dashboard and the server both apply live in one file, public/shared.js, imported by both. Four functions in public/frontend.js were a second implementation of them, and the placeholder above is what a second implementation drifting apart looks like
          - It sits under public/ because that is the half that cannot import from anywhere else: no build step, no dependencies, served straight from disk. The server imports it from there, so the arrow points one way and there is nothing to keep in step
          - test/shared.test.js covers it with plain node:test, which is the first coverage anything in public/ has had. It also asserts that the server re-exports those functions rather than holding a copy, and that public/frontend.js still imports them
