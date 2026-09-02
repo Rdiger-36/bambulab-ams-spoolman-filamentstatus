@@ -670,11 +670,50 @@ document.addEventListener("DOMContentLoaded", () => {
 	    };
 	}
 
+	// Keeps the first spelling of every entry and drops the later duplicates, so
+	// the local "PLA" is not listed a second time as the catalogue's "pla".
+	function uniqueByCase(values) {
+	    const seen = new Set();
+	    const unique = [];
+
+	    for (const value of values) {
+	        const key = String(value ?? "").trim().toLowerCase();
+	        if (!key || seen.has(key)) continue;
+	        seen.add(key);
+	        unique.push(String(value).trim());
+	    }
+	    return unique;
+	}
+
+	// Runs the last call of a burst, once the typing has stopped.
+	function debounce(fn, ms = 250) {
+	    let timer = null;
+	    return (...args) => {
+	        clearTimeout(timer);
+	        timer = setTimeout(() => fn(...args), ms);
+	    };
+	}
+
+	function sameText(a, b) {
+	    return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+	}
+
+	/** The colours a catalogue entry carries, in the shape the swatches use. */
+	function catalogueColors(entry) {
+	    if (entry.color_hexes?.length) return entry.color_hexes.map(c => normColor(c).toLowerCase());
+	    return entry.color_hex ? [normColor(entry.color_hex).toLowerCase()] : [];
+	}
+
 	// Values a chipless spool does report, used to pre-fill the form.
+	//
+	// The AMS reports every colour of a multi colour spool, so all of them are
+	// offered: taking only `tray_color` created a plain black spool for a
+	// filament that is black and red.
 	function slotDefaults(slot) {
+	    const colors = slotColors(slot).map(c => normColor(c));
 	    return {
 	        material: slot.tray_type || "",
-	        color: normColor(slot.tray_color) || "000000",
+	        colors: colors.length ? colors : [normColor(slot.tray_color) || "000000"],
 	    };
 	}
 
@@ -685,8 +724,18 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const slot = amsSpool.slot || {};
 	    const defaults = slotDefaults(slot);
 
-	    // Materials already used here first, then everything Spoolman knows about
-	    const materials = [...new Set([...(lookups.materials || []), ...(lookups.externalMaterials || []).map(m => m.material)])];
+	    // What this Spoolman already holds comes first in every list, and the
+	    // SpoolmanDB catalogue fills in what it does not: a first spool would
+	    // otherwise be typed into empty fields with nothing to pick from.
+	    const materials = uniqueByCase([
+	        ...(lookups.materials || []),
+	        ...(lookups.externalMaterials || []).map(m => m.material),
+	    ]);
+
+	    const vendors = uniqueByCase([
+	        ...(lookups.vendors || []).map(v => v.name),
+	        ...(lookups.externalVendors || []),
+	    ]);
 
 	    const filamentOptions = (lookups.filaments || [])
 	        .map(f => `<option value="${f.id}">#${f.id} ${escapeHtml([f.vendor?.name, f.material, f.name].filter(Boolean).join(" · "))}</option>`)
@@ -704,10 +753,32 @@ document.addEventListener("DOMContentLoaded", () => {
 	            </label>
 
 	            <div id="sp-filament-fields">
+	                <div class="sp-wide sp-catalogue">
+	                    <div class="sp-catalogue-title">Take the values from the filament catalogue</div>
+	                    <div class="sp-catalogue-steps">
+	                        <label class="sp-field">
+	                            <span>1. Manufacturer</span>
+	                            <input id="sp-cat-vendor" list="sp-cat-vendors" autocomplete="off" placeholder="all manufacturers">
+	                            <datalist id="sp-cat-vendors">${(lookups.externalVendors || []).map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
+	                        </label>
+	                        <label class="sp-field">
+	                            <span>2. Material</span>
+	                            <input id="sp-cat-material" list="sp-cat-materials" autocomplete="off" placeholder="all materials"
+	                                value="${escapeHtml(defaults.material)}">
+	                            <datalist id="sp-cat-materials"></datalist>
+	                        </label>
+	                        <label class="sp-field">
+	                            <span>3. Filament</span>
+	                            <input id="sp-cat-filament" list="sp-cat-filaments" autocomplete="off" placeholder="pick one to fill the form">
+	                            <datalist id="sp-cat-filaments"></datalist>
+	                        </label>
+	                    </div>
+	                    <small class="gc-muted" id="sp-catalogue-hint"></small>
+	                </div>
 	                <label class="sp-field">
 	                    <span>Manufacturer</span>
 	                    <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu">
-	                    <datalist id="sp-vendors">${(lookups.vendors || []).map(v => `<option value="${escapeHtml(v.name)}">`).join("")}</datalist>
+	                    <datalist id="sp-vendors">${vendors.map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
 	                    <small class="gc-muted" id="sp-vendor-hint"></small>
 	                </label>
 	                <label class="sp-field">
@@ -720,12 +791,17 @@ document.addEventListener("DOMContentLoaded", () => {
 	                    <span>Name</span>
 	                    <input id="sp-name" placeholder="e.g. Galaxy Black">
 	                </label>
-	                <label class="sp-field">
+	                <label class="sp-field sp-wide">
 	                    <span>Colour</span>
-	                    <span class="sp-colour">
-	                        <input type="color" id="sp-colour-pick" value="#${defaults.color}">
-	                        <input id="sp-colour" value="${defaults.color}" maxlength="6" autocomplete="off">
-	                    </span>
+	                    <div id="sp-colours" class="sp-colours"></div>
+	                    <div class="sp-colour-actions">
+	                        <button type="button" class="btn btn-small" id="sp-colour-add">Add a colour</button>
+	                        <select id="sp-direction" title="How the colours run along the filament">
+	                            <option value="coaxial">coaxial</option>
+	                            <option value="longitudinal">longitudinal</option>
+	                        </select>
+	                    </div>
+	                    <small class="gc-muted" id="sp-colour-hint"></small>
 	                </label>
 	                <label class="sp-field">
 	                    <span>Density * (g/cm³)</span>
@@ -783,6 +859,143 @@ document.addEventListener("DOMContentLoaded", () => {
 	        $("sp-filament-fields").style.display = e.target.value ? "none" : "";
 	    });
 
+	    // The SpoolmanDB catalogue, narrowed down in steps rather than searched in
+	    // one go: it holds around seven thousand entries, and reading a list of
+	    // that length is what picking a manufacturer first avoids. Every step is
+	    // an input with its own suggestions, so a name can also just be typed.
+	    //
+	    // Entries are ordered by how close their colour is to the one the printer
+	    // reports for the slot. A chipless spool tells the AMS its colour and
+	    // nothing else, so that is the strongest hint available, and picking an
+	    // entry fills in the density, the temperatures and the weights that
+	    // cannot be read off the spool at all.
+	    const slotColorSet = slotColors(slot);
+	    const catalogue = new Map();
+	    // Answers can come back out of order, and the first load is the slowest
+	    // one: without this the unfiltered list of the initial load landed after
+	    // the narrowed one and put the whole catalogue back on screen. The two
+	    // lists count separately, they are loaded together and neither of them
+	    // supersedes the other.
+	    const pending = { materials: 0, entries: 0 };
+
+	    const catalogueQuery = (extra = {}) => {
+	        const params = new URLSearchParams();
+	        const vendor = $("sp-cat-vendor").value.trim();
+	        const material = $("sp-cat-material").value.trim();
+	        if (vendor) params.set("manufacturer", vendor);
+	        if (material) params.set("material", material);
+	        for (const [key, value] of Object.entries(extra)) params.set(key, value);
+	        return params;
+	    };
+
+	    const askCatalogue = async (params) => {
+	        try {
+	            return await fetchJson(`./api/spoolman/external/filaments?${params}`);
+	        } catch {
+	            // The form works without it, so a catalogue that cannot be reached
+	            // costs the suggestions and nothing else.
+	            $("sp-catalogue-hint").textContent = "The filament catalogue could not be loaded";
+	            return null;
+	        }
+	    };
+
+	    const fillDatalist = (id, values) => {
+	        document.getElementById(id).innerHTML = values
+	            .map(value => `<option value="${escapeHtml(value)}">`).join("");
+	    };
+
+	    // The materials the chosen manufacturer actually sells.
+	    const loadMaterials = async () => {
+	        const request = ++pending.materials;
+	        const materials = await askCatalogue(catalogueQuery({ facet: "material" }));
+	        if (materials && request === pending.materials) fillDatalist("sp-cat-materials", materials);
+	    };
+
+	    // The entries left once manufacturer and material have been narrowed down.
+	    const loadEntries = async () => {
+	        const request = ++pending.entries;
+	        const entries = await askCatalogue(catalogueQuery({ limit: 500 }));
+	        if (!entries || request !== pending.entries) return;
+
+	        const ordered = [...entries].sort((a, b) =>
+	            colorSetDistance(slotColorSet, catalogueColors(a)) - colorSetDistance(slotColorSet, catalogueColors(b)));
+
+	        catalogue.clear();
+	        for (const entry of ordered) {
+	            // Names repeat across manufacturers, so the label carries all
+	            // three parts and is what the input is matched against.
+	            catalogue.set([entry.manufacturer, entry.material, entry.name].filter(Boolean).join(" · "), entry);
+	        }
+
+	        fillDatalist("sp-cat-filaments", [...catalogue.keys()]);
+	        $("sp-catalogue-hint").textContent = ordered.length
+	            ? `${ordered.length}${ordered.length === 500 ? "+" : ""} entries, closest colour to this slot first`
+	            : "Nothing in the catalogue matches this manufacturer and material";
+	    };
+
+	    // Picking an entry fills the form. A filament this Spoolman already holds
+	    // wins over the catalogue: creating a second one that only differs in its
+	    // id is how an inventory ends up with four "Sunlu PLA Grey".
+	    const applyCatalogueEntry = () => {
+	        const entry = catalogue.get($("sp-cat-filament").value.trim());
+	        if (!entry) return;
+
+	        const sameVendorAndName = (lookups.filaments || []).filter(f =>
+	            sameText(f.name, entry.name) && sameText(f.vendor?.name, entry.manufacturer));
+	        const local = sameVendorAndName.find(f => sameText(f.material, entry.material));
+
+	        if (local) {
+	            $("sp-filament").value = String(local.id);
+	            $("sp-filament-fields").style.display = "none";
+	            showNotification(`This filament already exists in Spoolman as #${local.id}, using it.`, "success");
+	            return;
+	        }
+
+	        $("sp-vendor").value = entry.manufacturer ?? "";
+	        $("sp-material").value = entry.material ?? "";
+	        $("sp-name").value = entry.name ?? "";
+	        if (entry.density != null) $("sp-density").value = entry.density;
+	        if (entry.diameter != null) $("sp-diameter").value = entry.diameter;
+	        if (entry.extruder_temp != null) $("sp-extruder-temp").value = entry.extruder_temp;
+	        if (entry.bed_temp != null) $("sp-bed-temp").value = entry.bed_temp;
+	        if (entry.weight != null) $("sp-weight").value = entry.weight;
+	        if (entry.spool_weight != null) $("sp-spool-weight").value = entry.spool_weight;
+	        if (entry.weight != null) $("sp-initial-weight").value = entry.weight;
+
+	        const colors = catalogueColors(entry);
+	        if (colors.length) {
+	            drawColours(colors.map(c => normColor(c)));
+	            if (entry.multi_color_direction) $("sp-direction").value = entry.multi_color_direction;
+	        }
+
+	        const notes = ["Filled in from the catalogue"];
+	        if (sameVendorAndName.length) {
+	            notes.push(`your Spoolman already holds #${sameVendorAndName[0].id} ${sameVendorAndName[0].material ?? ""} of this name`.trim());
+	        }
+	        $("sp-catalogue-hint").textContent = notes.join(", ");
+	    };
+
+	    // A step that changes invalidates the ones below it, otherwise a filament
+	    // picked for one manufacturer stays in the field for the next.
+	    const onVendorStep = debounce(() => {
+	        $("sp-cat-filament").value = "";
+	        loadMaterials();
+	        loadEntries();
+	    });
+
+	    const onMaterialStep = debounce(() => {
+	        $("sp-cat-filament").value = "";
+	        loadEntries();
+	    });
+
+	    $("sp-cat-vendor").addEventListener("input", onVendorStep);
+	    $("sp-cat-material").addEventListener("input", onMaterialStep);
+	    $("sp-cat-filament").addEventListener("input", applyCatalogueEntry);
+	    $("sp-cat-filament").addEventListener("change", applyCatalogueEntry);
+
+	    loadMaterials();
+	    loadEntries();
+
 	    // Density is required and cannot be read off the spool, so fill it (and the
 	    // temperatures) from Spoolman's material catalogue as soon as one matches.
 	    const applyMaterialDefaults = () => {
@@ -810,12 +1023,57 @@ document.addEventListener("DOMContentLoaded", () => {
 	            : "";
 	    });
 
-	    // Keep the picker and the hex field in sync
-	    $("sp-colour-pick").addEventListener("input", () => { $("sp-colour").value = $("sp-colour-pick").value.replace("#", "").toUpperCase(); });
-	    $("sp-colour").addEventListener("input", () => {
-	        const hex = normColor($("sp-colour").value);
-	        if (/^[0-9A-F]{6}$/.test(hex)) $("sp-colour-pick").value = `#${hex}`;
+	    // A filament can carry more than one colour, and both the AMS and the
+	    // catalogue report all of them. Spoolman keeps them as a list plus the
+	    // direction they run in, so the form does the same: one row per colour,
+	    // and the direction only asked for once there is more than one.
+	    const colourRow = (hex) => `
+	        <span class="sp-colour">
+	            <input type="color" class="sp-colour-pick" value="#${hex}">
+	            <input class="sp-colour-hex" value="${hex}" maxlength="6" autocomplete="off">
+	            <button type="button" class="sp-colour-remove" title="Remove this colour">✕</button>
+	        </span>`;
+
+	    const currentColours = () => [...pane.querySelectorAll(".sp-colour-hex")]
+	        .map(input => normColor(input.value))
+	        .filter(hex => /^[0-9A-F]{6}$/.test(hex));
+
+	    const drawColours = (colours) => {
+	        $("sp-colours").innerHTML = colours.map(colourRow).join("");
+	        // A single colour has no direction to run in, and Spoolman stores it
+	        // in the plain colour field then.
+	        $("sp-direction").style.display = colours.length > 1 ? "" : "none";
+	        $("sp-colours").classList.toggle("sp-colours-single", colours.length < 2);
+	        $("sp-colour-hint").textContent = colours.length > 1
+	            ? `${colours.length} colours, stored as a multi colour filament`
+	            : "";
+	    };
+
+	    $("sp-colours").addEventListener("input", (event) => {
+	        const row = event.target.closest(".sp-colour");
+	        if (!row) return;
+
+	        if (event.target.classList.contains("sp-colour-pick")) {
+	            row.querySelector(".sp-colour-hex").value = event.target.value.replace("#", "").toUpperCase();
+	        } else {
+	            const hex = normColor(event.target.value);
+	            if (/^[0-9A-F]{6}$/.test(hex)) row.querySelector(".sp-colour-pick").value = `#${hex}`;
+	        }
 	    });
+
+	    $("sp-colours").addEventListener("click", (event) => {
+	        if (!event.target.classList.contains("sp-colour-remove")) return;
+	        const colours = currentColours();
+	        const index = [...pane.querySelectorAll(".sp-colour")].indexOf(event.target.closest(".sp-colour"));
+	        colours.splice(index, 1);
+	        drawColours(colours.length ? colours : ["000000"]);
+	    });
+
+	    $("sp-colour-add").addEventListener("click", () => {
+	        drawColours([...currentColours(), "FFFFFF"]);
+	    });
+
+	    drawColours(defaults.colors);
 
 	    // Full weight is the usual starting point for a spool's initial weight
 	    $("sp-weight").addEventListener("input", () => { $("sp-initial-weight").value = $("sp-weight").value; });
@@ -849,7 +1107,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	            material:     $("sp-material").value,
 	            density:      $("sp-density").value,
 	            diameter:     $("sp-diameter").value,
-	            colorHex:     $("sp-colour").value,
+	            colorHexes:   [...pane.querySelectorAll(".sp-colour-hex")].map(input => input.value),
+	            multiColorDirection: $("sp-direction").value,
 	            weight:       $("sp-weight").value,
 	            spoolWeight:  $("sp-spool-weight").value,
 	            extruderTemp: $("sp-extruder-temp").value,

@@ -57,6 +57,29 @@ export async function getSpoolmanInternalFilaments() {
     }
 }
 
+/** How long the catalogue is reused before it is fetched again. */
+const EXTERNAL_FILAMENT_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The SpoolmanDB catalogue, from the cache while it is fresh.
+ *
+ * The create-spool dialog queries the catalogue while the user types, and every
+ * miss would otherwise pull several megabytes out of Spoolman again. A failed
+ * fetch is not cached, so an outage is retried rather than remembered.
+ */
+export async function getCachedExternalFilaments() {
+    const cache = state.externalFilamentCache;
+    const fresh = cache.entries.length && (Date.now() - cache.fetchedAt) < EXTERNAL_FILAMENT_TTL_MS;
+    if (fresh) return cache.entries;
+
+    const entries = await getSpoolmanExternalFilaments();
+    if (entries.length) {
+        cache.entries = entries;
+        cache.fetchedAt = Date.now();
+    }
+    return entries;
+}
+
 /** Fetches the SpoolmanDB filament catalogue, empty on failure. */
 export async function getSpoolmanExternalFilaments() {
     try {

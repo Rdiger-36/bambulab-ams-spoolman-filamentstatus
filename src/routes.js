@@ -13,7 +13,7 @@ import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { tailLogLines, logFileSet } from "./logger.js";
 import { toClientSpool } from "./uispool.js";
-import { spoolWeightLimit } from "./utils.js";
+import { catalogueFacet, filterCatalogue, spoolWeightLimit } from "./utils.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -30,6 +30,7 @@ import {
     checkSpoolmanHealth,
     getSpoolmanSpool,
     patchSpoolFields,
+    getCachedExternalFilaments,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
@@ -673,17 +674,56 @@ export function registerRoutes(app, printers) {
     // the rest is picked from what Spoolman already knows.
     app.get("/api/spoolman/lookups", async (req, res) => {
         try {
-            const [vendors, materials, externalMaterials, locations, filaments] = await Promise.all([
+            const [vendors, materials, externalMaterials, locations, filaments, catalogue] = await Promise.all([
                 getSpoolmanVendors(),
                 getSpoolmanMaterials(),
                 getSpoolmanExternalMaterials(),
                 getSpoolmanLocations(),
                 getSpoolmanInternalFilaments(),
+                // The catalogue itself is far too large to send, but the names
+                // in it are what makes the manufacturer field suggest a brand
+                // this Spoolman has never seen.
+                getCachedExternalFilaments().catch(() => []),
             ]);
-            res.json({ vendors, materials, externalMaterials, locations, filaments });
+
+            const externalVendors = [...new Set(catalogue
+                .map(entry => entry.manufacturer)
+                .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+            res.json({ vendors, materials, externalMaterials, locations, filaments, externalVendors });
         } catch (err) {
             console.error("Server", serverLogFilePath, "Could not load Spoolman lookups:", err?.message);
             res.status(502).json({ ok: false, error: err?.message || "Could not load Spoolman lookups" });
+        }
+    });
+
+    // The catalogue the create-spool form narrows down in: the manufacturers on
+    // offer, the materials that manufacturer sells, and then its entries.
+    //
+    // Queried while the user types, so it is filtered here: the whole catalogue
+    // is around seven thousand entries and a few megabytes, and a browser has no
+    // business downloading it to pick ten of them.
+    app.get("/api/spoolman/external/filaments", async (req, res) => {
+        try {
+            const catalogue = await getCachedExternalFilaments();
+            const query = {
+                manufacturer: req.query.manufacturer,
+                material: req.query.material,
+                q: req.query.q,
+                limit: req.query.limit,
+            };
+
+            // The dialog narrows down in steps, so it asks for the values still
+            // on offer before it asks for the entries themselves.
+            const facet = req.query.facet;
+            if (facet === "manufacturer" || facet === "material") {
+                return res.json(catalogueFacet(catalogue, facet, query));
+            }
+
+            res.json(filterCatalogue(catalogue, query));
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not load the SpoolmanDB catalogue:", err?.message);
+            res.status(502).json({ ok: false, error: err?.message || "Could not load the SpoolmanDB catalogue" });
         }
     });
 
@@ -716,12 +756,20 @@ export function registerRoutes(app, printers) {
                     console.log(printer.name, printer.logFilePath, `[Spool] Created vendor "${vendor.name}" (${vendorId})`);
                 }
 
+                // A multi colour filament is stored as the list plus the
+                // direction its colours run in, and Spoolman keeps the plain
+                // colour field empty then. Sending both is what it refuses.
+                const colors = filamentColorSet(filament);
+                const multiColour = colors.length > 1;
+
                 const created = await createFilament({
                     name: filament.name?.trim() || null,
                     material: filament.material?.trim() || null,
                     density: Number(filament.density),
                     diameter: Number(filament.diameter),
-                    color_hex: normalizeHex(filament.colorHex),
+                    color_hex: multiColour ? null : (colors[0] ?? null),
+                    multi_color_hexes: multiColour ? colors.join(",") : "",
+                    multi_color_direction: multiColour ? colorDirection(filament.multiColorDirection) : null,
                     weight: numberOrNull(filament.weight),
                     spool_weight: numberOrNull(filament.spoolWeight),
                     settings_extruder_temp: numberOrNull(filament.extruderTemp),
@@ -1085,6 +1133,27 @@ function numberOrNull(value) {
 function normalizeHex(value) {
     const hex = String(value || "").replace(/^#/, "").slice(0, 6).toUpperCase();
     return /^[0-9A-F]{6}$/.test(hex) ? hex : null;
+}
+
+/**
+ * The colours of a filament as the dialog sends them, normalised and in order.
+ *
+ * The AMS reports every colour of a multi colour spool and the catalogue lists
+ * them too, so the form offers all of them. `colorHex` is still read for a
+ * caller that sends a single colour the way this endpoint first took it.
+ *
+ * @param {object} filament - the filament details from the request
+ * @returns {string[]} six digit uppercase hex colours, without duplicates
+ */
+function filamentColorSet(filament) {
+    const raw = Array.isArray(filament?.colorHexes) ? filament.colorHexes : [filament?.colorHex];
+    const colors = raw.map(normalizeHex).filter(Boolean);
+    return [...new Set(colors)];
+}
+
+/** The two directions Spoolman knows, defaulting to the common one. */
+function colorDirection(value) {
+    return value === "longitudinal" ? "longitudinal" : "coaxial";
 }
 
 /**
