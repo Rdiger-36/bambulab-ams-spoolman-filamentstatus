@@ -40,6 +40,11 @@ function createRuntimePrinter(entry) {
         lastUpdateTime: new Date(),
         first_run: true,
         monitoringEnabled: true,
+        // The growing wait between two reachability checks of a printer that
+        // does not answer. See monitorPrinters() in mqtt.js.
+        offlineChecks: 0,
+        nextCheckAt: 0,
+        offlineWaitLogged: null,
         // print consumption tracking
         currentGcodeState: "IDLE",
         currentJobName: null,

@@ -5,7 +5,7 @@ import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, convertAMSandSlot, spoolIsEmpty, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -1304,6 +1304,65 @@ function describeMqttError(err) {
 }
 
 /**
+ * Drops the growing wait between the reachability checks of an offline printer.
+ *
+ * The backoff exists to stop the monitor loop asking a printer that is switched
+ * off every twenty seconds. A user who pressed a button is not the monitor loop,
+ * so resuming monitoring, reconnecting or editing a printer clears it, exactly
+ * as they clear the reconnect cooldown of `setupMqtt()`. Without this, a printer
+ * switched back on would wait out a five minute backoff before anything tried.
+ *
+ * @param {object} printer - the runtime printer
+ */
+export function resetOfflineBackoff(printer) {
+    printer.offlineChecks = 0;
+    printer.nextCheckAt = 0;
+    printer.offlineWaitLogged = null;
+}
+
+/**
+ * Records that a printer answered, and says whether it had been away.
+ *
+ * @param {object} printer - the runtime printer
+ * @returns {boolean} whether this is the first answer after failed checks
+ */
+function printerIsBack(printer) {
+    const wasOffline = (printer.offlineChecks || 0) > 0;
+    resetOfflineBackoff(printer);
+    return wasOffline;
+}
+
+/**
+ * Records a failed reachability check and schedules the next one.
+ *
+ * The wait grows with every failure, up to the configured limit, which is what
+ * keeps a printer that is switched off most of the time from being asked every
+ * twenty seconds for hours. It also decides whether this failure is worth a log
+ * line: only a wait that differs from the one already announced is, so a printer
+ * that stays off produces one line per backoff step and then nothing, instead of
+ * the same line forever.
+ *
+ * @param {object} printer - the runtime printer
+ * @param {number} now - the current timestamp
+ */
+function printerStillOffline(printer, now) {
+    const wait = offlineBackoff(printer.offlineChecks || 0, settings.OFFLINE_CHECK_INTERVAL, settings.OFFLINE_MAX_INTERVAL);
+
+    printer.offlineChecks = (printer.offlineChecks || 0) + 1;
+    printer.nextCheckAt = now + wait;
+    printer.mqttStatus = "Disconnected";
+    printer.mqttRunning = false;
+
+    if (printer.offlineWaitLogged === wait) {
+        console.debug(printer.name, printer.logFilePath, `Printer ${printer.id} is still unreachable, next try in ${formatInterval(wait)}`);
+        return;
+    }
+
+    printer.offlineWaitLogged = wait;
+    console.error(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is unreachable. Next try in ${formatInterval(wait)}...`);
+}
+
+/**
  * Runs forever, reconnecting printers that are reachable but not connected.
  *
  * This is the single retry driver for MQTT. On every offline check interval each
@@ -1311,6 +1370,11 @@ function describeMqttError(err) {
  * attempted, so an unreachable printer costs one short timeout rather than a
  * hanging MQTT handshake. The whole loop idles while Spoolman is down, since
  * there would be nothing to write AMS data to.
+ *
+ * A printer that does not answer is asked again on a growing interval rather
+ * than on every tick, see `printerStillOffline()`. The loop keeps ticking at the
+ * check interval, because the printers are on their own schedules and a printer
+ * added or re-enabled in the Web UI has to be picked up quickly.
  *
  * @param {object[]} printers - the printer list
  */
@@ -1328,10 +1392,19 @@ export async function monitorPrinters(printers) {
                 continue;
             }
 
+            const now = Date.now();
+            // Not yet due: this printer failed its last check and is waiting out
+            // its backoff. A connected one has no wait, so it is never skipped.
+            if (printer.nextCheckAt && now < printer.nextCheckAt) continue;
+
             try {
                 const isAlive = await checkPrinterAvailability(printer.ip, 8883);
 
                 if (isAlive) {
+                    if (printerIsBack(printer)) {
+                        console.log(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is reachable again`);
+                    }
+
                     if (!printer.mqttRunning && !printer.isReconnecting) {
                         if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
                             printer.monitoringEnabled = false;
@@ -1344,8 +1417,6 @@ export async function monitorPrinters(printers) {
                         setupMqtt(printer);
                     }
                 } else {
-                    console.error(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is unreachable. Next try in ${formatInterval(settings.OFFLINE_CHECK_INTERVAL)}...`);
-
                     if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
                         printer.monitoringEnabled = false;
                         printer.mqttRunning = false;
@@ -1353,8 +1424,7 @@ export async function monitorPrinters(printers) {
                         console.log(printer.name, printer.logFilePath, "Printer is unreachable and the retry limit is exceeded, monitoring disabled.");
                         continue;
                     }
-                    printer.mqttStatus = "Disconnected";
-                    printer.mqttRunning = false;
+                    printerStillOffline(printer, now);
                 }
             } catch (error) {
                 console.error(printer.name, printer.logFilePath, `Error monitoring Printer: ${printer.id} - ${error.message}`);

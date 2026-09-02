@@ -34,7 +34,7 @@ import {
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
-import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, ACTIVE_STATES } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 import {
     claimSlotLocation,
@@ -407,6 +407,7 @@ export function registerRoutes(app, printers) {
             // and the printer only came back on the next monitor pass.
             printer.reconnectAttempts = 0;
             printer.lastReconnectAttempt = 0;
+            resetOfflineBackoff(printer);
             printer.mqttRunning = false;
             printer.mqttStatus = "Reconnecting";
             console.log(printer.name, printer.logFilePath, `Monitoring enabled for ${printer.name} - ${printer.id}, restarting MQTT...`);
@@ -477,6 +478,7 @@ export function registerRoutes(app, printers) {
             // The cooldown in setupMqtt guards against retry storms, not against
             // a deliberate reconnect, so clear it here.
             printer.lastReconnectAttempt = 0;
+            resetOfflineBackoff(printer);
             printer.mqttStatus = "Reconnecting";
             reconnected.push(printer.id);
             setupMqtt(printer);
@@ -1084,6 +1086,7 @@ export function registerRoutes(app, printers) {
             // a deliberate reconnect, so clear it here.
             result.printer.lastReconnectAttempt = 0;
             result.printer.reconnectAttempts = 0;
+            resetOfflineBackoff(result.printer);
             if (result.printer.monitoringEnabled) setupMqtt(result.printer);
         }
 

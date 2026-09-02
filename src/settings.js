@@ -131,6 +131,16 @@ export const SETTINGS_SCHEMA = {
         label: "Offline check interval",
         description: "Milliseconds between two reachability checks of a disconnected printer.",
     },
+    OFFLINE_MAX_INTERVAL: {
+        type: "integer",
+        default: 300000,
+        min: 20000,
+        max: 3600000,
+        group: "printer",
+        advanced: true,
+        label: "Offline backoff limit",
+        description: "Longest wait between two reachability checks of a printer that stays unreachable. The wait doubles from the offline check interval up to this value. Set it to the check interval to keep the pace constant.",
+    },
     MAX_RETRIES: {
         type: "integer",
         default: 0,
