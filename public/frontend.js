@@ -1,3 +1,10 @@
+import {
+	correctRemainInt,
+	filamentColors,
+	normColor,
+	slotColors,
+} from "./shared.js";
+
 let autoButton = null;
 // When false (default) the spool weight is tracked from the sliced G-code, so the
 // main table shows the Spoolman remaining weight instead of the AMS RFID remain %.
@@ -10,26 +17,6 @@ let spoolmanConnected = false;
 let lastLegacyCtx = null;
 // Printer name, used to suggest a location matching the SET_LOCATION format.
 let currentPrinterName = "";
-
-// Mirrors src/ams.js correctRemainInt: Bambu reports remain% on a 1kg basis
-// for regular color filament <1kg, but support/accessory material (tray_type
-// suffix "-S") is measured relative to its actual spool size already.
-function correctRemainIntJS(remainOn1kgBasis, trayWeight, trayType) {
-	const remain = parseFloat(remainOn1kgBasis);
-	// Mirrors correctRemainInt in src/ams.js: the AMS reports no percentage for
-	// the first seconds after a spool goes in, and null must not become 0.
-	if (!Number.isFinite(remain)) return null;
-	const weight = parseFloat(trayWeight);
-	const isSupportMaterial = typeof trayType === "string" && trayType.endsWith("-S");
-
-	if (weight < 1000 && !isSupportMaterial) {
-		let percent = ((remain / 100) * 1000 / weight) * 100;
-		if (percent > 100) percent = 100;
-		if (percent < 0) percent = 0;
-		return Math.round(percent);
-	}
-	return Math.round(remain);
-}
 
 // Initialize the document once it has fully loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -355,25 +342,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     
-    // Every colour of an AMS slot, in the order the printer reported them.
-    // `cols` is the full set and `tray_color` only ever the first of them, so
-    // the single field is a fallback for a payload that predates `cols` rather
-    // than the value to read.
-    function slotColorsJS(slot) {
-        const cols = Array.isArray(slot?.cols) ? slot.cols.filter(Boolean) : [];
-        if (cols.length) return cols.map(normColorJS);
-        return slot?.tray_color ? [normColorJS(slot.tray_color)] : [];
-    }
-
-    // Every colour of a Spoolman filament. Single and multi colour records are
-    // mutually exclusive there: a multi colour filament carries no color_hex.
-    function filamentColorsJS(filament) {
-        if (filament?.multi_color_hexes) {
-            return filament.multi_color_hexes.split(",").filter(Boolean).map(normColorJS);
-        }
-        return filament?.color_hex ? [normColorJS(filament.color_hex)] : [];
-    }
-
     // The CSS background showing a whole colour set in one box.
     //
     // `direction` is Spoolman's multi_color_direction. A "longitudinal"
@@ -403,7 +371,10 @@ document.addEventListener("DOMContentLoaded", () => {
     function swatchHtml(colors, direction = null) {
         const background = colorSetBackground(colors, direction);
         if (!background) return "";
-        const title = colors.map(c => `#${c}`).join(" ");
+        // Uppercase only here: the sets arrive lowercased, because that is the
+        // case the colour comparisons settled on, and a hex reads as a colour
+        // in upper.
+        const title = colors.map(c => `#${normColor(c)}`).join(" ");
         return `<span class="gc-swatch" style="background:${background}" title="${title}"></span>`;
     }
 
@@ -453,12 +424,12 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // Compared as a set rather than as a single hex, so a multi colour spool
 	    // can reach the top for its own slot. Those carry no color_hex at all,
 	    // so against the single field they always ranked last.
-	    const slotColors   = [...slotColorsJS(slot)].sort().join(",");
+	    const slotColorSet = [...slotColors(slot)].sort().join(",");
 
 	    const score = (sp) => {
 	        const material = (sp.filament?.material || "").toUpperCase();
-	        const colors   = [...filamentColorsJS(sp.filament)].sort().join(",");
-	        if (material && material === slotMaterial && colors && colors === slotColors) return 0;
+	        const colors   = [...filamentColors(sp.filament)].sort().join(",");
+	        if (material && material === slotMaterial && colors && colors === slotColorSet) return 0;
 	        if (material && material === slotMaterial) return 1;
 	        return 2;
 	    };
@@ -472,7 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const fil   = sp.filament || {};
 	    const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
 	    const left  = sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
-	    const swatch = swatchHtml(filamentColorsJS(fil), fil.multi_color_direction);
+	    const swatch = swatchHtml(filamentColors(fil), fil.multi_color_direction);
 	    return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"} <span class="gc-muted">(${left})</span>`;
 	}
 
@@ -548,7 +519,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	function slotDefaults(slot) {
 	    return {
 	        material: slot.tray_type || "",
-	        color: normColorJS(slot.tray_color) || "000000",
+	        color: normColor(slot.tray_color) || "000000",
 	    };
 	}
 
@@ -687,7 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // Keep the picker and the hex field in sync
 	    $("sp-colour-pick").addEventListener("input", () => { $("sp-colour").value = $("sp-colour-pick").value.replace("#", "").toUpperCase(); });
 	    $("sp-colour").addEventListener("input", () => {
-	        const hex = normColorJS($("sp-colour").value);
+	        const hex = normColor($("sp-colour").value);
 	        if (/^[0-9A-F]{6}$/.test(hex)) $("sp-colour-pick").value = `#${hex}`;
 	    });
 
@@ -849,7 +820,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // are drawn, and the AMS does not report it, so it comes from whichever
 	    // filament record was matched.
 	    const direction = fil?.multi_color_direction ?? amsSpool.matchingExternalFilament?.multi_color_direction ?? null;
-	    const color = isEmpty ? "" : swatchHtml(slotColorsJS(slot), direction);
+	    const color = isEmpty ? "" : swatchHtml(slotColors(slot), direction);
 
 	    const spoolmanBaseUrl = (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
 	    const spoolman = amsSpool.existingSpool?.id
@@ -972,12 +943,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	// Slots that stand alone rather than filling a four slot AMS unit.
 	function isSingleSlotUnit(amsId) {
 	    return amsId === EXTERNAL_SLOT || amsId.startsWith("HT-");
-	}
-
-	// Mirrors normColor in src/gcode.js: slice colors carry a leading "#" and AMS
-	// colors carry a trailing alpha byte, so both are trimmed to bare 6-digit hex.
-	function normColorJS(color) {
-	    return String(color || "").replace(/^#/, "").slice(0, 6).toUpperCase();
 	}
 
 	function gcodeStateBadge(state) {
@@ -1154,7 +1119,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    } else if (onSpool == null && !isEmpty && slot.remain != null && totalSpool) {
 	        // Fallback if correctedWeight wasn't provided by the backend: derive
 	        // it client-side from the AMS remain%, same as the legacy table does.
-	        const pct = correctRemainIntJS(slot.remain, totalSpool, slot.tray_type);
+	        const pct = correctRemainInt(slot.remain, totalSpool, slot.tray_type);
 	        onSpool = Math.round((pct / 100) * totalSpool);
 	    }
 
@@ -1204,7 +1169,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    for (const e of missing) {
 	        // The sliced file names one colour per filament, so there is never a
 	        // set to draw here, unlike on a slot.
-	        const swatch = swatchHtml(e.color ? [normColorJS(e.color)] : []);
+	        const swatch = swatchHtml(e.color ? [normColor(e.color)] : []);
 	        const label = e.type ? `${e.type} <code>${e.tray_info_idx}</code>` : `<code>${e.tray_info_idx}</code>`;
 	        html += `<tr><td>${swatch}${label}</td>
 	            <td class="gc-required-amount">${e.grams}g needed</td></tr>`;

@@ -380,6 +380,36 @@ per printer, through `/api/printers`,
 `/api/printer/{id}/monitoring/start|stop` and `/api/status/{id}`. None of those
 changed and it sets no environment variables, so nothing here is a task for it.
 
+## Decided: one file for what both halves compute
+
+`public/shared.js` holds the pure functions the dashboard and the server both
+apply to the same payloads: `normColor`, `slotColors`, `filamentColors` and
+`correctRemainInt`. `src/utils.js`, `src/gcode.js` and `src/ams.js` re-export
+them so every existing caller keeps its import, and `public/frontend.js` imports
+them directly.
+
+It lives under `public/` rather than in `src/` because that is the half with the
+constraint: the directory is served straight from disk, has no build step and no
+dependencies, so the browser has to be able to load the file as it is. The
+server has no such limit, which is why it imports across rather than the other
+way round. Whatever is added there has to keep working in both places: no Node
+built-ins, no DOM.
+
+`test/shared.test.js` is the first coverage anything under `public/` has, and it
+asserts the arrangement as well as the behaviour: that the server re-exports
+those functions rather than holding a copy, and that `public/frontend.js` still
+imports them. A future second implementation fails a test rather than waiting
+for a user to notice, which is how the last two were found.
+
+The rest of `public/frontend.js` still has no tests, and that has not changed.
+What can be moved into the shared file is what can be covered; the DOM around it
+cannot be, without adding the build step the directory exists to avoid.
+
+`public/index.html` loads `frontend.js` as a module, which is what makes the
+import possible. `menu.js` stays a classic script and `frontend.js` still calls
+`initMenubar` as a global, because modules run after classic scripts and before
+`DOMContentLoaded`.
+
 ## Known gaps, by design
 
 Not tasks. Decisions and limits worth not relitigating.

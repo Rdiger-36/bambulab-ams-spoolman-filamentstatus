@@ -75,7 +75,10 @@
   </footer>
 
   <script src="menu.js"></script>
-  <script src="frontend.js"></script>
+  <!-- A module, so it can import the decisions it shares with the server from
+       shared.js. Modules are deferred, so it still runs before DOMContentLoaded
+       and after menu.js, whose functions it calls as globals. -->
+  <script type="module" src="frontend.js"></script>
 
   <dialog id="notice-dialog">
     <h3 id="notice-dialog-title"></h3>

@@ -28,7 +28,7 @@ matter for them are below.
 | `starting.js` | The service process. Global error handlers, signal handling, then dynamic-imports `backend.js`. Forked by `entrypoint.js`, so the handlers live where the application does. |
 | `backend.js` | Express app, static hosting, startup sequence: Spoolman health, vendor and extra-field bootstrap, printer log files, monitor loops. |
 | `src/` | All backend logic. See its AGENTS.md. |
-| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `menu.js` renders the menu bar and owns the dark mode button for every page, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. |
+| `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `menu.js` renders the menu bar and owns the dark mode button for every page, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. `shared.js` holds the pure decisions the frontend and the server both make; it lives here because a browser has to be able to load it unbuilt, and `src/` imports it from here. |
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
 | `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
@@ -197,6 +197,12 @@ Not punctuation, and therefore allowed:
 - Duplicating the settings schema in the frontend. `public/settings.js` renders
   whatever `/api/settings` describes, so a new field only has to be added to
   `SETTINGS_SCHEMA`.
+- Answering a question in `public/` that the server already answers. Either read
+  the answer off the payload, the way the dashboard reads `matchedAmsId` rather
+  than matching consumption itself, or put the decision in `public/shared.js`
+  and import it on both sides. A second implementation drifts, and `public/` has
+  no coverage of its own to catch it: `test/shared.test.js` is what makes the
+  shared file testable at all.
 - Adding a direct dependency without putting it in `package.json`. The Docker
   image installs from `package.json` and `package-lock.json` only, so relying on
   a transitive package works locally and breaks in the container.

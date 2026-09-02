@@ -45,8 +45,11 @@ function runSupervisor(env, { signalAfterMs } = {}) {
     fs.copySync(path.join(root, "entrypoint.js"), path.join(dir, "entrypoint.js"));
     fs.copySync(path.join(here, "fixtures", "exiting-service.js"), path.join(dir, "starting.js"));
     // The whole src directory, so this does not break every time entrypoint.js
-    // imports one more module from it.
+    // imports one more module from it, and public/ with it: `src/utils.js` and
+    // `src/gcode.js` import `public/shared.js`, the one implementation the
+    // dashboard and the server share.
     fs.copySync(path.join(root, "src"), path.join(dir, "src"));
+    fs.copySync(path.join(root, "public"), path.join(dir, "public"));
 
     return new Promise(resolve => {
         const child = fork(path.join(dir, "entrypoint.js"), [], {
