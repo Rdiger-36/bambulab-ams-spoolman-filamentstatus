@@ -26,6 +26,12 @@
 
 Based on the idea of a script from [Diogo Resende](https://github.com/dresende), posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
 
+> [!IMPORTANT]
+> Version 1.3.0 is still in development.
+> To use the pre-release version you need to use the dev build:
+> 
+> ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:dev
+
 ## What changed in 1.3.0
 
 - **G-code tracking is the new default.** Filament consumption is read from the sliced file of the print instead of the AMS RFID remain percentage, so 3rd party spools without a tag are covered as well. The previous behaviour lives on as [Legacy mode](#legacy-mode).
