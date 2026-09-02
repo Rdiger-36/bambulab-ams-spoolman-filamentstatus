@@ -160,10 +160,29 @@ export const getSpoolmanMaterials = () => getJson("/api/v1/material", "materials
  */
 export const getSpoolmanExternalMaterials = () => getJson("/api/v1/external/material", "external materials");
 
-/** Creates a vendor by name and returns the created record. */
-export async function createNamedVendor(name) {
+/**
+ * Creates a vendor and returns the created record.
+ *
+ * `external_id` is the manufacturer string as the SpoolmanDB catalogue writes
+ * it, which is what ties the vendor to the catalogue; Spoolman stores its own
+ * imported vendors the same way. `empty_spool_weight` is the vendor default a
+ * spool falls back on when its filament names no weight, and the catalogue
+ * carries it per entry. Both are left out when nothing knows them, rather than
+ * sent as null, so a vendor typed by hand stays a vendor typed by hand.
+ *
+ * @param {object} vendor
+ * @param {string} vendor.name - the manufacturer name
+ * @param {string|null} [vendor.externalId] - the catalogue's manufacturer string
+ * @param {number|null} [vendor.emptySpoolWeight] - grams of the empty spool
+ * @returns {Promise<object>} the created vendor
+ */
+export async function createVendor({ name, externalId = null, emptySpoolWeight = null }) {
+    const payload = { name };
+    if (externalId) payload.external_id = externalId;
+    if (Number.isFinite(emptySpoolWeight)) payload.empty_spool_weight = emptySpoolWeight;
+
     const response = await got.post(`${spoolmanUrl()}/api/v1/vendor`, {
-        json: { name },
+        json: payload,
         responseType: "json",
     });
     return response.body;
@@ -186,6 +205,9 @@ export async function createSpoolRecord(payload) {
     });
     return response.body;
 }
+
+/** The manufacturer every filament built from a Bambu Lab profile belongs to. */
+const BAMBU_VENDOR = "Bambu Lab";
 
 /**
  * The id of the "Bambu Lab" vendor, creating it when this Spoolman has none.
@@ -220,7 +242,7 @@ export async function ensureVendor() {
         throw error;
     }
 
-    const existing = vendors.find(vendor => vendor.name === "Bambu Lab" || vendor.external_id === "Bambu Lab");
+    const existing = vendors.find(vendor => vendor.name === BAMBU_VENDOR || vendor.external_id === BAMBU_VENDOR);
     if (existing) {
         state.vendorID = existing.id;
         console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: true');
@@ -228,37 +250,20 @@ export async function ensureVendor() {
     }
 
     console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" exists: false');
-    return await createVendor();
-}
-
-/**
- * Creates the "Bambu Lab" vendor and stores its id in shared state.
- *
- * The empty spool weight is the vendor default the catalogue entries rely on:
- * a Bambu Lab spool weighs 250 g, and a filament created from the catalogue
- * carries no weight of its own for a spool to fall back on.
- *
- * @returns {Promise<number>} the id of the created vendor
- */
-async function createVendor() {
     console.log("Server", serverLogFilePath, 'Creating Vendor "Bambu Lab"...');
-    try {
-        const manufacturerPayload = {
-            name: "Bambu Lab",
-            external_id: "Bambu Lab",
-            empty_spool_weight: 250,
-        };
 
-        const manufacturerResponse = await got.post(`${spoolmanUrl()}/api/v1/vendor`, {
-            json: manufacturerPayload,
-            responseType: "json",
+    try {
+        // 250 g is what a Bambu Lab spool weighs empty, and it is what every
+        // Bambu entry of the catalogue reports as its spool weight.
+        const created = await createVendor({
+            name: BAMBU_VENDOR,
+            externalId: BAMBU_VENDOR,
+            emptySpoolWeight: 250,
         });
 
-        if (!manufacturerResponse.body.id) {
-            throw new Error("Spoolman created the vendor but answered without an id");
-        }
+        if (!created.id) throw new Error("Spoolman created the vendor but answered without an id");
 
-        state.vendorID = manufacturerResponse.body.id;
+        state.vendorID = created.id;
         console.log("Server", serverLogFilePath, 'Vendor "Bambu Lab" successfully created!');
         return state.vendorID;
     } catch (error) {
@@ -410,7 +415,16 @@ export async function createFilamentAndSpool(spoolData) {
         // The one caller that needs the vendor, so the lookup lives here rather
         // than in the startup sequence. Cached after the first filament.
         await ensureVendor();
+    } catch {
+        // ensureVendor has already logged what Spoolman answered. This says
+        // what it cost: this slot keeps its button and the next AMS update
+        // tries again, while everything that does not need a vendor carries on.
+        console.error(spoolData.printerName, spoolData.logFilePath,
+            `    Filament for ${spoolData.amsId} not created: the "Bambu Lab" vendor could not be resolved`);
+        return;
+    }
 
+    try {
         const filamentPayload = buildFilamentPayload(spoolData);
 
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/filament`);

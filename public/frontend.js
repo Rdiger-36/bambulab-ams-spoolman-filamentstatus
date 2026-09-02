@@ -986,6 +986,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 : "Nothing in the catalogue matches this manufacturer and material";
         };
 
+        // What the catalogue knows about the manufacturer of the picked entry.
+        // A vendor this Spoolman does not have yet is created on save, and
+        // without this it would be created with its name alone, while the
+        // catalogue also names it and knows what its empty spool weighs.
+        // Dropped again as soon as the manufacturer field says something else.
+        let catalogueVendor = null;
+
         // Picking an entry fills the form. A filament this Spoolman already holds
         // wins over the catalogue: creating a second one that only differs in its
         // id is how an inventory ends up with four "Sunlu PLA Grey".
@@ -1003,6 +1010,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 showNotification(`This filament already exists in Spoolman as #${local.id}, using it.`, "success");
                 return;
             }
+
+            catalogueVendor = entry.manufacturer
+                ? { name: entry.manufacturer, spoolWeight: entry.spool_weight ?? null }
+                : null;
 
             $("sp-vendor").value = entry.manufacturer ?? "";
             $("sp-material").value = entry.material ?? "";
@@ -1131,10 +1142,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // Full weight is the usual starting point for a spool's initial weight
         $("sp-weight").addEventListener("input", () => { $("sp-initial-weight").value = $("sp-weight").value; });
 
-        actionButton.onclick = () => submitNewSpool(pane, actionButton, button, amsSpool, lookups);
+        actionButton.onclick = () => submitNewSpool(pane, actionButton, button, amsSpool, lookups, catalogueVendor);
     }
 
-    async function submitNewSpool(pane, actionButton, button, amsSpool, lookups) {
+    async function submitNewSpool(pane, actionButton, button, amsSpool, lookups, catalogueVendor = null) {
         const $ = (id) => pane.querySelector(`#${id}`);
         const error = $("sp-error");
         error.textContent = "";
@@ -1167,6 +1178,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 extruderTemp: $("sp-extruder-temp").value,
                 bedTemp:      $("sp-bed-temp").value,
             };
+
+            // Only when the field still names the manufacturer the catalogue
+            // entry did. Typing over it makes this a vendor of the user's own,
+            // and the catalogue has nothing to say about that one.
+            if (!known && catalogueVendor && sameText(catalogueVendor.name, vendorName)) {
+                payload.filament.vendorExternalId = catalogueVendor.name;
+                payload.filament.vendorSpoolWeight = catalogueVendor.spoolWeight;
+            }
 
             if (!payload.filament.material.trim()) { error.textContent = "Material is required."; return; }
             if (!(Number(payload.filament.density) > 0))  { error.textContent = "Density is required and must be greater than 0."; return; }

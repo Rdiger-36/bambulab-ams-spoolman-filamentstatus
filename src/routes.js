@@ -24,7 +24,7 @@ import {
     getSpoolmanMaterials,
     getSpoolmanExternalMaterials,
     getSpoolmanInternalFilaments,
-    createNamedVendor,
+    createVendor,
     createFilament,
     createSpoolRecord,
     checkSpoolmanHealth,
@@ -775,7 +775,16 @@ export function registerRoutes(app, printers) {
 
                 let vendorId = Number(filament.vendorId) || null;
                 if (!vendorId && filament.vendorName?.trim()) {
-                    const vendor = await createNamedVendor(filament.vendorName.trim());
+                    // A manufacturer the dialog filled in from the catalogue
+                    // brings the two fields Spoolman keeps on a vendor: the
+                    // catalogue's own name for it and the weight of its empty
+                    // spool. One typed by hand brings neither, and then the
+                    // vendor is created with its name alone.
+                    const vendor = await createVendor({
+                        name: filament.vendorName.trim(),
+                        externalId: String(filament.vendorExternalId ?? "").trim() || null,
+                        emptySpoolWeight: numberOrNull(filament.vendorSpoolWeight),
+                    });
                     vendorId = vendor.id;
                     console.log(printer.name, printer.logFilePath, `[Spool] Created vendor "${vendor.name}" (${vendorId})`);
                 }
