@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.6
    - Fixes:
       - The Spoolman location of a spool follows the AMS slot it is really in. SET_LOCATION was written from two places under two different conditions, and cleared from a third that checked nothing, so most of the mechanism did not work:
          - Assigning a spool wrote no location at all and unassigning cleared none, so a spool the printer cannot identify never got a location, and one that was unassigned kept naming the slot it had left for good. Both endpoints write it now, and reassigning a slot moves the location from the old spool to the new one
