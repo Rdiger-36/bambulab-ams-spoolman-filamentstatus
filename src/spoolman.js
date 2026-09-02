@@ -421,6 +421,38 @@ export async function patchSpoolWeight(spoolId, remainingWeight, lastUsed, locat
     return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: payload });
 }
 
+/**
+ * Fetches a single spool with its filament and vendor embedded.
+ *
+ * Unlike the narrowed payload the dashboard receives, this is the whole record,
+ * which is what the spool detail dialog shows. It rethrows rather than answering
+ * with an empty result, because it backs an interactive dialog that has to say
+ * why it is empty.
+ *
+ * @param {number} spoolId - Spoolman spool id
+ */
+export async function getSpoolmanSpool(spoolId) {
+    return getJson(`/api/v1/spool/${spoolId}`, `spool ${spoolId}`);
+}
+
+/**
+ * Writes an already built patch onto a spool and returns the updated record.
+ *
+ * Separate from `patchSpoolWeight()`, which is the legacy mode write path with
+ * its own fixed payload. This one carries whatever the detail dialog corrected
+ * by hand, and rethrows so the route can report the failure.
+ *
+ * @param {number} spoolId - Spoolman spool id
+ * @param {object} payload - Spoolman spool fields to write
+ */
+export async function patchSpoolFields(spoolId, payload) {
+    const response = await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, {
+        json: payload,
+        responseType: "json",
+    });
+    return response.body;
+}
+
 /** Sets a spool's location, or clears it when passed an empty string. */
 export async function patchSpoolLocation(spoolId, location) {
     return got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolId}`, { json: { location } });

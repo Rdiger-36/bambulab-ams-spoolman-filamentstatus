@@ -90,3 +90,12 @@ export const EXTERNAL_SLOT = "External";
  * `ams.js` itself would close an import cycle between the two.
  */
 export { slotColors, filamentColors } from "../public/shared.js";
+
+/**
+ * The upper bound for a remaining weight corrected by hand.
+ *
+ * Also in `public/shared.js`: the detail dialog refuses the same number before
+ * it is sent, so the message the user reads and the rule the route enforces
+ * cannot drift apart.
+ */
+export { spoolWeightLimit } from "../public/shared.js";

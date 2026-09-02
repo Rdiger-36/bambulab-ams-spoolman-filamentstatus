@@ -128,3 +128,26 @@ export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) 
     }
     return Math.round(remain);
 }
+
+/**
+ * The most filament a spool can hold, in grams, or null when nothing says.
+ *
+ * A remaining weight corrected by hand has to stay inside it: a spool cannot
+ * hold more than its filament's full weight, and a number above that quietly
+ * turns every percentage the dashboard shows into nonsense.
+ *
+ * The larger of the two candidates wins rather than the filament's alone. A
+ * spool that was registered with more than the catalogue's full weight really
+ * did hold that much, and refusing to write back a number the spool itself
+ * reports would be the wrong way round.
+ *
+ * @param {object} spool - a whole Spoolman spool, with its filament embedded
+ * @returns {number|null} the limit in grams, or null when neither is known
+ */
+export function spoolWeightLimit(spool) {
+    const candidates = [spool?.filament?.weight, spool?.initial_weight]
+        .map(value => Number(value))
+        .filter(value => Number.isFinite(value) && value > 0);
+
+    return candidates.length ? Math.max(...candidates) : null;
+}

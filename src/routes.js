@@ -13,6 +13,7 @@ import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { tailLogLines, logFileSet } from "./logger.js";
 import { toClientSpool } from "./uispool.js";
+import { spoolWeightLimit } from "./utils.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -27,6 +28,8 @@ import {
     createFilament,
     createSpoolRecord,
     checkSpoolmanHealth,
+    getSpoolmanSpool,
+    patchSpoolFields,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
@@ -99,6 +102,43 @@ function rejectInLegacyMode(res) {
 }
 
 /**
+ * Rejects a hand made spool edit while legacy mode is on.
+ *
+ * Legacy mode derives the remaining weight from the AMS RFID remain percentage
+ * and writes it on the next slot change (see processSlot in mqtt.js), so a
+ * corrected value would disappear again on its own within seconds. The dialog
+ * disables the fields for the same reason; this stops a direct call.
+ *
+ * @returns {boolean} true when the request was answered and the caller must stop
+ */
+function rejectSpoolEditInLegacyMode(res) {
+    if (!legacyMode()) return false;
+    res.status(409).json({
+        ok: false,
+        error: "Legacy mode writes the remaining weight from the AMS RFID reading, so an edit here would be overwritten",
+    });
+    return true;
+}
+
+/**
+ * Finds a printer that is mid print with this spool loaded in one of its slots.
+ *
+ * Asked per spool rather than per dashboard: the spool being consumed is what
+ * matters, and it can sit in a second printer than the one whose page the dialog
+ * was opened from.
+ *
+ * @param {object[]} printers - the printer list
+ * @param {number} spoolId - Spoolman spool id
+ * @returns {object|null} the printing printer, or null
+ */
+function printerPrintingWithSpool(printers, spoolId) {
+    return printers.find(printer =>
+        ACTIVE_STATES.has(printer.currentGcodeState) &&
+        (printer.spoolData || []).some(spool => spool.existingSpool?.id === spoolId)
+    ) || null;
+}
+
+/**
  * Registers every HTTP route on the Express app.
  *
  * The API falls into four groups: read-only status and spool data for the
@@ -129,6 +169,10 @@ export function registerRoutes(app, printers) {
             VERSION: version,
             SPOOLMAN_FQDN: settings.SPOOLMAN_FQDN,
             monitoringEnabled: printer.monitoringEnabled,
+            // Both views load this endpoint, /api/print only the G-code one, and
+            // the spool detail dialog has to know in either whether a print is
+            // running before it offers to correct a remaining weight.
+            gcodeState: printer.currentGcodeState || "IDLE",
         });
     });
 
@@ -495,6 +539,95 @@ export function registerRoutes(app, printers) {
         } catch (err) {
             console.error("Server", serverLogFilePath, "Could not load Spoolman spools:", err?.message);
             res.status(502).json({ ok: false, error: err?.message || "Could not load Spoolman spools" });
+        }
+    });
+
+    // The whole Spoolman record behind one slot, for the spool detail dialog.
+    // The dashboard payload is narrowed on purpose (see uispool.js), so the
+    // fields the dialog shows are fetched once, on demand, rather than pushed
+    // onto every slot of every SSE update.
+    app.get("/api/spoolman/spool/:id", async (req, res) => {
+        const spoolId = Number(req.params.id);
+        if (!Number.isInteger(spoolId) || spoolId <= 0) {
+            return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
+        }
+
+        try {
+            res.json(await getSpoolmanSpool(spoolId));
+        } catch (err) {
+            const status = err?.response?.statusCode === 404 ? 404 : 502;
+            const message = status === 404
+                ? `Spool ${spoolId} not found in Spoolman`
+                : err?.message || "Could not load the spool from Spoolman";
+            console.error("Server", serverLogFilePath, `Could not load Spoolman spool ${spoolId}:`, err?.message);
+            res.status(status).json({ ok: false, error: message });
+        }
+    });
+
+    // The three fields the detail dialog may correct by hand. Everything else
+    // about a spool is either derived, owned by this service, or belongs to the
+    // filament, so it is edited in Spoolman itself.
+    app.patch("/api/spoolman/spool/:id", async (req, res) => {
+        if (rejectSpoolEditInLegacyMode(res)) return;
+
+        const spoolId = Number(req.params.id);
+        if (!Number.isInteger(spoolId) || spoolId <= 0) {
+            return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
+        }
+
+        const payload = {};
+
+        if (req.body?.remainingWeight !== undefined) {
+            const weight = Number(req.body.remainingWeight);
+            if (!Number.isFinite(weight) || weight < 0) {
+                return res.status(400).json({ ok: false, error: "The remaining weight must be a number of grams, zero or more" });
+            }
+
+            // A running job books its consumption onto the spool when it ends,
+            // subtracting from whatever the spool holds at that moment, so a
+            // weight corrected now would be overwritten a few minutes later.
+            const printing = printerPrintingWithSpool(printers, spoolId);
+            if (printing) {
+                return res.status(409).json({
+                    ok: false,
+                    printInFlight: true,
+                    error: `${printing.name} is printing (${printing.currentGcodeState}) with this spool. Its consumption is booked when the job ends and would overwrite the corrected weight, so this can be changed once the print is done.`,
+                });
+            }
+
+            payload.remaining_weight = weight;
+        }
+
+        if (req.body?.comment !== undefined) payload.comment = String(req.body.comment).trim();
+        if (req.body?.lotNr !== undefined) payload.lot_nr = String(req.body.lotNr).trim();
+
+        if (!Object.keys(payload).length) {
+            return res.status(400).json({ ok: false, error: "Nothing to change" });
+        }
+
+        try {
+            // The upper bound comes from the spool itself, so it is read rather
+            // than taken from the caller: a browser tab that has been open for a
+            // while may know an older filament.
+            if (payload.remaining_weight !== undefined) {
+                const limit = spoolWeightLimit(await getSpoolmanSpool(spoolId));
+                if (limit != null && payload.remaining_weight > limit) {
+                    return res.status(400).json({
+                        ok: false,
+                        error: `This spool holds at most ${Math.round(limit)} g, so it cannot have ${Math.round(payload.remaining_weight)} g left`,
+                    });
+                }
+            }
+
+            const spool = await patchSpoolFields(spoolId, payload);
+            refreshCachedSpool(printers, spool);
+            console.log("Server", serverLogFilePath, `[Spool] Updated spool ${spoolId} from the Web UI: ${Object.keys(payload).join(", ")}`);
+            res.json(spool);
+        } catch (err) {
+            const detail = err.response?.body ? JSON.stringify(err.response.body) : err.message;
+            console.error("Server", serverLogFilePath, `Could not update Spoolman spool ${spoolId}:`, detail);
+            const status = err?.response?.statusCode === 404 ? 404 : 502;
+            res.status(status).json({ ok: false, error: detail || "Could not update the spool" });
         }
     });
 
@@ -968,6 +1101,31 @@ function validateFilamentInput(filament) {
     if (!Number.isFinite(Number(filament.density)) || Number(filament.density) <= 0) return "Density must be a positive number";
     if (!Number.isFinite(Number(filament.diameter)) || Number(filament.diameter) <= 0) return "Diameter must be a positive number";
     return null;
+}
+
+/**
+ * Writes an edited Spoolman spool into every slot that already holds it.
+ *
+ * `printer.spoolData` caches whole Spoolman records and is refreshed from
+ * Spoolman on the monitor interval, so without this the dashboard would keep
+ * showing the weight the spool had before the edit until that interval comes
+ * round. The slot update goes out over SSE the same way a mapping change does.
+ *
+ * @param {object[]} printers - the printer list
+ * @param {object} spool - the spool as Spoolman answered with it
+ */
+function refreshCachedSpool(printers, spool) {
+    for (const printer of printers) {
+        for (const uiSpool of printer.spoolData || []) {
+            if (uiSpool.existingSpool?.id !== spool.id) continue;
+
+            uiSpool.existingSpool = spool;
+            // Legacy mode owns this field from the AMS reading, and the edit is
+            // refused there, so following the spool is right in both modes.
+            if (uiSpool.correctedWeight != null) uiSpool.correctedWeight = spool.remaining_weight ?? null;
+            broadcastSlotUpdate(printer.id, uiSpool);
+        }
+    }
 }
 
 /**

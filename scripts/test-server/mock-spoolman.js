@@ -117,6 +117,12 @@ export function createMockSpoolman(log) {
         res.status(201).json(expandSpool(spool, store.filaments));
     });
 
+    app.get("/api/v1/spool/:id", (req, res) => {
+        const spool = store.spools.find(s => s.id === Number(req.params.id));
+        if (!spool) return res.status(404).json({ message: "No spool with that id" });
+        res.json(expandSpool(spool, store.filaments));
+    });
+
     app.patch("/api/v1/spool/:id", (req, res) => {
         const spool = store.spools.find(s => s.id === Number(req.params.id));
         if (!spool) return res.status(404).json({ message: "No spool with that id" });
@@ -126,6 +132,14 @@ export function createMockSpoolman(log) {
         const { extra, ...rest } = req.body;
         Object.assign(spool, rest);
         if (extra) spool.extra = { ...spool.extra, ...extra };
+
+        // Spoolman keeps the two sides of the same figure consistent: a written
+        // remaining weight moves used_weight with it. Without this the mock
+        // reports a spool as both refilled and fully used.
+        if (rest.remaining_weight !== undefined) {
+            const initial = Number(spool.initial_weight) || 0;
+            spool.used_weight = Math.max(0, initial - Number(rest.remaining_weight));
+        }
 
         res.json(expandSpool(spool, store.filaments));
     });
