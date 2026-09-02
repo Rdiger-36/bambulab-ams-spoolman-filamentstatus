@@ -12,4 +12,9 @@ export const state = {
     // changed repeatedly in the Web UI.
     monitorsRunning: false,
     spoolmanBootstrapRunning: false,
+    // The SpoolmanDB catalogue, kept for the create-spool dialog. It is around
+    // seven thousand entries and a few megabytes, the dialog queries it while
+    // the user types, and it changes about as often as Spoolman ships a
+    // release, so it is fetched once and reused rather than pulled per request.
+    externalFilamentCache: { fetchedAt: 0, entries: [] },
 };

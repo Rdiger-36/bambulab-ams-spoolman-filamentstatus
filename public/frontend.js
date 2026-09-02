@@ -3,7 +3,9 @@ import {
 	filamentColors,
 	normColor,
 	slotColors,
+	spoolWeightLimit,
 } from "./shared.js";
+import { bambuProfile, materialsAgree, slotMaterial } from "./materials.js";
 
 let autoButton = null;
 // When false (default) the spool weight is tracked from the sliced G-code, so the
@@ -17,11 +19,32 @@ let spoolmanConnected = false;
 let lastLegacyCtx = null;
 // Printer name, used to suggest a location matching the SET_LOCATION format.
 let currentPrinterName = "";
+// Print states in which a job is in flight. Its consumption is booked only when
+// it ends, so the detail dialog does not offer to correct a remaining weight
+// while one of these is on. Mirrors ACTIVE_STATES in src/mqtt.js.
+const ACTIVE_PRINT_STATES = ["PREPARE", "RUNNING", "PAUSE"];
+// gcode_state of the shown printer, mirrored from /api/status and kept fresh by
+// the G-code view, which reads it again from /api/print.
+let printerGcodeState = "IDLE";
+// The payload behind every rendered row, by AMS slot id. The detail dialog is
+// opened from a delegated listener, which sees the clicked element rather than
+// the object the row was built from, and rows are recreated on every update.
+const renderedSpools = new Map();
 
 // Initialize the document once it has fully loaded
 document.addEventListener("DOMContentLoaded", () => {
     
 	document.getElementById("monitoring-toggle").addEventListener("change", toggleMonitoring);
+
+    // Clicking a filament name opens the spool detail dialog. Delegated, because
+    // both views rebuild their rows on every update and an SSE slot update
+    // replaces a single row in place, which would drop a listener bound to it.
+    document.getElementById("spool-list").addEventListener("click", event => {
+        const name = event.target.closest(".spool-name-link");
+        if (!name) return;
+        const amsSpool = renderedSpools.get(name.dataset.amsid);
+        if (amsSpool) showSpoolDetailDialog(amsSpool);
+    });
 
     // The menu bar owns the printer list and the dark mode button. Picking a
     // printer switches the dashboard in place instead of navigating.
@@ -149,10 +172,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     showDeprecationNotice();
 
-    // Check if any modal dialog is currently open
+    // Check if any modal dialog is currently open. A live update that rerenders
+    // the table underneath an open dialog replaces the row it was opened from,
+    // so every dialog that reads a row has to be listed here.
     function isDialogOpen() {
-        const dialog = document.getElementById("info-dialog");
-        return dialog && dialog.open;
+        return ["info-dialog", "spool-detail-dialog"]
+            .some(id => document.getElementById(id)?.open);
     }
     
     // Opens a printer whenever the menu bar has loaded or reloaded the list
@@ -293,8 +318,12 @@ document.addEventListener("DOMContentLoaded", () => {
 	        spoolListElement.appendChild(table);
 	    });
 
-	    // Synchronize column widths across all tables
-	    synchronizeSelectedColumns([0,1,2,3]);
+	    // Synchronize column widths across all tables. The action column is
+	    // included: left out, it is the only column without a fixed width and
+	    // therefore absorbs all the leftover space of the full-width table, which
+	    // parks the button in the middle of a wide empty cell and leaves the
+	    // other columns crammed against the left edge.
+	    synchronizeSelectedColumns([0,1,2,3,4]);
 	}
     
     function synchronizeSelectedColumns(indices) {
@@ -416,27 +445,57 @@ document.addEventListener("DOMContentLoaded", () => {
 	// which the automatic match can't tell apart.
 	// ---------------------------------------------------------------------
 
-	// Ranks Spoolman spools by how well they fit the slot: same material AND
-	// color first, then same material, then the rest. Saves scrolling through a
-	// long inventory to find the obvious candidate.
+	// Ranks Spoolman spools by how well they fit the slot: the same material and
+	// the same colours first, then the same material by how close its colour is,
+	// then the rest. An inventory of forty spools is otherwise a list to read
+	// through rather than a choice to make.
 	function rankSpoolsForSlot(spools, slot) {
-	    const slotMaterial = (slot?.tray_type || "").toUpperCase();
+	    // The material of the profile the AMS names, compared by family: the
+	    // printer reports "PLA" where Spoolman holds "PLA Silk", so the exact
+	    // comparison this used to make put almost every spool in the last rank.
+	    const reported = slotMaterial(slot || {});
 	    // Compared as a set rather than as a single hex, so a multi colour spool
 	    // can reach the top for its own slot. Those carry no color_hex at all,
 	    // so against the single field they always ranked last.
-	    const slotColorSet = [...slotColors(slot)].sort().join(",");
+	    const slotColorSet = slotColors(slot);
 
 	    const score = (sp) => {
-	        const material = (sp.filament?.material || "").toUpperCase();
-	        const colors   = [...filamentColors(sp.filament)].sort().join(",");
-	        if (material && material === slotMaterial && colors && colors === slotColorSet) return 0;
-	        if (material && material === slotMaterial) return 1;
-	        return 2;
+	        const material = sp.filament?.material;
+	        const sameMaterial = Boolean(reported && material && materialsAgree(reported, material));
+	        const distance = colorSetDistance(slotColorSet, filamentColors(sp.filament));
+
+	        if (sameMaterial && distance === 0) return { rank: 0, distance };
+	        if (sameMaterial) return { rank: 1, distance };
+	        return { rank: 2, distance };
 	    };
 
 	    return [...spools]
-	        .map(sp => ({ sp, rank: score(sp) }))
-	        .sort((a, b) => a.rank - b.rank || a.sp.id - b.sp.id);
+	        .map(sp => ({ sp, ...score(sp) }))
+	        .sort((a, b) => a.rank - b.rank || a.distance - b.distance || a.sp.id - b.sp.id);
+	}
+
+	// How far two colour sets sit apart, 0 for the same colours and Infinity when
+	// one of them has no colour at all.
+	//
+	// Every colour is measured against the closest one on the other side, in both
+	// directions: taken one way only, a two colour spool would count as identical
+	// to a single colour one as soon as one of its colours matched.
+	function colorSetDistance(a, b) {
+	    if (!a.length || !b.length) return Infinity;
+
+	    const rgb = (color) => {
+	        const hex = normColor(color).padEnd(6, "0");
+	        return [0, 2, 4].map(at => parseInt(hex.slice(at, at + 2), 16) || 0);
+	    };
+
+	    const nearest = (color, set) => Math.min(...set.map(other => {
+	        const [r1, g1, b1] = rgb(color);
+	        const [r2, g2, b2] = rgb(other);
+	        return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+	    }));
+
+	    const distances = [...a.map(c => nearest(c, b)), ...b.map(c => nearest(c, a))];
+	    return distances.reduce((total, one) => total + one, 0) / distances.length;
 	}
 
 	function spoolPickerLabel(sp) {
@@ -490,6 +549,11 @@ document.addEventListener("DOMContentLoaded", () => {
 	    selectMode(spools.length ? "assign" : "create");
 	}
 
+	// How many spools the suggestion list offers before the rest is left to the
+	// full list below it. Enough to hold the obvious candidates of a slot,
+	// short enough to stay a suggestion.
+	const ASSIGN_SUGGESTIONS = 6;
+
 	function renderAssignPane(pane, actionButton, button, amsSpool, spools) {
 	    actionButton.textContent = "Assign";
 	    actionButton.disabled = true;
@@ -499,27 +563,201 @@ document.addEventListener("DOMContentLoaded", () => {
 	        return;
 	    }
 
-	    const rows = rankSpoolsForSlot(spools, amsSpool.slot || {}).map(({ sp }) => `
-	        <label class="sp-pick">
-	            <input type="radio" name="assign-spool" value="${sp.id}"> ${spoolPickerLabel(sp)}
-	        </label>`).join("");
+	    // The printer knows what material sits in the slot even for a spool it
+	    // cannot identify, so an assignment that would book PLA onto an ABS spool
+	    // can be pointed out. It is a warning, not a rule: the material a slot
+	    // reports can be wrong, and only the user knows what is really in there.
+	    const reported = slotMaterial(amsSpool.slot || {});
+	    const mismatched = new Set(spools
+	        .filter(sp => !materialsAgree(reported, sp.filament?.material))
+	        .map(sp => sp.id));
 
-	    pane.innerHTML = `<div class="sp-scroll">${rows}</div>`;
-	    pane.addEventListener("change", () => { actionButton.disabled = false; }, { once: true });
+	    const ranked = rankSpoolsForSlot(spools, amsSpool.slot || {});
+	    // Only a spool of the right material is ever suggested. Suggesting the
+	    // closest colour out of an inventory that holds nothing fitting would put
+	    // an ABS spool at the top of a PLA slot.
+	    const suggested = ranked.filter(entry => entry.rank < 2).slice(0, ASSIGN_SUGGESTIONS);
+	    const suggestedIds = new Set(suggested.map(entry => entry.sp.id));
+
+	    const pick = (entry) => `
+	        <label class="sp-pick">
+	            <input type="radio" name="assign-spool" value="${entry.sp.id}"> ${spoolPickerLabel(entry.sp)}${entry.rank === 0
+	                ? ` <span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
+	                : ""}${mismatched.has(entry.sp.id)
+	                ? ` <span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
+	                : ""}
+	        </label>`;
+
+	    // Everything a spool can be recognised by, so the search does not have to
+	    // guess which of them the user typed.
+	    const haystack = (sp) => [
+	        `#${sp.id}`,
+	        sp.filament?.vendor?.name,
+	        sp.filament?.material,
+	        sp.filament?.name,
+	        sp.location,
+	        sp.lot_nr,
+	        sp.comment,
+	    ].filter(Boolean).join(" ").toLowerCase();
+
+	    pane.innerHTML = `
+	        <label class="sp-search">
+	            <input id="sp-search" type="search" autocomplete="off" placeholder="Search by name, material, vendor or location">
+	        </label>
+	        <div class="sp-scroll" id="sp-list"></div>
+	        <p class="sp-note gc-warn" id="sp-material-warning"></p>`;
+
+	    const list = pane.querySelector("#sp-list");
+	    const search = pane.querySelector("#sp-search");
+	    const warning = pane.querySelector("#sp-material-warning");
+
+	    // Rerendered on every keystroke, so the selection has to be carried over
+	    // rather than read off the DOM that is about to be replaced.
+	    let selectedId = null;
+
+	    const render = () => {
+	        const term = search.value.trim().toLowerCase();
+	        const matches = term ? ranked.filter(entry => haystack(entry.sp).includes(term)) : ranked;
+
+	        if (!matches.length) {
+	            list.innerHTML = `<p class="gc-muted sp-wide">No spool matches "${escapeHtml(search.value.trim())}".</p>`;
+	            return;
+	        }
+
+	        // While searching, the split into suggestions and the rest only gets
+	        // in the way: what was typed is the filter, and the ranking still puts
+	        // the closest first.
+	        if (term) {
+	            list.innerHTML = `
+	                <div class="sp-section">${matches.length} of ${ranked.length} spools</div>
+	                ${matches.map(pick).join("")}`;
+	        } else {
+	            const rest = ranked.filter(entry => !suggestedIds.has(entry.sp.id));
+	            list.innerHTML = `
+	                ${suggested.length ? `
+	                    <div class="sp-section" title="Same material as the slot reports, closest colour first">Suggested for this slot</div>
+	                    ${suggested.map(pick).join("")}` : ""}
+	                ${rest.length ? `
+	                    <div class="sp-section">${suggested.length ? "Other spools" : "All spools"} (${rest.length})</div>
+	                    ${rest.map(pick).join("")}` : ""}`;
+	        }
+
+	        const stillThere = selectedId != null && list.querySelector(`input[value="${selectedId}"]`);
+	        if (stillThere) stillThere.checked = true;
+	        actionButton.disabled = !stillThere;
+	    };
+
+	    list.addEventListener("change", () => {
+	        const picked = list.querySelector('input[name="assign-spool"]:checked');
+	        if (!picked) return;
+
+	        selectedId = Number(picked.value);
+	        actionButton.disabled = false;
+
+	        const spool = spools.find(sp => sp.id === selectedId);
+	        warning.textContent = spool && mismatched.has(spool.id)
+	            ? `The printer reports ${reported} in this slot, spool #${spool.id} is ${spool.filament?.material ?? "of another material"}. It can still be assigned, and this slot's consumption is then booked onto that spool.`
+	            : "";
+	    });
+
+	    search.addEventListener("input", render);
+	    render();
 
 	    actionButton.onclick = () => {
-	        const picked = pane.querySelector('input[name="assign-spool"]:checked');
-	        if (!picked) return;
+	        if (selectedId == null) return;
 	        document.getElementById("info-dialog").close();
-	        sendMapping(button, amsSpool, Number(picked.value));
+	        sendMapping(button, amsSpool, selectedId);
 	    };
 	}
 
+	// Keeps the first spelling of every entry and drops the later duplicates, so
+	// the local "PLA" is not listed a second time as the catalogue's "pla".
+	function uniqueByCase(values) {
+	    const seen = new Set();
+	    const unique = [];
+
+	    for (const value of values) {
+	        const key = String(value ?? "").trim().toLowerCase();
+	        if (!key || seen.has(key)) continue;
+	        seen.add(key);
+	        unique.push(String(value).trim());
+	    }
+	    return unique;
+	}
+
+	// Runs the last call of a burst, once the typing has stopped.
+	function debounce(fn, ms = 250) {
+	    let timer = null;
+	    return (...args) => {
+	        clearTimeout(timer);
+	        timer = setTimeout(() => fn(...args), ms);
+	    };
+	}
+
+	function sameText(a, b) {
+	    return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+	}
+
+	/** The colours a catalogue entry carries, in the shape the swatches use. */
+	function catalogueColors(entry) {
+	    if (entry.color_hexes?.length) return entry.color_hexes.map(c => normColor(c).toLowerCase());
+	    return entry.color_hex ? [normColor(entry.color_hex).toLowerCase()] : [];
+	}
+
+	// What each catalogue entry is called in the picker.
+	//
+	// The name alone, because the two steps above it already said which
+	// manufacturer and which material this is. The catalogue lists the same
+	// filament once per spool it is sold on, so "Panchroma Regular Grey" is
+	// three entries that differ in weight and in the spool they come on, and a
+	// name that occurs more than once carries exactly the fields that differ
+	// between its entries. Adding the manufacturer to all of them, as this did
+	// at first, only printed the same qualifier twice.
+	function catalogueLabels(entries) {
+	    const parts = {
+	        manufacturer: entry => entry.manufacturer,
+	        material: entry => entry.material,
+	        weight: entry => (entry.weight == null ? null : `${Math.round(entry.weight)} g`),
+	        diameter: entry => (entry.diameter == null ? null : `${entry.diameter} mm`),
+	        spool_type: entry => entry.spool_type,
+	    };
+
+	    const byName = new Map();
+	    for (const entry of entries) {
+	        const name = entry.name ?? "";
+	        byName.set(name, [...(byName.get(name) ?? []), entry]);
+	    }
+
+	    const labelled = [];
+	    for (const [name, group] of byName) {
+	        if (group.length === 1) {
+	            labelled.push([name, group[0]]);
+	            continue;
+	        }
+
+	        const telling = Object.entries(parts)
+	            .filter(([, read]) => new Set(group.map(read)).size > 1)
+	            .map(([, read]) => read);
+
+	        for (const entry of group) {
+	            const qualifiers = telling.map(read => read(entry)).filter(Boolean);
+	            labelled.push([[name, ...qualifiers].join(" · "), entry]);
+	        }
+	    }
+
+	    return labelled;
+	}
+
 	// Values a chipless spool does report, used to pre-fill the form.
+	//
+	// The AMS reports every colour of a multi colour spool, so all of them are
+	// offered: taking only `tray_color` created a plain black spool for a
+	// filament that is black and red.
 	function slotDefaults(slot) {
+	    const colors = slotColors(slot).map(c => normColor(c));
 	    return {
 	        material: slot.tray_type || "",
-	        color: normColor(slot.tray_color) || "000000",
+	        colors: colors.length ? colors : [normColor(slot.tray_color) || "000000"],
 	    };
 	}
 
@@ -530,8 +768,18 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const slot = amsSpool.slot || {};
 	    const defaults = slotDefaults(slot);
 
-	    // Materials already used here first, then everything Spoolman knows about
-	    const materials = [...new Set([...(lookups.materials || []), ...(lookups.externalMaterials || []).map(m => m.material)])];
+	    // What this Spoolman already holds comes first in every list, and the
+	    // SpoolmanDB catalogue fills in what it does not: a first spool would
+	    // otherwise be typed into empty fields with nothing to pick from.
+	    const materials = uniqueByCase([
+	        ...(lookups.materials || []),
+	        ...(lookups.externalMaterials || []).map(m => m.material),
+	    ]);
+
+	    const vendors = uniqueByCase([
+	        ...(lookups.vendors || []).map(v => v.name),
+	        ...(lookups.externalVendors || []),
+	    ]);
 
 	    const filamentOptions = (lookups.filaments || [])
 	        .map(f => `<option value="${f.id}">#${f.id} ${escapeHtml([f.vendor?.name, f.material, f.name].filter(Boolean).join(" · "))}</option>`)
@@ -541,7 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        <div class="sp-scroll">
 	            <div class="sp-section">Filament</div>
 	            <label class="sp-field sp-wide">
-	                <span>Use filament</span>
+	                <span>Use a filament you already have</span>
 	                <select id="sp-filament">
 	                    <option value="">+ Create a new filament</option>
 	                    ${filamentOptions}
@@ -549,10 +797,34 @@ document.addEventListener("DOMContentLoaded", () => {
 	            </label>
 
 	            <div id="sp-filament-fields">
+	                <div class="sp-wide sp-catalogue">
+	                    <div class="sp-catalogue-title">Fill the new filament in from the catalogue</div>
+	                    <div class="sp-catalogue-steps">
+	                        <label class="sp-field">
+	                            <span>1. Manufacturer</span>
+	                            <input id="sp-cat-vendor" list="sp-cat-vendors" autocomplete="off" placeholder="all manufacturers">
+	                            <datalist id="sp-cat-vendors">${(lookups.externalVendors || []).map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
+	                        </label>
+	                        <label class="sp-field">
+	                            <span>2. Material</span>
+	                            <input id="sp-cat-material" list="sp-cat-materials" autocomplete="off" placeholder="all materials"
+	                                value="${escapeHtml(defaults.material)}">
+	                            <datalist id="sp-cat-materials"></datalist>
+	                        </label>
+	                        <label class="sp-field">
+	                            <span>3. Filament</span>
+	                            <input id="sp-cat-filament" list="sp-cat-filaments" autocomplete="off" placeholder="pick one to fill the form">
+	                            <datalist id="sp-cat-filaments"></datalist>
+	                        </label>
+	                    </div>
+	                    <small class="gc-muted" id="sp-catalogue-hint"></small>
+	                </div>
+
+	                <div class="sp-subsection">Filament data</div>
 	                <label class="sp-field">
 	                    <span>Manufacturer</span>
 	                    <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu">
-	                    <datalist id="sp-vendors">${(lookups.vendors || []).map(v => `<option value="${escapeHtml(v.name)}">`).join("")}</datalist>
+	                    <datalist id="sp-vendors">${vendors.map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
 	                    <small class="gc-muted" id="sp-vendor-hint"></small>
 	                </label>
 	                <label class="sp-field">
@@ -565,13 +837,21 @@ document.addEventListener("DOMContentLoaded", () => {
 	                    <span>Name</span>
 	                    <input id="sp-name" placeholder="e.g. Galaxy Black">
 	                </label>
-	                <label class="sp-field">
-	                    <span>Colour</span>
-	                    <span class="sp-colour">
-	                        <input type="color" id="sp-colour-pick" value="#${defaults.color}">
-	                        <input id="sp-colour" value="${defaults.color}" maxlength="6" autocomplete="off">
-	                    </span>
-	                </label>
+
+	                <div class="sp-subsection">Colour</div>
+	                <div class="sp-wide">
+	                    <div id="sp-colours" class="sp-colours"></div>
+	                    <div class="sp-colour-actions">
+	                        <button type="button" class="btn btn-small" id="sp-colour-add">Add a colour</button>
+	                        <select id="sp-direction" title="How the colours run along the filament">
+	                            <option value="coaxial">coaxial</option>
+	                            <option value="longitudinal">longitudinal</option>
+	                        </select>
+	                    </div>
+	                    <small class="gc-muted" id="sp-colour-hint"></small>
+	                </div>
+
+	                <div class="sp-subsection">Specifications</div>
 	                <label class="sp-field">
 	                    <span>Density * (g/cm³)</span>
 	                    <input type="number" id="sp-density" step="0.01" min="0.01">
@@ -588,6 +868,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	                    <span>Bed temp (°C)</span>
 	                    <input type="number" id="sp-bed-temp">
 	                </label>
+
+	                <div class="sp-subsection">Weights</div>
 	                <label class="sp-field">
 	                    <span>Full weight (g)</span>
 	                    <input type="number" id="sp-weight" min="0" value="1000">
@@ -628,6 +910,135 @@ document.addEventListener("DOMContentLoaded", () => {
 	        $("sp-filament-fields").style.display = e.target.value ? "none" : "";
 	    });
 
+	    // The SpoolmanDB catalogue, narrowed down in steps rather than searched in
+	    // one go: it holds around seven thousand entries, and reading a list of
+	    // that length is what picking a manufacturer first avoids. Every step is
+	    // an input with its own suggestions, so a name can also just be typed.
+	    //
+	    // Picking an entry fills in the colours, the density, the temperatures and
+	    // the weights, none of which can be read off a chipless spool at all.
+	    const catalogue = new Map();
+	    // Answers can come back out of order, and the first load is the slowest
+	    // one: without this the unfiltered list of the initial load landed after
+	    // the narrowed one and put the whole catalogue back on screen. The two
+	    // lists count separately, they are loaded together and neither of them
+	    // supersedes the other.
+	    const pending = { materials: 0, entries: 0 };
+
+	    const catalogueQuery = (extra = {}) => {
+	        const params = new URLSearchParams();
+	        const vendor = $("sp-cat-vendor").value.trim();
+	        const material = $("sp-cat-material").value.trim();
+	        if (vendor) params.set("manufacturer", vendor);
+	        if (material) params.set("material", material);
+	        for (const [key, value] of Object.entries(extra)) params.set(key, value);
+	        return params;
+	    };
+
+	    const askCatalogue = async (params) => {
+	        try {
+	            return await fetchJson(`./api/spoolman/external/filaments?${params}`);
+	        } catch {
+	            // The form works without it, so a catalogue that cannot be reached
+	            // costs the suggestions and nothing else.
+	            $("sp-catalogue-hint").textContent = "The filament catalogue could not be loaded";
+	            return null;
+	        }
+	    };
+
+	    const fillDatalist = (id, values) => {
+	        document.getElementById(id).innerHTML = values
+	            .map(value => `<option value="${escapeHtml(value)}">`).join("");
+	    };
+
+	    // The materials the chosen manufacturer actually sells.
+	    const loadMaterials = async () => {
+	        const request = ++pending.materials;
+	        const materials = await askCatalogue(catalogueQuery({ facet: "material" }));
+	        if (materials && request === pending.materials) fillDatalist("sp-cat-materials", materials);
+	    };
+
+	    // The entries left once manufacturer and material have been narrowed down.
+	    const loadEntries = async () => {
+	        const request = ++pending.entries;
+	        const entries = await askCatalogue(catalogueQuery({ limit: 500 }));
+	        if (!entries || request !== pending.entries) return;
+
+	        const ordered = [...entries].sort((a, b) =>
+	            String(a.name ?? "").localeCompare(String(b.name ?? "")));
+
+	        catalogue.clear();
+	        for (const [label, entry] of catalogueLabels(ordered)) catalogue.set(label, entry);
+
+	        fillDatalist("sp-cat-filaments", [...catalogue.keys()]);
+	        $("sp-catalogue-hint").textContent = ordered.length
+	            ? `${ordered.length}${ordered.length === 500 ? "+" : ""} entries, by name`
+	            : "Nothing in the catalogue matches this manufacturer and material";
+	    };
+
+	    // Picking an entry fills the form. A filament this Spoolman already holds
+	    // wins over the catalogue: creating a second one that only differs in its
+	    // id is how an inventory ends up with four "Sunlu PLA Grey".
+	    const applyCatalogueEntry = () => {
+	        const entry = catalogue.get($("sp-cat-filament").value.trim());
+	        if (!entry) return;
+
+	        const sameVendorAndName = (lookups.filaments || []).filter(f =>
+	            sameText(f.name, entry.name) && sameText(f.vendor?.name, entry.manufacturer));
+	        const local = sameVendorAndName.find(f => sameText(f.material, entry.material));
+
+	        if (local) {
+	            $("sp-filament").value = String(local.id);
+	            $("sp-filament-fields").style.display = "none";
+	            showNotification(`This filament already exists in Spoolman as #${local.id}, using it.`, "success");
+	            return;
+	        }
+
+	        $("sp-vendor").value = entry.manufacturer ?? "";
+	        $("sp-material").value = entry.material ?? "";
+	        $("sp-name").value = entry.name ?? "";
+	        if (entry.density != null) $("sp-density").value = entry.density;
+	        if (entry.diameter != null) $("sp-diameter").value = entry.diameter;
+	        if (entry.extruder_temp != null) $("sp-extruder-temp").value = entry.extruder_temp;
+	        if (entry.bed_temp != null) $("sp-bed-temp").value = entry.bed_temp;
+	        if (entry.weight != null) $("sp-weight").value = entry.weight;
+	        if (entry.spool_weight != null) $("sp-spool-weight").value = entry.spool_weight;
+	        if (entry.weight != null) $("sp-initial-weight").value = entry.weight;
+
+	        const colors = catalogueColors(entry);
+	        if (colors.length) {
+	            drawColours(colors.map(c => normColor(c)));
+	            if (entry.multi_color_direction) $("sp-direction").value = entry.multi_color_direction;
+	        }
+
+	        const notes = ["Filled in from the catalogue"];
+	        if (sameVendorAndName.length) {
+	            notes.push(`your Spoolman already holds #${sameVendorAndName[0].id} ${sameVendorAndName[0].material ?? ""} of this name`.trim());
+	        }
+	        $("sp-catalogue-hint").textContent = notes.join(", ");
+	    };
+
+	    // A step that changes invalidates the ones below it, otherwise a filament
+	    // picked for one manufacturer stays in the field for the next.
+	    const onVendorStep = debounce(() => {
+	        $("sp-cat-filament").value = "";
+	        loadMaterials();
+	        loadEntries();
+	    });
+
+	    const onMaterialStep = debounce(() => {
+	        $("sp-cat-filament").value = "";
+	        loadEntries();
+	    });
+
+	    $("sp-cat-vendor").addEventListener("input", onVendorStep);
+	    $("sp-cat-material").addEventListener("input", onMaterialStep);
+	    $("sp-cat-filament").addEventListener("input", applyCatalogueEntry);
+	    $("sp-cat-filament").addEventListener("change", applyCatalogueEntry);
+
+	    loadMaterials();
+	    loadEntries();
+
 	    // Density is required and cannot be read off the spool, so fill it (and the
 	    // temperatures) from Spoolman's material catalogue as soon as one matches.
 	    const applyMaterialDefaults = () => {
@@ -655,12 +1066,57 @@ document.addEventListener("DOMContentLoaded", () => {
 	            : "";
 	    });
 
-	    // Keep the picker and the hex field in sync
-	    $("sp-colour-pick").addEventListener("input", () => { $("sp-colour").value = $("sp-colour-pick").value.replace("#", "").toUpperCase(); });
-	    $("sp-colour").addEventListener("input", () => {
-	        const hex = normColor($("sp-colour").value);
-	        if (/^[0-9A-F]{6}$/.test(hex)) $("sp-colour-pick").value = `#${hex}`;
+	    // A filament can carry more than one colour, and both the AMS and the
+	    // catalogue report all of them. Spoolman keeps them as a list plus the
+	    // direction they run in, so the form does the same: one row per colour,
+	    // and the direction only asked for once there is more than one.
+	    const colourRow = (hex) => `
+	        <span class="sp-colour">
+	            <input type="color" class="sp-colour-pick" value="#${hex}">
+	            <input class="sp-colour-hex" value="${hex}" maxlength="6" autocomplete="off">
+	            <button type="button" class="sp-colour-remove" title="Remove this colour">✕</button>
+	        </span>`;
+
+	    const currentColours = () => [...pane.querySelectorAll(".sp-colour-hex")]
+	        .map(input => normColor(input.value))
+	        .filter(hex => /^[0-9A-F]{6}$/.test(hex));
+
+	    const drawColours = (colours) => {
+	        $("sp-colours").innerHTML = colours.map(colourRow).join("");
+	        // A single colour has no direction to run in, and Spoolman stores it
+	        // in the plain colour field then.
+	        $("sp-direction").style.display = colours.length > 1 ? "" : "none";
+	        $("sp-colours").classList.toggle("sp-colours-single", colours.length < 2);
+	        $("sp-colour-hint").textContent = colours.length > 1
+	            ? `${colours.length} colours, stored as a multi colour filament`
+	            : "";
+	    };
+
+	    $("sp-colours").addEventListener("input", (event) => {
+	        const row = event.target.closest(".sp-colour");
+	        if (!row) return;
+
+	        if (event.target.classList.contains("sp-colour-pick")) {
+	            row.querySelector(".sp-colour-hex").value = event.target.value.replace("#", "").toUpperCase();
+	        } else {
+	            const hex = normColor(event.target.value);
+	            if (/^[0-9A-F]{6}$/.test(hex)) row.querySelector(".sp-colour-pick").value = `#${hex}`;
+	        }
 	    });
+
+	    $("sp-colours").addEventListener("click", (event) => {
+	        if (!event.target.classList.contains("sp-colour-remove")) return;
+	        const colours = currentColours();
+	        const index = [...pane.querySelectorAll(".sp-colour")].indexOf(event.target.closest(".sp-colour"));
+	        colours.splice(index, 1);
+	        drawColours(colours.length ? colours : ["000000"]);
+	    });
+
+	    $("sp-colour-add").addEventListener("click", () => {
+	        drawColours([...currentColours(), "FFFFFF"]);
+	    });
+
+	    drawColours(defaults.colors);
 
 	    // Full weight is the usual starting point for a spool's initial weight
 	    $("sp-weight").addEventListener("input", () => { $("sp-initial-weight").value = $("sp-weight").value; });
@@ -694,7 +1150,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	            material:     $("sp-material").value,
 	            density:      $("sp-density").value,
 	            diameter:     $("sp-diameter").value,
-	            colorHex:     $("sp-colour").value,
+	            colorHexes:   [...pane.querySelectorAll(".sp-colour-hex")].map(input => input.value),
+	            multiColorDirection: $("sp-direction").value,
 	            weight:       $("sp-weight").value,
 	            spoolWeight:  $("sp-spool-weight").value,
 	            extruderTemp: $("sp-extruder-temp").value,
@@ -736,8 +1193,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	    }
 	}
 
-	async function fetchJson(url) {
-	    const res = await fetch(url);
+	async function fetchJson(url, options = undefined) {
+	    const res = await fetch(url, options);
 	    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
 	    return res.json();
 	}
@@ -793,6 +1250,460 @@ document.addEventListener("DOMContentLoaded", () => {
 	    }
 	}
 
+	// ---- Spool detail dialog -------------------------------------------------
+	// Opened from a filament name in either table. One tab for the spool, one for
+	// the filament behind it, each showing the whole Spoolman record next to a
+	// large colour swatch and a link to its Spoolman page. The dashboard payload
+	// is narrowed on purpose, so the record is fetched here rather than carried
+	// on every slot of every update.
+
+	// The name both tables print, without any of the markup around it.
+	function spoolReadableName(amsSpool) {
+	    const slot = amsSpool.slot || {};
+	    const fil = amsSpool.existingSpool?.filament;
+
+	    if (amsSpool.slotState === "Empty") {
+	        // An empty slot the AMS is busy with is a spool going in or out, which
+	        // reports nothing the backend could tell from a truly empty slot.
+	        return amsSpool.option === "Waiting for data" ? "Reading spool" : "Empty slot";
+	    }
+
+	    const parts = [
+	        fil?.vendor?.name ?? amsSpool.matchingExternalFilament?.manufacturer,
+	        fil?.material     ?? slot.tray_type,
+	        fil?.name         ?? amsSpool.matchingExternalFilament?.name ?? slot.tray_sub_brands,
+	    ].filter(Boolean);
+	    return parts.length ? parts.join(" · ") : "Unknown filament";
+	}
+
+	// The em dash is this UI's "no value", so an absent field reads the same here
+	// as it does in the tables.
+	function detailText(value) {
+	    return value == null || value === "" ? "—" : escapeHtml(value);
+	}
+
+	function detailGrams(value) {
+	    return value == null ? "—" : `${Math.round(value)} g`;
+	}
+
+	function detailDate(value) {
+	    if (!value) return "—";
+	    const date = new Date(value);
+	    return Number.isNaN(date.getTime()) ? escapeHtml(value) : formatDate(date);
+	}
+
+	// Spoolman stores an extra field as its JSON representation, so a tag comes
+	// back wrapped in quotes and would be shown with them.
+	function detailExtra(value) {
+	    if (value == null || value === "") return "—";
+	    try {
+	        return detailText(JSON.parse(value));
+	    } catch {
+	        return detailText(value);
+	    }
+	}
+
+	// Which colours a slot is drawn in: the linked Spoolman spool's, and the ones
+	// the printer reports for a slot that has no spool behind it.
+	//
+	// The AMS reports what physically sits in the tray, which is the only source
+	// for an unlinked slot. As soon as a spool is linked, the Spoolman record is
+	// the one a user keeps, so the swatch follows it and stops disagreeing with
+	// the spool page it links to. Where the two differ, the detail dialog names
+	// both under "Colour (AMS)" and "Colour (Spoolman)".
+	//
+	// The direction is never reported by the AMS, so it always comes from
+	// whichever filament record was matched.
+	function spoolSwatchColors(amsSpool, spool = null) {
+	    const filament = (spool ?? amsSpool.existingSpool)?.filament || null;
+	    const spoolmanColors = filamentColors(filament || {});
+	    const direction = filament?.multi_color_direction ?? amsSpool.matchingExternalFilament?.multi_color_direction ?? null;
+
+	    return {
+	        colors: spoolmanColors.length ? spoolmanColors : slotColors(amsSpool.slot || {}),
+	        direction,
+	    };
+	}
+
+	// A colour set as the small swatch plus the hex codes behind it. The AMS and
+	// Spoolman each report their own, and the two disagreeing is what explains a
+	// spool the automatic match will not connect.
+	function detailColors(colors, direction) {
+	    if (!colors.length) return "—";
+	    return `${swatchHtml(colors, direction)}${colors.map(c => `#${normColor(c)}`).join(" ")}`;
+	}
+
+	// Same colours as the inline swatch, drawn large enough to tell two shades of
+	// one filament apart, which is what the 12px one in the table cannot do.
+	function bigSwatchHtml(colors, direction) {
+	    const background = colorSetBackground(colors, direction);
+	    if (!background) return "";
+	    const title = colors.map(c => `#${normColor(c)}`).join(" ");
+	    return `<span class="sd-swatch" style="background:${background}" title="${title}"></span>`;
+	}
+
+	// A row is `[label, value]`, or `[label, value, field]` for one of the three
+	// fields that can be corrected here. The pencil turns that row into an input
+	// in place, so the values stay where they are read instead of being repeated
+	// in a form of their own further down.
+	//
+	// It sits in front of the value rather than behind it. Behind it, every row
+	// had to reserve its width to keep the values on one right edge, which left
+	// a gap along the whole list; in front, it takes the empty space between the
+	// label and the value that every row already has.
+	function detailRows(rows) {
+	    return `<div class="sd-grid">${rows
+	        .filter(Boolean)
+	        .map(([label, value, field]) => `
+	            <div class="sd-row"${field ? ` data-field="${field}"` : ""}>
+	                <span class="sd-label">${escapeHtml(label)}</span>
+	                <span class="sd-value">${field ? editButtonHtml(field, label) : ""}${value}</span>
+	            </div>`)
+	        .join("")}</div>`;
+	}
+
+	function editButtonHtml(field, label) {
+	    const what = `Change ${label.toLowerCase()}`;
+	    return `<button type="button" class="sd-edit" data-field="${field}" title="${escapeHtml(what)}" aria-label="${escapeHtml(what)}">✎</button>`;
+	}
+
+	// The link out to Spoolman belongs to whichever tab is open, so it sits in
+	// that pane's head rather than in the button row, where it read as a third
+	// action next to Close and Save.
+	function spoolmanLinkHtml(path, label) {
+	    return `<a class="sd-link gc-link" href="${spoolmanBase()}${path}" target="_blank" rel="noopener">${escapeHtml(label)} ↗</a>`;
+	}
+
+	function spoolmanBase() {
+	    return (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
+	}
+
+	// Why a spool cannot be edited right now, or null when it can. Legacy mode
+	// closes the whole form, a running print only the remaining weight: both of
+	// them write that number afterwards, and neither touches comment or lot
+	// number. The backend refuses the same two cases.
+	function spoolEditBlockedReason() {
+	    if (legacyMode) {
+	        return {
+	            everything: true,
+	            reason: "Legacy mode writes the remaining weight from the AMS RFID reading, so a value entered here would be overwritten on the next update. Edit this spool in Spoolman instead.",
+	        };
+	    }
+	    if (ACTIVE_PRINT_STATES.includes(printerGcodeState)) {
+	        return {
+	            everything: false,
+	            reason: `The printer is printing (${printerGcodeState}). The consumption of the running job is booked onto this spool when the job ends, which would overwrite a weight entered now. The other fields can still be changed.`,
+	        };
+	    }
+	    return null;
+	}
+
+	async function showSpoolDetailDialog(amsSpool) {
+	    const dialog  = document.getElementById("spool-detail-dialog");
+	    const content = document.getElementById("spool-detail-content");
+	    const close   = document.getElementById("spool-detail-close");
+
+	    updateElementText("spool-detail-title", `${amsSpool.amsId} · ${spoolReadableName(amsSpool)}`);
+	    content.innerHTML = `<p>Loading data from Spoolman…</p>`;
+	    close.onclick = () => dialog.close();
+	    dialog.showModal();
+	    close.focus();
+
+	    let spool = null;
+	    if (amsSpool.existingSpool?.id) {
+	        try {
+	            spool = await fetchJson(`./api/spoolman/spool/${amsSpool.existingSpool.id}`);
+	        } catch (err) {
+	            content.innerHTML = `<p class="gc-bad">Could not load the spool from Spoolman: ${escapeHtml(err.message)}</p>`;
+	            return;
+	        }
+	    }
+
+	    renderSpoolDetail(amsSpool, spool);
+	}
+
+	// Rerendered after a save as well, from the record Spoolman answered with
+	// rather than from what was sent, so the dialog shows what was really stored.
+	function renderSpoolDetail(amsSpool, spool) {
+	    const content = document.getElementById("spool-detail-content");
+
+	    content.innerHTML = `
+	        <div class="sp-tabs">
+	            <button type="button" class="sp-tab sp-tab-active" data-tab="spool">Spool</button>
+	            <button type="button" class="sp-tab" data-tab="filament">Filament</button>
+	        </div>
+	        <div id="sd-pane"></div>`;
+
+	    const pane = content.querySelector("#sd-pane");
+	    const tabs = [...content.querySelectorAll(".sp-tab")];
+
+	    const selectTab = (tab) => {
+	        for (const t of tabs) t.classList.toggle("sp-tab-active", t.dataset.tab === tab);
+	        if (tab === "spool") renderSpoolPane(pane, amsSpool, spool);
+	        else renderFilamentPane(pane, amsSpool, spool);
+	    };
+	    for (const t of tabs) t.addEventListener("click", () => selectTab(t.dataset.tab));
+
+	    selectTab("spool");
+	}
+
+	function renderSpoolPane(pane, amsSpool, spool) {
+	    const slot = amsSpool.slot || {};
+	    const isEmpty = amsSpool.slotState === "Empty";
+
+	    // The record the dialog just fetched, where there is one: it is fresher
+	    // than the copy the table was drawn from.
+	    const { colors, direction } = spoolSwatchColors(amsSpool, spool);
+	    const swatch = isEmpty ? "" : bigSwatchHtml(colors, direction);
+
+	    const linkState = amsSpool.connectedViaMapping
+	        ? `<span class="gc-ok">assigned by hand</span>`
+	        : amsSpool.connectedViaTag
+	            ? `<span class="gc-ok">linked by RFID tag</span>`
+	            : `<span class="gc-warn">not linked</span>`;
+
+	    const profile = bambuProfile(slot.tray_info_idx);
+
+	    // The two sides disagreeing about the material is what a spool assigned to
+	    // the wrong slot looks like, so it is marked where both are shown.
+	    const materialsDiffer = spool && !materialsAgree(slotMaterial(slot), spool.filament?.material)
+	        ? ` <span class="gc-warn" title="Spoolman holds ${escapeHtml(spool.filament?.material ?? "another material")} for the spool linked to this slot">⚠</span>`
+	        : "";
+
+	    const amsRows = detailRows([
+	        ["AMS slot", detailText(amsSpool.amsId)],
+	        ["State", detailText(amsSpool.slotState)],
+	        // The id alone says nothing to read, so the filament Bambu Studio would
+	        // print it as leads and the id follows it. An id no profile is known
+	        // for stands on its own.
+	        ["Tray profile", profile
+	            ? `${escapeHtml(profile.name)} <span class="gc-muted">(${escapeHtml(slot.tray_info_idx)})</span>`
+	            : detailText(slot.tray_info_idx)],
+	        ["Material (AMS)", `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
+	        ["Colour (AMS)", detailColors(slotColors(slot), direction)],
+	        ["Serialnumber", detailText(slot.tray_uuid)],
+	        // An empty slot and a spool without a tag both report 0 rather than
+	        // nothing, and neither of them weighs nothing.
+	        ["Tray weight", Number(slot.tray_weight) ? detailGrams(slot.tray_weight) : "—"],
+	        // Without a tag there is nothing to read a percentage from, and the
+	        // printer reports 0 rather than nothing for such a slot.
+	        ["RFID remain", slot.tray_uuid == null || slot.remain == null ? "—" : `${slot.remain}%`],
+	        ["Spoolman link", linkState],
+	    ]);
+
+	    if (!spool) {
+	        pane.innerHTML = `
+	            <div class="sd-head">${swatch}<div>
+	                <div class="sd-name">${escapeHtml(spoolReadableName(amsSpool))}</div>
+	                <div class="gc-muted sd-sub">No Spoolman spool is linked to this slot, so this is what the printer reports about it.</div>
+	            </div></div>
+	            <div class="sd-scroll">
+	                <div class="sd-section">Printer</div>
+	                ${amsRows}
+	            </div>`;
+	        return;
+	    }
+
+	    const blocked = spoolEditBlockedReason();
+	    // A pencil on a field something else is about to write would promise an
+	    // edit that does not hold, so the reason is shown instead of the pencil.
+	    const weightField = blocked ? null : "remainingWeight";
+	    const textField = (field) => (blocked?.everything ? null : field);
+
+	    pane.innerHTML = `
+	        <div class="sd-head">${swatch}<div>
+	            <div class="sd-name">${escapeHtml(spoolReadableName(amsSpool))}</div>
+	            <div class="gc-muted sd-sub">Spoolman spool #${spool.id}</div>
+	            ${spoolmanLinkHtml(`/spool/show/${spool.id}`, "Open this spool in Spoolman")}
+	        </div></div>
+	        <div class="sd-scroll">
+	            <div class="sd-section">Spool</div>
+	            ${blocked ? `<p class="sd-note gc-warn">${escapeHtml(blocked.reason)}</p>` : ""}
+	            ${detailRows([
+	                ["Remaining", `${detailGrams(spool.remaining_weight)}${spool.remaining_percentage == null ? "" : ` (${Math.round(spool.remaining_percentage)}%)`}`, weightField],
+	                ["Used", detailGrams(spool.used_weight)],
+	                ["Initial weight", detailGrams(spool.initial_weight)],
+	                ["Empty spool", detailGrams(spool.spool_weight)],
+	                ["Material (Spoolman)", detailText(spool.filament?.material)],
+	                ["Colour (Spoolman)", detailColors(filamentColors(spool.filament || {}), spool.filament?.multi_color_direction)],
+	                ["Location", detailText(spool.location)],
+	                ["Price", spool.price == null ? "—" : detailText(spool.price)],
+	                ["Registered", detailDate(spool.registered)],
+	                ["First used", detailDate(spool.first_used)],
+	                ["Last used", detailDate(spool.last_used)],
+	                ["Archived", spool.archived ? "yes" : "no"],
+	                ["Lot number", detailText(spool.lot_nr), textField("lotNr")],
+	                ["Comment", detailText(spool.comment), textField("comment")],
+	                ["Tag", detailExtra(spool.extra?.tag)],
+	            ])}
+
+	            <div class="sd-section">Printer</div>
+	            ${amsRows}
+	        </div>`;
+
+	    pane.addEventListener("click", event => {
+	        const button = event.target.closest(".sd-edit");
+	        if (button) startFieldEdit(button.closest(".sd-row"), button.dataset.field, amsSpool, spool);
+	    });
+	}
+
+	// What each editable row holds, reads back and refuses. The three entries are
+	// the only fields this dialog writes; everything else about a spool is either
+	// derived, owned by this service, or belongs to the shared filament record.
+	const SPOOL_EDIT_FIELDS = {
+	    remainingWeight: {
+	        type: "number",
+	        unit: "g",
+	        value: spool => (spool.remaining_weight == null ? "" : String(Math.round(spool.remaining_weight))),
+	        check: (raw, spool) => {
+	            const weight = Number(raw);
+	            if (raw === "" || !Number.isFinite(weight)) return { error: "Enter the grams left on the spool." };
+	            if (weight < 0) return { error: "A spool cannot hold less than nothing." };
+
+	            const limit = spoolWeightLimit(spool);
+	            if (limit != null && weight > limit) return { error: `This spool holds at most ${Math.round(limit)} g.` };
+
+	            return { value: Math.round(weight) };
+	        },
+	    },
+	    lotNr: {
+	        type: "text",
+	        value: spool => spool.lot_nr ?? "",
+	        check: raw => ({ value: raw.trim() }),
+	    },
+	    comment: {
+	        type: "text",
+	        value: spool => spool.comment ?? "",
+	        check: raw => ({ value: raw.trim() }),
+	    },
+	};
+
+	// Turns one row into an input in place. The row is rebuilt from the record
+	// Spoolman answers with, so what stays on screen is what was really stored.
+	function startFieldEdit(row, field, amsSpool, spool) {
+	    const spec = SPOOL_EDIT_FIELDS[field];
+	    if (!spec || row.classList.contains("sd-row-editing")) return;
+
+	    const value = row.querySelector(".sd-value");
+	    const before = value.innerHTML;
+
+	    row.classList.add("sd-row-editing");
+	    value.innerHTML = `
+	        <span class="sd-editing">
+	            <input class="sd-input" type="${spec.type}" ${spec.type === "number" ? 'min="0" step="1"' : 'autocomplete="off"'}
+	                value="${escapeHtml(spec.value(spool))}">
+	            ${spec.unit ? `<span class="gc-muted">${spec.unit}</span>` : ""}
+	            <button type="button" class="sd-confirm" title="Save">✓</button>
+	            <button type="button" class="sd-cancel" title="Cancel">✕</button>
+	        </span>
+	        <span class="sd-inline-error gc-bad"></span>`;
+
+	    const input = value.querySelector(".sd-input");
+	    const error = value.querySelector(".sd-inline-error");
+
+	    const stop = () => {
+	        row.classList.remove("sd-row-editing");
+	        value.innerHTML = before;
+	    };
+
+	    const submit = async () => {
+	        const checked = spec.check(input.value, spool);
+	        if (checked.error) {
+	            error.textContent = checked.error;
+	            input.focus();
+	            return;
+	        }
+
+	        error.textContent = "";
+	        input.disabled = true;
+	        try {
+	            await saveSpoolField(field, checked.value, amsSpool, spool);
+	        } catch (err) {
+	            error.textContent = err.message;
+	            input.disabled = false;
+	            input.focus();
+	        }
+	    };
+
+	    value.querySelector(".sd-confirm").addEventListener("click", submit);
+	    value.querySelector(".sd-cancel").addEventListener("click", stop);
+	    input.addEventListener("keydown", event => {
+	        if (event.key === "Enter") { event.preventDefault(); submit(); }
+	        if (event.key === "Escape") { event.preventDefault(); stop(); }
+	    });
+
+	    input.focus();
+	    input.select();
+	}
+
+	async function saveSpoolField(field, value, amsSpool, spool) {
+	    const updated = await fetchJson(`./api/spoolman/spool/${spool.id}`, {
+	        method: "PATCH",
+	        headers: { "Content-Type": "application/json" },
+	        body: JSON.stringify({ [field]: value }),
+	    });
+
+	    showNotification(`Spool #${spool.id} updated.`, "success");
+	    renderSpoolDetail(amsSpool, updated);
+
+	    // The table shows the remaining weight of this spool, so it has to be
+	    // refetched rather than waiting for the next AMS report.
+	    if (currentPrinterId) await loadPrinterData(currentPrinterId);
+	}
+
+	function renderFilamentPane(pane, amsSpool, spool) {
+
+	    const fil = spool?.filament || null;
+	    const external = amsSpool.matchingExternalFilament;
+
+	    if (!fil) {
+	        pane.innerHTML = external
+	            ? `
+	                <div class="sd-head">${bigSwatchHtml(slotColors(amsSpool.slot || {}), external.multi_color_direction)}<div>
+	                    <div class="sd-name">${escapeHtml([external.manufacturer, external.material, external.name].filter(Boolean).join(" · "))}</div>
+	                    <div class="gc-muted sd-sub">From the SpoolmanDB catalogue. No filament of this kind exists in your Spoolman yet.</div>
+	                </div></div>
+	                <div class="sd-scroll">
+	                    <div class="sd-section">Catalogue entry</div>
+	                    ${detailRows([
+	                        ["Manufacturer", detailText(external.manufacturer)],
+	                        ["Material", detailText(external.material)],
+	                        ["Name", detailText(external.name)],
+	                        ["Density", external.density == null ? "—" : `${external.density} g/cm³`],
+	                        ["Diameter", external.diameter == null ? "—" : `${external.diameter} mm`],
+	                        ["External id", detailText(external.id)],
+	                    ])}
+	                </div>`
+	            : `<p class="gc-muted">No filament is known for this slot. Link a Spoolman spool to it to see one here.</p>`;
+	        return;
+	    }
+
+	    pane.innerHTML = `
+	        <div class="sd-head">${bigSwatchHtml(filamentColors(fil), fil.multi_color_direction)}<div>
+	            <div class="sd-name">${escapeHtml([fil.vendor?.name, fil.material, fil.name].filter(Boolean).join(" · ") || "Unknown filament")}</div>
+	            <div class="gc-muted sd-sub">Spoolman filament #${fil.id}. Shared by every spool of this kind, so it is edited in Spoolman itself.</div>
+	            ${spoolmanLinkHtml(`/filament/show/${fil.id}`, "Open this filament in Spoolman")}
+	        </div></div>
+	        <div class="sd-scroll">
+	            <div class="sd-section">Filament</div>
+	            ${detailRows([
+	                ["Manufacturer", detailText(fil.vendor?.name)],
+	                ["Material", detailText(fil.material)],
+	                ["Name", detailText(fil.name)],
+	                ["Colour", detailText((filamentColors(fil).map(c => `#${normColor(c)}`).join(" ")) || null)],
+	                ["Multi colour", detailText(fil.multi_color_direction)],
+	                ["Density", fil.density == null ? "—" : `${fil.density} g/cm³`],
+	                ["Diameter", fil.diameter == null ? "—" : `${fil.diameter} mm`],
+	                ["Full weight", detailGrams(fil.weight)],
+	                ["Empty spool", detailGrams(fil.spool_weight)],
+	                ["Nozzle temp", fil.settings_extruder_temp == null ? "—" : `${fil.settings_extruder_temp} °C`],
+	                ["Bed temp", fil.settings_bed_temp == null ? "—" : `${fil.settings_bed_temp} °C`],
+	                ["External id", detailText(fil.external_id)],
+	                ["Comment", detailText(fil.comment)],
+	            ])}
+	        </div>`;
+	}
+
 	// Combined "Spool" identity cell shared by both the G-code dashboard and the
 	// (legacy) classic table: color swatch + readable filament name
 	// (vendor · material · name) with an optional ambiguity warning, then a muted
@@ -802,25 +1713,21 @@ document.addEventListener("DOMContentLoaded", () => {
 	function spoolIdentityHtml(amsSpool, ctx = null) {
 	    const slot = amsSpool.slot || {};
 	    const isEmpty = amsSpool.slotState === "Empty";
-	    const fil = amsSpool.existingSpool?.filament;
 
-	    const nameParts = [
-	        fil?.vendor?.name ?? amsSpool.matchingExternalFilament?.manufacturer,
-	        fil?.material     ?? slot.tray_type,
-	        fil?.name         ?? amsSpool.matchingExternalFilament?.name ?? slot.tray_sub_brands,
-	    ].filter(Boolean);
-	    // An empty slot the AMS is busy with is a spool going in or out, which
-	    // reports nothing the backend could tell from a truly empty slot.
-	    const emptyLabel = amsSpool.option === "Waiting for data" ? "Reading spool" : "Empty slot";
-	    const readable = isEmpty ? emptyLabel : (nameParts.length ? nameParts.join(" · ") : "Unknown filament");
+	    const readable = spoolReadableName(amsSpool);
 
-	    // The colours come from the slot, not from the matched filament: they are
-	    // what physically sits in the AMS, and the printer reports them in the
-	    // order they run along the strand. The direction only decides how they
-	    // are drawn, and the AMS does not report it, so it comes from whichever
-	    // filament record was matched.
-	    const direction = fil?.multi_color_direction ?? amsSpool.matchingExternalFilament?.multi_color_direction ?? null;
-	    const color = isEmpty ? "" : swatchHtml(slotColors(slot), direction);
+	    // A linked spool is drawn in its Spoolman colours, an unlinked slot in the
+	    // ones the printer reports for it. See spoolSwatchColors().
+	    const { colors, direction } = spoolSwatchColors(amsSpool);
+	    const color = isEmpty ? "" : swatchHtml(colors, direction);
+
+	    // A spool without an RFID tag: the AMS reports the generic profile and no
+	    // serial, so nothing but this label separates it from a Bambu spool the
+	    // printer simply has not read yet. Both views show it, the classic table
+	    // only had the ⚠ in its State column, which names no reason.
+	    const thirdParty = amsSpool.slotState === "Loaded (3rd party)"
+	        ? ` · <span class="gc-warn" title="3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.">3rd party</span>`
+	        : "";
 
 	    const spoolmanBaseUrl = (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
 	    const spoolman = amsSpool.existingSpool?.id
@@ -845,16 +1752,22 @@ document.addEventListener("DOMContentLoaded", () => {
 	        ? ` <span class="gc-warn" title="Another loaded spool is identical in profile and colour. Consumption is still split correctly whenever the sliced file names the slot each filament was meant for. Where it does not, the whole amount goes to one of them; assign one to choose which.">⚠</span>`
 	        : "";
 
+	    // The name opens the detail dialog. A button rather than a styled span, so
+	    // it is reachable by keyboard and announced as the control it is.
+	    const name = `<button type="button" class="spool-name-link" data-amsid="${escapeHtml(amsSpool.amsId)}"
+	        title="Show everything about this slot">${escapeHtml(readable)}</button>`;
+
 	    return `
-	        ${color}<strong>${readable}</strong>${ambiguous}<br>
+	        ${color}${name}${ambiguous}<br>
 	        <span style="font-size:0.82em">
-	            <span class="gc-muted">${amsSpool.amsId} · <code>${isEmpty ? "—" : (slot.tray_info_idx ?? "—")}</code></span> · ${spoolman}${booking}
+	            <span class="gc-muted">${amsSpool.amsId} · <code>${isEmpty ? "—" : (slot.tray_info_idx ?? "—")}</code></span>${thirdParty} · ${spoolman}${booking}
 	        </span>`;
 	}
 
 	function createSpoolRow(amsSpool, ctx = null) {
 	    const tr = document.createElement("tr");
 	    tr.setAttribute("data-amsid", amsSpool.amsId);
+	    renderedSpools.set(amsSpool.amsId, amsSpool);
 	
 	    let amsSpoolRemainingWeight = amsSpool.correctedWeight ?? (amsSpool.slot.remain == null
 	        ? null
@@ -905,7 +1818,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        if (targetTbody) {
 	            targetTbody.appendChild(newRow);
 	            if (typeof synchronizeSelectedColumns === 'function') {
-	                try { synchronizeSelectedColumns([0,1,2,3]); } catch (e) {}
+	                try { synchronizeSelectedColumns([0,1,2,3,4]); } catch (e) {}
 	            }
 	        } else {
 	            if (currentPrinterId) loadPrinterData(currentPrinterId);
@@ -970,6 +1883,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	        const spools = await spoolsRes.json();
 	        const printData = await printRes.json();
+	        printerGcodeState = printData.gcodeState || "IDLE";
 
 	        el.innerHTML = "";
 	        el.appendChild(buildGcodeCard(printData));
@@ -1097,6 +2011,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const { fullCons, partCons, keyCount } = ctx;
 	    const tr = document.createElement("tr");
 	    tr.setAttribute("data-amsid", amsSpool.amsId);
+	    renderedSpools.set(amsSpool.amsId, amsSpool);
 
 	    const slot   = amsSpool.slot || {};
 	    const isEmpty = amsSpool.slotState === "Empty";
@@ -1278,6 +2193,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         dialogContent.innerHTML = content;
         updateElementText("action-button", actionButtonText);
+        // The dialog is shared, and whatever ran in it last may have left the
+        // button disabled: the create form disables it while it saves and then
+        // closes the dialog, which is what made the next Unassign do nothing
+        // until the page was reloaded.
+        actionButton.disabled = false;
 
         if (actionButton.textContent === "Go to Spoolman") {
             actionButton.onclick = () => {
@@ -1370,6 +2290,7 @@ document.addEventListener("DOMContentLoaded", () => {
             : "No update yet";
         
         if (typeof data.LEGACY_MODE === "boolean") legacyMode = data.LEGACY_MODE;
+        printerGcodeState = data.gcodeState || "IDLE";
 
         // Active tracking mode badge
         const modeEl = getElementSafe("tracking-mode");
@@ -1424,9 +2345,13 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Set status icon for spool behavior
     function setIcon(status, slotState) {
-        let icon = "⚠️";
-        if (slotState === "Loaded (Bambu Lab)") icon = status ? "❗️" : "✅";
-        return icon;
+        if (slotState === "Loaded (Bambu Lab)") return status ? "❗️" : "✅";
+        // Everything else is a warning triangle, so it carries the reason as a
+        // tooltip: an untagged 3rd party spool is a normal state, not a fault.
+        const title = slotState === "Loaded (3rd party)"
+            ? "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it."
+            : "No spool data from the AMS for this slot.";
+        return `<span title="${title}">⚠️</span>`;
     }
 
     // Safely get an element by ID and log a warning if it doesn't exist

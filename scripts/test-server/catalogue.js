@@ -302,7 +302,59 @@ export const CATALOGUE = [
         extruder_temp: 220,
         bed_temp: 60,
         multi_color_direction: null,
-    },];
+    },
+    // The same filament, listed once per spool it is sold on. SpoolmanDB is
+    // full of these, and they are what the create-spool picker has to tell
+    // apart: the name repeats, the weight and the spool do not.
+    {
+        id: "polymaker_pla_panchromaregulargrey_1000_175_c",
+        manufacturer: "Polymaker",
+        name: "Panchroma™ Regular Grey",
+        material: "PLA",
+        density: 1.24,
+        weight: 1000,
+        spool_weight: 140,
+        spool_type: "cardboard",
+        diameter: 1.75,
+        color_hex: "8C9099",
+        color_hexes: null,
+        extruder_temp: 220,
+        bed_temp: 60,
+        multi_color_direction: null,
+    },
+    {
+        id: "polymaker_pla_panchromaregulargrey_3000_175_c",
+        manufacturer: "Polymaker",
+        name: "Panchroma™ Regular Grey",
+        material: "PLA",
+        density: 1.24,
+        weight: 3000,
+        spool_weight: 425,
+        spool_type: "cardboard",
+        diameter: 1.75,
+        color_hex: "8C9099",
+        color_hexes: null,
+        extruder_temp: 220,
+        bed_temp: 60,
+        multi_color_direction: null,
+    },
+    {
+        id: "polymaker_pla_panchromaregulargrey_5000_175_p",
+        manufacturer: "Polymaker",
+        name: "Panchroma™ Regular Grey",
+        material: "PLA",
+        density: 1.24,
+        weight: 5000,
+        spool_weight: 819,
+        spool_type: "plastic",
+        diameter: 1.75,
+        color_hex: "8C9099",
+        color_hexes: null,
+        extruder_temp: 220,
+        bed_temp: 60,
+        multi_color_direction: null,
+    },
+];
 
 /** The material catalogue behind `/api/v1/external/material`. */
 export const EXTERNAL_MATERIALS = [

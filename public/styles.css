@@ -204,6 +204,38 @@ h1 {
 
 .dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
 
+/* The picker searches a whole inventory, so the field sits above the list it
+   filters rather than inside the scrolling area. */
+.sp-search {
+  display: block;
+  margin: 4px 0 10px;
+}
+
+.sp-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+
+.sp-search input:focus {
+  outline: none;
+  border-color: #1c6fd6;
+  box-shadow: 0 0 0 2px #1c6fd633;
+}
+
+.dark-mode .sp-search input {
+  background: #2a2a2a;
+  border-color: #555;
+}
+
+.dark-mode .sp-search input:focus { border-color: #6fb0ec; }
+
 /* The dialog is capped in height, so the form scrolls rather than the page */
 .sp-scroll {
   max-height: 46vh;
@@ -228,6 +260,19 @@ h1 {
 }
 
 .sp-scroll > .sp-section:first-child { margin-top: 0; }
+
+/* Inside the new filament form: its data, its colours, its specifications and
+   its weights. Lighter than a section heading, because the form is one thing
+   and these only keep its ten fields apart. */
+.sp-subsection {
+  grid-column: 1 / -1;
+  font-size: 0.82em;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-top: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #8882;
+}
 
 .sp-wide, .sp-note, #sp-error { grid-column: 1 / -1; }
 .sp-note { font-size: 0.83em; opacity: 0.75; margin: 8px 0 0; }
@@ -285,6 +330,79 @@ h1 {
 }
 
 .sp-field small:empty { display: none; }
+
+/* The catalogue is narrowed down in three steps, so they are framed together
+   and read as one block rather than as three more fields of the form. */
+.sp-catalogue {
+  padding: 12px;
+  border: 1px solid #8883;
+  border-radius: 8px;
+  background: #8881;
+}
+
+.sp-catalogue-title {
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.sp-catalogue-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px 18px;
+}
+
+.sp-catalogue small { display: block; margin-top: 8px; }
+
+/* One row per colour, so a multi colour filament can be entered the way the
+   AMS and the catalogue report it. */
+.sp-colours {
+  display: grid;
+  /* auto-fill with a cap, so one colour stays a field and does not stretch
+     across the whole dialog the way a single auto-fit column would. */
+  grid-template-columns: repeat(auto-fill, minmax(160px, 240px));
+  gap: 8px;
+}
+
+.sp-colours-single .sp-colour-remove { display: none; }
+
+.sp-colour-remove {
+  border: none;
+  background: none;
+  margin: 0;
+  padding: 0 4px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.sp-colour-remove:hover { opacity: 1; }
+
+.sp-colour-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.sp-colour-actions .btn { margin: 0; }
+
+.sp-colour-actions select {
+  padding: 4px 8px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.85em;
+}
+
+.dark-mode .sp-colour-actions select {
+  background: #2a2a2a;
+  border-color: #555;
+}
 
 .sp-colour { display: flex; gap: 6px; align-items: center; }
 .sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
@@ -1586,3 +1704,216 @@ input:checked + .slider:before {
    settings page shown on an empty dashboard. */
 #spool-list a { color: #1c6fd6; }
 .dark-mode #spool-list a { color: #6fb0ec; }
+
+/* ---- Spool detail dialog ----
+   The filament name in both tables is the control that opens it, so it has to
+   read as clickable without turning every row into a page of links. */
+.spool-name-link {
+  font: inherit;
+  font-weight: bold;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: #8886;
+  text-underline-offset: 3px;
+}
+
+.spool-name-link:hover,
+.spool-name-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+.sd-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 6px 0 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #8883;
+}
+
+.sd-name { font-weight: 600; font-size: 1.08em; }
+.sd-sub { font-size: 0.83em; margin-top: 4px; }
+
+/* The way out to Spoolman belongs to the tab it is about, so it sits with the
+   name instead of in the button row, where it read as a third action. */
+.sd-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.83em;
+  text-decoration: none;
+}
+
+.sd-link:hover { text-decoration: underline; }
+
+/* Large enough to tell two shades of one filament apart, which the 12px swatch
+   in the table cannot do. Same border and radius family as .gc-swatch. */
+.sd-swatch {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border: 1px solid #888;
+  border-radius: 6px;
+}
+
+/* Capped the same way the assignment dialog is, so the dialog scrolls its body
+   rather than growing past the viewport. */
+.sd-scroll {
+  max-height: 56vh;
+  overflow-y: auto;
+  text-align: left;
+  padding-right: 8px;
+}
+
+/* Heavier and further apart than the section labels in the assignment dialog:
+   this dialog stacks three blocks of dense rows, and they ran into each other. */
+.sd-section {
+  font-size: 0.92em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 26px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #1c6fd6;
+}
+
+.sd-scroll > .sd-section:first-child { margin-top: 6px; }
+.dark-mode .sd-section { border-bottom-color: #6fb0ec; }
+
+.sd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 28px;
+}
+
+.sd-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-bottom: 1px solid #8882;
+  font-size: 0.88em;
+}
+
+.sd-label { opacity: 0.7; white-space: nowrap; }
+
+/* A row is value plus an optional pencil, laid out as a row of its own: as
+   inline content the pencil kept breaking short values onto a second line. */
+.sd-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* The three writable fields are edited where they are read, so each of them
+   carries a pencil instead of being repeated in a form of its own. It stands in
+   front of the value, in the space every row has between label and value, so
+   the values keep one right edge without every row reserving a column for it.
+   Faint rather than hidden: appearing on hover alone made the rows look
+   different from one another. */
+
+.sd-edit,
+.sd-confirm,
+.sd-cancel {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  /* `dialog button` pushes every button in a dialog down by 20px, which is
+     right for the row at the bottom and wrong for an icon inside a line. */
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.sd-edit { opacity: 0.4; transition: opacity 0.15s; }
+
+.sd-row:hover .sd-edit,
+.sd-edit:focus-visible { opacity: 0.75; }
+
+.sd-edit:hover { opacity: 1; }
+
+.sd-confirm { color: #1c6fd6; }
+.sd-cancel { opacity: 0.6; }
+.dark-mode .sd-confirm { color: #6fb0ec; }
+
+/* A row being edited gives its whole width to the input, and stacks the reason
+   a value was refused under it rather than beside it. */
+.sd-row-editing { align-items: flex-start; }
+
+.sd-row-editing .sd-value {
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.sd-editing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.sd-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 240px;
+  padding: 5px 8px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-size: 1em;
+  font-family: inherit;
+}
+
+.sd-input:focus {
+  outline: none;
+  border-color: #1c6fd6;
+  box-shadow: 0 0 0 2px #1c6fd633;
+}
+
+.sd-input:disabled { opacity: 0.55; }
+
+.dark-mode .sd-input {
+  background: #2a2a2a;
+  border-color: #555;
+}
+
+.dark-mode .sd-input:focus { border-color: #6fb0ec; }
+
+/* Sits under the input, in the row itself, so the reason stays next to the
+   value it is about. */
+.sd-inline-error {
+  display: block;
+  font-size: 0.85em;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.sd-inline-error:empty { display: none; }
+
+.sd-note { font-size: 0.83em; margin: 10px 0; line-height: 1.45; }
+#sd-error:empty { display: none; }
+
+#spool-detail-dialog { min-width: min(640px, 92vw); }
+#spool-detail-title { margin-bottom: 4px; }
+
+@media (max-width: 760px) {
+  .sd-grid { grid-template-columns: 1fr; }
+  .sd-swatch { width: 48px; height: 48px; }
+  .sd-edit { opacity: 0.65; }
+}

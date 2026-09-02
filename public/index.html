@@ -89,6 +89,17 @@
     </div>
   </dialog>
 
+  <!-- Opened by clicking a filament name in either table. Its own dialog rather
+       than #info-dialog, because it carries tabs and edits its fields in place,
+       not the one confirm button that one is shaped around. -->
+  <dialog id="spool-detail-dialog">
+    <h3 id="spool-detail-title"></h3>
+    <div id="spool-detail-content"></div>
+    <div class="button-container">
+      <button class="btn" id="spool-detail-close">Close</button>
+    </div>
+  </dialog>
+
   <dialog id="info-dialog">
     <h3><span id="button-header" style="display: block; text-align: center;"></span></h3>
     <div id="dialog-content"></div>

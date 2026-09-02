@@ -9,6 +9,7 @@ import {
     slotColors,
     filamentColors,
     correctRemainInt,
+    spoolWeightLimit,
 } from "../public/shared.js";
 
 import * as utils from "../src/utils.js";
@@ -122,6 +123,29 @@ test("correctRemainInt clamps a reading that scales past the ends", () => {
     assert.equal(correctRemainInt(-5, 500, "PLA"), 0);
 });
 
+/* ---- spoolWeightLimit ---- */
+
+test("spoolWeightLimit takes the filament's full weight", () => {
+    assert.equal(spoolWeightLimit({ initial_weight: 750, filament: { weight: 1000 } }), 1000);
+});
+
+test("spoolWeightLimit takes the spool's own weight when that is the larger one", () => {
+    // The spool really did hold this much, so refusing to write it back would
+    // be the wrong way round.
+    assert.equal(spoolWeightLimit({ initial_weight: 1200, filament: { weight: 1000 } }), 1200);
+});
+
+test("spoolWeightLimit falls back to whichever of the two is known", () => {
+    assert.equal(spoolWeightLimit({ initial_weight: 500, filament: null }), 500);
+    assert.equal(spoolWeightLimit({ filament: { weight: 1000 } }), 1000);
+});
+
+test("spoolWeightLimit answers null when nothing says", () => {
+    assert.equal(spoolWeightLimit({}), null);
+    assert.equal(spoolWeightLimit({ initial_weight: 0, filament: { weight: null } }), null);
+    assert.equal(spoolWeightLimit(null), null);
+});
+
 /* ---- one implementation, not two ---- */
 
 test("the server re-exports these rather than keeping a copy", () => {
@@ -131,6 +155,7 @@ test("the server re-exports these rather than keeping a copy", () => {
     assert.equal(utils.filamentColors, filamentColors);
     assert.equal(gcode.normColor, normColor);
     assert.equal(ams.correctRemainInt, correctRemainInt);
+    assert.equal(utils.spoolWeightLimit, spoolWeightLimit);
 });
 
 test("the dashboard imports them rather than keeping a copy", () => {
