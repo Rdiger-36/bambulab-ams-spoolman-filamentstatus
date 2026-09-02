@@ -169,6 +169,15 @@ The version deliberately stays on a `-dev` prerelease for now, currently
   mismatch, so a bump in only one of them fails the build. Not to be done ahead
   of time: the bump happens when the release is actually wanted, and Niklas says
   when that is.
+- [ ] Replace the `1.3.0-dev.*` blocks in `CHANGELOG.md` with the consolidated
+  release block drafted in `docs/changelog-1.3.0-draft.md`. The dev blocks stay
+  as they are for the whole dev phase, because they are what testers on the dev
+  images read to see what changed between two builds. This has to happen before
+  the tag is pushed: the release body is the `CHANGELOG.md` section for exactly
+  that version, so without a `Version 1.3.0` section the release says it has no
+  notes. The draft covers up to `dev.7` and carries two open questions of its
+  own, on the deprecation of the environment variables and on a test count that
+  goes stale.
 
 Tag behaviour, after the hardening in `c053561`:
 
