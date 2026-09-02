@@ -1,6 +1,6 @@
 import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
-import { slotColors } from "./utils.js";
+import { slotColors, filamentColors } from "./utils.js";
 import { consumptionKey, normColor } from "./gcode.js";
 
 /**
@@ -167,38 +167,11 @@ export function hasTrayDataChanged(nextTrayData, lastTrayData) {
  * Converts the AMS remain percentage into a percentage of the spool's real
  * size.
  *
- * The AMS estimates the remaining filament against a 1 kg reference regardless
- * of the actual spool, so a full 250 g spool reports 25 %. Rescaling to the
- * real `tray_weight` gives the value a user expects to see, clamped to 0 to 100.
- *
- * @param {number|string} remainOn1kgBasis - `remain` as reported by the AMS
- * @param {number|string} trayWeight - the spool's real filament weight in grams
- * @param {string|null} trayType - `tray_type`, needed to spot support material
- * @returns {number|null} remaining percentage of the real spool, rounded, or
- *   null when the printer reported no usable value
+ * Defined in `public/shared.js`, because the dashboard shows the same
+ * percentage from the same payload, and re-exported here so that `mqtt.js` and
+ * `spoolman.js` keep importing it from the AMS module.
  */
-export function correctRemainInt(remainOn1kgBasis, trayWeight, trayType = null) {
-    const remain = parseFloat(remainOn1kgBasis);
-    // Unknown in, unknown out. Every caller has to decide for itself what to do
-    // without a reading; none of them may treat it as 0.
-    if (!Number.isFinite(remain)) return null;
-    const weight = parseFloat(trayWeight);
-
-    // Support/accessory material (tray_type suffix "-S", e.g. "PLA-S") is sold
-    // and measured at its real spool size, not estimated on a 1kg basis like
-    // regular color filament <1kg, so its remain% is already relative to the
-    // actual tray_weight and must not be rescaled.
-    const isSupportMaterial = typeof trayType === "string" && trayType.endsWith("-S");
-
-    if (weight < 1000 && !isSupportMaterial) {
-        let grams = (remain / 100) * 1000;
-        let percent = (grams / weight) * 100;
-        if (percent > 100) percent = 100;
-        if (percent < 0) percent = 0;
-        return Math.round(percent);
-    }
-    return Math.round(remain);
-}
+export { correctRemainInt } from "../public/shared.js";
 
 /**
  * The fields an empty AMS slot reports. Anything beyond these is filament data.
@@ -293,14 +266,14 @@ export function findExistingSpool(amsSpool, allSpools) {
         const materialMatches = spoolmanSpool.filament.material === amsSpool.tray_sub_brands;
         const tagMatches = tag === amsSpool.tray_uuid;
 
-        if (amsColors.length > 1) {
-            if (!spoolmanSpool.filament.multi_color_hexes) return false;
-            const filamentColors = spoolmanSpool.filament.multi_color_hexes.split(",").map(c => c.toLowerCase()).sort();
-            return materialMatches && JSON.stringify(filamentColors) === JSON.stringify(sortedAmsColors) && tagMatches;
-        }
+        // One comparison for both shapes. A count that differs is what keeps a
+        // multi colour record from matching a single colour slot on its first
+        // hex, which is the case the two separate branches here used to cover.
+        const spoolColors = filamentColors(spoolmanSpool.filament);
+        if (spoolColors.length !== amsColors.length) return false;
 
-        const colorHex = spoolmanSpool.filament.color_hex?.toLowerCase();
-        return materialMatches && colorHex === amsColors[0] && tagMatches;
+        return materialMatches && tagMatches
+            && JSON.stringify([...spoolColors].sort()) === JSON.stringify(sortedAmsColors);
     }) || null;
 }
 

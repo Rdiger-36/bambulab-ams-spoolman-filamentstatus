@@ -2,6 +2,12 @@
 Unreleased
    - Fixes:
       - The Web UI no longer flashes the light theme when a page is opened in dark mode. The class that carries the theme was set by menu.js at the end of the body, so the browser painted the light stylesheet first and switched afterwards, on every page change. A small script in each page head now sets it on the html element before the first paint, and the stylesheet matches it there
+      - A slot holding a spool the printer cannot identify no longer draws a swatch out of the placeholder the printer sends. The dashboard turned the literal "N/A" into a colour and handed "#N/A" to CSS, where the server had always dropped it
+   - Development:
+      - The colour and weight rules the dashboard and the server both apply live in one file, public/shared.js, imported by both. Four functions in public/frontend.js were a second implementation of them, and the placeholder above is what a second implementation drifting apart looks like
+         - It sits under public/ because that is the half that cannot import from anywhere else: no build step, no dependencies, served straight from disk. The server imports it from there, so the arrow points one way and there is nothing to keep in step
+         - test/shared.test.js covers it with plain node:test, which is the first coverage anything in public/ has had. It also asserts that the server re-exports those functions rather than holding a copy, and that public/frontend.js still imports them
+         - public/index.html loads frontend.js as a module, which is what lets it import at all. Nothing else about the frontend changed: no build step, no bundler, no framework
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.4

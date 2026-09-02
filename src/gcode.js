@@ -3,6 +3,7 @@ import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
 import { EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
+import { normColor } from "../public/shared.js";
 
 /**
  * TLS options for BambuLab's self-signed certificate. The printer presents a
@@ -88,11 +89,12 @@ export async function fetchSliceInfo(printer, jobName) {
 /**
  * Normalises a color to a bare 6-digit uppercase hex (no "#", no alpha) so
  * slice colors ("#000000") and AMS slot colors ("000000FF") compare equal.
+ *
+ * Defined in `public/shared.js`, because the dashboard normalises the same
+ * colors out of the same payloads, and re-exported here so that every caller
+ * keeps importing it from where the consumption keys are built.
  */
-export function normColor(c) {
-    if (!c) return "";
-    return String(c).replace(/^#/, "").slice(0, 6).toUpperCase();
-}
+export { normColor } from "../public/shared.js";
 
 /**
  * Identity of a filament for consumption matching: tray_info_idx alone is the
