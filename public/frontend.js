@@ -293,8 +293,12 @@ document.addEventListener("DOMContentLoaded", () => {
 	        spoolListElement.appendChild(table);
 	    });
 
-	    // Synchronize column widths across all tables
-	    synchronizeSelectedColumns([0,1,2,3]);
+	    // Synchronize column widths across all tables. The action column is
+	    // included: left out, it is the only column without a fixed width and
+	    // therefore absorbs all the leftover space of the full-width table, which
+	    // parks the button in the middle of a wide empty cell and leaves the
+	    // other columns crammed against the left edge.
+	    synchronizeSelectedColumns([0,1,2,3,4]);
 	}
     
     function synchronizeSelectedColumns(indices) {
@@ -822,6 +826,14 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const direction = fil?.multi_color_direction ?? amsSpool.matchingExternalFilament?.multi_color_direction ?? null;
 	    const color = isEmpty ? "" : swatchHtml(slotColors(slot), direction);
 
+	    // A spool without an RFID tag: the AMS reports the generic profile and no
+	    // serial, so nothing but this label separates it from a Bambu spool the
+	    // printer simply has not read yet. Both views show it, the classic table
+	    // only had the ⚠ in its State column, which names no reason.
+	    const thirdParty = amsSpool.slotState === "Loaded (3rd party)"
+	        ? ` · <span class="gc-warn" title="3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.">3rd party</span>`
+	        : "";
+
 	    const spoolmanBaseUrl = (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
 	    const spoolman = amsSpool.existingSpool?.id
 	        ? `<a class="gc-link" href="${spoolmanBaseUrl}/spool/show/${amsSpool.existingSpool.id}" target="_blank">Spoolman #${amsSpool.existingSpool.id}</a>`
@@ -848,7 +860,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return `
 	        ${color}<strong>${readable}</strong>${ambiguous}<br>
 	        <span style="font-size:0.82em">
-	            <span class="gc-muted">${amsSpool.amsId} · <code>${isEmpty ? "—" : (slot.tray_info_idx ?? "—")}</code></span> · ${spoolman}${booking}
+	            <span class="gc-muted">${amsSpool.amsId} · <code>${isEmpty ? "—" : (slot.tray_info_idx ?? "—")}</code></span>${thirdParty} · ${spoolman}${booking}
 	        </span>`;
 	}
 
@@ -905,7 +917,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        if (targetTbody) {
 	            targetTbody.appendChild(newRow);
 	            if (typeof synchronizeSelectedColumns === 'function') {
-	                try { synchronizeSelectedColumns([0,1,2,3]); } catch (e) {}
+	                try { synchronizeSelectedColumns([0,1,2,3,4]); } catch (e) {}
 	            }
 	        } else {
 	            if (currentPrinterId) loadPrinterData(currentPrinterId);
@@ -1424,9 +1436,13 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Set status icon for spool behavior
     function setIcon(status, slotState) {
-        let icon = "⚠️";
-        if (slotState === "Loaded (Bambu Lab)") icon = status ? "❗️" : "✅";
-        return icon;
+        if (slotState === "Loaded (Bambu Lab)") return status ? "❗️" : "✅";
+        // Everything else is a warning triangle, so it carries the reason as a
+        // tooltip: an untagged 3rd party spool is a normal state, not a fault.
+        const title = slotState === "Loaded (3rd party)"
+            ? "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it."
+            : "No spool data from the AMS for this slot.";
+        return `<span title="${title}">⚠️</span>`;
     }
 
     // Safely get an element by ID and log a warning if it doesn't exist
