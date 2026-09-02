@@ -14,6 +14,11 @@ LICENSE
 Home\ Assistant\ Addon/
 CHANGELOG.md
 README.md
+AGENTS.md
+OPEN.md
+# The screenshots and working notes the README and OPEN.md link to. Nothing the
+# image runs reads them, and they are 2.9 MB of PNG.
+docs/
 test/
 # Developer tools that have nothing to run in a container: the mock printer and
 # mock Spoolman of the test server, and the script that regenerates the Bambu
