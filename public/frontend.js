@@ -5,6 +5,7 @@ import {
 	slotColors,
 	spoolWeightLimit,
 } from "./shared.js";
+import { bambuProfile, materialsAgree, slotMaterial } from "./materials.js";
 
 let autoButton = null;
 // When false (default) the spool weight is tracked from the sliced G-code, so the
@@ -448,17 +449,21 @@ document.addEventListener("DOMContentLoaded", () => {
 	// color first, then same material, then the rest. Saves scrolling through a
 	// long inventory to find the obvious candidate.
 	function rankSpoolsForSlot(spools, slot) {
-	    const slotMaterial = (slot?.tray_type || "").toUpperCase();
+	    // The material of the profile the AMS names, compared by family: the
+	    // printer reports "PLA" where Spoolman holds "PLA Silk", so the exact
+	    // comparison this used to make put almost every spool in the last rank.
+	    const reported = slotMaterial(slot || {});
 	    // Compared as a set rather than as a single hex, so a multi colour spool
 	    // can reach the top for its own slot. Those carry no color_hex at all,
 	    // so against the single field they always ranked last.
 	    const slotColorSet = [...slotColors(slot)].sort().join(",");
 
 	    const score = (sp) => {
-	        const material = (sp.filament?.material || "").toUpperCase();
+	        const material = sp.filament?.material;
+	        const sameMaterial = Boolean(reported && material && materialsAgree(reported, material));
 	        const colors   = [...filamentColors(sp.filament)].sort().join(",");
-	        if (material && material === slotMaterial && colors && colors === slotColorSet) return 0;
-	        if (material && material === slotMaterial) return 1;
+	        if (sameMaterial && colors && colors === slotColorSet) return 0;
+	        if (sameMaterial) return 1;
 	        return 2;
 	    };
 
@@ -527,13 +532,36 @@ document.addEventListener("DOMContentLoaded", () => {
 	        return;
 	    }
 
+	    // The printer knows what material sits in the slot even for a spool it
+	    // cannot identify, so an assignment that would book PLA onto an ABS spool
+	    // can be pointed out. It is a warning, not a rule: the material a slot
+	    // reports can be wrong, and only the user knows what is really in there.
+	    const reported = slotMaterial(amsSpool.slot || {});
+	    const mismatched = new Set(spools
+	        .filter(sp => !materialsAgree(reported, sp.filament?.material))
+	        .map(sp => sp.id));
+
 	    const rows = rankSpoolsForSlot(spools, amsSpool.slot || {}).map(({ sp }) => `
 	        <label class="sp-pick">
-	            <input type="radio" name="assign-spool" value="${sp.id}"> ${spoolPickerLabel(sp)}
+	            <input type="radio" name="assign-spool" value="${sp.id}"> ${spoolPickerLabel(sp)}${mismatched.has(sp.id)
+	                ? ` <span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(sp.filament?.material ?? "other material")}</span>`
+	                : ""}
 	        </label>`).join("");
 
-	    pane.innerHTML = `<div class="sp-scroll">${rows}</div>`;
-	    pane.addEventListener("change", () => { actionButton.disabled = false; }, { once: true });
+	    pane.innerHTML = `
+	        <div class="sp-scroll">${rows}</div>
+	        <p class="sp-note gc-warn" id="sp-material-warning"></p>`;
+
+	    const warning = pane.querySelector("#sp-material-warning");
+	    pane.addEventListener("change", () => {
+	        actionButton.disabled = false;
+
+	        const picked = pane.querySelector('input[name="assign-spool"]:checked');
+	        const spool = picked && spools.find(sp => sp.id === Number(picked.value));
+	        warning.textContent = spool && mismatched.has(spool.id)
+	            ? `The printer reports ${reported} in this slot, spool #${spool.id} is ${spool.filament?.material ?? "of another material"}. It can still be assigned, and this slot's consumption is then booked onto that spool.`
+	            : "";
+	    });
 
 	    actionButton.onclick = () => {
 	        const picked = pane.querySelector('input[name="assign-spool"]:checked');
@@ -1033,10 +1061,24 @@ document.addEventListener("DOMContentLoaded", () => {
 	            ? `<span class="gc-ok">linked by RFID tag</span>`
 	            : `<span class="gc-warn">not linked</span>`;
 
+	    const profile = bambuProfile(slot.tray_info_idx);
+
+	    // The two sides disagreeing about the material is what a spool assigned to
+	    // the wrong slot looks like, so it is marked where both are shown.
+	    const materialsDiffer = spool && !materialsAgree(slotMaterial(slot), spool.filament?.material)
+	        ? ` <span class="gc-warn" title="Spoolman holds ${escapeHtml(spool.filament?.material ?? "another material")} for the spool linked to this slot">⚠</span>`
+	        : "";
+
 	    const amsRows = detailRows([
 	        ["AMS slot", detailText(amsSpool.amsId)],
 	        ["State", detailText(amsSpool.slotState)],
-	        ["Tray profile", detailText(slot.tray_info_idx)],
+	        // The id alone says nothing to read, so the filament Bambu Studio would
+	        // print it as leads and the id follows it. An id no profile is known
+	        // for stands on its own.
+	        ["Tray profile", profile
+	            ? `${escapeHtml(profile.name)} <span class="gc-muted">(${escapeHtml(slot.tray_info_idx)})</span>`
+	            : detailText(slot.tray_info_idx)],
+	        ["Material (AMS)", `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
 	        ["Colour (AMS)", detailColors(slotColors(slot), direction)],
 	        ["Serialnumber", detailText(slot.tray_uuid)],
 	        // An empty slot and a spool without a tag both report 0 rather than
@@ -1081,6 +1123,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	                ["Used", detailGrams(spool.used_weight)],
 	                ["Initial weight", detailGrams(spool.initial_weight)],
 	                ["Empty spool", detailGrams(spool.spool_weight)],
+	                ["Material (Spoolman)", detailText(spool.filament?.material)],
 	                ["Colour (Spoolman)", detailColors(filamentColors(spool.filament || {}), spool.filament?.multi_color_direction)],
 	                ["Location", detailText(spool.location)],
 	                ["Price", spool.price == null ? "—" : detailText(spool.price)],
