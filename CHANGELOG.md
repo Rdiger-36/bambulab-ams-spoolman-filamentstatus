@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.7
    - New Features:
       - A spool that runs empty is archived in Spoolman on its own, off by default (issue #65)
          - "Archive empty spools" in the sync settings turns it on, "Empty threshold" says how many grams left still count as empty, zero by default
