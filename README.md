@@ -94,6 +94,7 @@ Pulling `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:latest` retrieve
 - A running Spoolman instance
 - Serial number, access code and IP address of every printer
 - LAN access to the printer on port **8883** (MQTT, AMS data) and **990** (FTPS, sliced file)
+- How the printer is bound does not matter: cloud mode, LAN only mode and developer mode all work. Both ports above are served locally in every one of them, and nothing is read through the Bambu cloud
 - "Update remaining capacity" turned on in Bambu Studio. The consumption itself comes from the sliced file, but the remaining weight the AMS reports is what a spool is matched against when it is merged into an existing Spoolman spool, and it is the only source [legacy mode](#legacy-mode) has:
   ![Bambu Studio setting](https://github.com/user-attachments/assets/fe6cf018-b211-4fd6-8931-1c895842d71b) ![Bambu Studio setting](https://github.com/user-attachments/assets/23c60d83-e5ed-41af-9fbc-24cc9dd8ede7)
 
@@ -405,6 +406,10 @@ Pick a printer by number, then choose between subscribing to its MQTT messages, 
 **I cannot merge my existing spool, only create a new one, or the container creates it automatically.**
 
 Check the *filament* in Spoolman, not the spool. The material has to match the one shown in the Web UI or the logs exactly — `PETG HF` is not the same as `PETG`.
+
+**Do I have to put my printer into LAN only mode?**
+
+No. Cloud mode, LAN only mode and developer mode all work. Everything this service reads comes from the printer itself over the LAN, MQTT on 8883 and FTPS on 990, and those are served in every one of the three. Nothing goes through the Bambu cloud in either direction.
 
 ## Feedback
 
