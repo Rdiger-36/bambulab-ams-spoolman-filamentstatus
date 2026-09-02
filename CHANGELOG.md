@@ -35,6 +35,7 @@ Unreleased
       - The classic AMS table (legacy MQTT mode) uses the full width of the page again. Only the first four columns were width-synced across the tables, so the action column was the only one left without a fixed width and swallowed all the leftover space of the full-width table: the button sat in the middle of a wide empty cell while the other columns were crammed against the left edge. The action column is synced with the rest now, the same way the G-code table already did it
       - A spool the printer cannot identify is labelled "3rd party" in both views. The classic table marked it with nothing but the warning triangle in its State column, which names no reason, and the G-code view did not mark it at all. The triangle now carries the reason as a tooltip as well
    - Development:
+      - The container image no longer carries the test server or the script that regenerates the filament profile table. Neither has anything to run in a container, and the scripts that do, debug.sh, mqtt.js and capture-trays.js, are still there
       - public/materials.js holds the Bambu Studio filament ids the AMS reports as tray_info_idx, each with the material its profile prints, plus the rule for which materials count as the same stuff
          - Read out of an installed Bambu Studio by scripts/extract-bambu-profiles.js, so the table can be regenerated when Bambu ships new filaments
          - test/materials.test.js covers the family rules and the table, test/catalogue.test.js the catalogue filter and its facets

@@ -15,3 +15,9 @@ Home\ Assistant\ Addon/
 CHANGELOG.md
 README.md
 test/
+# Developer tools that have nothing to run in a container: the mock printer and
+# mock Spoolman of the test server, and the script that regenerates the Bambu
+# filament profile table from an installed Bambu Studio. debug.sh, mqtt.js and
+# capture-trays.js stay, they talk to the printer and are used inside the image.
+scripts/test-server/
+scripts/extract-bambu-profiles.js

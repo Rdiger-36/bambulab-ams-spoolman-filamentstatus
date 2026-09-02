@@ -201,19 +201,23 @@ Under each spool stands whether its consumption can be booked:
 | **assigned** | Linked by hand to a Spoolman spool. Booked onto that spool |
 | **not tracked** | Nothing links this slot to Spoolman yet. The print runs, but nothing is booked. Use **Assign Spool** |
 
-**Assign Spool** offers both ways of linking a slot the printer cannot identify — picking a spool that already exists in Spoolman:
+**Assign Spool** offers both ways of linking a slot the printer cannot identify. Picking a spool that already exists in Spoolman, which opens on the ones that fit the slot, same material and closest colour first, and searches the rest by name, vendor, material or location:
 
 ![Assign an existing spool](docs/images/assign-dialog.png)
 
-or creating filament and spool right there, pre-filled from what the AMS reports and from Spoolman's material catalogue:
+A spool of another material can still be chosen, and says so: the material a slot reports can be wrong, and only you know what is really in there.
+
+Or creating filament and spool right there, filled in from the SpoolmanDB catalogue: manufacturer, then material, then the filament itself. Picking one fills in the colours, the density, the diameter, the temperatures and both weights, none of which a chipless spool reports. A filament that already exists in your Spoolman is used instead of created a second time, and multi colour spools are entered as what they are, one row per colour plus the direction they run in:
 
 ![Create a spool for a slot](docs/images/assign-dialog-create.png)
 
-The picker opens on the spools that fit the slot, same material and closest colour first, and searches the rest by name, vendor, material or location. A spool of another material can still be chosen, and says so: the material a slot reports can be wrong, and only you know what is really in there.
+Clicking the filament name of a slot opens what Spoolman and the printer each hold about it. Remaining weight, lot number and comment are corrected in place, each behind a pencil in its row. The remaining weight stays read only while something else is about to write it, in legacy mode and while a print is running, and it cannot be set above what the spool can hold:
 
-The creation form fills a new filament in from the SpoolmanDB catalogue, narrowed down in three steps, manufacturer, material and then the filament itself. Picking one fills in the colours, the density, the diameter, the temperatures and both weights, none of which a chipless spool reports. A filament that already exists in your Spoolman is used instead of created a second time. Multi colour spools are entered as what they are, one row per colour plus the direction they run in.
+![The spool behind a slot](docs/images/spool-dialog.png)
 
-Clicking the filament name of a slot opens what Spoolman and the printer each hold about it. The Spool tab carries the whole Spoolman record next to the AMS side of the slot, the Filament tab the filament behind it, and both link to their Spoolman page. Remaining weight, lot number and comment can be corrected in place, each behind a pencil in its row. The remaining weight stays read only while something else is about to write it, in legacy mode and while a print is running, and it cannot be set above what the spool can hold.
+The second tab carries the filament behind the spool, shared by every spool of its kind and therefore edited in Spoolman itself. Both tabs link to their Spoolman page:
+
+![The filament behind a spool](docs/images/spool-dialog-filament.png)
 
 In manual mode the merge and create actions of a Bambu Lab spool work the same way: a button per slot, opening a dialog with what would be written to Spoolman.
 
