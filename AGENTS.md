@@ -180,7 +180,8 @@ Not punctuation, and therefore allowed:
   question, including `print.mapping` decoded into slot labels, which is what a
   question about a booking landing on the wrong spool starts from.
 - There is no linter, formatter or type checker configured. Match the
-  surrounding style: 4-space indent in `src/`, double quotes, semicolons.
+  surrounding style: 4-space indent, no tabs, in `src/` and in `public/`,
+  double quotes, semicolons.
 - Comments in this codebase explain why, usually pointing at the bug the line
   prevents. Preserve them when editing nearby; they are the record of hardware
   quirks that are otherwise invisible.
