@@ -445,9 +445,10 @@ document.addEventListener("DOMContentLoaded", () => {
 	// which the automatic match can't tell apart.
 	// ---------------------------------------------------------------------
 
-	// Ranks Spoolman spools by how well they fit the slot: same material AND
-	// color first, then same material, then the rest. Saves scrolling through a
-	// long inventory to find the obvious candidate.
+	// Ranks Spoolman spools by how well they fit the slot: the same material and
+	// the same colours first, then the same material by how close its colour is,
+	// then the rest. An inventory of forty spools is otherwise a list to read
+	// through rather than a choice to make.
 	function rankSpoolsForSlot(spools, slot) {
 	    // The material of the profile the AMS names, compared by family: the
 	    // printer reports "PLA" where Spoolman holds "PLA Silk", so the exact
@@ -456,20 +457,45 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // Compared as a set rather than as a single hex, so a multi colour spool
 	    // can reach the top for its own slot. Those carry no color_hex at all,
 	    // so against the single field they always ranked last.
-	    const slotColorSet = [...slotColors(slot)].sort().join(",");
+	    const slotColorSet = slotColors(slot);
 
 	    const score = (sp) => {
 	        const material = sp.filament?.material;
 	        const sameMaterial = Boolean(reported && material && materialsAgree(reported, material));
-	        const colors   = [...filamentColors(sp.filament)].sort().join(",");
-	        if (sameMaterial && colors && colors === slotColorSet) return 0;
-	        if (sameMaterial) return 1;
-	        return 2;
+	        const distance = colorSetDistance(slotColorSet, filamentColors(sp.filament));
+
+	        if (sameMaterial && distance === 0) return { rank: 0, distance };
+	        if (sameMaterial) return { rank: 1, distance };
+	        return { rank: 2, distance };
 	    };
 
 	    return [...spools]
-	        .map(sp => ({ sp, rank: score(sp) }))
-	        .sort((a, b) => a.rank - b.rank || a.sp.id - b.sp.id);
+	        .map(sp => ({ sp, ...score(sp) }))
+	        .sort((a, b) => a.rank - b.rank || a.distance - b.distance || a.sp.id - b.sp.id);
+	}
+
+	// How far two colour sets sit apart, 0 for the same colours and Infinity when
+	// one of them has no colour at all.
+	//
+	// Every colour is measured against the closest one on the other side, in both
+	// directions: taken one way only, a two colour spool would count as identical
+	// to a single colour one as soon as one of its colours matched.
+	function colorSetDistance(a, b) {
+	    if (!a.length || !b.length) return Infinity;
+
+	    const rgb = (color) => {
+	        const hex = normColor(color).padEnd(6, "0");
+	        return [0, 2, 4].map(at => parseInt(hex.slice(at, at + 2), 16) || 0);
+	    };
+
+	    const nearest = (color, set) => Math.min(...set.map(other => {
+	        const [r1, g1, b1] = rgb(color);
+	        const [r2, g2, b2] = rgb(other);
+	        return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+	    }));
+
+	    const distances = [...a.map(c => nearest(c, b)), ...b.map(c => nearest(c, a))];
+	    return distances.reduce((total, one) => total + one, 0) / distances.length;
 	}
 
 	function spoolPickerLabel(sp) {
@@ -523,6 +549,11 @@ document.addEventListener("DOMContentLoaded", () => {
 	    selectMode(spools.length ? "assign" : "create");
 	}
 
+	// How many spools the suggestion list offers before the rest is left to the
+	// full list below it. Enough to hold the obvious candidates of a slot,
+	// short enough to stay a suggestion.
+	const ASSIGN_SUGGESTIONS = 6;
+
 	function renderAssignPane(pane, actionButton, button, amsSpool, spools) {
 	    actionButton.textContent = "Assign";
 	    actionButton.disabled = true;
@@ -541,33 +572,101 @@ document.addEventListener("DOMContentLoaded", () => {
 	        .filter(sp => !materialsAgree(reported, sp.filament?.material))
 	        .map(sp => sp.id));
 
-	    const rows = rankSpoolsForSlot(spools, amsSpool.slot || {}).map(({ sp }) => `
+	    const ranked = rankSpoolsForSlot(spools, amsSpool.slot || {});
+	    // Only a spool of the right material is ever suggested. Suggesting the
+	    // closest colour out of an inventory that holds nothing fitting would put
+	    // an ABS spool at the top of a PLA slot.
+	    const suggested = ranked.filter(entry => entry.rank < 2).slice(0, ASSIGN_SUGGESTIONS);
+	    const suggestedIds = new Set(suggested.map(entry => entry.sp.id));
+
+	    const pick = (entry) => `
 	        <label class="sp-pick">
-	            <input type="radio" name="assign-spool" value="${sp.id}"> ${spoolPickerLabel(sp)}${mismatched.has(sp.id)
-	                ? ` <span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(sp.filament?.material ?? "other material")}</span>`
+	            <input type="radio" name="assign-spool" value="${entry.sp.id}"> ${spoolPickerLabel(entry.sp)}${entry.rank === 0
+	                ? ` <span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
+	                : ""}${mismatched.has(entry.sp.id)
+	                ? ` <span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
 	                : ""}
-	        </label>`).join("");
+	        </label>`;
+
+	    // Everything a spool can be recognised by, so the search does not have to
+	    // guess which of them the user typed.
+	    const haystack = (sp) => [
+	        `#${sp.id}`,
+	        sp.filament?.vendor?.name,
+	        sp.filament?.material,
+	        sp.filament?.name,
+	        sp.location,
+	        sp.lot_nr,
+	        sp.comment,
+	    ].filter(Boolean).join(" ").toLowerCase();
 
 	    pane.innerHTML = `
-	        <div class="sp-scroll">${rows}</div>
+	        <label class="sp-search">
+	            <input id="sp-search" type="search" autocomplete="off" placeholder="Search by name, material, vendor or location">
+	        </label>
+	        <div class="sp-scroll" id="sp-list"></div>
 	        <p class="sp-note gc-warn" id="sp-material-warning"></p>`;
 
+	    const list = pane.querySelector("#sp-list");
+	    const search = pane.querySelector("#sp-search");
 	    const warning = pane.querySelector("#sp-material-warning");
-	    pane.addEventListener("change", () => {
+
+	    // Rerendered on every keystroke, so the selection has to be carried over
+	    // rather than read off the DOM that is about to be replaced.
+	    let selectedId = null;
+
+	    const render = () => {
+	        const term = search.value.trim().toLowerCase();
+	        const matches = term ? ranked.filter(entry => haystack(entry.sp).includes(term)) : ranked;
+
+	        if (!matches.length) {
+	            list.innerHTML = `<p class="gc-muted sp-wide">No spool matches "${escapeHtml(search.value.trim())}".</p>`;
+	            return;
+	        }
+
+	        // While searching, the split into suggestions and the rest only gets
+	        // in the way: what was typed is the filter, and the ranking still puts
+	        // the closest first.
+	        if (term) {
+	            list.innerHTML = `
+	                <div class="sp-section">${matches.length} of ${ranked.length} spools</div>
+	                ${matches.map(pick).join("")}`;
+	        } else {
+	            const rest = ranked.filter(entry => !suggestedIds.has(entry.sp.id));
+	            list.innerHTML = `
+	                ${suggested.length ? `
+	                    <div class="sp-section" title="Same material as the slot reports, closest colour first">Suggested for this slot</div>
+	                    ${suggested.map(pick).join("")}` : ""}
+	                ${rest.length ? `
+	                    <div class="sp-section">${suggested.length ? "Other spools" : "All spools"} (${rest.length})</div>
+	                    ${rest.map(pick).join("")}` : ""}`;
+	        }
+
+	        const stillThere = selectedId != null && list.querySelector(`input[value="${selectedId}"]`);
+	        if (stillThere) stillThere.checked = true;
+	        actionButton.disabled = !stillThere;
+	    };
+
+	    list.addEventListener("change", () => {
+	        const picked = list.querySelector('input[name="assign-spool"]:checked');
+	        if (!picked) return;
+
+	        selectedId = Number(picked.value);
 	        actionButton.disabled = false;
 
-	        const picked = pane.querySelector('input[name="assign-spool"]:checked');
-	        const spool = picked && spools.find(sp => sp.id === Number(picked.value));
+	        const spool = spools.find(sp => sp.id === selectedId);
 	        warning.textContent = spool && mismatched.has(spool.id)
 	            ? `The printer reports ${reported} in this slot, spool #${spool.id} is ${spool.filament?.material ?? "of another material"}. It can still be assigned, and this slot's consumption is then booked onto that spool.`
 	            : "";
 	    });
 
+	    search.addEventListener("input", render);
+	    render();
+
 	    actionButton.onclick = () => {
-	        const picked = pane.querySelector('input[name="assign-spool"]:checked');
-	        if (!picked) return;
+	        if (selectedId == null) return;
 	        document.getElementById("info-dialog").close();
-	        sendMapping(button, amsSpool, Number(picked.value));
+	        sendMapping(button, amsSpool, selectedId);
 	    };
 	}
 

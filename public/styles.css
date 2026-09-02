@@ -204,6 +204,38 @@ h1 {
 
 .dark-mode .sp-tab-active { border-bottom-color: #6fb0ec; }
 
+/* The picker searches a whole inventory, so the field sits above the list it
+   filters rather than inside the scrolling area. */
+.sp-search {
+  display: block;
+  margin: 4px 0 10px;
+}
+
+.sp-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+
+.sp-search input:focus {
+  outline: none;
+  border-color: #1c6fd6;
+  box-shadow: 0 0 0 2px #1c6fd633;
+}
+
+.dark-mode .sp-search input {
+  background: #2a2a2a;
+  border-color: #555;
+}
+
+.dark-mode .sp-search input:focus { border-color: #6fb0ec; }
+
 /* The dialog is capped in height, so the form scrolls rather than the page */
 .sp-scroll {
   max-height: 46vh;
