@@ -205,21 +205,20 @@ function currentMenuPrinter() {
 }
 
 function setupDarkMode() {
-    const body = document.body;
+    // The inline script in the page head already put the class on <html> before
+    // the first paint; here the icon and the toggle only catch up with it.
+    const root = document.documentElement;
     const toggleButton = document.getElementById("dark-mode-toggle");
     const icon = document.getElementById("dark-mode-icon");
     if (!toggleButton || !icon) return;
 
-    if (localStorage.getItem("dark-mode") === "true") {
-        body.classList.add("dark-mode");
-        icon.src = DARK_MODE_ICON;
-    }
+    if (root.classList.contains("dark-mode")) icon.src = DARK_MODE_ICON;
 
     // Added late so the theme does not animate in on every page load.
-    setTimeout(() => body.classList.add("transition-enabled"), 100);
+    setTimeout(() => root.classList.add("transition-enabled"), 100);
 
     toggleButton.addEventListener("click", () => {
-        const enabled = body.classList.toggle("dark-mode");
+        const enabled = root.classList.toggle("dark-mode");
         icon.src = enabled ? DARK_MODE_ICON : LIGHT_MODE_ICON;
         localStorage.setItem("dark-mode", enabled);
     });
