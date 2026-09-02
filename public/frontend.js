@@ -1,11 +1,16 @@
 import {
+	ACTIVE_PRINT_STATES,
+	EXTERNAL_SLOT,
+	SLOT_OPTIONS,
 	correctRemainInt,
 	filamentColors,
+	formatDate,
 	normColor,
 	slotColors,
 	spoolWeightLimit,
 } from "./shared.js";
 import { bambuProfile, materialsAgree, slotMaterial } from "./materials.js";
+import { escapeHtml, fetchJson } from "./ui.js";
 
 let autoButton = null;
 // When false (default) the spool weight is tracked from the sliced G-code, so the
@@ -19,13 +24,14 @@ let spoolmanConnected = false;
 let lastLegacyCtx = null;
 // Printer name, used to suggest a location matching the SET_LOCATION format.
 let currentPrinterName = "";
-// Print states in which a job is in flight. Its consumption is booked only when
-// it ends, so the detail dialog does not offer to correct a remaining weight
-// while one of these is on. Mirrors ACTIVE_STATES in src/mqtt.js.
-const ACTIVE_PRINT_STATES = ["PREPARE", "RUNNING", "PAUSE"];
 // gcode_state of the shown printer, mirrored from /api/status and kept fresh by
 // the G-code view, which reads it again from /api/print.
 let printerGcodeState = "IDLE";
+// Why a slot without an RFID tag is not a fault. Shown in both views: on the
+// identity line of the row and on the warning triangle in the State column,
+// which names no reason by itself.
+const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.";
+
 // The payload behind every rendered row, by AMS slot id. The detail dialog is
 // opened from a delegated listener, which sees the clicked element rather than
 // the object the row was built from, and rows are recreated on every update.
@@ -231,6 +237,80 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     
+	// One table per AMS unit: the four slot units in tables of four, the single
+	// slot ones (AMS HT and the external spool holder) in a table of their own.
+	//
+	// Both views group their slots this way and each used to write the grouping
+	// out itself, the classic one with its header block spelled out a second
+	// time for the single slot tables. The view passes its columns as
+	// `[label, alignment]` and the function that builds one of its rows.
+	//
+	// @param {object[]} spools - the slots to render
+	// @param {Array[]} columns - the header cells
+	// @param {function(object): HTMLTableRowElement} makeRow - one row
+	// @param {string|null} emptyMessage - what to show when nothing is loaded
+	// @returns {HTMLTableElement[]} the tables, in display order
+	function buildSpoolTables(spools, columns, makeRow, emptyMessage = null) {
+	    const makeTable = (slots) => {
+	        const table = document.createElement("table");
+	        table.className = "spool-table";
+
+	        const thead = document.createElement("thead");
+	        const headerRow = document.createElement("tr");
+	        for (const [label, align] of columns) {
+	            const th = document.createElement("th");
+	            th.textContent = label;
+	            if (align) th.style.textAlign = align;
+	            headerRow.appendChild(th);
+	        }
+	        thead.appendChild(headerRow);
+	        table.appendChild(thead);
+
+	        const tbody = document.createElement("tbody");
+	        for (const spool of slots) tbody.appendChild(makeRow(spool));
+	        table.appendChild(tbody);
+
+	        return table;
+	    };
+
+	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
+	    const singles = spools.filter(s => isSingleSlotUnit(s.amsId));
+
+	    const tables = [];
+	    for (let i = 0; i < normalAMS.length; i += 4) tables.push(makeTable(normalAMS.slice(i, i + 4)));
+	    for (const single of singles) tables.push(makeTable([single]));
+
+	    if (!tables.length && emptyMessage) {
+	        const empty = makeTable([]);
+	        empty.querySelector("tbody").innerHTML =
+	            `<tr><td colspan="${columns.length}" style="opacity:0.5">${escapeHtml(emptyMessage)}</td></tr>`;
+	        tables.push(empty);
+	    }
+
+	    return tables;
+	}
+
+	// Every column of the spool tables, the action column included. Left out, it
+	// is the only column without a fixed width and therefore absorbs all the
+	// leftover space of the full width table, which parks the button in the
+	// middle of a wide empty cell and crams the other columns against the left
+	// edge. Both views have these five columns, and all three call sites want
+	// all of them.
+	const SYNCED_COLUMNS = [0, 1, 2, 3, 4];
+
+	// How often each filament identity is loaded across all units. Two slots the
+	// automatic match cannot tell apart get the ⚠ in the Spool cell, which needs
+	// the count over every slot and cannot be derived from one row. Both views
+	// ask, and both used to count it themselves.
+	function countSpoolKeys(spools) {
+	    const keyCount = {};
+	    for (const spool of spools) {
+	        if (spool.slotState === "Empty") continue;
+	        keyCount[spool.key] = (keyCount[spool.key] || 0) + 1;
+	    }
+	    return keyCount;
+	}
+
     // Update the displayed list of spools based on fetched data
 	async function updateSpools(spools) {
 	    const spoolListElement = getElementSafe("spool-list");
@@ -239,91 +319,21 @@ document.addEventListener("DOMContentLoaded", () => {
 	    spoolListElement.innerHTML = "";
 
 	    const columns = [
-	        "Spool", "Remaining (estimated)",
-	        "Serialnumber", "State", "Action"
+	        ["Spool"], ["Remaining (estimated)"],
+	        ["Serialnumber"], ["State"], ["Action"],
 	    ];
 
-	    // Count identical loaded spools (same type AND color) across all units so
-	    // the shared Spool cell can flag ambiguous duplicates with ⚠, just like
-	    // the G-code view.
-	    const keyCount = {};
-	    for (const s of spools) {
-	        if (s.slotState === "Empty") continue;
-	        keyCount[s.key] = (keyCount[s.key] || 0) + 1;
-	    }
-	    const ctx = { keyCount };
+	    const ctx = { keyCount: countSpoolKeys(spools) };
 	    // Remembered so single-row SSE updates keep the duplicate-spool ⚠, which
 	    // needs the counts across all slots and can't be derived from one row.
 	    lastLegacyCtx = ctx;
 
-	    // Split AMS types:
-	    // Normal AMS = up to 4 slots per unit
-	    // AMS HT and the external spool holder = 1 slot each, own table
-	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
-	    const htAMS = spools.filter(s => isSingleSlotUnit(s.amsId));
-
-	    // Render normal AMS units in tables of four (original behavior)
-	    for (let i = 0; i < normalAMS.length; i += 4) {
-	        const table = document.createElement("table");
-	        table.className = "spool-table";
-
-	        // Build table header
-	        const thead = document.createElement("thead");
-	        const headerRow = document.createElement("tr");
-
-	        for (const col of columns) {
-	            const th = document.createElement("th");
-	            th.textContent = col;
-	            headerRow.appendChild(th);
-	        }
-
-	        thead.appendChild(headerRow);
-	        table.appendChild(thead);
-
-	        // Build table rows
-	        const tbody = document.createElement("tbody");
-
-	        for (let j = i; j < i + 4 && j < normalAMS.length; j++) {
-	            const spoolRow = createSpoolRow(normalAMS[j], ctx);
-	            tbody.appendChild(spoolRow);
-	        }
-
-	        table.appendChild(tbody);
+	    for (const table of buildSpoolTables(spools, columns, spool => createSpoolRow(spool, ctx))) {
 	        spoolListElement.appendChild(table);
 	    }
 
-	    // Render each AMS HT spool in its own table (1 slot per table)
-	    htAMS.forEach(amsSpool => {
-	        const table = document.createElement("table");
-	        table.className = "spool-table";
-
-	        // Build table header
-	        const thead = document.createElement("thead");
-	        const headerRow = document.createElement("tr");
-
-	        for (const col of columns) {
-	            const th = document.createElement("th");
-	            th.textContent = col;
-	            headerRow.appendChild(th);
-	        }
-
-	        thead.appendChild(headerRow);
-	        table.appendChild(thead);
-
-	        // Build table row (single-slot)
-	        const tbody = document.createElement("tbody");
-	        tbody.appendChild(createSpoolRow(amsSpool, ctx));
-
-	        table.appendChild(tbody);
-	        spoolListElement.appendChild(table);
-	    });
-
-	    // Synchronize column widths across all tables. The action column is
-	    // included: left out, it is the only column without a fixed width and
-	    // therefore absorbs all the leftover space of the full-width table, which
-	    // parks the button in the middle of a wide empty cell and leaves the
-	    // other columns crammed against the left edge.
-	    synchronizeSelectedColumns([0,1,2,3,4]);
+	    // Every column to its widest cell, so the tables of the units line up.
+	    synchronizeSelectedColumns(SYNCED_COLUMNS);
 	}
     
     function synchronizeSelectedColumns(indices) {
@@ -418,17 +428,17 @@ document.addEventListener("DOMContentLoaded", () => {
 	    button.addEventListener("click", () => {
 	        // Spool assignment has its own flow: it needs a picker populated from
 	        // Spoolman rather than a fixed confirmation text.
-	        if (button.textContent === "Assign Spool")   return showAssignDialog(button, amsSpool);
-	        if (button.textContent === "Unassign Spool") return showUnassignDialog(button, amsSpool);
+	        if (button.textContent === SLOT_OPTIONS.ASSIGN)   return showAssignDialog(button, amsSpool);
+	        if (button.textContent === SLOT_OPTIONS.UNASSIGN) return showUnassignDialog(button, amsSpool);
 
 	        const content = generateDialogContent(button, amsSpool);
 	        const actionMap = {
-	            "Create Spool": "Create",
-	            "Merge Spool": "Merge",
-	            "Create Filament & Spool": "Create Filament & Spool",
-	            "Show Info!": "Go to Spoolman"
+	            [SLOT_OPTIONS.CREATE]: "Create",
+	            [SLOT_OPTIONS.MERGE]: "Merge",
+	            [SLOT_OPTIONS.CREATE_WITH_FILAMENT]: SLOT_OPTIONS.CREATE_WITH_FILAMENT,
+	            [SLOT_OPTIONS.SHOW_INFO]: "Go to Spoolman"
 	        };
-	        const actionText = actionMap[button.textContent] || "No actions available";
+	        const actionText = actionMap[button.textContent] || SLOT_OPTIONS.NONE;
 	        const actionCallback = () => performAction(button, amsSpool);
 	        showDialog(button, content, actionText, actionCallback);
 	    });
@@ -1193,16 +1203,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	    }
 	}
 
-	async function fetchJson(url, options = undefined) {
-	    const res = await fetch(url, options);
-	    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
-	    return res.json();
-	}
-
-	function escapeHtml(value) {
-	    return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-	}
-
 	function showUnassignDialog(button, amsSpool) {
 	    const sp = amsSpool.existingSpool;
 	    const content = `
@@ -1265,7 +1265,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	    if (amsSpool.slotState === "Empty") {
 	        // An empty slot the AMS is busy with is a spool going in or out, which
 	        // reports nothing the backend could tell from a truly empty slot.
-	        return amsSpool.option === "Waiting for data" ? "Reading spool" : "Empty slot";
+	        return amsSpool.option === SLOT_OPTIONS.WAITING ? "Reading spool" : "Empty slot";
 	    }
 
 	    const parts = [
@@ -1726,12 +1726,11 @@ document.addEventListener("DOMContentLoaded", () => {
 	    // printer simply has not read yet. Both views show it, the classic table
 	    // only had the ⚠ in its State column, which names no reason.
 	    const thirdParty = amsSpool.slotState === "Loaded (3rd party)"
-	        ? ` · <span class="gc-warn" title="3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.">3rd party</span>`
+	        ? ` · <span class="gc-warn" title="${THIRD_PARTY_HINT}">3rd party</span>`
 	        : "";
 
-	    const spoolmanBaseUrl = (document.getElementById("spoolmanLink")?.href || "").replace(/\/+$/, "");
 	    const spoolman = amsSpool.existingSpool?.id
-	        ? `<a class="gc-link" href="${spoolmanBaseUrl}/spool/show/${amsSpool.existingSpool.id}" target="_blank">Spoolman #${amsSpool.existingSpool.id}</a>`
+	        ? `<a class="gc-link" href="${spoolmanBase()}/spool/show/${amsSpool.existingSpool.id}" target="_blank">Spoolman #${amsSpool.existingSpool.id}</a>`
 	        : `<span class="gc-muted">not linked</span>`;
 
 	    // Tag/booking status is G-code-consumption semantics, so only shown there.
@@ -1818,7 +1817,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        if (targetTbody) {
 	            targetTbody.appendChild(newRow);
 	            if (typeof synchronizeSelectedColumns === 'function') {
-	                try { synchronizeSelectedColumns([0,1,2,3,4]); } catch (e) {}
+	                try { synchronizeSelectedColumns(SYNCED_COLUMNS); } catch (e) {}
 	            }
 	        } else {
 	            if (currentPrinterId) loadPrinterData(currentPrinterId);
@@ -1848,12 +1847,10 @@ document.addEventListener("DOMContentLoaded", () => {
 	    }, 1000);
 	}
 
-	// The label the server gives the external spool holder. It reports one spool
-	// and gets a table of its own, like an AMS HT unit, because it belongs to no
-	// four slot unit and would otherwise break their grouping.
-	const EXTERNAL_SLOT = "External";
-
-	// Slots that stand alone rather than filling a four slot AMS unit.
+	// Slots that stand alone rather than filling a four slot AMS unit. The
+	// external spool holder reports one spool and gets a table of its own, like
+	// an AMS HT unit, because it belongs to no four slot unit and would
+	// otherwise break their grouping.
 	function isSingleSlotUnit(amsId) {
 	    return amsId === EXTERNAL_SLOT || amsId.startsWith("HT-");
 	}
@@ -1892,12 +1889,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	            el.appendChild(table);
 	        }
 
-	        // Align column widths across all AMS tables (each column to its widest
-	        // cell) so AMS A / AMS B / … line up uniformly. 5 columns: 0..4,
-	        // unlike the classic table the action column has to be included here,
-	        // otherwise the table shrinks to its content width and squeezes the
-	        // Spool column into a narrow wrapped block.
-	        synchronizeSelectedColumns([0, 1, 2, 3, 4]);
+	        // Every column to its widest cell, so AMS A / AMS B / … line up.
+	        synchronizeSelectedColumns(SYNCED_COLUMNS);
 
 	        const missing = buildGcodeMissing(printData);
 	        if (missing) el.appendChild(missing);
@@ -1907,7 +1900,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	}
 
 	function buildGcodeCard(printData) {
-	    const active = ["RUNNING", "PAUSE", "PREPARE"].includes(printData.gcodeState);
+	    const active = ACTIVE_PRINT_STATES.includes(printData.gcodeState);
 	    const humanLayer  = (printData.layerNum ?? 0) + 1;
 	    const humanTotal  = printData.totalLayers != null ? printData.totalLayers + 1 : null;
 	    const progressPct = humanTotal ? Math.round((humanLayer / humanTotal) * 100) : null;
@@ -1947,48 +1940,17 @@ document.addEventListener("DOMContentLoaded", () => {
 	    const fullCons = printData.fullConsumption || {};
 	    const partCons = printData.consumption || {};
 
-	    // Ambiguity is global across all AMS units, so count keys over everything
-	    const keyCount = {};
-	    for (const s of spools) {
-	        if (s.slotState === "Empty") continue;
-	        keyCount[s.key] = (keyCount[s.key] || 0) + 1;
-	    }
-	    const ctx = { fullCons, partCons, keyCount, showBooking: true };
+	    const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true };
 
-	    const makeTable = (slotsSubset) => {
-	        const table = document.createElement("table");
-	        table.className = "spool-table";
-	        table.innerHTML = `<thead><tr>
-	            <th style="text-align:left">Spool</th>
-	            <th style="text-align:right">On spool / total</th>
-	            <th style="text-align:right">Needed</th>
-	            <th style="text-align:right">After print</th>
-	            <th>Action</th>
-	        </tr></thead>`;
-	        const tbody = document.createElement("tbody");
-	        for (const s of slotsSubset) tbody.appendChild(createGcodeSpoolRow(s, ctx));
-	        table.appendChild(tbody);
-	        return table;
-	    };
+	    const columns = [
+	        ["Spool", "left"],
+	        ["On spool / total", "right"],
+	        ["Needed", "right"],
+	        ["After print", "right"],
+	        ["Action"],
+	    ];
 
-	    const tables = [];
-	    const normalAMS = spools.filter(s => !isSingleSlotUnit(s.amsId));
-	    const singles   = spools.filter(s => isSingleSlotUnit(s.amsId));
-
-	    // Normal AMS: up to 4 slots per unit/table
-	    for (let i = 0; i < normalAMS.length; i += 4) {
-	        tables.push(makeTable(normalAMS.slice(i, i + 4)));
-	    }
-	    // AMS HT and the external spool holder: one slot per table
-	    for (const single of singles) tables.push(makeTable([single]));
-
-	    if (!tables.length) {
-	        const empty = makeTable([]);
-	        empty.querySelector("tbody").innerHTML =
-	            `<tr><td colspan="5" style="opacity:0.5">No spools loaded</td></tr>`;
-	        tables.push(empty);
-	    }
-	    return tables;
+	    return buildSpoolTables(spools, columns, spool => createGcodeSpoolRow(spool, ctx), "No spools loaded");
 	}
 
 	// The grams a slot carries in a consumption map.
@@ -2094,51 +2056,60 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return wrap;
 	}
 
+	// The options this button knows how to label. Anything else, including an
+	// option a newer server has learned, reads as no action rather than putting
+	// a word on a button that does nothing. SLOT_OPTIONS.WAITING is in the list
+	// and is not an action: the AMS has not reported the remaining percentage
+	// yet, and creating a spool without it would store a partly used one as
+	// brand new. The server offers the real action as soon as the reading
+	// arrives, or after five updates without one.
+	const KNOWN_OPTIONS = new Set([
+	    SLOT_OPTIONS.MERGE,
+	    SLOT_OPTIONS.CREATE,
+	    SLOT_OPTIONS.CREATE_WITH_FILAMENT,
+	    SLOT_OPTIONS.ASSIGN,
+	    SLOT_OPTIONS.UNASSIGN,
+	    SLOT_OPTIONS.SHOW_INFO,
+	    SLOT_OPTIONS.WAITING,
+	]);
+
 	function setupButton(button, amsSpool) {
         if (amsSpool.error && amsSpool.slotState === "Loaded (Bambu Lab)") {
-            button.textContent = "Show Info!";
+            button.textContent = SLOT_OPTIONS.SHOW_INFO;
             button.disabled = false;
             return;
         }
 
-        const actionMap = {
-            "Merge Spool": "Merge Spool",
-            "Create Spool": "Create Spool",
-            "Create Filament & Spool": "Create Filament & Spool",
-            "Assign Spool": "Assign Spool",
-            "Unassign Spool": "Unassign Spool",
-            "Show Info!": "Show Info!",
-            // Not an action: the AMS has not reported the remaining percentage
-            // yet, and creating a spool without it would store a partly used
-            // one as brand new. The backend offers the real action as soon as
-            // the reading arrives, or after five updates without one.
-            "Waiting for data": "Waiting for data"
-        };
-
-        button.textContent = actionMap[amsSpool.option] || "No actions available";
+        button.textContent = KNOWN_OPTIONS.has(amsSpool.option) ? amsSpool.option : SLOT_OPTIONS.NONE;
         button.disabled = amsSpool.enableButton !== "true" || !spoolmanConnected;
-        if (amsSpool.option === "Waiting for data") {
+        if (amsSpool.option === SLOT_OPTIONS.WAITING) {
             button.title = "The AMS has not reported how much filament is left yet. Creating the spool now would store it as brand new.";
         }
     }
 
+    // What the printer reports about the slot the action is about. The same row
+    // opens all three confirmations, which used to spell it out once each.
+    function amsSpoolRow(amsSpool) {
+        return `<tr>
+                        <th>AMS Spool:</th>
+                        <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
+                    </tr>`;
+    }
+
     // Generate the content of the confirmation dialog
     function generateDialogContent(button, amsSpool) {
-        if (button.textContent === "Create Spool") {
+        if (button.textContent === SLOT_OPTIONS.CREATE) {
             return `
                 <p>Do you really want to create a Spool with the following stats in Spoolman?</p>
                 <table class="data-table">
-                    <tr>
-                        <th>AMS Spool:</th>
-                        <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
-                    </tr>
+                    ${amsSpoolRow(amsSpool)}
                     <tr>
                         <th>Spoolman Filament:</th>
                         <td>Bambu Lab - ${amsSpool.matchingInternalFilament.material} - ${amsSpool.matchingInternalFilament.name}</td>
                     </tr>
                 </table>
             `;
-        } else if (button.textContent === "Merge Spool") {
+        } else if (button.textContent === SLOT_OPTIONS.MERGE) {
             const remain = amsSpool.slot.remain == null
                 ? null
                 : (amsSpool.slot.remain / 100) * amsSpool.slot.tray_weight;
@@ -2146,24 +2117,18 @@ document.addEventListener("DOMContentLoaded", () => {
             return `
                 <p>Do you really want to merge this Spool with an existing Spool in Spoolman?</p>
                 <table class="data-table">
-                    <tr>
-                        <th>AMS Spool:</th>
-                        <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
-                    </tr>
+                    ${amsSpoolRow(amsSpool)}
                     <tr>
                         <th>Spoolman Spool:</th>
                         <td>Spool-ID ${amsSpool.mergeableSpool.id} - Bambu Lab - ${amsSpool.mergeableSpool.filament.material} - ${amsSpool.mergeableSpool.filament.name} - ${remain == null ? "unknown" : `${remain} g`} left on spool</td>
                     </tr>
                 </table>
             `;
-        } else if (button.textContent === "Create Filament & Spool") {
+        } else if (button.textContent === SLOT_OPTIONS.CREATE_WITH_FILAMENT) {
             return `
                 <p>Do you really want to create a Spool and a new Filament with the following stats in Spoolman?</p>
                 <table class="data-table">
-                    <tr>
-                        <th>AMS Spool:</th>
-                        <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
-                    </tr>
+                    ${amsSpoolRow(amsSpool)}
                     <tr>
                         <th>New Spool & Filament:</th>
                         <td>${amsSpool.matchingExternalFilament.manufacturer} - ${amsSpool.matchingExternalFilament.material} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.matchingExternalFilament.density} g/cm³ - ${amsSpool.matchingExternalFilament.diameter} mm</td>
@@ -2225,9 +2190,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Send the selected action to the backend
     async function performAction(button, amsSpool) {
         const endpointMap = {
-            "Create Spool": "./api/createSpool",
-            "Merge Spool": "./api/mergeSpool",
-            "Create Filament & Spool": "./api/createSpoolWithFilament"
+            [SLOT_OPTIONS.CREATE]: "./api/createSpool",
+            [SLOT_OPTIONS.MERGE]: "./api/mergeSpool",
+            [SLOT_OPTIONS.CREATE_WITH_FILAMENT]: "./api/createSpoolWithFilament"
         };
 
         const endpoint = endpointMap[button.textContent];
@@ -2252,7 +2217,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            button.textContent = "No actions available";
+            button.textContent = SLOT_OPTIONS.NONE;
             showNotification("Action sent successfully. UI updates after next MQTT event.", "success");
         } catch (err) {
             console.error("Action failed:", err);
@@ -2349,7 +2314,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Everything else is a warning triangle, so it carries the reason as a
         // tooltip: an untagged 3rd party spool is a normal state, not a fault.
         const title = slotState === "Loaded (3rd party)"
-            ? "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it."
+            ? THIRD_PARTY_HINT
             : "No spool data from the AMS for this slot.";
         return `<span title="${title}">⚠️</span>`;
     }
@@ -2369,17 +2334,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (element) element.textContent = text;
     }
 
-    // Format a Date object into a human-readable string
-    function formatDate(date) {
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-
-        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
-    }
 });
 
 let currentPrinterId = null;

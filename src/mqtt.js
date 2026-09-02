@@ -5,7 +5,7 @@ import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, convertAMSandSlot, EXTERNAL_SPOOL_ID } from "./utils.js";
+import { sleep, formatDate, formatInterval, convertAMSandSlot, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
     getSpoolmanSpools,
     getSpoolmanInternalFilaments,
@@ -60,8 +60,10 @@ export function broadcastSlotUpdate(printerId, spool) {
 
 // Print states that signal the end of a print job
 const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
-// Print states that indicate an active or paused job
-export const ACTIVE_STATES = new Set(["PREPARE", "RUNNING", "PAUSE"]);
+// Print states that indicate an active or paused job. Built from the list in
+// public/shared.js, because the dashboard has to answer the same question
+// before it offers to correct a weight this side would then overwrite.
+export const ACTIVE_STATES = new Set(ACTIVE_PRINT_STATES);
 
 /**
  * Tracks gcode_state transitions and triggers filament consumption tracking.
@@ -604,7 +606,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     let matchingExternalFilament = null;
     let matchingInternalFilament = null;
     let existingSpool = null;
-    let option = "No actions available";
+    let option = SLOT_OPTIONS.NONE;
     let enableButton = "false";
     let error = false;
     let mutated = false;
@@ -733,19 +735,19 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
                 // service just appears to ignore the slot for a minute.
                 const waits = printer.remainWaits?.[amsId]?.waits ?? 0;
                 console.log(printer.name, printer.logFilePath, `    Waiting for the AMS to report how much is left before creating a spool (${waits}/${MAX_REMAIN_WAITS})`);
-                option = "Waiting for data";
+                option = SLOT_OPTIONS.WAITING;
                 enableButton = "false";
             } else if (!existingSpool) {
                 if (matchingInternalFilament) {
                     console.log(printer.name, printer.logFilePath, "    Filament exists, create a Spool with this Data");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingInternalFilament.material}, Color: ${matchingInternalFilament.name}`);
-                    if (await runAutomatically("Create Spool", createSpool)) mutated = true;
-                    option = "Create Spool";
+                    if (await runAutomatically(SLOT_OPTIONS.CREATE, createSpool)) mutated = true;
+                    option = SLOT_OPTIONS.CREATE;
                 } else if (matchingExternalFilament) {
                     console.log(printer.name, printer.logFilePath, "    Filament does not exist. Create a new Filament");
                     console.log(printer.name, printer.logFilePath, `    Material: ${matchingExternalFilament.material}, Color: ${matchingExternalFilament.name}`);
-                    if (await runAutomatically("Create Filament & Spool", createFilamentAndSpool)) mutated = true;
-                    option = "Create Filament & Spool";
+                    if (await runAutomatically(SLOT_OPTIONS.CREATE_WITH_FILAMENT, createFilamentAndSpool)) mutated = true;
+                    option = SLOT_OPTIONS.CREATE_WITH_FILAMENT;
                 } else {
                     console.error(printer.name, printer.logFilePath, "    No matching Filament found in Database, please check manually!");
                     error = true;
@@ -753,11 +755,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             }
         } else {
             console.log(printer.name, printer.logFilePath, `    Found mergeable Spool => Spoolman Spool ID: ${mergeableSpool.id}, Material: ${mergeableSpool.filament.material}, Color: ${mergeableSpool.filament.name}`);
-            if (await runAutomatically("Merge Spool", mergeSpool)) mutated = true;
-            option = "Merge Spool";
+            if (await runAutomatically(SLOT_OPTIONS.MERGE, mergeSpool)) mutated = true;
+            option = SLOT_OPTIONS.MERGE;
         }
 
-        if (!automatic && option !== "Waiting for data") enableButton = "true";
+        if (!automatic && option !== SLOT_OPTIONS.WAITING) enableButton = "true";
         printer.lastUpdateTime = new Date();
 
         // A create/merge just happened, so look the spool back up right away so
@@ -774,7 +776,7 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
             if (linked) {
                 existingSpool = linked;
                 found = true;
-                option = "No actions available";
+                option = SLOT_OPTIONS.NONE;
             }
         }
     }
@@ -797,11 +799,11 @@ async function processSlot(printer, ams, slot, spools, externalFilaments, intern
     const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools);
     if (mappedSpool) {
         existingSpool = mappedSpool;
-        option = "Unassign Spool";
+        option = SLOT_OPTIONS.UNASSIGN;
         enableButton = "true";
-    } else if (!legacyMode() && !found && option === "No actions available") {
+    } else if (!legacyMode() && !found && option === SLOT_OPTIONS.NONE) {
         // Nothing to create or merge, and no tag link, so offer a manual assignment
-        option = "Assign Spool";
+        option = SLOT_OPTIONS.ASSIGN;
         enableButton = "true";
     }
 
@@ -849,7 +851,7 @@ function buildEmptySpool(printer, amsId, slot) {
         matchingInternalFilament: null,
         matchingExternalFilament: null,
         existingSpool: null,
-        option: slotIsBusy(slot) ? "Waiting for data" : "No actions available",
+        option: slotIsBusy(slot) ? SLOT_OPTIONS.WAITING : SLOT_OPTIONS.NONE,
         enableButton: "false",
         printerName: printer.name,
         logFilePath: printer.logFilePath,
@@ -882,7 +884,7 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // Legacy mode offers nothing here. Its weight comes from the RFID
         // percentage, which this spool does not report, so there is no action
         // that would do anything.
-        option: legacyMode() ? "No actions available" : (mappedSpool ? "Unassign Spool" : "Assign Spool"),
+        option: legacyMode() ? SLOT_OPTIONS.NONE : (mappedSpool ? SLOT_OPTIONS.UNASSIGN : SLOT_OPTIONS.ASSIGN),
         enableButton: legacyMode() ? "false" : "true",
         printerName: printer.name,
         logFilePath: printer.logFilePath,

@@ -1,5 +1,5 @@
 import { consumptionKey } from "./gcode.js";
-import { orNull, slotColors } from "./utils.js";
+import { orNull, slotColors, SLOT_OPTIONS } from "./utils.js";
 
 /**
  * The one projection from an internal UI spool to what a client sees.
@@ -123,7 +123,7 @@ export function toClientSpool(uiSpool) {
         connectedViaMapping: uiSpool.connectedViaMapping ?? false,
         correctedRemain: uiSpool.correctedRemain ?? null,
         correctedWeight: uiSpool.correctedWeight ?? null,
-        option: uiSpool.option ?? "No actions available",
+        option: uiSpool.option ?? SLOT_OPTIONS.NONE,
         enableButton: uiSpool.enableButton ?? "false",
         error: uiSpool.error ?? false,
 

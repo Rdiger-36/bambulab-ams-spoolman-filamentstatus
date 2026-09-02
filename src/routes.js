@@ -13,7 +13,7 @@ import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { tailLogLines, logFileSet } from "./logger.js";
 import { toClientSpool } from "./uispool.js";
-import { catalogueFacet, filterCatalogue, spoolWeightLimit } from "./utils.js";
+import { catalogueFacet, filterCatalogue, spoolWeightLimit, SLOT_OPTIONS } from "./utils.js";
 import {
     createSpool,
     createFilamentAndSpool,
@@ -1229,7 +1229,7 @@ function refreshCachedSpool(printers, spool) {
 function applyMappingToUiSpool(printer, uiSpool, spool) {
     uiSpool.existingSpool        = spool;
     uiSpool.connectedViaMapping  = !!spool;
-    uiSpool.option               = spool ? "Unassign Spool" : "Assign Spool";
+    uiSpool.option               = spool ? SLOT_OPTIONS.UNASSIGN : SLOT_OPTIONS.ASSIGN;
     uiSpool.enableButton         = "true";
     // correctedWeight came from the assigned spool, so it has to go with it.
     // 3rd-party slots report tray_weight 0 and have no weight of their own.
