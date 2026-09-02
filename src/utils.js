@@ -262,3 +262,32 @@ export function spoolIsEmpty(remainingWeight, threshold = 0) {
     const limit = Number(threshold);
     return grams <= (Number.isFinite(limit) ? limit : 0);
 }
+
+/**
+ * How long to wait before the next reachability check of an offline printer.
+ *
+ * A printer that is switched off more often than it is on was checked at the
+ * same pace forever, which is one failed connection and one log line every
+ * interval, all day. The wait doubles from the check interval up to a limit, so
+ * a printer that is off for the evening is asked a handful of times rather than
+ * hundreds, and one that comes back is still found within that limit.
+ *
+ * The first failure waits the base interval, which is what keeps a printer that
+ * dropped off for a moment coming back as fast as it did before.
+ *
+ * @param {number} failures - consecutive failed checks so far, zero on the first
+ * @param {number} base - the configured offline check interval, in ms
+ * @param {number} limit - the longest wait to grow to, in ms
+ * @returns {number} milliseconds to wait before the next check
+ */
+export function offlineBackoff(failures, base, limit) {
+    const start = Number(base) > 0 ? Number(base) : 20000;
+    const max = Number(limit) > 0 ? Math.max(Number(limit), start) : start;
+    const steps = Number.isFinite(Number(failures)) ? Math.max(0, Math.floor(Number(failures))) : 0;
+
+    // 2 ** steps overflows into Infinity for a printer that has been off for
+    // weeks, and Math.min() with it is still the limit, but the intermediate
+    // multiplication is capped rather than relied on.
+    if (steps > 30) return max;
+    return Math.min(start * 2 ** steps, max);
+}

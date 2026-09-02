@@ -254,7 +254,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
 | **Tracking** | Operation mode and [legacy mode](#legacy-mode) |
 | **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool, [archiving empty spools](#archiving-empty-spools) |
-| **Printer connection** | Offline check interval and the retry limit |
+| **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
 | **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
@@ -277,6 +277,14 @@ The **Service** card is what a support question usually asks for first, plus the
 
 > [!IMPORTANT]
 > The Web UI has no authentication and is meant for a trusted local network. It can change the printer list and the Spoolman endpoint, so do not expose the port to the internet. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
+
+### A printer that is switched off
+
+Nothing has to be configured for a printer that is off most of the time. The monitor loop probes it with a plain TCP connect, and the wait between two probes doubles from **Offline check interval** up to **Offline backoff limit** (five minutes by default) for as long as it stays away. The log says so once per step and then goes quiet, instead of repeating the same line every twenty seconds all day, and it says when the printer answered again.
+
+Setting the backoff limit to the check interval keeps the old constant pace.
+
+Anything the user does clears the wait, so a printer switched back on is picked up at once rather than after the current backoff: resuming its monitoring, **Reconnect all printers**, and saving its address. Monitoring can also be switched off per printer, in the Web UI or over the API, which is what the [Home Assistant integration](https://github.com/Rdiger-36/ha-bambulab-ams-spoolman-filamentstatus) drives from a switch: nothing is probed at all while it is off.
 
 ## Diagnostics and privacy
 

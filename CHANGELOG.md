@@ -8,10 +8,18 @@ Unreleased
          - An archived spool that is still sitting in its slot is recognised by its tag and left alone. Without that the spool would be gone from Spoolman's spool list, and the automatic mode would create a second record for the same spool on the very next update. The slot says "Loaded (archived)" and offers no action until the spool is taken out or restored
          - An assignment pointing at a spool that was archived survives. It used to be dropped as "no longer exists in Spoolman", which restoring the spool could not undo
       - The spool dialog archives and restores a spool by hand, in the row that already showed whether it is archived
+   - Fixes:
+      - A printer that is switched off no longer fills the log, and is no longer probed at the same pace forever (issue #54)
+         - The wait between two reachability checks doubles from the offline check interval up to the new "Offline backoff limit", five minutes by default. A printer that is off for the evening is asked a handful of times instead of hundreds
+         - The log carries one line per backoff step and then goes quiet, where it used to repeat the same unreachable line every interval. It says when the printer answered again
+         - The first failure still waits the plain check interval, so a printer that dropped off for a moment comes back as fast as it did before
+         - Resuming monitoring, reconnecting all printers and saving a printer's address clear the wait, next to the reconnect cooldown they already cleared, so a printer switched back on is picked up at once rather than after the current backoff
+         - Setting the backoff limit to the check interval keeps the constant pace of before
    - Development:
       - PATCH /api/spoolman/spool/:id takes the archived flag, as a real boolean only, so a string of "false" cannot archive a spool
       - test/archive.test.js covers the empty decision, including the unknown weight that must never read as used up
       - The mock Spoolman of scripts/test-server answers like the real one about archived spools: it leaves them out of the spool list unless allow_archived is asked for, and it reports the flag it was given instead of always false. Both were needed to exercise the guard at all
+      - test/monitoring.backoff.test.js covers the growth, the limit, the overflow of a printer that has been away for weeks, and the reset a user action performs
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.6

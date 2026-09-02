@@ -85,6 +85,17 @@ build their Spoolman payload from.
   and for implicit TLS that stored host wins over the one passed to `access()`,
   so a shared constant sends every later connection to the printer that used it
   first.
+- **The monitor loop is the only retry driver, and an offline printer is asked
+  on a growing interval.** `monitorPrinters()` keeps ticking at
+  `OFFLINE_CHECK_INTERVAL`, but a printer that failed its last check carries
+  `nextCheckAt` and is skipped until it is due, doubling up to
+  `OFFLINE_MAX_INTERVAL` (`offlineBackoff()` in `utils.js`). A printer that is
+  switched off more often than it is on used to cost one failed connection and
+  one log line every interval, all day. Only a wait that differs from the one
+  already announced is logged, so the log carries one line per backoff step and
+  then goes quiet. Anything the user pressed clears it through
+  `resetOfflineBackoff()`, next to the `setupMqtt()` cooldown it sits beside,
+  because a button is not the monitor loop.
 - **A connection test never disturbs the live connection.** `testMqttConnection`
   opens its own client and force closes it; it must not touch
   `printer.mqttClient`.
