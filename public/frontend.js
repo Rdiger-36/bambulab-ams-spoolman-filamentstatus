@@ -704,6 +704,50 @@ document.addEventListener("DOMContentLoaded", () => {
 	    return entry.color_hex ? [normColor(entry.color_hex).toLowerCase()] : [];
 	}
 
+	// What each catalogue entry is called in the picker.
+	//
+	// The name alone, because the two steps above it already said which
+	// manufacturer and which material this is. The catalogue lists the same
+	// filament once per spool it is sold on, so "Panchroma Regular Grey" is
+	// three entries that differ in weight and in the spool they come on, and a
+	// name that occurs more than once carries exactly the fields that differ
+	// between its entries. Adding the manufacturer to all of them, as this did
+	// at first, only printed the same qualifier twice.
+	function catalogueLabels(entries) {
+	    const parts = {
+	        manufacturer: entry => entry.manufacturer,
+	        material: entry => entry.material,
+	        weight: entry => (entry.weight == null ? null : `${Math.round(entry.weight)} g`),
+	        diameter: entry => (entry.diameter == null ? null : `${entry.diameter} mm`),
+	        spool_type: entry => entry.spool_type,
+	    };
+
+	    const byName = new Map();
+	    for (const entry of entries) {
+	        const name = entry.name ?? "";
+	        byName.set(name, [...(byName.get(name) ?? []), entry]);
+	    }
+
+	    const labelled = [];
+	    for (const [name, group] of byName) {
+	        if (group.length === 1) {
+	            labelled.push([name, group[0]]);
+	            continue;
+	        }
+
+	        const telling = Object.entries(parts)
+	            .filter(([, read]) => new Set(group.map(read)).size > 1)
+	            .map(([, read]) => read);
+
+	        for (const entry of group) {
+	            const qualifiers = telling.map(read => read(entry)).filter(Boolean);
+	            labelled.push([[name, ...qualifiers].join(" · "), entry]);
+	        }
+	    }
+
+	    return labelled;
+	}
+
 	// Values a chipless spool does report, used to pre-fill the form.
 	//
 	// The AMS reports every colour of a multi colour spool, so all of them are
@@ -745,7 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	        <div class="sp-scroll">
 	            <div class="sp-section">Filament</div>
 	            <label class="sp-field sp-wide">
-	                <span>Use filament</span>
+	                <span>Use a filament you already have</span>
 	                <select id="sp-filament">
 	                    <option value="">+ Create a new filament</option>
 	                    ${filamentOptions}
@@ -754,7 +798,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	            <div id="sp-filament-fields">
 	                <div class="sp-wide sp-catalogue">
-	                    <div class="sp-catalogue-title">Take the values from the filament catalogue</div>
+	                    <div class="sp-catalogue-title">Fill the new filament in from the catalogue</div>
 	                    <div class="sp-catalogue-steps">
 	                        <label class="sp-field">
 	                            <span>1. Manufacturer</span>
@@ -775,6 +819,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	                    </div>
 	                    <small class="gc-muted" id="sp-catalogue-hint"></small>
 	                </div>
+
+	                <div class="sp-subsection">Filament data</div>
 	                <label class="sp-field">
 	                    <span>Manufacturer</span>
 	                    <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu">
@@ -791,8 +837,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	                    <span>Name</span>
 	                    <input id="sp-name" placeholder="e.g. Galaxy Black">
 	                </label>
-	                <label class="sp-field sp-wide">
-	                    <span>Colour</span>
+
+	                <div class="sp-subsection">Colour</div>
+	                <div class="sp-wide">
 	                    <div id="sp-colours" class="sp-colours"></div>
 	                    <div class="sp-colour-actions">
 	                        <button type="button" class="btn btn-small" id="sp-colour-add">Add a colour</button>
@@ -802,7 +849,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	                        </select>
 	                    </div>
 	                    <small class="gc-muted" id="sp-colour-hint"></small>
-	                </label>
+	                </div>
+
+	                <div class="sp-subsection">Specifications</div>
 	                <label class="sp-field">
 	                    <span>Density * (g/cm³)</span>
 	                    <input type="number" id="sp-density" step="0.01" min="0.01">
@@ -819,6 +868,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	                    <span>Bed temp (°C)</span>
 	                    <input type="number" id="sp-bed-temp">
 	                </label>
+
+	                <div class="sp-subsection">Weights</div>
 	                <label class="sp-field">
 	                    <span>Full weight (g)</span>
 	                    <input type="number" id="sp-weight" min="0" value="1000">
@@ -917,16 +968,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	            String(a.name ?? "").localeCompare(String(b.name ?? "")));
 
 	        catalogue.clear();
-	        for (const entry of ordered) {
-	            // The name alone, because the two steps above already said which
-	            // manufacturer and which material this is. Names do repeat across
-	            // them, so one that is taken carries what tells the two apart.
-	            const name = entry.name ?? "";
-	            const label = catalogue.has(name)
-	                ? [name, entry.manufacturer, entry.material].filter(Boolean).join(" · ")
-	                : name;
-	            catalogue.set(label, entry);
-	        }
+	        for (const [label, entry] of catalogueLabels(ordered)) catalogue.set(label, entry);
 
 	        fillDatalist("sp-cat-filaments", [...catalogue.keys()]);
 	        $("sp-catalogue-hint").textContent = ordered.length
@@ -2151,6 +2193,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         dialogContent.innerHTML = content;
         updateElementText("action-button", actionButtonText);
+        // The dialog is shared, and whatever ran in it last may have left the
+        // button disabled: the create form disables it while it saves and then
+        // closes the dialog, which is what made the next Unassign do nothing
+        // until the page was reloaded.
+        actionButton.disabled = false;
 
         if (actionButton.textContent === "Go to Spoolman") {
             actionButton.onclick = () => {

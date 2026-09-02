@@ -54,7 +54,8 @@ test("an entry carries only the fields the dialog fills in", () => {
 
     assert.deepEqual(Object.keys(entry).sort(), [
         "bed_temp", "color_hex", "color_hexes", "density", "diameter", "extruder_temp",
-        "id", "manufacturer", "material", "multi_color_direction", "name", "spool_weight", "weight",
+        "id", "manufacturer", "material", "multi_color_direction", "name", "spool_type",
+        "spool_weight", "weight",
     ]);
     // Everything the catalogue carries beyond that stays on the server.
     assert.equal("translucent" in entry, false);

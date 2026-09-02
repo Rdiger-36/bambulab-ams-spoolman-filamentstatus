@@ -261,6 +261,19 @@ h1 {
 
 .sp-scroll > .sp-section:first-child { margin-top: 0; }
 
+/* Inside the new filament form: its data, its colours, its specifications and
+   its weights. Lighter than a section heading, because the form is one thing
+   and these only keep its ten fields apart. */
+.sp-subsection {
+  grid-column: 1 / -1;
+  font-size: 0.82em;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-top: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #8882;
+}
+
 .sp-wide, .sp-note, #sp-error { grid-column: 1 / -1; }
 .sp-note { font-size: 0.83em; opacity: 0.75; margin: 8px 0 0; }
 #sp-error:empty { display: none; }
@@ -345,7 +358,9 @@ h1 {
    AMS and the catalogue report it. */
 .sp-colours {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* auto-fill with a cap, so one colour stays a field and does not stretch
+     across the whole dialog the way a single auto-fit column would. */
+  grid-template-columns: repeat(auto-fill, minmax(160px, 240px));
   gap: 8px;
 }
 

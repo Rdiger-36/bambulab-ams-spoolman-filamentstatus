@@ -124,6 +124,9 @@ function pickCatalogueEntry(filament) {
         diameter: filament.diameter ?? null,
         weight: filament.weight ?? null,
         spool_weight: filament.spool_weight ?? null,
+        // Kept because the same filament is listed once per spool it is sold
+        // on, and the type is part of what tells those entries apart.
+        spool_type: filament.spool_type ?? null,
         extruder_temp: filament.extruder_temp ?? null,
         bed_temp: filament.bed_temp ?? null,
         color_hex: filament.color_hex ?? null,
