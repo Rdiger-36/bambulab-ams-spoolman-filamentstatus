@@ -633,32 +633,42 @@ body.show-footer #spool-list {
     box-sizing: border-box;
   }
 
+  /* One unit, one card. The slots used to be four free floating tiles with the
+     header hovering above them, so nothing but their order said they belonged
+     to the same AMS. The card is the unit now: its header is the band, and the
+     slots are sections inside it, parted by a line rather than by air.
+     !important beats the desktop .spool-table rules defined later in source. */
   .spool-table {
-    /* Air between two units, on top of what the band above says */
     margin-top: 22px;
-    /* drop the desktop card frame. Each row is its own card on mobile.
-       !important beats the desktop .spool-table rules defined later in source. */
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    background: transparent !important;
+    border: 1px solid var(--border-card) !important;
+    border-radius: 10px !important;
+    background: var(--row-bg) !important;
+    box-shadow: var(--shadow-card) !important;
+    overflow: hidden;
   }
 
   .spool-table tr {
-    border: 1px solid var(--border-card);
-    border-radius: 8px;
-    margin-bottom: 14px;
-    overflow: hidden;
-    background: var(--row-bg);
+    border: none;
+    background: transparent;
+  }
+
+  /* The one line inside the card that separates two slots. The fields within a
+     slot carry no lines at all, so a line always means "next slot". */
+  .spool-table tr + tr {
+    border-top: 1px solid var(--border-card);
   }
 
   .spool-table td {
-    border: none;
-    border-bottom: 1px solid var(--border-row);
-    padding: 9px 12px;
+    /* !important for the same reason as above: the desktop rule that draws the
+       row separator sits later in the file. */
+    border: none !important;
+    padding: 5px 14px;
     text-align: left !important;
   }
-  .spool-table td:last-child { border-bottom: none; }
+
+  /* Air around a slot rather than between its fields */
+  .spool-table tr td:first-child { padding-top: 12px; }
+  .spool-table tr td:last-child { padding-bottom: 14px; }
 
   /* Per-cell label above the value (robust for multi-line cell content) */
   .spool-table td::before {
@@ -684,16 +694,18 @@ body.show-footer #spool-list {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    /* The head of the unit card, so it sits on it rather than above it */
+    margin: 0;
+    border: none;
+    border-bottom: 1px solid var(--border-card);
+    border-radius: 0;
     /* Centred, both lines: the band spans the whole width, and its readings
        left packed under a centred card head looked like a leftover. */
     justify-content: center;
     text-align: center;
     gap: 4px 14px;
-    padding: 8px 11px;
-    margin-bottom: 10px;
+    padding: 9px 12px;
     background: var(--head-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
   }
 
   /* The gap spaces them now, and a trailing margin would push the band open on
