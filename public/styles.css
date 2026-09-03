@@ -203,14 +203,20 @@ h1 {
   cursor: pointer;
 }
 
+/* A row of facts, not a table: each one takes the width of what it says and the
+   next one follows. As a grid of equal columns they were spread over the whole
+   card, so "Connected" sat a hand's width from the label of the next one for no
+   reason. The column gap is wide enough to separate two pairs without a rule
+   between them. */
 .status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 34px;
 }
 
 .status-item {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
