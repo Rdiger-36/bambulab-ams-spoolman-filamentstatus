@@ -14,21 +14,21 @@
       } catch (error) { /* Storage blocked: stay in light mode. */ }
     </script>
 </head>
-<body class="hide-footer">
+<body class="hide-footer logs-page">
     <div id="menubar">
         <!-- The whole bar, including the dark mode button, is filled by menu.js -->
         <div id="menu-root"></div>
     </div>
-    <div class="page-width">
+    <div class="page-width log-page">
         <!-- The name is a picker over the logs, filled by menu.js -->
         <h3 class="log-title">Backend Logs for: <span id="headline"></span></h3>
-        <!-- The download acts on the log below it, so it sits with it rather
-             than in the menu bar -->
-        <div class="log-actions">
-            <button id="download-logs" class="log-button">Download this log file...</button>
-        </div>
         <div id="log-box">
             <div id="logs"></div>
+        </div>
+        <!-- Under the log it downloads, and always on screen: the box above it
+             takes the height that is left rather than growing past it -->
+        <div class="log-actions">
+            <button id="download-logs" class="log-button">Download this log file...</button>
         </div>
     </div>
     <script src="menu.js"></script>

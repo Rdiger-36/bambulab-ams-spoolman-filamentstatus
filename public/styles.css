@@ -1041,12 +1041,41 @@ button {
   margin-bottom: 10px;
 }
 
-/* The download acts on the log below it and sits with it, right aligned over
-   the box rather than in the menu bar, where it was a page action among
-   navigation. */
+/* The download acts on the log and sits under it, in the middle, rather than in
+   the menu bar where it was a page action among navigation. */
 .log-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+/* The log page is a column the height of the window: the box takes what is left
+   after the bar, the headline and the button, so the button is on screen
+   whatever the log contains and however long the headline wraps. A fixed
+   max-height had to guess all three. */
+body.logs-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* An auto margin on a flex item wins over the stretch it would get otherwise,
+   so both of these have to be told to take the width; the margin then only
+   centres them within the 1180px. */
+body.logs-page #menubar {
+  flex: none;
+  width: 100%;
+}
+
+body.logs-page .log-page { width: 100%; }
+
+.log-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* Or the box refuses to shrink below the height of the log inside it */
+  min-height: 0;
 }
 
 #log-box {
@@ -1056,7 +1085,8 @@ button {
   border-radius: 5px;
   background-color: var(--log-bg);
   color: var(--text);
-  max-height: calc(100vh - 100px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
