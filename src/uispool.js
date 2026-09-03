@@ -145,3 +145,23 @@ export function toClientSpool(uiSpool) {
         key: consumptionKey(slot.tray_info_idx, slot.tray_color, slot.cols),
     };
 }
+
+/**
+ * The labels of the slots that hold something, for `orderedAmsSlots()`.
+ *
+ * Bambu Studio's filament list skips an empty slot, so passing every slot the
+ * printer has would put a position where the slicer has none and shift every
+ * filament after it onto the wrong slot. Measured on a P2S with A2 and B1
+ * emptied: seven loaded slots, seven filaments, both gaps absent.
+ *
+ * Takes runtime UI spools or their client projection, because the booking reads
+ * one and `/api/print` the other and both ask this same question.
+ *
+ * @param {object[]} uiSpools - `printer.spoolData` or its `toClientSpool()` map
+ * @returns {string[]} the labels, in input order
+ */
+export function loadedSlotIds(uiSpools) {
+    return (uiSpools || [])
+        .filter(uiSpool => uiSpool.slotState !== "Empty")
+        .map(uiSpool => uiSpool.amsId);
+}

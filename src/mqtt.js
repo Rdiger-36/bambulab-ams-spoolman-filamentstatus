@@ -40,7 +40,7 @@ import {
     consumptionCandidate,
     matchConsumption,
 } from "./ams.js";
-import { toClientSpool } from "./uispool.js";
+import { toClientSpool, loadedSlotIds } from "./uispool.js";
 import { traceEnabled } from "./printers.js";
 
 /**
@@ -581,7 +581,7 @@ async function bookConsumption(printer, consumption, state) {
     // with the printer and cannot tell when it is not. Without it, the position
     // in the list is all there is.
     const reported = printer.currentMapping;
-    const slots = reported ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId));
+    const slots = reported ?? orderedAmsSlots(loadedSlotIds(printer.spoolData));
 
     // Which of the two sources named the slots, and what it named. This is the
     // decision behind every booking landing where it did: the printer's own

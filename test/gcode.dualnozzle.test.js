@@ -76,9 +76,10 @@ test("the four filaments of the H2C print are read with their grams", () => {
 test("on two extruders the list order is not the slot order", () => {
     // The estimate for a ten slot printer starts at A0, and the print takes
     // nothing from A0, A1 or A2 at all. Position 3 lands on A3 by coincidence.
+    // The slicer listed these four as HT-A, the holder, B2 and A3.
     assert.deepEqual(
         orderedAmsSlots(loadedSlots().map(s => s.amsId)),
-        ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "HT-A", "External"],
+        ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "External", "HT-A"],
     );
 });
 

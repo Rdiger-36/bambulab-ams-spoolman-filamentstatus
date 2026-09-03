@@ -13,6 +13,7 @@ import {
     decodePrintMapping,
 } from "../src/gcode.js";
 import { matchConsumption, consumptionCandidate } from "../src/ams.js";
+import { loadedSlotIds } from "../src/uispool.js";
 
 // A real print off a single nozzle P1S with two AMS units, an AMS HT and a
 // spool on the external holder, sliced in Bambu Studio 02.08.02.61. The printer
@@ -21,17 +22,18 @@ import { matchConsumption, consumptionCandidate } from "../src/ams.js";
 // filaments match those nine loaded slots one for one, in order.
 //
 // That correspondence is the measurement this fixture exists for, because it
-// settles two things `orderedAmsSlots()` could only assume:
+// settles two things `orderedAmsSlots()` could only assume, and both are what
+// it now does:
 //
 //   - the empty B3 takes no position. The list runs A0 to A3, then B0 to B2,
 //     and the next entry is already the external holder
 //   - the external holder comes before the AMS HT, although the printer numbers
-//     the holder 254 and the HT 128
+//     the holder 254 and the HT 128, so the order is not a sort by unit id
 //
-// The plate prints four of those nine, at the positions 0, 6, 7 and 8, and the
-// booking is right either way: where the estimated position is wrong the slot
-// refuses it and profile plus colour decide. The test at the end holds exactly
-// that, and is the one to change when the ordering is corrected.
+// The plate prints four of those nine, at the positions 0, 6, 7 and 8. The
+// booking does not rest on the position alone: the shuffled layout below moves
+// every spool and lands on the same spools, because the slot refuses a position
+// that does not hold what was sliced and profile plus colour decide instead.
 //
 // The plate is printed by object, which gives each filament one closed layer
 // range and makes this the fixture for what a cancelled sequential print books.
@@ -64,7 +66,7 @@ const printerSlots = () => [
 ];
 
 /** The positions this service estimates, the way `/api/print` builds them. */
-const estimatedPositions = (spools) => orderedAmsSlots(spools.map(s => s.amsId));
+const estimatedPositions = (spools) => orderedAmsSlots(loadedSlotIds(spools));
 
 /** The slot every sliced filament ends up matched to, in slicer list order. */
 function matchedSlots(consumption, slots, reportedByPrinter, spools) {
@@ -128,29 +130,18 @@ test("what the printer reports carries the unused filaments as gaps", () => {
     assert.deepEqual(matchedSlots(calcFullConsumption(p1s), slots, true, spools), ["A0", "B2", "External", "HT-A"]);
 });
 
-test("the estimated positions are not the ones the slicer used", () => {
+test("the estimated positions are the ones the slicer used", () => {
     // Read off the printer: the nine filaments of the project are its nine
-    // loaded slots, in the order A0 A1 A2 A3 B0 B1 B2 External HT-A. The
-    // estimate differs from that in both directions, and this is what a
-    // correction would change.
+    // loaded slots, in this order. The empty B3 has no position, and the holder
+    // comes before the AMS HT although the printer numbers it 254 against the
+    // HT's 128.
     const measured = ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "External", "HT-A"];
-    const estimated = estimatedPositions(printerSlots());
+    assert.deepEqual(estimatedPositions(printerSlots()), measured);
 
-    // The empty B3 is given a position it does not have in the slicer's list,
-    // and the holder and the AMS HT come the other way round.
-    assert.deepEqual(estimated, ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "HT-A", "External"]);
-    assert.notDeepEqual(estimated.slice(0, measured.length), measured);
-
-    // It costs this print nothing. Position 7 names the empty B3, which is no
-    // candidate at all, and position 8 names HT-A, which does hold the sliced
-    // ABS and is confirmed. The one that is wrong falls through to the colour
-    // stages and finds the holder.
-    const entries = Object.values(resolveSliceSlots(calcFullConsumption(p1s), estimated, { reportedByPrinter: false }));
-    assert.deepEqual(entries.map(e => e.amsId), ["A0", "B2", "B3", "HT-A"]);
-    assert.deepEqual(
-        matchedSlots(calcFullConsumption(p1s), estimated, false, printerSlots()),
-        ["A0", "B2", "External", "HT-A"],
-    );
+    // So the position alone names every slot this print runs from, and each of
+    // the four is confirmed by what the slot holds.
+    const entries = Object.values(resolveSliceSlots(calcFullConsumption(p1s), measured, { reportedByPrinter: false }));
+    assert.deepEqual(entries.map(e => e.amsId), ["A0", "B2", "External", "HT-A"]);
 });
 
 test("a print by object gives every filament a range of its own", () => {
