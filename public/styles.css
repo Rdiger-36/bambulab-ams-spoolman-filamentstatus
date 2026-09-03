@@ -684,6 +684,10 @@ body.show-footer #spool-list {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    /* Centred, both lines: the band spans the whole width, and its readings
+       left packed under a centred card head looked like a leftover. */
+    justify-content: center;
+    text-align: center;
     gap: 4px 14px;
     padding: 8px 11px;
     margin-bottom: 10px;
@@ -704,7 +708,10 @@ body.show-footer #spool-list {
   /* The drying cycle carries a target and a countdown, which is more than fits
      next to the humidity on a phone. Its own line, under the readings it
      belongs to. */
-  caption.ams-env .ams-env-drying { flex-basis: 100%; }
+  caption.ams-env .ams-env-drying {
+    flex-basis: 100%;
+    text-align: center;
+  }
 
 
 
