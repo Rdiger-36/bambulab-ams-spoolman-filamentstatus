@@ -332,6 +332,15 @@ projection. Do not add a second condition in front of it; the one that used to
 be there held every slot the printer could not identify back, so an emptied slot
 never reached the UI.
 
+**Per-unit AMS readings:** humidity, temperature and the drying cycle come out
+of `extractAmsEnvironment()` in `ams.js` and travel on their own path, not on
+the slot one. They are display only, they are refreshed on every report rather
+than on the AMS update interval, and their `ams_env` broadcast is throttled to
+one every 30 seconds. Do not feed them into `extractComparableTrayData()`: they
+change on every report and would make every report look like a slot change.
+Which fields a unit sends depends on the hardware, so every one of them is
+optional; the shapes that have been observed are in `test/ams.env.test.js`.
+
 **Changing slot classification:** `processSlot()` in `mqtt.js` branches, in
 order: invalid slot → empty slot → 3rd party (unidentified) → Bambu Lab. The
 order matters; the empty branch must not swallow an occupied-but-unidentified

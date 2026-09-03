@@ -533,6 +533,35 @@ table {
   background-color: var(--table-bg);
 }
 
+/* ---- AMS unit header ----
+   What the unit says about itself, above its slot table: humidity, temperature
+   and the drying cycle. Hidden (and empty) for a unit that reports none of it,
+   which is the AMS Lite and the external spool holder. */
+caption.ams-env {
+  caption-side: top;
+  text-align: left;
+  padding: 0 2px 6px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+/* Spaced with a margin rather than a flex gap: a caption given `display:flex`
+   leaves the table layout and is drawn below the header row instead of above
+   the table. */
+caption.ams-env > span {
+  margin-right: 12px;
+}
+
+caption.ams-env .ams-env-unit {
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+caption.ams-env .ams-env-drying {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* Keep content clear of the fixed footer so the last table isn't overlapped */
 body.show-footer #spool-list {
   margin-bottom: 80px;
@@ -595,6 +624,14 @@ body.show-footer #spool-list {
     color: var(--text-muted);
     font-weight: 600;
     margin-bottom: 2px;
+  }
+
+  /* The unit header, on a table whose rows are cards. A caption keeps its
+     table display even when everything around it is a block, and shrink wraps
+     into a column one word wide. */
+  caption.ams-env {
+    display: block;
+    padding: 0 2px 8px;
   }
 
   /* Make the action button comfortably tappable */

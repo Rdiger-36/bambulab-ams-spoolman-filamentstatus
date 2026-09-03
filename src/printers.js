@@ -55,6 +55,10 @@ function createRuntimePrinter(entry) {
         currentLayerNum: 0,
         consumptionBooked: false,
         sliceFetchDone: false,
+        // Humidity, temperature and drying state per AMS unit, for the header
+        // of each unit's table. Display only: it never reaches Spoolman, and it
+        // is refreshed on every report rather than on the AMS update interval.
+        amsEnv: [],
         // How many AMS updates a slot has been waiting for its remain reading,
         // keyed by slot label. See waitedLongEnoughForRemain() in mqtt.js.
         remainWaits: {},

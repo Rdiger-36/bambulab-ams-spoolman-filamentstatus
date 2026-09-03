@@ -8,6 +8,8 @@ The dashboard shows the running print, its layer progress, and every loaded spoo
 
 ![Dashboard](images/dashboard.png)
 
+Above each unit's table stands what the unit reports about itself: the relative humidity inside it, its temperature, and, while a drying cycle runs, its target temperature and the minutes left. Which of those appear depends on the hardware. An AMS 2 Pro and an AMS HT report all of it. The original AMS reports only the five step humidity level, 1 being the driest, and has no temperature sensor. The AMS Lite and the external spool holder report none of it and get no header.
+
 Under each spool stands whether its consumption can be booked:
 
 | Marker | Meaning |

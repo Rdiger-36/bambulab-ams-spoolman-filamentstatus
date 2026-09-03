@@ -1,6 +1,6 @@
 import { settings, legacyMode } from "./settings.js";
 import { toClientSpool } from "./uispool.js";
-import { orNull, slotColors, filamentColors } from "./utils.js";
+import { orNull, slotColors, filamentColors, convertAMSandSlot } from "./utils.js";
 import { consumptionKey, normColor } from "./gcode.js";
 
 /**
@@ -619,4 +619,91 @@ export function matchConsumption(entries, candidates) {
     }
 
     return result;
+}
+
+/**
+ * A finite number from one of the string fields the AMS reports, or null.
+ *
+ * Every environment value arrives as a string, and an unsupported reading
+ * arrives as an empty string, a placeholder or a missing field. `Number("")` is
+ * 0, which would turn "this AMS has no sensor" into a real measurement, so the
+ * empty string is rejected before the conversion.
+ *
+ * @param {*} value - the raw field
+ * @returns {number|null} the number, or null when there is no reading
+ */
+function amsNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+/**
+ * The environment readings of every AMS unit, for the dashboard header.
+ *
+ * What a unit reports depends on which AMS it is, and the differences are the
+ * whole reason this is one function rather than four field reads:
+ *
+ *   - AMS 2 Pro and AMS HT carry a real sensor and a dryer. They report
+ *     `humidity` as a level, `humidity_raw` as percent relative humidity,
+ *     `temp` in °C, `dry_time` as the minutes of drying left and `dry_setting`
+ *     as what was set for it.
+ *   - The original AMS reports `humidity` and nothing else usable: no
+ *     `humidity_raw`, no drying fields, and `temp` is the literal "0.0",
+ *     which is the absence of a sensor rather than a freezing AMS. A
+ *     temperature of zero or below is therefore dropped.
+ *   - The AMS Lite has neither sensor nor dryer. Whatever it leaves out ends up
+ *     null here, and a unit that reports nothing at all is left out entirely,
+ *     so the dashboard shows no empty header for it.
+ *
+ * `humidity` is a level from 1 (driest) to 5. An AMS HT was observed reporting
+ * level "0" alongside a valid 24% reading, so 0 is treated as "no level yet"
+ * and only the percentage is shown for it.
+ *
+ * The external spool holder passes through here as well, since it is appended
+ * to the unit list before processing. It reports no environment data and drops
+ * out with the units that have no sensor.
+ *
+ * @param {object[]} amsArray - `print.ams.ams`, or the processed unit list
+ * @returns {object[]} one entry per unit that reports anything, in input order
+ */
+export function extractAmsEnvironment(amsArray) {
+    if (!Array.isArray(amsArray)) return [];
+
+    return amsArray.map(unit => {
+        const level = amsNumber(unit?.humidity);
+        const percent = amsNumber(unit?.humidity_raw);
+        const temperature = amsNumber(unit?.temp);
+        const dryTime = amsNumber(unit?.dry_time);
+        const setting = unit?.dry_setting || null;
+
+        // The dryer is what separates an AMS 2 Pro or HT from the other two, and
+        // the presence of the field is the only thing in the payload that says
+        // so. A unit without it gets no drying section at all, rather than one
+        // reading "not drying", which would claim it could.
+        const canDry = dryTime !== null || !!setting;
+        const settingTemp = amsNumber(setting?.dry_temperature);
+        const settingDuration = amsNumber(setting?.dry_duration);
+
+        return {
+            amsId: convertAMSandSlot(unit?.id, null),
+            humidity: level !== null && level >= 1 && level <= 5 ? level : null,
+            humidityPercent: percent !== null && percent > 0 && percent <= 100 ? percent : null,
+            temperature: temperature !== null && temperature > 0 ? temperature : null,
+            drying: canDry ? {
+                active: (dryTime ?? 0) > 0,
+                remainingMinutes: dryTime !== null && dryTime > 0 ? dryTime : null,
+                // Both are -1 while nothing is set, which is not a temperature
+                // and not a duration.
+                targetTemp: settingTemp !== null && settingTemp > 0 ? settingTemp : null,
+                durationHours: settingDuration !== null && settingDuration > 0 ? settingDuration : null,
+                filament: setting?.dry_filament || null,
+            } : null,
+        };
+    }).filter(entry =>
+        entry.humidity !== null ||
+        entry.humidityPercent !== null ||
+        entry.temperature !== null ||
+        entry.drying !== null
+    );
 }

@@ -33,6 +33,12 @@ let printerGcodeState = "IDLE";
 const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.";
 const ARCHIVED_HINT = "This spool is archived in Spoolman because it ran empty. Take it out of the slot, or restore it in the spool details.";
 
+// Humidity, temperature and drying state per AMS unit, keyed by the unit part
+// of a slot label ("A" for A0 to A3, "HT-A" for a single slot unit). Mirrored
+// from /api/status and kept fresh by the ams_env SSE event, which arrives at
+// most every 30 seconds because the readings never sit still.
+let amsEnvByUnit = {};
+
 // The payload behind every rendered row, by AMS slot id. The detail dialog is
 // opened from a delegated listener, which sees the clicked element rather than
 // the object the row was built from, and rows are recreated on every update.
@@ -91,6 +97,12 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             // Keep the G-code dashboard (print state / progress) live
             if (!legacyMode) scheduleGcodeRefresh();
+        } else if (data.type === 'ams_env' && data.printer === printerId) {
+            // The captions only, not a table rebuild: the readings change on
+            // their own schedule and a rebuild would drop an open row state and
+            // fight the column width sync for nothing.
+            setAmsEnv(data.amsEnv);
+            refreshAmsEnvCaptions();
         } else if (data.type === 'refresh' && data.printer === printerId) {
           refreshMenubarPrinters();
         } else if (data.type === "monitoring_update") {
@@ -256,6 +268,19 @@ document.addEventListener("DOMContentLoaded", () => {
             const table = document.createElement("table");
             table.className = "spool-table";
 
+            // First child, because that is where a caption belongs, and kept
+            // even when the unit reports nothing so a later reading can fill it
+            // in without rebuilding the table.
+            const caption = document.createElement("caption");
+            caption.className = "ams-env";
+            caption.dataset.unit = amsUnitKey(slots[0]?.amsId);
+            caption.innerHTML = amsEnvCaptionHtml(caption.dataset.unit);
+            caption.hidden = !caption.innerHTML;
+            // Prepended, not appended: `display:flex` takes the element out of
+            // the table layout, so it renders where it sits in the DOM rather
+            // than where `caption-side` asks for it.
+            table.prepend(caption);
+
             const thead = document.createElement("thead");
             const headerRow = document.createElement("tr");
             for (const [label, align] of columns) {
@@ -289,6 +314,66 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         return tables;
+    }
+
+    // The unit a slot belongs to, as the AMS environment readings are keyed.
+    // A four slot unit is the letter of its label, a single slot unit is the
+    // whole label, because "HT-A" carries no slot number to strip.
+    function amsUnitKey(amsId) {
+        if (!amsId) return "";
+        return isSingleSlotUnit(amsId) ? amsId : amsId.charAt(0);
+    }
+
+    // Mirrors the readings from /api/status or an ams_env event. A payload
+    // without them leaves what is shown alone: the status endpoint is read on
+    // several occasions and dropping the header on one of them would make it
+    // flicker.
+    function setAmsEnv(amsEnv) {
+        if (!Array.isArray(amsEnv)) return;
+        amsEnvByUnit = Object.fromEntries(amsEnv.map(entry => [entry.amsId, entry]));
+    }
+
+    // The header line of one unit's table: what the AMS reports about itself.
+    //
+    // Empty for a unit that reports nothing, which is the AMS Lite, the
+    // external spool holder and any unit whose readings have not arrived yet.
+    // The original AMS reports only the humidity level, the AMS 2 Pro and the
+    // AMS HT a percentage and a temperature as well, so every part is optional.
+    function amsEnvCaptionHtml(unitKey) {
+        const env = amsEnvByUnit[unitKey];
+        if (!env) return "";
+
+        const parts = [];
+        if (env.humidityPercent !== null && env.humidityPercent !== undefined) {
+            const level = env.humidity ? ` (level ${env.humidity}/5)` : "";
+            parts.push(`<span title="Relative humidity inside the unit${level ? ", 1 is driest" : ""}">💧 ${env.humidityPercent} %${escapeHtml(level)}</span>`);
+        } else if (env.humidity !== null && env.humidity !== undefined) {
+            // The original AMS has no percentage, only the five step level the
+            // printer shows as a bar. Spelled out rather than drawn, because
+            // there is no percentage to put next to it.
+            parts.push(`<span title="Humidity level reported by the AMS, 1 is driest. This unit has no percentage sensor.">💧 level ${env.humidity}/5</span>`);
+        }
+        if (env.temperature !== null && env.temperature !== undefined) {
+            parts.push(`<span title="Temperature inside the unit">🌡️ ${env.temperature} °C</span>`);
+        }
+        if (env.drying?.active) {
+            const target = env.drying.targetTemp ? ` at ${env.drying.targetTemp} °C` : "";
+            const left = env.drying.remainingMinutes ? `, ${env.drying.remainingMinutes} min left` : "";
+            parts.push(`<span class="ams-env-drying" title="This unit is running its drying cycle">♨️ Drying${escapeHtml(target)}${escapeHtml(left)}</span>`);
+        }
+
+        if (!parts.length) return "";
+        return `<span class="ams-env-unit">AMS ${escapeHtml(unitKey)}</span>${parts.join("")}`;
+    }
+
+    // Rewrites the headers of the tables already on screen. The readings arrive
+    // on their own schedule, so this runs without rebuilding a single row.
+    function refreshAmsEnvCaptions() {
+        for (const caption of document.querySelectorAll("caption.ams-env")) {
+            const html = amsEnvCaptionHtml(caption.dataset.unit || "");
+            caption.innerHTML = html;
+            caption.hidden = !html;
+        }
     }
 
     // Every column of the spool tables, the action column included. Left out, it
@@ -2298,6 +2383,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ? formatDate(new Date(data.lastMqttAmsUpdate))
             : "No update yet";
         
+        setAmsEnv(data.amsEnv);
+
         if (typeof data.LEGACY_MODE === "boolean") legacyMode = data.LEGACY_MODE;
         printerGcodeState = data.gcodeState || "IDLE";
 

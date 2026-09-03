@@ -210,6 +210,10 @@ export function registerRoutes(app, printers) {
             VERSION: version,
             SPOOLMAN_FQDN: settings.SPOOLMAN_FQDN,
             monitoringEnabled: printer.monitoringEnabled,
+            // Humidity, temperature and drying state per AMS unit. Sent with the
+            // status so a page load starts with the last readings rather than an
+            // empty header until the next broadcast, which is up to 30s away.
+            amsEnv: printer.amsEnv || [],
             // Both views load this endpoint, /api/print only the G-code one, and
             // the spool detail dialog has to know in either whether a print is
             // running before it offers to correct a remaining weight.
