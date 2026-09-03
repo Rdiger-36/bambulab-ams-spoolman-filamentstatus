@@ -203,20 +203,21 @@ h1 {
   cursor: pointer;
 }
 
-/* A row of facts, not a table: each one takes the width of what it says and the
-   next one follows. As a grid of equal columns they were spread over the whole
-   card, so "Connected" sat a hand's width from the label of the next one for no
-   reason. The column gap is wide enough to separate two pairs without a rule
-   between them. */
+/* Facts of one size, in the middle of the card.
+   Every cell is the same width, so a wrapped row lines up under the one above
+   it instead of every line starting somewhere else. The tracks have a fixed
+   size rather than 1fr, which is what keeps them from being stretched apart
+   over the whole card, and the whole block is centred rather than left packed,
+   so the empty space of a half filled last row sits on both sides. */
 .status-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 34px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 170px));
+  justify-content: center;
+  gap: 12px 30px;
 }
 
 .status-item {
   display: flex;
-  flex: 0 1 auto;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
@@ -1130,6 +1131,14 @@ button {
 }
 
 @media (max-width: 760px) {
+  /* Two of the fixed 170px tracks do not fit a phone, and one of them centred
+     leaves a column with margins on both sides. Equal shares of the width
+     instead: still two cells of the same size, still lined up. */
+  .status-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px 18px;
+  }
+
   /* Three across does not fit a phone. They stack in the same order, all to
      the left, because a centred title over a left aligned column reads as a
      mistake rather than as a decision. */
