@@ -335,10 +335,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // The header line of one unit's table: what the AMS reports about itself.
     //
-    // Empty for a unit that reports nothing, which is the AMS Lite, the
-    // external spool holder and any unit whose readings have not arrived yet.
-    // The original AMS reports only the humidity level, the AMS 2 Pro and the
-    // AMS HT a percentage and a temperature as well, so every part is optional.
+    // Empty for a unit that reports nothing, which is the external spool holder
+    // and any unit whose readings have not arrived yet. The original AMS and the
+    // AMS Lite report only the humidity level, the AMS 2 Pro and the AMS HT a
+    // percentage and a temperature as well, so every part is optional.
     function amsEnvCaptionHtml(unitKey) {
         const env = amsEnvByUnit[unitKey];
         if (!env) return "";
@@ -351,7 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // The original AMS has no percentage, only the five step level the
             // printer shows as a bar. Spelled out rather than drawn, because
             // there is no percentage to put next to it.
-            parts.push(`<span title="Humidity level reported by the AMS, 1 is driest. This unit has no percentage sensor.">💧 level ${env.humidity}/5</span>`);
+            parts.push(`<span title="Humidity level reported by the AMS, 1 is driest. This unit reports no percentage. An AMS Lite has no sensor at all and always reports 5.">💧 level ${env.humidity}/5</span>`);
         }
         if (env.temperature !== null && env.temperature !== undefined) {
             parts.push(`<span title="Temperature inside the unit">🌡️ ${env.temperature} °C</span>`);

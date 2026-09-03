@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 
 import { extractAmsEnvironment } from "../src/ams.js";
 
-// The three unit shapes this service has seen, copied from real reports rather
-// than invented: an AMS 2 Pro on a P2S, the AMS HT from issue #40 and the
-// original AMS from issue #7. They differ in which fields exist at all, which
-// is the whole reason extractAmsEnvironment() exists.
+// The four unit shapes this service has seen, copied from real reports rather
+// than invented: an AMS 2 Pro on a P2S, the AMS HT from issue #40, the original
+// AMS from issue #7 and the AMS Lite from issue #4. They differ in which fields
+// exist at all, which is the whole reason extractAmsEnvironment() exists.
 const AMS_2_PRO = {
     id: "0",
     humidity: "1",
@@ -27,6 +27,11 @@ const AMS_HT = {
 };
 
 const AMS_ORIGINAL = { id: "0", humidity: "5", temp: "0.0" };
+
+// Byte for byte the same two fields as the original AMS, although the AMS Lite
+// has no sensor of any kind. The level it reports was 5 on the one that was
+// logged, and the temperature is the same "0.0" placeholder.
+const AMS_LITE = { id: "0", humidity: "5", temp: "0.0" };
 
 test("an AMS 2 Pro reports humidity, percentage, temperature and a dryer", () => {
     const [unit] = extractAmsEnvironment([AMS_2_PRO]);
@@ -82,9 +87,16 @@ test("the original AMS reports a level, no percentage and no usable temperature"
     assert.equal(unit.drying, null);
 });
 
+test("an AMS Lite is not told apart from the original AMS", () => {
+    // It has no sensor at all and still reports a level, so there is nothing to
+    // detect it by. Showing the level it sends is the only honest option; the
+    // header says where the number comes from.
+    assert.deepEqual(extractAmsEnvironment([AMS_LITE]), extractAmsEnvironment([AMS_ORIGINAL]));
+});
+
 test("a unit without any reading is left out", () => {
-    // The AMS Lite has neither sensor nor dryer, and the external spool holder
-    // passes through the same list. Neither should produce an empty header.
+    // The external spool holder passes through the same list and reports no
+    // environment data. It must not produce an empty header.
     assert.deepEqual(extractAmsEnvironment([{ id: "0", tray: [] }]), []);
     assert.deepEqual(extractAmsEnvironment([{ id: "255", humidity: "", temp: "" }]), []);
 });

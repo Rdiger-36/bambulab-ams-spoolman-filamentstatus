@@ -652,9 +652,14 @@ function amsNumber(value) {
  *     `humidity_raw`, no drying fields, and `temp` is the literal "0.0",
  *     which is the absence of a sensor rather than a freezing AMS. A
  *     temperature of zero or below is therefore dropped.
- *   - The AMS Lite has neither sensor nor dryer. Whatever it leaves out ends up
- *     null here, and a unit that reports nothing at all is left out entirely,
- *     so the dashboard shows no empty header for it.
+ *   - The AMS Lite reports the same two fields as the original AMS, a level and
+ *     a "0.0" temperature, although it has no sensor at all: the level observed
+ *     on one (issue #4) is a constant 5. There is nothing in the payload that
+ *     separates that from an original AMS whose air really is that humid, so
+ *     the level is shown for both and the dashboard says where it comes from.
+ *   - A unit that reports none of it is left out entirely, so the dashboard
+ *     shows no empty header. The external spool holder is the case that
+ *     reaches this.
  *
  * `humidity` is a level from 1 (driest) to 5. An AMS HT was observed reporting
  * level "0" alongside a valid 24% reading, so 0 is treated as "no level yet"
