@@ -27,6 +27,11 @@ jobs:
       # and node:24-alpine has no armv7 build.
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # The whole history and every tag: the release notes below name the
+          # previous release to compare against, which cannot be found in the
+          # single commit a shallow checkout leaves behind.
+          fetch-depth: 0
 
       - name: Set up QEMU (multi-arch support)
         uses: docker/setup-qemu-action@v4
@@ -84,8 +89,26 @@ jobs:
             *)             TAGS="${IMAGE}:${VERSION},${IMAGE}:latest" ; PRERELEASE=false ;;
           esac
 
-          echo "Publishing: ${TAGS} (prerelease: ${PRERELEASE})"
+          # The release these notes compare against. A pre-release compares
+          # against whatever came before it, dev builds included, so a -dev.7
+          # lists only what happened since -dev.6. A stable version skips the
+          # pre-releases and compares against the last stable one, so its notes
+          # carry the whole line of work rather than the last dev step of it.
+          # Ordered by when the tags were created, not by name: a version sort
+          # puts 1.3.0 before 1.3.0-dev without being told what a suffix means.
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            CANDIDATES="$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' || true)"
+          else
+            CANDIDATES="$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+          fi
+          PREVIOUS="$(awk -v cur="${GITHUB_REF_NAME}" '
+            $0 == cur { seen = 1; next }
+            seen { print; exit }
+          ' <<< "${CANDIDATES}")"
+
+          echo "Publishing: ${TAGS} (prerelease: ${PRERELEASE}, previous: ${PREVIOUS:-none})"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "previous=${PREVIOUS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "prerelease=${PRERELEASE}" >> $GITHUB_OUTPUT
           # Build time for the OCI created label. The repository's updated_at
@@ -118,6 +141,7 @@ jobs:
           VERSION: ${{ steps.tags.outputs.version }}
           PRERELEASE: ${{ steps.tags.outputs.prerelease }}
           TAGS: ${{ steps.tags.outputs.tags }}
+          PREVIOUS: ${{ steps.tags.outputs.previous }}
         run: |
           set -euo pipefail
 
@@ -133,6 +157,32 @@ jobs:
             found { print }
           ' CHANGELOG.md)"
 
+          # What GitHub itself knows about the release: every merged pull request
+          # since the previous one, grouped into the sections of
+          # .github/release.yml by the label it carries, each naming who wrote
+          # it, plus the first-time contributors and the compare link. This is
+          # why a pull request is labelled before it is merged; an unlabelled
+          # one lands under "Everything else".
+          #
+          # Not fatal on its own: a release whose overview is missing is worth
+          # more than no release at all, so a failure here leaves the hand
+          # written section standing alone.
+          GENERATED=""
+          if ! GENERATED="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+                --method POST \
+                -f tag_name="${GITHUB_REF_NAME}" \
+                ${PREVIOUS:+-f previous_tag_name="${PREVIOUS}"} \
+                --jq '.body')"; then
+            echo "::warning::Could not generate the pull request overview for ${GITHUB_REF_NAME}."
+            GENERATED=""
+          fi
+
+          # Everyone the generated body credits, as one line. It attributes each
+          # pull request on its own line, which answers "who wrote this change"
+          # but not "who is behind this release".
+          CONTRIBUTORS="$(grep -oE 'by @[A-Za-z0-9-]+' <<< "${GENERATED}" \
+            | sed 's/^by //' | sort -u | tr '\n' ' ' || true)"
+
           {
             if [[ -n "${NOTES//[[:space:]]/}" ]]; then
               # Fenced, because the changelog is indented plain text: as
@@ -143,6 +193,18 @@ jobs:
               echo '```'
             else
               echo "No CHANGELOG.md section for ${VERSION}."
+            fi
+
+            if [[ -n "${GENERATED//[[:space:]]/}" ]]; then
+              echo
+              printf '%s\n' "${GENERATED}"
+            fi
+
+            if [[ -n "${CONTRIBUTORS// /}" ]]; then
+              echo
+              echo "### Contributors"
+              echo
+              echo "Thanks to ${CONTRIBUTORS% }."
             fi
 
             echo

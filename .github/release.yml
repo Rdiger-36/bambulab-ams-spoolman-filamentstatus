@@ -1,0 +1,35 @@
+# How GitHub groups the pull requests of a release.
+#
+# Read by the releases/generate-notes API, which the publish workflow calls for
+# every release, pre-release included. A pull request lands in the first
+# category whose labels it carries, so the order below is the order of the
+# sections and the reason a PR labelled both "enhancement" and "bug" is listed
+# as a feature rather than twice.
+#
+# This is why pull requests are labelled before they are merged: an unlabelled
+# one ends up under "Everything else", where nobody looks for it.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: New Features
+      labels:
+        - enhancement
+    - title: Fixes
+      labels:
+        - bug
+    - title: Deprecations
+      labels:
+        - deprecation
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Maintenance
+      labels:
+        - maintenance
+    # The catch-all has to stay last: it matches everything, so anything after
+    # it would never be reached.
+    - title: Everything else
+      labels:
+        - "*"

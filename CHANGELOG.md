@@ -9,6 +9,7 @@ Unreleased
    - Development:
       - extractAmsEnvironment() in src/ams.js is the one reading of the per-unit environment fields, covered in test/ams.env.test.js against the four unit shapes that have been observed: an AMS 2 Pro on a P2S, the AMS HT from issue #40, the original AMS from issue #7 and the AMS Lite from issue #4
       - The mock printer of scripts/test-server reports the environment block the way real hardware does, one unit drying, and no longer sends the two fields on the AMS block that no firmware has been seen to send
+      - The release notes of every version, pre-releases included, carry the merged pull requests grouped into New Features, Fixes, Deprecations, Documentation and Maintenance, each naming who wrote it, plus the contributors of that release and the compare link. The grouping is the label a pull request carries, configured in .github/release.yml, which is why they are labelled before they are merged. A pre-release compares against whatever came before it, so a dev build lists only its own step, while a stable version compares against the last stable one and carries the whole line of work
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.7
