@@ -171,9 +171,11 @@ h1 {
   border-bottom: 1px solid var(--border-soft);
 }
 
-/* Headline, tracking mode and the switch on one line, in that order: what this
-   is, what it runs on, and whether it is running. The headline moved in here
-   from above the card, where it repeated a name the card already carried. */
+/* The headline of the card, and the tracking mode at the far end of the same
+   line: what the card is about, and what it is tracked with. Everything that
+   describes a state, the switch included, is a cell of the row below. */
+.status-head .pill { margin-left: auto; }
+
 .status-title {
   font-size: 1.06rem;
   font-weight: 700;
@@ -183,18 +185,21 @@ h1 {
   gap: 6px;
 }
 
+/* The switch as the value of its cell: on the baseline the other values sit on,
+   with the note beside it while it is off. */
 .status-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
+  gap: 10px;
   cursor: pointer;
+  min-height: 22px;
 }
 
-/* What switching the monitoring off actually stopped. Sits in the same row and
-   wraps onto its own line when the row runs out of width. */
+/* What switching the monitoring off actually stopped. */
 .status-note {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.3;
   color: var(--danger-solid);
 }
 
@@ -1117,6 +1122,10 @@ button {
 }
 
 @media (max-width: 760px) {
+  /* The badge wraps under the headline on a narrow screen; pushed to the right
+     edge it would sit there alone, so it stays with the words it belongs to. */
+  .status-head .pill { margin-left: 0; }
+
   .menu-burger {
     display: inline-flex;
     border-color: var(--border-control);
