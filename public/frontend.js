@@ -620,12 +620,19 @@ document.addEventListener("DOMContentLoaded", () => {
         return distances.reduce((total, one) => total + one, 0) / distances.length;
     }
 
+    // The name of a spool as the picker writes it, and what is known about it
+    // besides the name. Two pieces rather than one string, because they go on
+    // two lines of their own: a spool name runs long enough that the weight and
+    // the badges behind it end up wrapping into it.
     function spoolPickerLabel(sp) {
         const fil   = sp.filament || {};
         const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
-        const left  = sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
         const swatch = swatchHtml(filamentColors(fil), fil.multi_color_direction);
-        return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"} <span class="gc-muted">(${left})</span>`;
+        return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"}`;
+    }
+
+    function spoolPickerWeight(sp) {
+        return sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
     }
 
     async function showAssignDialog(button, amsSpool) {
@@ -701,13 +708,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const suggested = ranked.filter(entry => entry.rank < 2).slice(0, ASSIGN_SUGGESTIONS);
         const suggestedIds = new Set(suggested.map(entry => entry.sp.id));
 
+        // Name on the first line, everything about it on the second, both
+        // starting at the same edge next to the radio button.
         const pick = (entry) => `
             <label class="sp-pick">
-                <input type="radio" name="assign-spool" value="${entry.sp.id}"> ${spoolPickerLabel(entry.sp)}${entry.rank === 0
-                    ? ` <span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
-                    : ""}${mismatched.has(entry.sp.id)
-                    ? ` <span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
-                    : ""}
+                <input type="radio" name="assign-spool" value="${entry.sp.id}">
+                <span class="sp-pick-text">
+                    <span class="sp-pick-name">${spoolPickerLabel(entry.sp)}</span>
+                    <span class="sp-pick-meta">
+                        <span class="gc-muted">${escapeHtml(spoolPickerWeight(entry.sp))}</span>${entry.rank === 0
+                        ? `<span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
+                        : ""}${mismatched.has(entry.sp.id)
+                        ? `<span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
+                        : ""}
+                    </span>
+                </span>
             </label>`;
 
         // Everything a spool can be recognised by, so the search does not have to

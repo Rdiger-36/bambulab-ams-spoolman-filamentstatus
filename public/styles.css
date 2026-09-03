@@ -543,16 +543,40 @@ h1 {
 .sp-colour input:not([type="color"]) { flex: 1; text-transform: uppercase; }
 
 /* One pickable spool per row, so the whole row reacts rather than just the
-   radio button next to it. */
+   radio button next to it. Two lines: the name, and under it what is known
+   about that spool. On one line the weight and the badges wrapped into the
+   name, which is long enough on its own. */
 .sp-pick {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 9px;
   padding: 7px 10px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9em;
   transition: background-color 0.2s;
+}
+
+.sp-pick input[type="radio"] {
+  flex: none;
+  /* On the line of the name rather than in the middle of both lines */
+  margin-top: 3px;
+}
+
+/* Both lines start at the same edge, next to the radio button and not under
+   it, so the second reads as a continuation of the first. */
+.sp-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sp-pick-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.92em;
 }
 
 .sp-pick:hover { background: #8881; }
@@ -839,15 +863,6 @@ body.show-footer #spool-list {
   .set-key-row input { flex: 1 0 100% !important; }
   .set-key-row .btn { flex: 1; min-height: 36px; }
 
-  /* One spool per line in the assign dialog. As a flex row its parts each got
-     a column of their own, so the weight and the badge wrapped away from the
-     name they belong to. */
-  .sp-pick { display: block; }
-
-  .sp-pick input[type="radio"] {
-    margin-right: 6px;
-    vertical-align: middle;
-  }
 }
 
 table th, table td {
