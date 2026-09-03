@@ -981,10 +981,25 @@ function renderApiKeys() {
     });
 }
 
-/** A stored timestamp in the language of the browser, or "unknown". */
+/**
+ * A stored timestamp in the language of the browser, or "unknown".
+ *
+ * Every part two digits, so the column lines up rather than jumping between
+ * "3.9.2026" and "13.10.2026". The order stays whatever the browser's language
+ * puts it in; only the padding is asked for.
+ */
 function formatStamp(iso) {
     const date = iso ? new Date(iso) : null;
-    return date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : "unknown";
+    if (!date || Number.isNaN(date.getTime())) return "unknown";
+
+    return date.toLocaleString(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    });
 }
 
 /** Asks for a name and creates the key. */
