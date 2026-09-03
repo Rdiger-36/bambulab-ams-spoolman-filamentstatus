@@ -4,7 +4,7 @@ import AdmZip from "adm-zip";
 import fs from "fs";
 import path from "path";
 
-import { startTestApp, call } from "./helpers/app.js";
+import { startTestApp, call, UI_HEADERS } from "./helpers/app.js";
 
 // Its own app so the bundle is built against a data directory this file owns.
 let app;
@@ -37,7 +37,7 @@ after(async () => { await app.close(); });
 
 /** Downloads a bundle and returns its entries as a name to text map. */
 async function bundle(query = "") {
-    const response = await fetch(`${app.url}/api/diagnostics/download${query}`);
+    const response = await fetch(`${app.url}/api/diagnostics/download${query}`, { headers: UI_HEADERS });
     assert.equal(response.status, 200);
 
     const zip = new AdmZip(Buffer.from(await response.arrayBuffer()));
@@ -98,13 +98,13 @@ test("the full bundle keeps the addresses but never the access code", async () =
 });
 
 test("the log download is anonymised unless it is asked not to be", async () => {
-    const anonymized = await fetch(`${app.url}/api/logs/01P00A000000042/download`);
+    const anonymized = await fetch(`${app.url}/api/logs/01P00A000000042/download`, { headers: UI_HEADERS });
     const text = await anonymized.text();
     assert.match(text, /01P00XXXXXXXXXX/);
     assert.doesNotMatch(text, /192\.168\.178\.55/);
     assert.match(anonymized.headers.get("content-disposition"), /01P00XXXXXXXXXX/);
 
-    const full = await fetch(`${app.url}/api/logs/01P00A000000042/download?anonymize=false`);
+    const full = await fetch(`${app.url}/api/logs/01P00A000000042/download?anonymize=false`, { headers: UI_HEADERS });
     assert.match(await full.text(), /192\.168\.178\.55/);
     assert.match(full.headers.get("content-disposition"), /_full/);
 });

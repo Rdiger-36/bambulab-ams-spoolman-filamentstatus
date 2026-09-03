@@ -64,9 +64,13 @@ A key is a full session: it reads and it changes everything the Web UI can, incl
 
 The list shows when each key was created and when it was last used, so a key nothing uses any more is easy to spot. The last use is written at most once a minute: a polling home automation would otherwise rewrite the file a few times a minute forever, and the column is there to say "still in use", not to be an access log.
 
-Locked out of everything, keys included? Stop the container, delete `printers/apikeys.json` and remove the `AUTH_PASSWORD` line from `printers/settings.json`, start it again. The key file is read once at start, so editing it by hand takes effect on the next one.
+The API answers only two kinds of caller, whether or not a password is set: the Web UI of this installation, and a request carrying a key. Anything else gets a 401 that says so. Without a password the pages themselves stay open to the network, exactly as before — it is `/api/` that asks.
 
-Keys work whether or not a Web UI password is set. Without a password nothing is behind a login anyway and a key changes nothing about who can reach the service; with one, a key is the way in for everything that cannot log in.
+That is a change from earlier versions, where an installation without a password answered every caller on the network. **A script, a home automation or an integration that called this API without a key stops working and needs one.** The [Home Assistant integration](https://github.com/Rdiger-36/ha-bambulab-ams-spoolman-filamentstatus) is the one to look at first.
+
+How the Web UI is recognised is the `Sec-Fetch-Site` header the browser sets on every request a page makes, with the `Referer` as the fallback for browsers too old to send it. That is a fence, not a proof: anybody who can open the Web UI can read those headers off their own browser, or simply create a key. The proof is the password, which is a secret the caller has to hold. The fence is what keeps the key list an honest answer to "what is using this API".
+
+Locked out of everything, keys included? Stop the container, delete `printers/apikeys.json` and remove the `AUTH_PASSWORD` line from `printers/settings.json`, start it again. The key file is read once at start, so editing it by hand takes effect on the next one.
 
 Setting a password does not touch the keys. Every browser session ends, every key keeps working, so a key created while the Web UI stood open to the network still has full access afterwards. The settings page says so and names the keys when you turn the password on for the first time; revoke the ones you do not recognise before you do.
 
@@ -79,4 +83,4 @@ Nothing has to be configured for a printer that is off most of the time. The mon
 
 Setting the backoff limit to the check interval keeps the old constant pace.
 
-Anything the user does clears the wait, so a printer switched back on is picked up at once rather than after the current backoff: resuming its monitoring, **Reconnect all printers**, and saving its address. Monitoring can also be switched off per printer, in the Web UI or over the API, which is what the [Home Assistant integration](https://github.com/Rdiger-36/ha-bambulab-ams-spoolman-filamentstatus) drives from a switch: nothing is probed at all while it is off.
+Anything the user does clears the wait, so a printer switched back on is picked up at once rather than after the current backoff: resuming its monitoring, **Reconnect all printers**, and saving its address. Monitoring can also be switched off per printer, in the Web UI or over the API, which is what the [Home Assistant integration](https://github.com/Rdiger-36/ha-bambulab-ams-spoolman-filamentstatus) drives from a switch, with an [API key](#api-keys): nothing is probed at all while it is off.

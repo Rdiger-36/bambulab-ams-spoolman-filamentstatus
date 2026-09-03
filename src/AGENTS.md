@@ -26,10 +26,10 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
-| `auth.js` | The Web UI password: the signed session cookie, the lockout after repeated wrong guesses, and the middleware that puts every page and every route behind it. Does nothing while no password is set, except note the use of an API key. |
+| `auth.js` | Who may talk to this service: the signed session cookie of the Web UI password, the lockout after repeated wrong guesses, and the middleware in front of every page and every route. Without a password the pages are open and `/api/` still needs an API key or a request the browser marks as coming from the Web UI. |
 | `passwords.js` | scrypt hashing and verification, and nothing else. Its own module because `settings.js` needs it and may import nothing that logs. |
 | `apikeys.js` | The named API keys for callers that are not a browser: generation, the SHA-256 stored in `printers/apikeys.json`, the header a key travels in, and the throttled "last used". A key counts as a session in `auth.js`. |
-| `security.js` | The request guard: which `Host` a request may be addressed to and which `Origin` may change something. Pure decisions plus the middleware `backend.js` puts in front of everything. The allow list is `settings.ALLOWED_HOSTS`, read per request. |
+| `security.js` | The request guard: which `Host` a request may be addressed to, which `Origin` may change something, and whether a request came from the Web UI itself (`isFromOwnUi()`, which `auth.js` uses). Pure decisions plus the middleware `backend.js` puts in front of everything. The allow list is `settings.ALLOWED_HOSTS`, read per request. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
 | `utils.js` | Date/interval formatting, `sleep`, AMS id to slot label (`A0`, `HT-A`), and `slotColors()`, the colour set of a slot. It lives here because both `ams.js` and `uispool.js` need it and `ams.js` already imports `uispool.js`. |

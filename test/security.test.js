@@ -18,7 +18,7 @@ process.env.LOG_DIR = path.join(tempDir, "logs");
 fs.ensureDirSync(process.env.DATA_DIR);
 fs.ensureDirSync(process.env.LOG_DIR);
 
-const { isAllowedHost, isSameOrigin, parseAllowedHosts } = await import("../src/security.js");
+const { isAllowedHost, isFromOwnUi, isSameOrigin, parseAllowedHosts } = await import("../src/security.js");
 const { settings } = await import("../src/settings.js");
 
 test.after(() => fs.removeSync(tempDir));
@@ -71,6 +71,26 @@ test("an origin has to name the same host, and no origin is not a browser", () =
     assert.equal(isSameOrigin("https://evil.com", "localhost:4000", ["ams.example.com"]), false);
 });
 
+test("a request is taken for the Web UI only when the browser says so", () => {
+    // What a page of this service produces
+    assert.equal(isFromOwnUi({ "sec-fetch-site": "same-origin", host: "192.168.1.50:4000" }), true);
+    // A typed URL, a bookmark, a link from somewhere else
+    assert.equal(isFromOwnUi({ "sec-fetch-site": "none", host: "192.168.1.50:4000" }), false);
+    assert.equal(isFromOwnUi({ "sec-fetch-site": "cross-site", host: "192.168.1.50:4000" }), false);
+    // curl, a home automation, anything that is not a browser
+    assert.equal(isFromOwnUi({ host: "192.168.1.50:4000" }), false);
+    assert.equal(isFromOwnUi({}), false);
+
+    // A browser too old for Sec-Fetch-Site still sends a referer on a same
+    // origin fetch, and behind a rewriting proxy the allow list decides
+    assert.equal(isFromOwnUi({ referer: "http://192.168.1.50:4000/settings.html", host: "192.168.1.50:4000" }), true);
+    assert.equal(isFromOwnUi({ referer: "http://evil.example.com/", host: "192.168.1.50:4000" }), false);
+    assert.equal(isFromOwnUi({ referer: "https://ams.example.com/index.html", host: "localhost:4000" }, ["ams.example.com"]), true);
+    // The header wins over the referer when it is there, so a stale referer
+    // cannot talk a modern browser's cross site request into passing
+    assert.equal(isFromOwnUi({ "sec-fetch-site": "cross-site", referer: "http://192.168.1.50:4000/", host: "192.168.1.50:4000" }), false);
+});
+
 /**
  * Sends a request with headers `fetch()` refuses to set.
  *
@@ -84,6 +104,11 @@ test("an origin has to name the same host, and no origin is not a browser", () =
  */
 function request(url, { method = "GET", headers = {}, body } = {}) {
     const target = new URL(url);
+    // What a browser puts on a request its own page made. Without it the API
+    // asks for a key before the guard under test is ever reached; see
+    // isFromOwnUi() and requireAuth(). A test that wants the other side of that
+    // rule passes its own Sec-Fetch-Site.
+    headers = { "Sec-Fetch-Site": "same-origin", ...headers };
     return new Promise((resolve, reject) => {
         const req = http.request({
             hostname: target.hostname,

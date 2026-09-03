@@ -116,7 +116,7 @@ You need a running Spoolman instance and, per printer, its serial number, access
 >
 > Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access** as well.
 >
-> A tool that has no browser, for example Home Assistant or a script, gets an [API key](docs/settings.md#api-keys) instead of the password. Keys are named and revoked one at a time, shown once and stored as a hash.
+> The API answers only the Web UI of this installation and a caller carrying an [API key](docs/settings.md#api-keys), whether or not a password is set. Keys are named and revoked one at a time, shown once and stored as a hash. A script or an integration that called this API without a key needs one now.
 
 ## Feedback
 

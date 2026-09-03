@@ -952,8 +952,9 @@ function renderApiKeys() {
     if (!container) return;
 
     if (!apiKeys.length) {
-        container.innerHTML = `<p class="set-note">No API keys. A key lets a tool that has no browser, for example Home
-            Assistant, Node-RED or a script, use this API without logging in. It is shown once when it is created.</p>`;
+        container.innerHTML = `<p class="set-note">No API keys. This API answers only the Web UI of this installation, so
+            a tool that has no browser, for example Home Assistant, Node-RED or a script, needs a key. It is shown once
+            when it is created.</p>`;
         return;
     }
 

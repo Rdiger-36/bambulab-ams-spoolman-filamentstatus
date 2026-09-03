@@ -4,7 +4,7 @@ import fs from "fs-extra";
 import os from "node:os";
 import path from "node:path";
 
-import { startTestApp } from "./helpers/app.js";
+import { startTestApp, UI_HEADERS } from "./helpers/app.js";
 
 // config.js reads DATA_DIR and LOG_DIR when it is first imported, so they are
 // pointed at a temporary directory before anything under src/ is loaded. See
@@ -192,22 +192,54 @@ test("a key opens the API while a password is set, and only the right one does",
     }
 });
 
+test("without a password the API answers a script only with a key", async () => {
+    reset();
+    const app = await startTestApp();
+    resetApiKeyCache();
+
+    try {
+        // No password anywhere in this test: the pages are open, the API is not
+        const refused = await fetch(`${app.url}/api/printers`);
+        assert.equal(refused.status, 401);
+        assert.equal((await refused.json()).apiKeyRequired, true);
+
+        const created = createApiKey("Home Assistant");
+        for (const header of [{ Authorization: `Bearer ${created.key}` }, { "X-API-Key": created.key }]) {
+            assert.equal((await fetch(`${app.url}/api/printers`, { headers: header })).status, 200, JSON.stringify(header));
+        }
+
+        // The Web UI itself needs none, which is what keeps an installation
+        // that never creates a key working exactly as before
+        assert.equal((await fetch(`${app.url}/api/printers`, { headers: UI_HEADERS })).status, 200);
+
+        // And the key is noted as used even though nothing was behind a login
+        assert.notEqual(listApiKeys()[0].lastUsedAt, null);
+
+        // A page is still served without any of it. Only /api/ asks.
+        assert.equal((await fetch(`${app.url}/api/auth/state`)).status, 200);
+    } finally {
+        resetApiKeyCache();
+        await app.close();
+    }
+});
+
 test("the API creates a key, shows it once and never again", async () => {
     reset();
     const app = await startTestApp();
     resetApiKeyCache();
 
     try {
+        // Through the Web UI, which is where a key is created
         const created = await (await fetch(`${app.url}/api/apikeys`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...UI_HEADERS },
             body: JSON.stringify({ name: "Node-RED" }),
         })).json();
 
         assert.equal(created.ok, true);
         assert.match(created.key, /^ams_/);
 
-        const listed = await (await fetch(`${app.url}/api/apikeys`)).json();
+        const listed = await (await fetch(`${app.url}/api/apikeys`, { headers: UI_HEADERS })).json();
         assert.equal(listed.keys.length, 1);
         assert.equal(listed.keys[0].name, "Node-RED");
         // Neither the key nor its hash is ever listed again
@@ -216,12 +248,12 @@ test("the API creates a key, shows it once and never again", async () => {
 
         const duplicate = await fetch(`${app.url}/api/apikeys`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...UI_HEADERS },
             body: JSON.stringify({ name: "Node-RED" }),
         });
         assert.equal(duplicate.status, 400);
 
-        assert.equal((await fetch(`${app.url}/api/apikeys/nope`, { method: "DELETE" })).status, 404);
+        assert.equal((await fetch(`${app.url}/api/apikeys/nope`, { method: "DELETE", headers: UI_HEADERS })).status, 404);
     } finally {
         resetApiKeyCache();
         await app.close();
