@@ -230,11 +230,19 @@ export function decodePrintMapping(mapping) {
  * counting only the occupied ones would shift every position after one onto the
  * wrong spool. An AMS HT and the holder are one position each.
  *
- * Where an AMS HT really sits is inference, not measurement: no observed file
- * has one in it. It costs nothing to be wrong about, because `slotConfirmsSlice`
- * refuses a position whose slot does not hold the expected profile and colours,
- * and the stages below it then decide exactly as they did before positions were
- * used at all.
+ * Where an AMS HT really sits is inference, not measurement. It costs nothing
+ * to be wrong about, because `slotConfirmsSlice` refuses a position whose slot
+ * does not hold the expected profile and colours, and the stages below it then
+ * decide exactly as they did before positions were used at all.
+ *
+ * A dual nozzle printer breaks the assumption outright, and the one observed
+ * file that carries an AMS HT is such a printer: an H2C with two AMS units, an
+ * AMS HT and a spool on the holder listed its four filaments as HT-A, the
+ * holder, B2 and A3, because Bambu Studio groups the list by extruder rather
+ * than by unit (`filament_maps` in the same file says "1 2 2 2"). Three of the
+ * four positions this function names for that print are therefore wrong, all
+ * three are refused, and profile plus colour place every filament correctly.
+ * See `test/gcode.dualnozzle.test.js`.
  *
  * This is the fallback for a printer that does not report `print.mapping`,
  * which answers the same question and is right where this is only sometimes:
