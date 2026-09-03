@@ -1,10 +1,20 @@
 -----------------------------------------------------------------------------------------------
 Unreleased
+   - New Features:
+      - The Web UI can ask for a password. "Web UI password" in the Network access card of the settings page turns it on, and until one is set nothing changes: the Web UI stays open to the network, which is how every installation behaved before
+         - With a password set, every page and every API call asks for it first. There is one password for the installation, not an account per person, which is what a service on a home network actually needs
+         - It is stored as a scrypt hash in printers/settings.json and never sent back to the browser. The field says "unchanged" rather than showing anything, typing into it replaces the password and "remove" next to the label takes it away again, both without a restart. AUTH_PASSWORD seeds it from the container definition like every other setting
+         - The browser stays signed in for 30 days, and "Log out" in the menu ends that session. Changing or removing the password ends every session on every device, because the cookie is signed with the stored hash. The browser that made the change keeps working rather than being thrown out mid save
+         - Repeated wrong guesses from one address have to wait, starting after five attempts and doubling up to fifteen minutes, because a short password on a local network is otherwise worked through by a script in minutes
+         - A session survives a restart of the service, since nothing about it is kept in memory
+      - Forgotten the password? Stop the container, remove the AUTH_PASSWORD line from printers/settings.json, start it again
    - Fixes:
       - The API no longer invites every website the browser has open to call it. Every response carried "Access-Control-Allow-Origin: *", which tells the browser to hand the answer to any page that asks, so a page on any other site could read the printer list and the settings of an installation on the local network and could write to them as well. The Web UI is served by the same process under the same address and never needed that header, so it is gone
       - A request is refused unless it was addressed to this service. A name the attacker controls can be pointed at a local address after the browser has loaded their page, which no browser can tell apart from a legitimate request, so the name the request carries is checked instead: IP addresses, localhost and .local names are accepted as they are, everything else has to be named under "Allowed host names" in the new "Network access" card of the settings page. An installation reached under a real domain or through a reverse proxy fills it in once, saves, and it takes effect without a restart; every other installation notices nothing. ALLOWED_HOSTS seeds the same setting from the container definition, like every other variable
       - A request that changes something is refused when it comes from another site, while a call from a script or a home automation, which carries no site at all, keeps working
    - Development:
+      - src/passwords.js holds the hashing on its own, because src/settings.js needs it and must not import anything that logs. src/auth.js holds the session, the lockout and the middleware, covered end to end in test/auth.test.js
+      - The password hash is stripped from both variants of the diagnostics bundle, like the printer access code
       - src/security.js holds the whole decision as pure functions, covered in test/security.test.js, and the test app registers the guard the way backend.js does so the routes are exercised behind it
       - The cors dependency is dropped
       - The allow list is read at the point of use rather than captured when the middleware is built, so a name added on the settings page applies to the very next request

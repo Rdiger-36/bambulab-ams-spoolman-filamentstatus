@@ -30,6 +30,14 @@ async function fetchJson(url, options) {
     const body = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+        // The session ended, or a password was set while this tab was open. The
+        // page cannot recover from that on its own, so it goes to the login and
+        // carries where it was, rather than showing an error nobody can act on.
+        if (res.status === 401 && body.authRequired) {
+            const next = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.href = `login.html?next=${next}`;
+        }
+
         const error = new Error(body.error || `HTTP ${res.status}`);
         error.conflict = !!body.conflict;
         error.printInFlight = !!body.printInFlight;

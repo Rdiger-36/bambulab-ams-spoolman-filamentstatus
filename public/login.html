@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      // Applies the stored theme before the first paint so page changes do not flash.
+      try {
+        if (localStorage.getItem("dark-mode") === "true") {
+          document.documentElement.classList.add("dark-mode");
+        }
+      } catch (error) { /* Storage blocked: stay in light mode. */ }
+    </script>
+</head>
+<body class="hide-footer">
+    <div id="app">
+        <form id="login-form" class="login-card" autocomplete="on">
+            <h1>AMS Spoolman Manager</h1>
+            <p class="login-lead">This installation asks for a password.</p>
+
+            <label class="login-label" for="login-password">Password</label>
+            <input type="password" id="login-password" name="password" autocomplete="current-password" autofocus>
+
+            <button type="submit" id="login-submit">Sign in</button>
+            <p id="login-error" class="login-error" hidden></p>
+        </form>
+    </div>
+
+    <script src="login.js"></script>
+</body>
+</html>

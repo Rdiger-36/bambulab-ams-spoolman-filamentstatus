@@ -21,6 +21,9 @@ const GROUPS = [
 let fields = [];
 let values = {};
 let sources = {};
+// Which password fields hold a stored value. The values themselves are never
+// sent, so this is all the page knows about them.
+let hasValue = {};
 let spoolmanUrl = "";
 // Revision of the settings this page last read, sent back with a save so a
 // state somebody else replaced is not overwritten
@@ -112,6 +115,7 @@ function applyView(view) {
     fields = view.fields;
     values = view.values;
     sources = view.sources;
+    hasValue = view.hasValue ?? {};
     spoolmanUrl = view.spoolmanUrl;
     restartPending = view.restartPending;
     revision = view.revision;
@@ -403,6 +407,10 @@ function renderSettings() {
         button.addEventListener("click", () => resetField(button.dataset.reset));
     });
 
+    container.querySelectorAll("[data-clear]").forEach(button => {
+        button.addEventListener("click", () => clearPassword(button.dataset.clear));
+    });
+
     document.getElementById("test-spoolman")?.addEventListener("click", testSpoolmanConnection);
 }
 
@@ -540,6 +548,12 @@ function renderField(field) {
         input = `<input type="number" id="${id}" value="${escapeHtml(value)}"
                         ${field.min !== null ? `min="${field.min}"` : ""}
                         ${field.max !== null ? `max="${field.max}"` : ""}>`;
+    } else if (field.type === "password") {
+        // Never prefilled, because the stored value is a hash the server does
+        // not send. Left empty it keeps what is stored, which is the same rule
+        // the printer access code follows.
+        input = `<input type="password" id="${id}" autocomplete="new-password"
+                        placeholder="${hasValue[field.key] ? "unchanged" : "not set"}">`;
     } else {
         input = `<input type="text" id="${id}" value="${escapeHtml(value ?? "")}">`;
     }
@@ -550,6 +564,11 @@ function renderField(field) {
         // Once saved, the file owns every field, so this is the only way back to
         // the documented value.
         isDefault(field) ? "" : `<button type="button" class="set-reset" data-reset="${field.key}">default</button>`,
+        // Emptying the field means "unchanged", so removing a stored password
+        // needs a gesture of its own.
+        field.type === "password" && hasValue[field.key]
+            ? `<button type="button" class="set-reset" data-clear="${field.key}">remove</button>`
+            : "",
     ].join("");
 
     // A checkbox reads better next to its label than under it, so it sits in
@@ -582,6 +601,23 @@ function resetField(key) {
     setDirty(true);
 }
 
+/**
+ * Marks a stored password for removal on the next save.
+ *
+ * Nothing is sent here. The field says what will happen and the save button
+ * does it, like every other change on this page.
+ */
+function clearPassword(key) {
+    const input = document.getElementById(`set-${key}`);
+    if (!input) return;
+
+    input.value = "";
+    input.dataset.clear = "true";
+    input.placeholder = "will be removed on save";
+    document.querySelector(`[data-clear="${key}"]`)?.remove();
+    setDirty(true);
+}
+
 /** Reads every field back out of the form, in the type the backend expects. */
 function collectSettings() {
     const payload = {};
@@ -591,6 +627,9 @@ function collectSettings() {
         if (!input) continue;
 
         if (field.type === "boolean") payload[field.key] = input.checked;
+        // An empty password field keeps what is stored, so removing one is an
+        // explicit null rather than the empty string every save would send.
+        else if (field.type === "password") payload[field.key] = input.dataset.clear === "true" ? null : input.value;
         else payload[field.key] = input.value;
     }
 

@@ -1,6 +1,7 @@
 import fs from "fs-extra";
 import path from "path";
 import { settingsPath, envSeed, supervised } from "./config.js";
+import { hashPassword, isPasswordHash } from "./passwords.js";
 
 /**
  * Runtime configuration, persisted to `printers/settings.json`.
@@ -187,6 +188,13 @@ export const SETTINGS_SCHEMA = {
         label: "Kept printer logs",
         description: "How many rotated logs to keep per printer. Every printer has its own file, so this multiplies with the number of printers.",
     },
+    AUTH_PASSWORD: {
+        type: "password",
+        default: null,
+        group: "network",
+        label: "Web UI password",
+        description: "Ask for this password before anything in the Web UI is shown. Leave it empty to keep the Web UI open to everyone on the network, which is how it behaved before. It is stored as a scrypt hash and never sent back to the browser.",
+    },
     ALLOWED_HOSTS: {
         type: "string",
         default: null,
@@ -251,6 +259,16 @@ export function coerceSetting(key, raw) {
     if (field.type === "string") {
         const value = String(raw).trim();
         return { value: value === "" ? null : value };
+    }
+
+    // A password arrives in clear text, from the settings page or from the
+    // variable that seeds it, and only ever the hash is stored. A value that is
+    // already a hash is the settings file being read back and is kept as it is,
+    // which is what stops it from being hashed again on every start.
+    if (field.type === "password") {
+        const value = String(raw).trim();
+        if (value === "") return { value: null };
+        return { value: isPasswordHash(value) ? value : hashPassword(value) };
     }
 
     if (field.type === "boolean") {
@@ -546,10 +564,40 @@ export function spoolmanUrl() {
     return buildSpoolmanUrl(settings);
 }
 
+/**
+ * The values a client may see.
+ *
+ * Every password is replaced by null, the way the printer access code is never
+ * sent back either. `hasPassword` carries the one thing the settings page needs
+ * to know about it: whether a value is stored, so the field can say "unchanged"
+ * rather than "empty" and offer to remove it.
+ *
+ * @returns {object} the settings with every password field emptied
+ */
+function publicValues() {
+    const values = { ...settings };
+    for (const [key, field] of Object.entries(SETTINGS_SCHEMA)) {
+        if (field.type === "password") values[key] = null;
+    }
+    return values;
+}
+
+/** Whether a password is stored for a field, keyed by field name. */
+function passwordsSet() {
+    const set = {};
+    for (const [key, field] of Object.entries(SETTINGS_SCHEMA)) {
+        if (field.type === "password") set[key] = !!settings[key];
+    }
+    return set;
+}
+
 /** The current settings plus the metadata the Web UI needs to render them. */
 export function getSettingsView() {
     return {
-        values: { ...settings },
+        values: publicValues(),
+        // Which password fields hold a value, since the values themselves are
+        // never sent
+        hasValue: passwordsSet(),
         sources: describeSources(storedSettings, envSeed),
         fields: Object.entries(SETTINGS_SCHEMA).map(([key, field]) => ({
             key,
@@ -609,6 +657,13 @@ export function updateSettings(patch, expectedRevision) {
     const accepted = {};
 
     for (const [key, raw] of Object.entries(patch)) {
+        // A password field the user did not type into keeps what is stored. The
+        // settings page sends every field on every save and never receives the
+        // stored value, so an empty string here means "unchanged", not "clear
+        // it". Removing one is an explicit null, which is what the button next
+        // to the field sends.
+        if (SETTINGS_SCHEMA[key]?.type === "password" && raw === "") continue;
+
         const result = coerceSetting(key, raw);
         if (result.error) {
             errors.push(result.error);

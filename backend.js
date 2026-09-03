@@ -7,6 +7,7 @@ import { PORT, serverLogFilePath, version } from "./src/config.js";
 import { rotateLogFile } from "./src/logger.js";
 import { deprecatedConfig, deprecationLogLines } from "./src/deprecation.js";
 import { printers } from "./src/printers.js";
+import { requireAuth } from "./src/auth.js";
 import { registerRoutes } from "./src/routes.js";
 import { hostGuard } from "./src/security.js";
 import { startService } from "./src/service.js";
@@ -20,6 +21,9 @@ const app = express();
 // page the user has open elsewhere. See src/security.js.
 app.use(hostGuard());
 app.use(express.json());
+// Behind the guard and in front of the static files, so a page is not served to
+// somebody who cannot use it. Does nothing until a password is set.
+app.use(requireAuth());
 app.use(express.static("public", { maxAge: 0 }));
 
 app.get("/", (req, res) => {

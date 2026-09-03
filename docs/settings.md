@@ -13,7 +13,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
-| **Network access** | The host names this service may be addressed under. IP addresses, `localhost` and `.local` names are always accepted, so most installations leave it empty |
+| **Network access** | The Web UI password, and the host names this service may be addressed under. Both are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
 | **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
 
@@ -33,10 +33,20 @@ The **Service** card is what a support question usually asks for first, plus the
 - **Download diagnostics**: see [Diagnostics and privacy](troubleshooting.md#diagnostics-and-privacy).
 - **Update check** against the GitHub releases. Nothing is downloaded or installed and nothing about the installation is sent, it is one request for the latest version number, cached for six hours.
 
+## The Web UI password
+
+Type one into **Web UI password** in the **Network access** card and save. From then on every page and every API call asks for it first, and the browser stays signed in for 30 days. Leave the field empty and nothing changes: that is how every installation behaved before this existed, and it is still the right setting for a service only your own network can reach.
+
+The password is stored as a scrypt hash in `printers/settings.json` and is never sent back to the browser, so the field says "unchanged" rather than showing anything. Typing into it replaces the password, **remove** next to the label takes it away again on the next save, and both take effect without a restart. Repeated wrong guesses from one address have to wait, doubling up to fifteen minutes.
+
+Changing or removing the password ends every session that exists, on every device, because the cookie is signed with it. The browser that made the change keeps working, every other one asks again. **Log out** in the menu ends the session of that browser.
+
+Forgotten it? Stop the container, remove the `AUTH_PASSWORD` line from `printers/settings.json`, start it again. The Web UI is then open until a new one is set.
+
 > [!IMPORTANT]
-> The Web UI has no authentication and is meant for a trusted local network. It can change the printer list and the Spoolman endpoint, so do not expose the port to the internet. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
+> The Web UI asks for a password only once you set one under **Network access**. Without one it is open to everyone on the network and can change the printer list and the Spoolman endpoint, so do not expose the port to the internet either way. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
 >
-> Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access**.
+> Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access** as well.
 
 ## A printer that is switched off
 

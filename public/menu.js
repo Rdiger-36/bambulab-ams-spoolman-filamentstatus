@@ -48,10 +48,18 @@ function renderMenubar() {
                         <a href="#" id="menu-server-logs">Server Logs</a>
                     </div>
                 </div>
+                <a href="#" id="menu-logout" hidden>Log out</a>
             </div>
         </div>`;
 
     setupMenuToggles(root);
+
+    document.getElementById("menu-logout").onclick = event => {
+        event.preventDefault();
+        logout();
+    };
+
+    showLogoutWhenLoggedIn();
 
     document.getElementById("menu-server-logs").onclick = event => {
         event.preventDefault();
@@ -64,6 +72,34 @@ function renderMenubar() {
         if (!printer) return;
         window.location.href = `logs.html?serial=${encodeURIComponent(printer.id)}&name=${encodeURIComponent(printer.name)}`;
     };
+}
+
+/**
+ * Shows the log out entry only where there is a session to end.
+ *
+ * The entry would otherwise sit in the menu of every installation that never
+ * set a password, promising something that does nothing.
+ */
+async function showLogoutWhenLoggedIn() {
+    try {
+        const res = await fetch("./api/auth/state");
+        if (!res.ok) return;
+        const state = await res.json();
+        const entry = document.getElementById("menu-logout");
+        if (entry) entry.hidden = !state.required;
+    } catch {
+        // Nothing is shown when the service cannot be asked, which is the same
+        // as before this entry existed.
+    }
+}
+
+/** Ends the session and goes to the login page. */
+async function logout() {
+    try {
+        await fetch("./api/auth/logout", { method: "POST" });
+    } finally {
+        window.location.href = "login.html";
+    }
 }
 
 /**
