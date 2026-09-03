@@ -23,27 +23,25 @@
   <!-- App Content -->
   <div id="app" class="page-width">
     <div id="status" class="status-card">
-      <!-- What the card is about, and what it is tracked with. The printer
-           name is a picker, filled by menu.js. -->
+      <!-- The title in the middle, the two things that are not the title at
+           the two ends: what it is tracked with, and whether it is running.
+           The printer name is a picker, filled by menu.js. -->
       <div class="status-head">
+        <div class="status-head-side">
+          <span id="tracking-mode" class="pill"></span>
+        </div>
         <h1 class="status-title">Loaded Spools on <span id="printer-name"></span></h1>
-        <span id="tracking-mode" class="pill"></span>
-      </div>
-      <div class="status-grid">
-        <!-- The switch is a state of this printer like the two connections
-             next to it, so it is a cell of this row and takes its label from
-             it rather than carrying one of its own. -->
-        <div class="status-item">
-          <span class="status-label">Monitoring</span>
-          <label class="status-value status-toggle" title="Reads this printer over MQTT and writes what it finds to Spoolman">
+        <div class="status-head-side status-head-side-end">
+          <label class="status-toggle" title="Reads this printer over MQTT and writes what it finds to Spoolman">
+            <span>Monitoring</span>
             <span class="set-switch set-switch-alarm">
               <input type="checkbox" id="monitoring-toggle">
               <span class="set-switch-track"></span>
             </span>
-            <!-- A switch never says what switching it off means, so this does -->
-            <span id="monitoring-note" class="status-note" hidden>paused · nothing is read or written</span>
           </label>
         </div>
+      </div>
+      <div class="status-grid">
         <div class="status-item">
           <span class="status-label">Spoolman</span>
           <span id="spoolman-status" class="status-value"></span>

@@ -2476,21 +2476,18 @@ let currentPrinterId = null;
 
 
 /**
- * Puts the switch into a state and says what that state means.
+ * Puts the switch into a state.
  *
- * The note is the whole point of the pair: a switch on its own never says what
- * turning it off stops, and this one stops both directions at once, the MQTT
- * connection to the printer and everything that would have reached Spoolman
- * because of it.
+ * Off is red rather than the grey the settings switches use, because off here
+ * is not a preference but a stopped service: the MQTT connection is closed, so
+ * nothing is read from the printer and nothing reaches Spoolman. The row under
+ * it says the same thing in words, with "Printer (MQTT)" going to "Disabled".
  *
  * @param {boolean} enabled - whether this printer is being monitored
  */
 function setMonitoringSwitch(enabled) {
     const toggle = document.getElementById("monitoring-toggle");
     if (toggle) toggle.checked = enabled;
-
-    const note = document.getElementById("monitoring-note");
-    if (note) note.hidden = enabled;
 }
 
 async function toggleMonitoring() {
@@ -2498,11 +2495,6 @@ async function toggleMonitoring() {
 
     const toggle = document.getElementById("monitoring-toggle");
     const enable = toggle.checked;
-
-    // Said at once rather than when the answer comes back, so the switch and
-    // the sentence next to it are never briefly telling two different stories.
-    setMonitoringSwitch(enable);
-
     const action = enable ? "start" : "stop";
 
     await fetch(`./api/printer/${currentPrinterId}/monitoring/${action}`, {
