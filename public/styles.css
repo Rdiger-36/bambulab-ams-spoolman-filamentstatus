@@ -211,9 +211,12 @@ h1 {
    so the empty space of a half filled last row sits on both sides. */
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 170px));
+  /* 165 and 24: six of them plus five gaps are 1110px, which is what a card at
+     the 1180px page width has room for, so the whole state of the printer is
+     one line and not five and a orphan. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 165px));
   justify-content: center;
-  gap: 12px 30px;
+  gap: 12px 24px;
 }
 
 .status-item {
@@ -1139,18 +1142,21 @@ button {
     gap: 12px 18px;
   }
 
-  /* Three across does not fit a phone. They stack in the same order, all to
-     the left, because a centred title over a left aligned column reads as a
-     mistake rather than as a decision. */
+  /* Three across does not fit a phone, so the title takes the first line and
+     the two that describe the state share the second, centred under it. The
+     order is the reading order: what this is, then how it is doing. */
   .status-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    justify-content: center;
+    gap: 8px 14px;
   }
 
-  .status-head-side { flex: none; }
-  .status-head-side-end { justify-content: flex-start; }
-  .status-title { text-align: left; }
+  .status-title {
+    order: -1;
+    flex-basis: 100%;
+  }
+
+  .status-head-side { flex: 0 1 auto; }
+  .status-head-side-end { justify-content: center; }
 
   .menu-burger {
     display: inline-flex;
