@@ -814,10 +814,15 @@ button {
 
 /* The settings page holds its content in a narrower column, so the bar lines
    up with it instead of running wider than everything below it. */
-body.settings-page #menubar {
+/* One measure for every page. The bar and the content under it share it, so
+   they line up, and a wide screen does not stretch a spool table, a log line or
+   a headline across the whole desk. `box-sizing` so the max width counts the
+   padding and the bar lines up with what is below it. */
+#menubar,
+.page-width,
+.set-page {
   max-width: 1180px;
   margin: 0 auto;
-  /* so the max width counts the padding and the bar lines up with the cards */
   box-sizing: border-box;
 }
 
@@ -1234,8 +1239,6 @@ input:checked + .slider:before {
 }
 /* ---- Settings page ---- */
 .set-page {
-  max-width: 1180px;
-  margin: 0 auto;
   padding-bottom: 6px;
 }
 

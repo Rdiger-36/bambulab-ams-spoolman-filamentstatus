@@ -24,6 +24,7 @@ Unreleased
          - What the page is showing is picked in the page instead. The dashboard headline names the printer and the log viewer names the log, and that name is now the picker; with one printer it stays plain text, because there is nothing to pick
          - The download of a log left the menu bar and sits above the log it downloads, where a page action belongs
          - On a phone the three pages fold into one button
+      - Every page keeps to the same width as the settings page, 1180 px, instead of stretching to the window. The menu bar and the content under it line up, and a wide screen no longer pulls a spool table or a log line across the whole desk
    - Fixes:
       - "Log out" was shown on installations that never set a password, where it does nothing. The entry was hidden with the hidden attribute, which the menu's own "display: block" overrode; every element hidden that way stays hidden now, which also covers the AMS unit header on a phone
       - "Printer Logs" opened the log of whichever printer was picked last, a rule nothing on the screen stated. Each printer's log is its own entry now, and the log you are reading is marked while you read it

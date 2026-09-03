@@ -19,15 +19,17 @@
         <!-- The whole bar, including the dark mode button, is filled by menu.js -->
         <div id="menu-root"></div>
     </div>
-    <!-- The name is a picker over the logs, filled by menu.js -->
-    <h3 class="log-title">Backend Logs for: <span id="headline"></span></h3>
-    <!-- The download acts on the log below it, so it sits with it rather than
-         in the menu bar -->
-    <div class="log-actions">
-        <button id="download-logs" class="log-button">Download this log file...</button>
-    </div>
-    <div id="log-box">
-        <div id="logs"></div>
+    <div class="page-width">
+        <!-- The name is a picker over the logs, filled by menu.js -->
+        <h3 class="log-title">Backend Logs for: <span id="headline"></span></h3>
+        <!-- The download acts on the log below it, so it sits with it rather
+             than in the menu bar -->
+        <div class="log-actions">
+            <button id="download-logs" class="log-button">Download this log file...</button>
+        </div>
+        <div id="log-box">
+            <div id="logs"></div>
+        </div>
     </div>
     <script src="menu.js"></script>
     <script src="export.js"></script>
