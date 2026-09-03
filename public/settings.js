@@ -15,6 +15,7 @@ const GROUPS = [
     { key: "sync",     title: "Synchronisation" },
     { key: "printer",  title: "Printer connection" },
     { key: "logging",  title: "Logging" },
+    { key: "network",  title: "Network access" },
 ];
 
 let fields = [];

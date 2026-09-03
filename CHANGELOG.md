@@ -2,11 +2,12 @@
 Unreleased
    - Fixes:
       - The API no longer invites every website the browser has open to call it. Every response carried "Access-Control-Allow-Origin: *", which tells the browser to hand the answer to any page that asks, so a page on any other site could read the printer list and the settings of an installation on the local network and could write to them as well. The Web UI is served by the same process under the same address and never needed that header, so it is gone
-      - A request is refused unless it was addressed to this service. A name the attacker controls can be pointed at a local address after the browser has loaded their page, which no browser can tell apart from a legitimate request, so the name the request carries is checked instead: IP addresses, localhost and .local names are accepted as they are, everything else has to be named in the new ALLOWED_HOSTS variable. An installation reached under a real domain or through a reverse proxy sets it once; every other installation notices nothing
+      - A request is refused unless it was addressed to this service. A name the attacker controls can be pointed at a local address after the browser has loaded their page, which no browser can tell apart from a legitimate request, so the name the request carries is checked instead: IP addresses, localhost and .local names are accepted as they are, everything else has to be named under "Allowed host names" in the new "Network access" card of the settings page. An installation reached under a real domain or through a reverse proxy fills it in once, saves, and it takes effect without a restart; every other installation notices nothing. ALLOWED_HOSTS seeds the same setting from the container definition, like every other variable
       - A request that changes something is refused when it comes from another site, while a call from a script or a home automation, which carries no site at all, keeps working
    - Development:
       - src/security.js holds the whole decision as pure functions, covered in test/security.test.js, and the test app registers the guard the way backend.js does so the routes are exercised behind it
       - The cors dependency is dropped
+      - The allow list is read at the point of use rather than captured when the middleware is built, so a name added on the settings page applies to the very next request
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.8

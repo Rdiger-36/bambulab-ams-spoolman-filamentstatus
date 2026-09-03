@@ -19,6 +19,7 @@ fs.ensureDirSync(process.env.DATA_DIR);
 fs.ensureDirSync(process.env.LOG_DIR);
 
 const { isAllowedHost, isSameOrigin, parseAllowedHosts } = await import("../src/security.js");
+const { settings } = await import("../src/settings.js");
 
 test.after(() => fs.removeSync(tempDir));
 
@@ -134,12 +135,20 @@ test("the guard refuses an unknown host and a cross site write over HTTP", async
     }
 });
 
-test("a host named in ALLOWED_HOSTS passes", async () => {
-    const app = await startTestApp({ allowedHosts: "ams.example.com" });
+test("a host named in the setting passes, and the guard reads it per request", async () => {
+    const app = await startTestApp();
     try {
-        const res = await request(`${app.url}/api/settings`, { headers: { Host: "ams.example.com" } });
-        assert.equal(res.status, 200);
+        const before = await request(`${app.url}/api/settings`, { headers: { Host: "ams.example.com" } });
+        assert.equal(before.status, 403);
+
+        // Written the way the settings page writes it, into the object the
+        // guard reads at the point of use. A captured allow list would keep
+        // refusing the name until the next start.
+        settings.ALLOWED_HOSTS = "ams.example.com";
+        const after = await request(`${app.url}/api/settings`, { headers: { Host: "ams.example.com" } });
+        assert.equal(after.status, 200);
     } finally {
+        settings.ALLOWED_HOSTS = null;
         await app.close();
     }
 });

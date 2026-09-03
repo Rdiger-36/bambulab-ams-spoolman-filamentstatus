@@ -69,22 +69,18 @@ a reverse proxy:
 
 ```
 Host "ams.example.com" is not allowed. Reach this service under its IP address,
-or add the name to the ALLOWED_HOSTS environment variable.
+or add the name to "Allowed host names" on the settings page.
 ```
 
-The server log carries the same line once per refused name. Add the name to
-`ALLOWED_HOSTS` in the container definition, comma separated for more than one,
-and start the container again:
+The server log carries the same line once per refused name. Open the Web UI
+under the IP address of the host, which is never refused, and add the name under
+**Network access** on the settings page, comma separated for more than one. It
+takes effect on save, without a restart. `ALLOWED_HOSTS` in the container
+definition seeds the same setting on an installation that has never saved it.
 
-```yaml
-environment:
-  - ALLOWED_HOSTS=ams.example.com
-```
-
-Until then the Web UI is still reachable under the IP address of the host, which
-is never refused. A `PUT` or `POST` answered with 403 while the pages load has
-the same cause behind a reverse proxy that rewrites the `Host` header: the same
-entry fixes it.
+A `PUT` or `POST` answered with 403 while the pages load has the same cause
+behind a reverse proxy that rewrites the `Host` header: the same entry fixes
+it.
 
 ## Diagnostics and privacy
 

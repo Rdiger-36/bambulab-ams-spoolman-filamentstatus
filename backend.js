@@ -3,12 +3,12 @@ import path from "path";
 import fs from "fs-extra";
 
 import "./src/logger.js"; // must be first, sets up console overrides
-import { allowedHosts, PORT, serverLogFilePath, version } from "./src/config.js";
+import { PORT, serverLogFilePath, version } from "./src/config.js";
 import { rotateLogFile } from "./src/logger.js";
 import { deprecatedConfig, deprecationLogLines } from "./src/deprecation.js";
 import { printers } from "./src/printers.js";
 import { registerRoutes } from "./src/routes.js";
-import { hostGuard, parseAllowedHosts } from "./src/security.js";
+import { hostGuard } from "./src/security.js";
 import { startService } from "./src/service.js";
 import { formatDateLog } from "./src/utils.js";
 
@@ -18,7 +18,7 @@ const app = express();
 // more: the Web UI is served from this same app under the same origin, so it
 // never needed one, and the wildcard it used to send was an invitation to every
 // page the user has open elsewhere. See src/security.js.
-app.use(hostGuard(parseAllowedHosts(allowedHosts)));
+app.use(hostGuard());
 app.use(express.json());
 app.use(express.static("public", { maxAge: 0 }));
 

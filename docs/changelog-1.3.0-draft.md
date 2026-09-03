@@ -53,7 +53,7 @@ Version 1.3.0
       - MODE="auto" is accepted, and an unknown value is reported instead of quietly falling back to manual
       - Support material ("-S") no longer has its remaining percentage rescaled to a 1 kg basis
       - Several dashboard fixes: the theme no longer flashes on page load, the confirmation dialog stays usable, the legacy table uses the full width, and a spool the printer cannot identify is labelled "3rd party"
-      - The API is no longer reachable from every other website the browser has open. The wildcard CORS header is gone, a request has to be addressed to this service under an IP address, localhost, a .local name or a name listed in the new ALLOWED_HOSTS variable, and a request that changes something is refused when it comes from another site
+      - The API is no longer reachable from every other website the browser has open. The wildcard CORS header is gone, a request has to be addressed to this service under an IP address, localhost, a .local name or a name listed in the new "Network access" setting, and a request that changes something is refused when it comes from another site
    - Development:
       - Node 22, and the README is rebuilt around G-code tracking with new screenshots
       - One projection for what a client sees of a slot, one consumption match, and the rules both sides apply live in public/shared.js instead of in two implementations

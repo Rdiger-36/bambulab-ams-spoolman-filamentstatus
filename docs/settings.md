@@ -13,6 +13,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
+| **Network access** | The host names this service may be addressed under. IP addresses, `localhost` and `.local` names are always accepted, so most installations leave it empty |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
 | **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
 
@@ -35,7 +36,7 @@ The **Service** card is what a support question usually asks for first, plus the
 > [!IMPORTANT]
 > The Web UI has no authentication and is meant for a trusted local network. It can change the printer list and the Spoolman endpoint, so do not expose the port to the internet. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
 >
-> Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host in `ALLOWED_HOSTS`, see [deprecated configuration](deprecated-configuration.md).
+> Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access**.
 
 ## A printer that is switched off
 

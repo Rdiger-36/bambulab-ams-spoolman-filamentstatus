@@ -1,4 +1,5 @@
 import { serverLogFilePath } from "./config.js";
+import { settings } from "./settings.js";
 import { state } from "./state.js";
 
 /**
@@ -26,7 +27,7 @@ import { state } from "./state.js";
  * arrived at, so a rebound request announces the attacker's name.
  *
  * Hence the rule below: a host that cannot be rebound is allowed, anything else
- * has to be named in ALLOWED_HOSTS.
+ * has to be named in the ALLOWED_HOSTS setting.
  */
 
 /** Methods that change something and therefore need the origin check as well. */
@@ -39,7 +40,7 @@ const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
  * request arrives on is decided by the container mapping and says nothing about
  * who addressed it.
  *
- * @param {string|undefined} raw - Raw environment value.
+ * @param {string|undefined} raw - Raw setting value.
  * @returns {string[]} Host names, without ports, empty when nothing is set.
  */
 export function parseAllowedHosts(raw) {
@@ -57,7 +58,7 @@ export function parseAllowedHosts(raw) {
  * the bracketed `[::1]:port` an IPv6 address needs so that its colons cannot be
  * read as a port separator.
  *
- * @param {string} value - Host header or a single ALLOWED_HOSTS entry.
+ * @param {string} value - Host header or a single entry of the setting.
  * @returns {string} Bare host name or address, lowercased.
  */
 function hostname(value) {
@@ -106,8 +107,8 @@ function isIpLiteral(host) {
  *   would lock those users out of their own Web UI.
  *
  * Everything else is a name resolved through ordinary DNS and has to be listed
- * in ALLOWED_HOSTS, which is what an installation behind a reverse proxy or
- * under a real domain sets.
+ * in the ALLOWED_HOSTS setting, which is what an installation behind a reverse
+ * proxy or under a real domain sets.
  *
  * @param {string|undefined} hostHeader - Raw `Host` header of the request.
  * @param {string[]} allowList - Result of `parseAllowedHosts()`.
@@ -135,11 +136,11 @@ export function isAllowedHost(hostHeader, allowList) {
  * proxy the browser sends `https://name` while the request reaches this service
  * as plain HTTP, and the host is the part that carries the identity.
  *
- * A name from ALLOWED_HOSTS is accepted as well, not only a literal match on
+ * A name from the allow list is accepted as well, not only a literal match on
  * the `Host` header. A reverse proxy that rewrites the header, which is what
  * nginx does unless it is told to pass `$host` through, leaves the browser's
  * name in `Origin` and its own in `Host`, and the two would never agree. That
- * makes ALLOWED_HOSTS the single place such an installation is configured.
+ * makes the setting the single place such an installation is configured.
  *
  * @param {string|undefined} originHeader - Raw `Origin` header.
  * @param {string|undefined} hostHeader - Raw `Host` header.
@@ -168,14 +169,22 @@ export function isSameOrigin(originHeader, hostHeader, allowList = []) {
  * getting a Web UI in which every call fails for a reason the browser does not
  * explain.
  *
- * @param {string[]} allowList - Result of `parseAllowedHosts()`.
+ * The allow list is read per request rather than captured here, because the
+ * setting is edited in the Web UI and a captured copy would keep the value the
+ * process started with. That the setting sits behind the guard it configures is
+ * deliberate: a request that could change it has to pass the guard first, and
+ * an installation that locks itself out of a name is still reachable under the
+ * IP address of its host, which is never refused.
+ *
  * @returns {function} Express middleware.
  */
-export function hostGuard(allowList) {
+export function hostGuard() {
     return (req, res, next) => {
+        const allowList = parseAllowedHosts(settings.ALLOWED_HOSTS);
+
         if (!isAllowedHost(req.headers.host, allowList)) {
             return refuse(req, res,
-                `Host "${req.headers.host || "(none)"}" is not allowed. Reach this service under its IP address, or add the name to the ALLOWED_HOSTS environment variable.`,
+                `Host "${req.headers.host || "(none)"}" is not allowed. Reach this service under its IP address, or add the name to "Allowed host names" on the settings page.`,
                 `[Security] Refused a request for host "${req.headers.host || "(none)"}". Add it to ALLOWED_HOSTS to allow it.`);
         }
 
