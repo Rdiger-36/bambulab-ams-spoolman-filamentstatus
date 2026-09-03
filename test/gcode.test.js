@@ -211,22 +211,25 @@ test("the three multi colour filaments are still told apart", () => {
 // Two AMS units, which is what both real prints below were sliced against.
 const twoUnits = ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3"];
 
-test("the slots are ordered by ascending AMS unit id", () => {
+test("the slots are ordered by unit and then by slot", () => {
     // Reported in whatever order the printer sends its units, and the slicer
     // lists them unit by unit and slot by slot.
     assert.deepEqual(orderedAmsSlots(["B1", "A0", "B0", "A2"]),
-                     ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3"]);
+                     ["A0", "A2", "B0", "B1"]);
 
-    // Every attached four slot unit contributes all four positions even when
-    // only some of them reported. The slicer lists a slot whether or not it
-    // holds anything, so counting the reported ones would shift everything
-    // after an empty slot.
-    assert.deepEqual(orderedAmsSlots(["A0"]), ["A0", "A1", "A2", "A3"]);
+    // Only what was passed in. An empty slot takes no position, because Bambu
+    // Studio builds its list by synchronising with the AMS and there is nothing
+    // in an empty slot to synchronise. Measured on a P2S with A2 and B1 emptied:
+    // seven loaded slots, seven filaments, and the gaps simply absent.
+    assert.deepEqual(orderedAmsSlots(["A0"]), ["A0"]);
+    assert.deepEqual(orderedAmsSlots(["A0", "A1", "A3", "B0", "B2", "B3", "External"]),
+                     ["A0", "A1", "A3", "B0", "B2", "B3", "External"]);
 
-    // The printer numbers the four slot units 0 to 3, an AMS HT 128 to 135 and
-    // the external holder 255, so both sit after them and the holder last.
+    // The external holder comes after the four slot units and before an AMS HT,
+    // which is not the order of the ids the printer gives them: the holder is
+    // 254 and an HT is 128 to 135. Measured on a P1S carrying both.
     assert.deepEqual(orderedAmsSlots(["A0", "External", "HT-B", "HT-A"]),
-                     ["A0", "A1", "A2", "A3", "HT-A", "HT-B", "External"]);
+                     ["A0", "External", "HT-A", "HT-B"]);
     assert.deepEqual(orderedAmsSlots([]), []);
 });
 

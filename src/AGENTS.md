@@ -221,19 +221,26 @@ build their Spoolman payload from.
   value settles a moment after the start, and one observed report still carried
   the slot the job had been configured with before the user changed it.
 - **A position is resolved against the printer, never computed.**
-  `resolveSliceSlots()` takes the slots from `orderedAmsSlots()`, which orders
-  them by ascending AMS unit id: the four slot units 0 to 3, then AMS HT at 128
-  to 135, then the external holder at 255. That order is read off a printer. A
-  P2S with two AMS units and a spool on the holder produced a nine entry
-  filament list whose colours matched the reported slots position for position,
-  the holder last. Arithmetic on "four per unit" is wrong, it turned that ninth
-  entry into "C0", a unit the printer does not have, and the list length says
-  nothing either: it is the project's filament count, and the same P2S produced
-  files with six, eight and nine entries. All four positions of an attached four
-  slot unit are listed whether or not they reported a spool, because the slicer
-  lists an empty slot too and counting only the occupied ones shifts everything
-  after one. Where an AMS HT sits is inference, no observed file has one, and it
-  costs nothing to be wrong about because the confirmation below rejects it.
+  `resolveSliceSlots()` takes the slots from `orderedAmsSlots()`, which lists the
+  four slot units by unit id and then by slot, then the external holder, then an
+  AMS HT. Arithmetic on "four per unit" is wrong, it turned the ninth entry of an
+  observed file into "C0", a unit the printer does not have, and the list length
+  says nothing either: it is the project's filament count, and one P2S produced
+  files with six, seven, eight and nine entries.
+- **Only a loaded slot takes a position**, which is why both callers pass
+  `loadedSlotIds()` from `uispool.js` rather than every slot. Bambu Studio builds
+  its filament list by synchronising with the AMS and an empty slot has nothing
+  to contribute, so a gap shifts everything after it one to the left. Measured on
+  a P2S emptied at A2 and B1: seven loaded slots, seven filaments, both gaps
+  absent. The order past the units is measured too, on a P1S carrying an AMS HT
+  and a spool on the holder: the holder comes first and the HT last, which is not
+  the order of the ids the printer gives them (254 against 128 to 135).
+  `test/gcode.emptyslots.test.js` and `test/gcode.htexternal.test.js` hold both.
+- **The order is a suggestion and a dual nozzle printer ignores it.** An H2C
+  groups its filament list by extruder, so the position names the wrong slot for
+  most of the print. It costs nothing, because the confirmation below rejects a
+  position whose slot does not hold what was sliced, and the stages under it then
+  decide as they did before positions existed.
 - **The slot a sliced filament belongs to is decided once**, by
   `matchConsumption()` in `ams.js`. `bookConsumption()` runs it over the spools
   it may book on, so an unassigned slot can never take an amount, and the

@@ -39,7 +39,7 @@ import {
     consumptionCandidate,
     matchConsumption,
 } from "./ams.js";
-import { toClientSpool } from "./uispool.js";
+import { toClientSpool, loadedSlotIds } from "./uispool.js";
 
 /**
  * Sends an event to every connected SSE client. A payload that cannot be
@@ -306,7 +306,7 @@ async function bookConsumption(printer, consumption, state) {
     const reported = printer.currentMapping;
     resolveSliceSlots(
         consumption,
-        reported ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId)),
+        reported ?? orderedAmsSlots(loadedSlotIds(printer.spoolData)),
         { reportedByPrinter: !!reported },
     );
 

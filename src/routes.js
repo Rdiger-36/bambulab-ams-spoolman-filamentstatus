@@ -14,7 +14,7 @@ import { state } from "./state.js";
 import { attemptLogin, authEnabled, clearSessionCookie, isAuthenticated, issueSession, setSessionCookie } from "./auth.js";
 import { createApiKey, listApiKeys, removeApiKey } from "./apikeys.js";
 import { tailLogLines, logFileSet } from "./logger.js";
-import { toClientSpool } from "./uispool.js";
+import { toClientSpool, loadedSlotIds } from "./uispool.js";
 import { catalogueFacet, filterCatalogue, spoolWeightLimit, SLOT_OPTIONS } from "./utils.js";
 import {
     createSpool,
@@ -581,7 +581,7 @@ export function registerRoutes(app, printers) {
             // the figures off the slots the booking will use rather than
             // repeating the guess client side.
             const reported = printer.currentMapping;
-            const slots = reported ?? orderedAmsSlots(loadedSpools.map(s => s.amsId));
+            const slots = reported ?? orderedAmsSlots(loadedSlotIds(loadedSpools));
             const from = { reportedByPrinter: !!reported };
 
             fullConsumption = nameMatchedSlots(resolveSliceSlots(calcFullConsumption(sliceInfo), slots, from), loadedSpools);
