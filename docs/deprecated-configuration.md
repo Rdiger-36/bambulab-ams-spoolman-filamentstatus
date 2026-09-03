@@ -18,10 +18,11 @@ Configuring this service through **environment variables** and a hand-written **
 
 The full list of variables and the `printers.json` format are documented in the **[README of v1.2.1](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/v1.2.1/README.md)**.
 
-Three variables are container level and stay as they are, they have no field in the Web UI:
+Four variables are container level and stay as they are, they have no field in the Web UI:
 
 | Variable | Description |
 |----------|-------------|
 | `TZ` | Time zone of the container, e.g. `Europe/Berlin`. The log timestamps follow it, without it the container runs on UTC |
 | `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live and where the logs are written. Default to `/app/printers` and `/app/logs`, which the volumes of the [installation](installation.md) mount. Only set these when you cannot mount those paths |
+| `ALLOWED_HOSTS` | Host names this service may be addressed under, comma separated, for example `ams.example.com,ams.home.arpa`. IP addresses, `localhost` and `.local` names are always accepted and need no entry, so an ordinary installation leaves this empty. Set it when the Web UI is reached under a real domain name or through a reverse proxy, otherwise those requests are answered with 403. It is not a field in the Web UI on purpose: what decides who may call the API must not be changeable through that API |
 | `SUPERVISOR` | Set to `false` to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |

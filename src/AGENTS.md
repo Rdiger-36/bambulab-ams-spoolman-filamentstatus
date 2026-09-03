@@ -26,6 +26,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
+| `security.js` | The request guard: which `Host` a request may be addressed to and which `Origin` may change something. Pure decisions plus the middleware `backend.js` puts in front of everything. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
 | `utils.js` | Date/interval formatting, `sleep`, AMS id to slot label (`A0`, `HT-A`), and `slotColors()`, the colour set of a slot. It lives here because both `ams.js` and `uispool.js` need it and `ams.js` already imports `uispool.js`. |

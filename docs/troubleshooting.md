@@ -59,6 +59,33 @@ Pick a printer by number, then choose between subscribing to its MQTT messages, 
 3. Back to main menu
 ```
 
+## The Web UI answers with 403
+
+The service accepts a request only under the name it was addressed to, which is
+what keeps a page on another website from reaching an installation on your
+network. IP addresses, `localhost` and `.local` names are always accepted, so
+this only appears when the Web UI is reached under a real domain name or through
+a reverse proxy:
+
+```
+Host "ams.example.com" is not allowed. Reach this service under its IP address,
+or add the name to the ALLOWED_HOSTS environment variable.
+```
+
+The server log carries the same line once per refused name. Add the name to
+`ALLOWED_HOSTS` in the container definition, comma separated for more than one,
+and start the container again:
+
+```yaml
+environment:
+  - ALLOWED_HOSTS=ams.example.com
+```
+
+Until then the Web UI is still reachable under the IP address of the host, which
+is never refused. A `PUT` or `POST` answered with 403 while the pages load has
+the same cause behind a reverse proxy that rewrites the `Host` header: the same
+entry fixes it.
+
 ## Diagnostics and privacy
 
 Logs and configuration describe a home network: the address of every printer and of Spoolman, the serial numbers, and in `printers.json` the access codes. Every download that can carry them asks first and offers an anonymised variant.

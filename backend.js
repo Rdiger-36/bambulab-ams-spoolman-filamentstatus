@@ -1,20 +1,24 @@
 import express from "express";
-import cors from "cors";
 import path from "path";
 import fs from "fs-extra";
 
 import "./src/logger.js"; // must be first, sets up console overrides
-import { PORT, serverLogFilePath, version } from "./src/config.js";
+import { allowedHosts, PORT, serverLogFilePath, version } from "./src/config.js";
 import { rotateLogFile } from "./src/logger.js";
 import { deprecatedConfig, deprecationLogLines } from "./src/deprecation.js";
 import { printers } from "./src/printers.js";
 import { registerRoutes } from "./src/routes.js";
+import { hostGuard, parseAllowedHosts } from "./src/security.js";
 import { startService } from "./src/service.js";
 import { formatDateLog } from "./src/utils.js";
 
 const app = express();
 
-app.use(cors());
+// In front of everything, the static files included. There is no CORS layer any
+// more: the Web UI is served from this same app under the same origin, so it
+// never needed one, and the wildcard it used to send was an invitation to every
+// page the user has open elsewhere. See src/security.js.
+app.use(hostGuard(parseAllowedHosts(allowedHosts)));
 app.use(express.json());
 app.use(express.static("public", { maxAge: 0 }));
 

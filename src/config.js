@@ -31,6 +31,13 @@ export const supervised = process.env.SUPERVISED === "1";
 
 export const version = "1.3.0-dev.8";
 export const PORT = 4000;
+
+// Host names this service may be addressed under, comma separated. Container
+// level like DATA_DIR and LOG_DIR, and deliberately not a field in the Web UI:
+// a value that decides who may call the API must not be changeable through the
+// API it protects. IP addresses, localhost and .local names are always allowed
+// and need no entry, see security.js.
+export const allowedHosts = process.env.ALLOWED_HOSTS;
 export const RECONNECT_INTERVAL = 60000;
 
 // Raw environment values. They seed settings.json and printers.json on the

@@ -17,4 +17,8 @@ export const state = {
     // the user types, and it changes about as often as Spoolman ships a
     // release, so it is fetched once and reused rather than pulled per request.
     externalFilamentCache: { fetchedAt: 0, entries: [] },
+    // Request refusals already written to the server log, see security.js. A
+    // Web UI left open on a refused host retries forever, so each distinct
+    // reason is logged once instead of on every attempt.
+    refusedRequestsLogged: new Set(),
 };

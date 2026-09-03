@@ -37,7 +37,7 @@ Version 1.3.0
       - Log files are rotated instead of growing forever, and the log view and download read across the rotated history
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
       - Reworked menu bar and a dark mode that covers every page
-      - New ENVs: LEGACY_MODE, DATA_DIR, LOG_DIR, SUPERVISOR, LOG_MAX_SIZE_MB, LOG_KEEP_SERVER, LOG_KEEP_PRINTER
+      - New ENVs: LEGACY_MODE, DATA_DIR, LOG_DIR, SUPERVISOR, LOG_MAX_SIZE_MB, LOG_KEEP_SERVER, LOG_KEEP_PRINTER, ALLOWED_HOSTS
    - Fixes:
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it
@@ -53,6 +53,7 @@ Version 1.3.0
       - MODE="auto" is accepted, and an unknown value is reported instead of quietly falling back to manual
       - Support material ("-S") no longer has its remaining percentage rescaled to a 1 kg basis
       - Several dashboard fixes: the theme no longer flashes on page load, the confirmation dialog stays usable, the legacy table uses the full width, and a spool the printer cannot identify is labelled "3rd party"
+      - The API is no longer reachable from every other website the browser has open. The wildcard CORS header is gone, a request has to be addressed to this service under an IP address, localhost, a .local name or a name listed in the new ALLOWED_HOSTS variable, and a request that changes something is refused when it comes from another site
    - Development:
       - Node 22, and the README is rebuilt around G-code tracking with new screenshots
       - One projection for what a client sees of a slot, one consumption match, and the rules both sides apply live in public/shared.js instead of in two implementations
