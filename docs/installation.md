@@ -56,7 +56,7 @@ services:
     restart: unless-stopped
 ```
 
-Both volumes are worth mounting: `/app/printers` holds `printers.json`, `settings.json` and `mappings.json` and makes the configuration survive a container update, `/app/logs` keeps the logs.
+Both volumes are worth mounting: `/app/printers` holds `printers.json`, `settings.json`, `mappings.json` and `apikeys.json` and makes the configuration survive a container update, `/app/logs` keeps the logs.
 
 `TZ` sets the time zone the log timestamps follow. Without it the container runs on UTC.
 

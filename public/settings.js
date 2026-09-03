@@ -34,6 +34,10 @@ let restartPending = false;
 // say what will happen instead of listing conditions
 let supervised = false;
 let printers = [];
+// The API keys as the server lists them: name, when it was created and when it
+// was last used, never the key itself. Cached here because the Network access
+// card is rebuilt from the settings response on every save and over SSE.
+let apiKeys = [];
 // Set once an input was touched. Blocks the save button while nothing changed,
 // keeps a settings update pushed over SSE from overwriting what is being typed,
 // and drives the warning when leaving the page.
@@ -51,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("reconnect-printers").addEventListener("click", reconnectPrinters);
     document.getElementById("toggle-monitoring").addEventListener("click", toggleAllMonitoring);
     document.getElementById("printer-dialog-cancel").addEventListener("click", () => closeDialog("printer-dialog"));
+    document.getElementById("apikey-dialog-cancel").addEventListener("click", () => closeDialog("apikey-dialog"));
     document.getElementById("printer-dialog-test").addEventListener("click", testPrinterConnection);
 
     window.addEventListener("beforeunload", event => {
@@ -61,6 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadSettings();
     loadPrinters();
+    loadApiKeys();
     loadSystemInfo();
     loadUpdate();
 
@@ -179,6 +185,7 @@ async function loadSystemInfo() {
         ["Tracking", info.tracking],
         ["Supervisor", info.supervised ? "on" : "off"],
         ["Printers", String(info.printers)],
+        ["API keys", String(info.apiKeys ?? 0)],
         ["Spoolman", info.spoolman],
     ];
 
@@ -395,7 +402,8 @@ function renderSettings() {
                     <summary>${escapeHtml(group.advancedLabel || "Advanced")}</summary>
                     <div class="set-form">${advanced.map(renderField).join("")}</div>
                 </details>` : ""}
-            ${group.key === "spoolman" ? renderSpoolmanTest() : ""}`;
+            ${group.key === "spoolman" ? renderSpoolmanTest() : ""}
+            ${group.key === "network" ? renderApiKeyShell() : ""}`;
         container.appendChild(card);
     }
 
@@ -412,6 +420,9 @@ function renderSettings() {
     });
 
     document.getElementById("test-spoolman")?.addEventListener("click", testSpoolmanConnection);
+    document.getElementById("add-apikey")?.addEventListener("click", () => openApiKeyDialog());
+    // The card was just rebuilt, so the list has to be painted into the new one
+    renderApiKeys();
 }
 
 /* ---- Connection tests ---- */
@@ -638,11 +649,14 @@ function collectSettings() {
 
 async function saveSettings(event) {
     event.preventDefault();
+    const values = collectSettings();
+    if (!await confirmKeysSurvivePassword(values)) return;
+
     const button = document.getElementById("save-settings");
     button.disabled = true;
 
     try {
-        const result = await sendJson("./api/settings", "PUT", { revision, values: collectSettings() });
+        const result = await sendJson("./api/settings", "PUT", { revision, values });
         applyView(result);
 
         if (restartPending) {
@@ -658,6 +672,38 @@ async function saveSettings(event) {
             : `Could not save: ${err.message}`, "bad");
         button.disabled = false;
     }
+}
+
+/**
+ * Says what a first password does not do, before it is saved.
+ *
+ * Setting one ends every browser session, which is what people expect it to do,
+ * and leaves every API key working, which is what they do not: a key is not
+ * signed with the password and nothing about it changes here. Somebody turning
+ * the password on is usually closing the Web UI to the network, and a key
+ * created while it stood open keeps full access afterwards.
+ *
+ * Only for the step from no password to a password. Changing one that is
+ * already set is not the surprising case: the keys were created next to it.
+ *
+ * @param {object} values - what the form is about to send
+ * @returns {Promise<boolean>} whether the save should go ahead
+ */
+async function confirmKeysSurvivePassword(values) {
+    const typed = typeof values.AUTH_PASSWORD === "string" && values.AUTH_PASSWORD !== "";
+    if (!typed || hasValue.AUTH_PASSWORD || !apiKeys.length) return true;
+
+    const list = apiKeys.map(key => `<li>${escapeHtml(key.name)}</li>`).join("");
+    return confirmAction({
+        title: "These API keys keep working",
+        html: `<p>The password ends every browser session, but it does not touch an API key. These
+                  ${apiKeys.length === 1 ? "key keeps" : `${apiKeys.length} keys keep`} full access to this
+                  service without ever being asked for it:</p>
+               <ul class="set-list">${list}</ul>
+               <p class="set-note">That is what a key is for. Revoke the ones you do not recognise, under
+                  API keys in this card, and save again.</p>`,
+        okLabel: "Set the password",
+    });
 }
 
 /* ---- Printers ---- */
@@ -865,6 +911,207 @@ async function deletePrinter(printer, force) {
             return;
         }
         showBanner(`Could not remove the printer: ${err.message}`, "bad");
+    }
+}
+
+/* ---- API keys ---- */
+
+/**
+ * The shell the key list is painted into, rendered as part of the Network
+ * access card.
+ *
+ * Below the two fields rather than in a card of its own, because a key is the
+ * same question those fields answer: who may talk to this service. The list
+ * itself is filled by renderApiKeys(), which runs whenever the card is rebuilt
+ * and after every change to the keys.
+ */
+function renderApiKeyShell() {
+    return `<div class="set-subsection">
+                <div class="set-subhead">
+                    <h3>API keys</h3>
+                    <button class="btn btn-small" type="button" id="add-apikey">Add key</button>
+                </div>
+                <div id="apikey-table"></div>
+            </div>`;
+}
+
+async function loadApiKeys() {
+    try {
+        apiKeys = (await fetchJson("./api/apikeys")).keys ?? [];
+    } catch (err) {
+        apiKeys = [];
+        const container = document.getElementById("apikey-table");
+        if (container) container.innerHTML = `<p class="set-error">Could not load the API keys: ${escapeHtml(err.message)}</p>`;
+        return;
+    }
+    renderApiKeys();
+}
+
+function renderApiKeys() {
+    const container = document.getElementById("apikey-table");
+    if (!container) return;
+
+    if (!apiKeys.length) {
+        container.innerHTML = `<p class="set-note">No API keys. This API answers only the Web UI of this installation, so
+            a tool that has no browser, for example Home Assistant, Node-RED or a script, needs a key. It is shown once
+            when it is created.</p>`;
+        return;
+    }
+
+    const rows = apiKeys.map(key => `
+        <tr>
+            <td>${escapeHtml(key.name)}</td>
+            <td>${escapeHtml(formatStamp(key.createdAt))}</td>
+            <td>${escapeHtml(key.lastUsedAt ? formatStamp(key.lastUsedAt) : "never")}</td>
+            <td class="set-row-actions">
+                <button class="btn btn-small btn-danger" data-revoke="${escapeHtml(key.id)}">Revoke</button>
+            </td>
+        </tr>`).join("");
+
+    container.innerHTML = `<table class="data-table">
+            <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <p class="set-note">A key counts as a full session: it may read and change everything the Web UI can. Send it as
+            <code>Authorization: Bearer &lt;key&gt;</code> or <code>X-API-Key: &lt;key&gt;</code>. Only a hash is stored,
+            so a lost key is replaced rather than looked up. "Last used" is written at most once a minute.</p>`;
+
+    container.querySelectorAll("[data-revoke]").forEach(button => {
+        button.onclick = () => confirmRevokeApiKey(apiKeys.find(key => key.id === button.dataset.revoke));
+    });
+}
+
+/**
+ * A stored timestamp in the language of the browser, or "unknown".
+ *
+ * Every part two digits, so the column lines up rather than jumping between
+ * "3.9.2026" and "13.10.2026". The order stays whatever the browser's language
+ * puts it in; only the padding is asked for.
+ */
+function formatStamp(iso) {
+    const date = iso ? new Date(iso) : null;
+    if (!date || Number.isNaN(date.getTime())) return "unknown";
+
+    return date.toLocaleString(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    });
+}
+
+/** Asks for a name and creates the key. */
+function openApiKeyDialog() {
+    const dialog = document.getElementById("apikey-dialog");
+    const save = document.getElementById("apikey-dialog-save");
+
+    document.getElementById("apikey-dialog-title").textContent = "New API key";
+    document.getElementById("apikey-dialog-error").textContent = "";
+    document.getElementById("apikey-dialog-body").innerHTML = `
+        <div class="set-form">
+            <div class="set-field">
+                <label class="set-field-label" for="apikey-name"><span>Name</span></label>
+                <input type="text" id="apikey-name" maxlength="64" placeholder="Home Assistant">
+                <small>Only for you, so you know which key to revoke later.</small>
+            </div>
+        </div>`;
+
+    save.textContent = "Create key";
+    save.hidden = false;
+    save.onclick = createApiKey;
+    document.getElementById("apikey-dialog-cancel").textContent = "Cancel";
+
+    dialog.showModal();
+    document.getElementById("apikey-name").focus();
+}
+
+async function createApiKey() {
+    const error = document.getElementById("apikey-dialog-error");
+    const save = document.getElementById("apikey-dialog-save");
+    error.textContent = "";
+    save.disabled = true;
+
+    let result;
+    try {
+        result = await sendJson("./api/apikeys", "POST", { name: document.getElementById("apikey-name").value });
+    } catch (err) {
+        error.textContent = err.message;
+        return;
+    } finally {
+        save.disabled = false;
+    }
+
+    apiKeys = result.keys ?? apiKeys;
+    renderApiKeys();
+    // The Service card counts the keys, so it is stale the moment one is added
+    loadSystemInfo();
+    showCreatedApiKey(result.entry?.name ?? "", result.key);
+}
+
+/**
+ * Shows the key, once.
+ *
+ * In a field rather than as text, so it can be selected on the installations
+ * where the clipboard is not available: the browser hands that API only to a
+ * page served over HTTPS or from localhost, and most installations of this
+ * service are reached over plain HTTP under their address.
+ */
+function showCreatedApiKey(name, key) {
+    document.getElementById("apikey-dialog-title").textContent = `Key for ${name}`;
+    document.getElementById("apikey-dialog-error").textContent = "";
+    document.getElementById("apikey-dialog-body").innerHTML = `
+        <p>Copy it now. Only a hash of it is stored, so this is the only time it is shown.</p>
+        <div class="set-key-row">
+            <input type="text" id="apikey-value" class="set-mono" readonly value="${escapeHtml(key)}">
+            <button class="btn btn-small" type="button" id="apikey-copy">Copy</button>
+        </div>
+        <p class="set-note">Send it as <code>Authorization: Bearer &lt;key&gt;</code> or <code>X-API-Key: &lt;key&gt;</code>.</p>`;
+
+    const save = document.getElementById("apikey-dialog-save");
+    save.hidden = true;
+    save.onclick = null;
+    document.getElementById("apikey-dialog-cancel").textContent = "Done";
+
+    const field = document.getElementById("apikey-value");
+    field.focus();
+    field.select();
+
+    document.getElementById("apikey-copy").onclick = async () => {
+        field.select();
+        try {
+            await navigator.clipboard.writeText(key);
+            document.getElementById("apikey-copy").textContent = "Copied";
+        } catch {
+            // No clipboard permission, or no secure context. The field is
+            // selected, so the key is one keyboard shortcut away either way.
+            document.getElementById("apikey-copy").textContent = "Press Ctrl+C";
+        }
+    };
+}
+
+function confirmRevokeApiKey(key) {
+    if (!key) return;
+
+    confirmAction({
+        title: `Revoke ${key.name}?`,
+        html: `<p>Anything still using this key stops working at once. Every other key and every browser session keeps
+                  working.</p>
+               <p class="set-note">A revoked key cannot be brought back. Create a new one and give it to the tool.</p>`,
+        okLabel: "Revoke",
+    }).then(confirmed => confirmed && revokeApiKey(key));
+}
+
+async function revokeApiKey(key) {
+    try {
+        const result = await fetchJson(`./api/apikeys/${encodeURIComponent(key.id)}`, { method: "DELETE" });
+        apiKeys = result.keys ?? apiKeys;
+        renderApiKeys();
+        loadSystemInfo();
+        showBanner(`Revoked the key "${key.name}".`, "ok");
+    } catch (err) {
+        showBanner(`Could not revoke the key: ${err.message}`, "bad");
     }
 }
 

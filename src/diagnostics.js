@@ -7,6 +7,7 @@ import { version, dataDir, logsDir, serverLogFilePath, mappingsPath, supervised 
 import { deprecatedConfig } from "./deprecation.js";
 import { logFileSet } from "./logger.js";
 import { printers } from "./printers.js";
+import { apiKeyCount } from "./apikeys.js";
 import { getSettingsView, legacyMode } from "./settings.js";
 import { state } from "./state.js";
 import {
@@ -52,6 +53,11 @@ export function systemInfo(anonymize = false) {
         mode: view.values.MODE,
         memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
         printers: printers.length,
+        // How many keys exist, never which. The keys live in their own file and
+        // no variant of the bundle carries it, the way the password hash is
+        // stripped from the settings; the count is what a support question about
+        // "something is writing to Spoolman" actually needs.
+        apiKeys: apiKeyCount(),
         spoolman: state.spoolmanStatus,
         dataDir: anonymize ? maskPath(dataDir) : dataDir,
         logsDir: anonymize ? maskPath(logsDir) : logsDir,

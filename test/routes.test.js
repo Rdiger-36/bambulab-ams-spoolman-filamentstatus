@@ -4,7 +4,7 @@ import AdmZip from "adm-zip";
 import fs from "fs";
 import path from "path";
 
-import { startTestApp, call } from "./helpers/app.js";
+import { startTestApp, call, UI_HEADERS } from "./helpers/app.js";
 
 // The API is exercised over HTTP against a throwaway data directory, so the
 // write paths are covered rather than only the pure functions behind them.
@@ -176,7 +176,7 @@ test("the download is a zip once there is a history, and a log file before that"
     fs.writeFileSync(path.join(logDir, "server.log.1"), "older line\n");
     fs.writeFileSync(path.join(logDir, "server.log"), "current line\n");
 
-    const archive = await fetch(`${app.url}/api/logs/server/download`);
+    const archive = await fetch(`${app.url}/api/logs/server/download`, { headers: UI_HEADERS });
     assert.equal(archive.status, 200);
     assert.equal(archive.headers.get("content-type"), "application/zip");
     assert.match(archive.headers.get("content-disposition"), /server_logs\.zip/);
@@ -189,7 +189,7 @@ test("the download is a zip once there is a history, and a log file before that"
     assert.equal(zip.readAsText("01_server.rotated.1.log"), "older line\n");
 
     fs.rmSync(path.join(logDir, "server.log.1"));
-    const single = await fetch(`${app.url}/api/logs/server/download`);
+    const single = await fetch(`${app.url}/api/logs/server/download`, { headers: UI_HEADERS });
     assert.match(single.headers.get("content-type"), /text\/plain/);
     assert.match(single.headers.get("content-disposition"), /server\.log/);
     assert.equal(await single.text(), "current line\n");
@@ -199,6 +199,6 @@ test("the log endpoints refuse an unknown printer", async () => {
     const read = await call(`${app.url}/api/logs/01P00A0000NOPE`);
     assert.equal(read.status, 404);
 
-    const download = await fetch(`${app.url}/api/logs/01P00A0000NOPE/download`);
+    const download = await fetch(`${app.url}/api/logs/01P00A0000NOPE/download`, { headers: UI_HEADERS });
     assert.equal(download.status, 404);
 });

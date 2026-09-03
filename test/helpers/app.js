@@ -70,11 +70,22 @@ export async function startTestApp({ seedPrinters } = {}) {
     };
 }
 
+/**
+ * What a browser puts on a request its own page made.
+ *
+ * Without a password the API answers a caller that is not the Web UI only when
+ * it carries an API key, and `Sec-Fetch-Site` is how the Web UI is recognised.
+ * A test that stands in for the Web UI sends this; a test that stands in for a
+ * script or a home automation deliberately does not. See `isFromOwnUi()` in
+ * src/security.js.
+ */
+export const UI_HEADERS = { "Sec-Fetch-Site": "same-origin" };
+
 /** Small fetch wrapper returning status and parsed body together. */
-export async function call(url, method = "GET", body) {
+export async function call(url, method = "GET", body, headers = UI_HEADERS) {
     const response = await fetch(url, {
         method,
-        headers: body === undefined ? {} : { "Content-Type": "application/json" },
+        headers: body === undefined ? { ...headers } : { "Content-Type": "application/json", ...headers },
         body: body === undefined ? undefined : JSON.stringify(body),
     });
 

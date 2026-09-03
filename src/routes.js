@@ -12,6 +12,7 @@ import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { attemptLogin, authEnabled, clearSessionCookie, isAuthenticated, issueSession, setSessionCookie } from "./auth.js";
+import { createApiKey, listApiKeys, removeApiKey } from "./apikeys.js";
 import { tailLogLines, logFileSet } from "./logger.js";
 import { toClientSpool } from "./uispool.js";
 import { catalogueFacet, filterCatalogue, spoolWeightLimit, SLOT_OPTIONS } from "./utils.js";
@@ -1009,6 +1010,48 @@ export function registerRoutes(app, printers) {
         broadcastSSE({ type: "settings_update", values: view.values });
 
         res.json({ ok: true, ...view, changed: result.changed, restartRequired: result.restartRequired });
+    });
+
+    // ---------------------------------------------------------------------
+    // API keys
+    //
+    // The Network access card again, for the callers that have no browser to
+    // log in with. Behind the same middleware as everything else: a key can be
+    // created by a browser session and by another key, which is what "a key is
+    // a full session" means. See apikeys.js.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/apikeys", (req, res) => {
+        res.json({ keys: listApiKeys() });
+    });
+
+    app.post("/api/apikeys", (req, res) => {
+        let result;
+        try {
+            result = createApiKey(req.body?.name);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not write apikeys.json:", err?.message);
+            return res.status(500).json({ ok: false, error: err?.message || "Could not save the key" });
+        }
+
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+
+        // The one time the key exists outside the caller. Everything after this
+        // sees the hash, so a client that loses it has to create a new one.
+        res.json({ ok: true, key: result.key, entry: result.entry, keys: listApiKeys() });
+    });
+
+    app.delete("/api/apikeys/:id", (req, res) => {
+        let removed;
+        try {
+            removed = removeApiKey(req.params.id);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, "Could not write apikeys.json:", err?.message);
+            return res.status(500).json({ ok: false, error: err?.message || "Could not remove the key" });
+        }
+
+        if (!removed) return res.status(404).json({ ok: false, error: "No key with this id" });
+        res.json({ ok: true, removed, keys: listApiKeys() });
     });
 
     // ---------------------------------------------------------------------

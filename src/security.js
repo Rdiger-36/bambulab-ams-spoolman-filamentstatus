@@ -162,6 +162,37 @@ export function isSameOrigin(originHeader, hostHeader, allowList = []) {
 }
 
 /**
+ * Whether a request looks like it was made by the Web UI of this installation.
+ *
+ * `Sec-Fetch-Site` is what says it: the browser sets it on every request it
+ * makes and the page cannot influence it, so `same-origin` means the request
+ * started on a page this service served. A typed URL, a bookmark and a link
+ * from anywhere else are `none` or `cross-site`, and anything that is not a
+ * browser sends the header not at all.
+ *
+ * That last case is why the `Referer` is looked at when the header is missing:
+ * a browser old enough not to send `Sec-Fetch-Site` still sends a referer on a
+ * same origin fetch. It is compared through `isSameOrigin()`, so a reverse
+ * proxy that rewrites the `Host` is covered by the allow list the same way.
+ *
+ * This is a fence, not a proof. Every one of these headers is one a caller can
+ * simply set, so it separates a script that was pointed at this API from the
+ * Web UI, and it does not separate a person who can open the Web UI from
+ * anything at all: that person can read the headers off their own browser, or
+ * create an API key in two clicks. The proof is the password, which is a secret
+ * the caller has to hold.
+ *
+ * @param {object} headers - the request headers, lowercased as node delivers them
+ * @param {string[]} [allowList] - result of `parseAllowedHosts()`
+ */
+export function isFromOwnUi(headers = {}, allowList = []) {
+    const site = headers["sec-fetch-site"];
+    if (site) return site === "same-origin";
+    if (!headers.referer) return false;
+    return isSameOrigin(headers.referer, headers.host, allowList);
+}
+
+/**
  * Builds the guard middleware.
  *
  * Registered in front of everything, the static files included: a user whose

@@ -24,6 +24,9 @@ export const configPath = path.join(dataDir, "printers.json");
 export const mappingsPath = path.join(dataDir, "mappings.json");
 // Runtime configuration edited through the Web UI, see settings.js.
 export const settingsPath = path.join(dataDir, "settings.json");
+// API keys for callers that are not a browser, see apikeys.js. Its own file
+// rather than a field in settings.json, so a settings export can never carry it.
+export const apiKeysPath = path.join(dataDir, "apikeys.json");
 
 // Set by the supervisor in entrypoint.js. Tells the Web UI whether a restart
 // brings the service back on its own or depends on the container policy.

@@ -1,7 +1,9 @@
 import crypto from "crypto";
 
+import { apiKeyFromRequest, verifyApiKey } from "./apikeys.js";
 import { serverLogFilePath } from "./config.js";
 import { verifyPassword } from "./passwords.js";
+import { isFromOwnUi, parseAllowedHosts } from "./security.js";
 import { settings } from "./settings.js";
 import { state } from "./state.js";
 
@@ -23,6 +25,10 @@ import { state } from "./state.js";
  * clears the cookie of the browser that asked, and everything else stays valid
  * until it expires or the password changes. For a service on a home network
  * that is the right trade.
+ *
+ * The second way in is an API key, for the callers that have no browser to log
+ * in with. It counts as a session of its own here; `apikeys.js` owns what a key
+ * is and how it is stored.
  */
 
 /** Name of the session cookie. */
@@ -232,20 +238,66 @@ export function isAuthenticated(req) {
 }
 
 /**
- * The middleware that puts everything behind the password.
+ * Whether the request carries a valid API key, and notes its use when it does.
+ *
+ * Checked whether or not a password is set: without one the API still asks for
+ * a key from everything that is not the Web UI, and the "last used" column of
+ * the key list has to be right either way.
+ *
+ * @param {object} req - Express request
+ */
+export function authenticatedByApiKey(req) {
+    return !!verifyApiKey(apiKeyFromRequest(req));
+}
+
+/**
+ * The middleware that decides who may talk to this service.
  *
  * Registered in front of the static files as well as the API, so a page is not
- * served to somebody who cannot use it. A browser asking for a page is sent to
- * the login page; anything under `/api/` is answered with 401 and the shape the
- * frontend's `fetchJson()` reads, which is what lets an open tab notice that
- * its session ended.
+ * served to somebody who cannot use it. Three ways in, and a request needs one
+ * of them:
+ *
+ * - **An API key**, always. It travels in a header, which a page on another
+ *   site cannot set on a cross site request without a preflight that
+ *   `security.js` refuses, so accepting one here does not reopen what the
+ *   request guard closed.
+ * - **A session cookie**, once a password is set. That is the Web UI of a
+ *   person who has logged in.
+ * - **Being the Web UI itself**, while no password is set. The pages are open
+ *   then, the way this service always behaved, but the API under `/api/` is
+ *   not: a caller that is not a page of this installation needs a key.
+ *
+ * That last rule is the one that changed. Until it existed, an installation
+ * without a password answered every caller on the network, which meant the key
+ * list could never say who was actually using the API. It is a fence and not a
+ * proof, see `isFromOwnUi()`; the proof is the password.
+ *
+ * A browser asking for a page it may not have is sent to the login page;
+ * anything under `/api/` is answered with 401 and the shape the frontend's
+ * `fetchJson()` reads, which is what lets an open tab notice that its session
+ * ended.
  *
  * @returns {function} Express middleware
  */
 export function requireAuth() {
     return (req, res, next) => {
-        if (!authEnabled()) return next();
+        // First, and whether or not a password is set: a key is a session of its
+        // own and its use has to be noted either way.
+        if (authenticatedByApiKey(req)) return next();
         if (PUBLIC_PATHS.has(req.path)) return next();
+
+        if (!authEnabled()) {
+            // The pages stay open without a password. Only the API asks.
+            if (!req.path.startsWith("/api/")) return next();
+            if (isFromOwnUi(req.headers, parseAllowedHosts(settings.ALLOWED_HOSTS))) return next();
+
+            return res.status(401).json({
+                ok: false,
+                error: "This API needs an API key. Create one under \"Network access\" on the settings page and send it as \"Authorization: Bearer <key>\" or \"X-API-Key: <key>\".",
+                apiKeyRequired: true,
+            });
+        }
+
         if (isAuthenticated(req)) return next();
 
         if (req.path.startsWith("/api/")) {

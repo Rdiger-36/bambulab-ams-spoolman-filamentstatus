@@ -23,5 +23,5 @@ Three variables are container level and stay as they are, they have no field in 
 | Variable | Description |
 |----------|-------------|
 | `TZ` | Time zone of the container, e.g. `Europe/Berlin`. The log timestamps follow it, without it the container runs on UTC |
-| `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json` and `mappings.json` live and where the logs are written. Default to `/app/printers` and `/app/logs`, which the volumes of the [installation](installation.md) mount. Only set these when you cannot mount those paths |
+| `DATA_DIR`, `LOG_DIR` | Where `printers.json`, `settings.json`, `mappings.json` and `apikeys.json` live and where the logs are written. Default to `/app/printers` and `/app/logs`, which the volumes of the [installation](installation.md) mount. Only set these when you cannot mount those paths |
 | `SUPERVISOR` | Set to `false` to run the service in a single process, without the supervisor that restarts it from the Web UI. Saves about 30 MB of memory, which matters on a 32 bit Raspberry Pi. The restart button then depends on the restart policy of the container, and says so (default: on) |

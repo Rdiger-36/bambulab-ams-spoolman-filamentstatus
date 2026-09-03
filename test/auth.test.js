@@ -4,7 +4,7 @@ import fs from "fs-extra";
 import os from "node:os";
 import path from "node:path";
 
-import { startTestApp } from "./helpers/app.js";
+import { startTestApp, UI_HEADERS } from "./helpers/app.js";
 
 // config.js reads DATA_DIR and LOG_DIR when it is first imported, so they are
 // pointed at a temporary directory before anything under src/ is loaded. See
@@ -142,10 +142,20 @@ test("repeated wrong passwords lock an address out, a right one clears it", () =
     }
 });
 
-test("nothing is behind a password until one is set", async () => {
+test("without a password the Web UI is open and the API still wants a key", async () => {
     const app = await startTestApp();
     try {
-        assert.equal((await fetch(`${app.url}/api/settings`)).status, 200);
+        // The Web UI, which the browser marks as coming from this same page
+        assert.equal((await fetch(`${app.url}/api/settings`, { headers: UI_HEADERS })).status, 200);
+        // A caller that is not the Web UI and carries no key. This is the rule
+        // that changed: it used to be answered.
+        const script = await fetch(`${app.url}/api/settings`);
+        assert.equal(script.status, 401);
+        assert.equal((await script.json()).apiKeyRequired, true);
+        // And a browser that was pointed at the URL by hand rather than by the
+        // Web UI is that same caller
+        assert.equal((await fetch(`${app.url}/api/settings`, { headers: { "Sec-Fetch-Site": "none" } })).status, 401);
+
         const state = await (await fetch(`${app.url}/api/auth/state`)).json();
         assert.deepEqual(state, { required: false, authenticated: true });
     } finally {
@@ -195,10 +205,10 @@ test("with a password set, the API answers 401 until the login succeeds", async 
 test("setting a password hands the caller a session instead of locking them out", async () => {
     const app = await startTestApp();
     try {
-        const view = await (await fetch(`${app.url}/api/settings`)).json();
+        const view = await (await fetch(`${app.url}/api/settings`, { headers: UI_HEADERS })).json();
         const saved = await fetch(`${app.url}/api/settings`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...UI_HEADERS },
             body: JSON.stringify({ revision: view.revision, values: { AUTH_PASSWORD: "a good long password" } }),
         });
         assert.equal(saved.status, 200);
@@ -207,8 +217,8 @@ test("setting a password hands the caller a session instead of locking them out"
         // from the hash. The one handed back here is signed with the new one.
         const cookie = saved.headers.getSetCookie().join("; ");
         assert.match(cookie, /ams_session=/);
-        assert.equal((await fetch(`${app.url}/api/settings`)).status, 401);
-        assert.equal((await fetch(`${app.url}/api/settings`, { headers: { Cookie: cookie } })).status, 200);
+        assert.equal((await fetch(`${app.url}/api/settings`, { headers: UI_HEADERS })).status, 401);
+        assert.equal((await fetch(`${app.url}/api/settings`, { headers: { Cookie: cookie, ...UI_HEADERS } })).status, 200);
     } finally {
         reset();
         await app.close();
