@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.8
    - New Features:
       - Each AMS unit says how it is doing above its slot table: relative humidity, the temperature inside it, and the drying cycle while one is running, with its target temperature and the minutes left
          - What is shown depends on which unit it is, because the units report different things. An AMS 2 Pro and an AMS HT carry a real sensor and a dryer and show all of it. The original AMS and the AMS Lite report only the five step humidity level and show that, since their temperature field is a constant "0.0" rather than a reading. The AMS Lite has no humidity sensor either and was observed always reporting 5, which nothing in the payload separates from an original AMS whose air really is that humid, so the level says where it comes from. The external spool holder reports none of it and gets no header
