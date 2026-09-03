@@ -113,6 +113,8 @@ You need a running Spoolman instance and, per printer, its serial number, access
 
 > [!IMPORTANT]
 > The Web UI has no authentication and is meant for a trusted local network. It can change the printer list and the Spoolman endpoint, so do not expose the port to the internet. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
+>
+> Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access** on the [settings page](docs/settings.md).
 
 ## Feedback
 

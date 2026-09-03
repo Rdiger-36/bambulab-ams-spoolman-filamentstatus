@@ -14,6 +14,8 @@ import path from "path";
  * once at import time, so this has to run before the first import and each test
  * file gets its own process anyway.
  *
+ * @param {object} [options]
+ * @param {Array} [options.seedPrinters] - Written to printers.json before the import.
  * @returns {Promise<{url: string, dataDir: string, close: function(): Promise<void>, readJson: function(string): object|null}>}
  */
 export async function startTestApp({ seedPrinters } = {}) {
@@ -34,8 +36,13 @@ export async function startTestApp({ seedPrinters } = {}) {
 
     const { registerRoutes } = await import("../../src/routes.js");
     const { printers } = await import("../../src/printers.js");
+    const { hostGuard } = await import("../../src/security.js");
 
     const app = express();
+    // Same order as backend.js, so a route is exercised behind the guard rather
+    // than in front of it. The server listens on 127.0.0.1, so every request a
+    // test makes carries an IP address as its host and passes.
+    app.use(hostGuard());
     app.use(express.json());
     registerRoutes(app, printers);
 

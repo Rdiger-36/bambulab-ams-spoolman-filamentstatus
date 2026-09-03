@@ -187,6 +187,13 @@ export const SETTINGS_SCHEMA = {
         label: "Kept printer logs",
         description: "How many rotated logs to keep per printer. Every printer has its own file, so this multiplies with the number of printers.",
     },
+    ALLOWED_HOSTS: {
+        type: "string",
+        default: null,
+        group: "network",
+        label: "Allowed host names",
+        description: "Host names this service may be addressed under, comma separated, for example ams.example.com. IP addresses, localhost and .local names are always accepted, so most installations leave this empty. Set it when the Web UI is reached under a real domain name or through a reverse proxy, otherwise those requests are answered with 403.",
+    },
 };
 
 /** Problems seen while loading the settings file, logged by backend.js. */
