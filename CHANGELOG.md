@@ -8,6 +8,12 @@ Unreleased
          - Repeated wrong guesses from one address have to wait, starting after five attempts and doubling up to fifteen minutes, because a short password on a local network is otherwise worked through by a script in minutes
          - A session survives a restart of the service, since nothing about it is kept in memory
       - Forgotten the password? Stop the container, remove the AUTH_PASSWORD line from printers/settings.json, start it again
+      - API keys, for the callers that have no browser to log in with. "API keys" in the Network access card of the settings page creates them, and an installation that does not create one notices nothing
+         - Named keys, listed with the date they were created and the date they were last used, each revoked on its own without signing anybody out and without the other keys noticing. That is what a key buys over the password, which is one value for the whole installation
+         - A key is shown once, when it is created, and only a SHA-256 of it is stored, in the new printers/apikeys.json. A lost key is replaced rather than looked up, and a copy of the file is not a set of working keys
+         - It travels in a header, "Authorization: Bearer <key>" or "X-API-Key: <key>", never in the URL: a URL ends up in the log of every proxy, and a header cannot be set on a cross site request without a preflight the request guard refuses
+         - A key is a full session: it reads and changes everything the Web UI can, including the settings and the keys themselves. No permission split, because an installation of this size has no two kinds of caller to separate
+         - Keys work whether or not a password is set, and "last used" is recorded either way, at most once a minute so that a polling home automation does not rewrite the file all day
    - Fixes:
       - The API no longer invites every website the browser has open to call it. Every response carried "Access-Control-Allow-Origin: *", which tells the browser to hand the answer to any page that asks, so a page on any other site could read the printer list and the settings of an installation on the local network and could write to them as well. The Web UI is served by the same process under the same address and never needed that header, so it is gone
       - A request is refused unless it was addressed to this service. A name the attacker controls can be pointed at a local address after the browser has loaded their page, which no browser can tell apart from a legitimate request, so the name the request carries is checked instead: IP addresses, localhost and .local names are accepted as they are, everything else has to be named under "Allowed host names" in the new "Network access" card of the settings page. An installation reached under a real domain or through a reverse proxy fills it in once, saves, and it takes effect without a restart; every other installation notices nothing. ALLOWED_HOSTS seeds the same setting from the container definition, like every other variable
@@ -16,6 +22,8 @@ Unreleased
       - src/passwords.js holds the hashing on its own, because src/settings.js needs it and must not import anything that logs. src/auth.js holds the session, the lockout and the middleware, covered end to end in test/auth.test.js
       - The password hash is stripped from both variants of the diagnostics bundle, like the printer access code
       - src/security.js holds the whole decision as pure functions, covered in test/security.test.js, and the test app registers the guard the way backend.js does so the routes are exercised behind it
+      - src/apikeys.js owns the keys and printers/apikeys.json, covered in test/apikeys.test.js. The keys are hashed with SHA-256 rather than the scrypt of the password: a key is 32 random bytes, so there is no word list to slow down, and the hash is computed on every request that carries one
+      - No variant of the diagnostics bundle carries the key file. The Service card and info.json say how many keys exist, never which
       - The cors dependency is dropped
       - The allow list is read at the point of use rather than captured when the middleware is built, so a name added on the settings page applies to the very next request
 

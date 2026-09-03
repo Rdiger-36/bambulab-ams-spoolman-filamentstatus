@@ -13,7 +13,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
-| **Network access** | The Web UI password, and the host names this service may be addressed under. Both are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
+| **Network access** | The Web UI password, the host names this service may be addressed under, and the API keys for callers that have no browser. All three are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
 | **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
 
@@ -47,6 +47,29 @@ Forgotten it? Stop the container, remove the `AUTH_PASSWORD` line from `printers
 > The Web UI asks for a password only once you set one under **Network access**. Without one it is open to everyone on the network and can change the printer list and the Spoolman endpoint, so do not expose the port to the internet either way. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
 >
 > Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access** as well.
+
+## API keys
+
+Home Assistant, Node-RED and a shell script have no browser to log in with, and a password typed into an automation is a password stored in clear text somewhere else. **Add key** under **API keys** in the **Network access** card creates one, under a name you pick so you know later which one to revoke.
+
+The key is shown once, when it is created. Only a SHA-256 of it is stored, in `printers/apikeys.json`, so a lost key is replaced rather than looked up. Copy it into the tool that needs it and send it as a header:
+
+```bash
+curl -H "Authorization: Bearer ams_..." http://192.168.1.50:4000/api/printers
+```
+
+`X-API-Key: ams_...` works just as well, which is the header most home automations ask for by name.
+
+A key is a full session: it reads and it changes everything the Web UI can, including the settings and other keys. There is no permission split, because an installation of this size has no two kinds of caller to separate. What a key does buy over the password is that each one can be revoked on its own, without signing anybody out and without the other keys noticing.
+
+The list shows when each key was created and when it was last used, so a key nothing uses any more is easy to spot. The last use is written at most once a minute: a polling home automation would otherwise rewrite the file a few times a minute forever, and the column is there to say "still in use", not to be an access log.
+
+Locked out of everything, keys included? Stop the container, delete `printers/apikeys.json` and remove the `AUTH_PASSWORD` line from `printers/settings.json`, start it again. The key file is read once at start, so editing it by hand takes effect on the next one.
+
+Keys work whether or not a Web UI password is set. Without a password nothing is behind a login anyway and a key changes nothing about who can reach the service; with one, a key is the way in for everything that cannot log in.
+
+> [!NOTE]
+> The key travels in a header on purpose, never in the URL. A URL ends up in the log of every proxy in front of this service, and a value a browser can put in a URL is one a page on another site could put there too. A header cannot be set on a cross site request without a preflight, which the request guard refuses, so a key cannot be used against you by a page you happen to have open.
 
 ## A printer that is switched off
 

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 
+import { apiKeyFromRequest, verifyApiKey } from "./apikeys.js";
 import { serverLogFilePath } from "./config.js";
 import { verifyPassword } from "./passwords.js";
 import { settings } from "./settings.js";
@@ -23,6 +24,10 @@ import { state } from "./state.js";
  * clears the cookie of the browser that asked, and everything else stays valid
  * until it expires or the password changes. For a service on a home network
  * that is the right trade.
+ *
+ * The second way in is an API key, for the callers that have no browser to log
+ * in with. It counts as a session of its own here; `apikeys.js` owns what a key
+ * is and how it is stored.
  */
 
 /** Name of the session cookie. */
@@ -232,6 +237,20 @@ export function isAuthenticated(req) {
 }
 
 /**
+ * Whether the request carries a valid API key, and notes its use when it does.
+ *
+ * Checked even while no password is set, where nothing is behind a login
+ * anyway: the "last used" column of the key list is what tells the user which
+ * key can be revoked, and it would stay empty forever on an installation that
+ * has not turned the password on.
+ *
+ * @param {object} req - Express request
+ */
+export function authenticatedByApiKey(req) {
+    return !!verifyApiKey(apiKeyFromRequest(req));
+}
+
+/**
  * The middleware that puts everything behind the password.
  *
  * Registered in front of the static files as well as the API, so a page is not
@@ -240,11 +259,21 @@ export function isAuthenticated(req) {
  * frontend's `fetchJson()` reads, which is what lets an open tab notice that
  * its session ended.
  *
+ * An API key is accepted in place of the session. It travels in a header, which
+ * a page on another site cannot set on a cross site request without a preflight
+ * that `security.js` refuses, so accepting one here does not reopen what the
+ * request guard closed.
+ *
  * @returns {function} Express middleware
  */
 export function requireAuth() {
     return (req, res, next) => {
+        // Before the switch below, so a key is noted as used on an installation
+        // that has no password set. See authenticatedByApiKey().
+        const keyed = authenticatedByApiKey(req);
+
         if (!authEnabled()) return next();
+        if (keyed) return next();
         if (PUBLIC_PATHS.has(req.path)) return next();
         if (isAuthenticated(req)) return next();
 

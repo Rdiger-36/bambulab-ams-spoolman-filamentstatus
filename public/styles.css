@@ -1378,6 +1378,51 @@ input:checked + .slider:before {
 .gc-required-table td:first-child { font-weight: normal; }
 .gc-required-amount { text-align: right; white-space: nowrap; }
 
+/* ---- API keys ---- */
+/* A second block inside the Network access card rather than a card of its own:
+   a key answers the same question the two fields above it do. */
+.set-subsection {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #8882;
+}
+
+.set-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.set-subhead h3 {
+  margin: 0;
+  font-size: 0.95em;
+}
+
+/* Scrolls inside the card on a narrow screen, like the printer table */
+#apikey-table {
+  overflow-x: auto;
+}
+
+#apikey-table .data-table {
+  min-width: 460px;
+}
+
+/* The key and its copy button on one line, the field taking what is left */
+.set-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.set-key-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* ---- Printer table ---- */
 /* Scrolls inside the card on a narrow screen instead of widening the page */
 #printer-table {

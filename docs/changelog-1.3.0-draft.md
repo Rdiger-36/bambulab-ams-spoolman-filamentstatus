@@ -37,6 +37,7 @@ Version 1.3.0
       - Log files are rotated instead of growing forever, and the log view and download read across the rotated history
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
       - The Web UI can ask for a password, off unless one is set in the Network access card. One password for the installation, stored as a scrypt hash and never sent back to the browser, a session that lasts 30 days and survives a restart, and a lockout after repeated wrong guesses
+      - API keys for the callers that have no browser, in the same Network access card. Named keys, created and revoked one at a time, shown once and stored as a hash, sent as "Authorization: Bearer" or "X-API-Key". A key is a full session and works whether or not a password is set
       - Reworked menu bar and a dark mode that covers every page
       - New ENVs: LEGACY_MODE, DATA_DIR, LOG_DIR, SUPERVISOR, LOG_MAX_SIZE_MB, LOG_KEEP_SERVER, LOG_KEEP_PRINTER, ALLOWED_HOSTS, AUTH_PASSWORD
    - Fixes:

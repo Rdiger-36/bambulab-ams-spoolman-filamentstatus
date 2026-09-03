@@ -30,7 +30,7 @@ matter for them are below.
 | `src/` | All backend logic. See its AGENTS.md. |
 | `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `login.html` and `login.js` are the exception to everything below: they are served before anybody is logged in and therefore import nothing from the rest of the UI. `menu.js` renders the menu bar and owns the dark mode button for every page, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. `shared.js` holds the pure decisions the frontend and the server both make, including the slot options, the active print states and the external slot label; it lives here because a browser has to be able to load it unbuilt, and `src/` imports it from here. `ui.js` holds what every page does with the API and with a string, `fetchJson()` and `escapeHtml()`, which is browser only and therefore not in `shared.js`. `frontend.js` and `settings.js` are modules and import both; `menu.js` and `export.js` are classic scripts read off the global scope. |
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
-| `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration) and `mappings.json` (slot assignments). All three are written by the service and editable by hand. |
+| `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration), `mappings.json` (slot assignments) and `apikeys.json` (the API keys, as hashes). All four are written by the service and editable by hand, `apikeys.json` only with a restart: it is read once and then held in memory. |
 | `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
 | `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), the standalone `mqtt.js` probe, `capture-trays.js` (prints a printer's slots once and exits: the AMS trays, the external holder and the slots the running print reports), and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
@@ -46,9 +46,10 @@ matter for them are below.
 - **ESM only.** `"type": "module"`; use `import`, not `require`.
 - **Every file under `printers/` is written through its owning module only**:
   `printers.json` through `printers.js`, `settings.json` through `settings.js`,
-  `mappings.json` through `mappings.js`. All three write temp file plus rename,
-  so a crash mid-write cannot truncate them. Runtime state never reaches
-  `printers.json`; only id, code, ip and name are persisted.
+  `mappings.json` through `mappings.js`, `apikeys.json` through `apikeys.js`.
+  All four write temp file plus rename, so a crash mid-write cannot truncate
+  them. Runtime state never reaches `printers.json`; only id, code, ip and name
+  are persisted.
 - **Never commit `printers/`, `logs/`, or `.env`.** They hold the printer access
   code and LAN addresses and are gitignored. Keep it that way.
 - **Two tracking modes, mutually exclusive.** Default tracks consumption from

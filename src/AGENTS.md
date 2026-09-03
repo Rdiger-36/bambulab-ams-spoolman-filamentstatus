@@ -26,8 +26,9 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
-| `auth.js` | The Web UI password: the signed session cookie, the lockout after repeated wrong guesses, and the middleware that puts every page and every route behind it. Does nothing while no password is set. |
+| `auth.js` | The Web UI password: the signed session cookie, the lockout after repeated wrong guesses, and the middleware that puts every page and every route behind it. Does nothing while no password is set, except note the use of an API key. |
 | `passwords.js` | scrypt hashing and verification, and nothing else. Its own module because `settings.js` needs it and may import nothing that logs. |
+| `apikeys.js` | The named API keys for callers that are not a browser: generation, the SHA-256 stored in `printers/apikeys.json`, the header a key travels in, and the throttled "last used". A key counts as a session in `auth.js`. |
 | `security.js` | The request guard: which `Host` a request may be addressed to and which `Origin` may change something. Pure decisions plus the middleware `backend.js` puts in front of everything. The allow list is `settings.ALLOWED_HOSTS`, read per request. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
