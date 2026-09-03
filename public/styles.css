@@ -8,6 +8,12 @@
    A colour that is the same in both themes stays a literal in its rule. There
    is nothing for a token to decide about it. */
 :root {
+  /* What the browser and the operating system draw themselves: the option list
+     of a select, scrollbars, radios, checkboxes, spin buttons, the focus ring.
+     None of it is reachable from this file, and this is the only lever on it.
+     Without it a dark page opens a light grey popup with grey text in it. */
+  color-scheme: light;
+
   /* Text */
   --text: #333;
   --text-soft: #333;
@@ -540,7 +546,26 @@ h1 {
 
 .sp-colour { display: flex; gap: 6px; align-items: center; }
 .sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
-.sp-colour input:not([type="color"]) { flex: 1; text-transform: uppercase; }
+/* The hex field beside the swatch. Styled like every other field of the
+   dialog rather than left to the browser, which draws its own box and, under a
+   dark colour scheme, its own grey that matches nothing around it. */
+.sp-colour input:not([type="color"]) {
+  flex: 1;
+  text-transform: uppercase;
+  padding: 5px 8px;
+  border: 1px solid #8886;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+}
+
+.sp-colour input:not([type="color"]):focus {
+  outline: none;
+  border-color: var(--accent);
+}
 
 /* One pickable spool per row, so the whole row reacts rather than just the
    radio button next to it. Two lines: the name, and under it what is known
@@ -948,6 +973,8 @@ html.transition-enabled body {
    paints the root itself so the canvas has a colour before the body has any
    height. The body takes the same two values from the tokens. */
 html.dark-mode {
+  /* Tells the browser to draw its own controls dark as well, see :root */
+  color-scheme: dark;
   background-color: var(--page-bg);
   color: var(--text);
 }
