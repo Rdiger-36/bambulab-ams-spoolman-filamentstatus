@@ -109,7 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const current = document.getElementById("printer-serial").textContent;
 
             if (data.printer === current) {
-                document.getElementById("monitoring-toggle").checked = data.enabled;
+                setMonitoringSwitch(data.enabled);
             }
       } else if (data.type === "printers_update") {
             // A printer was added, renamed or removed on the settings page
@@ -236,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const spools = await spoolsResponse.json();
 
             currentPrinterId = printerId;
-            document.getElementById("monitoring-toggle").checked = status.monitoringEnabled === true;
+            setMonitoringSwitch(status.monitoringEnabled === true);
 
             updateStatus(status); // sets the global legacyMode flag
 
@@ -2475,11 +2475,33 @@ document.addEventListener("DOMContentLoaded", () => {
 let currentPrinterId = null;
 
 
+/**
+ * Puts the switch into a state and says what that state means.
+ *
+ * The note is the whole point of the pair: a switch on its own never says what
+ * turning it off stops, and this one stops both directions at once, the MQTT
+ * connection to the printer and everything that would have reached Spoolman
+ * because of it.
+ *
+ * @param {boolean} enabled - whether this printer is being monitored
+ */
+function setMonitoringSwitch(enabled) {
+    const toggle = document.getElementById("monitoring-toggle");
+    if (toggle) toggle.checked = enabled;
+
+    const note = document.getElementById("monitoring-note");
+    if (note) note.hidden = enabled;
+}
+
 async function toggleMonitoring() {
     if (!currentPrinterId) return;
 
     const toggle = document.getElementById("monitoring-toggle");
     const enable = toggle.checked;
+
+    // Said at once rather than when the answer comes back, so the switch and
+    // the sentence next to it are never briefly telling two different stories.
+    setMonitoringSwitch(enable);
 
     const action = enable ? "start" : "stop";
 

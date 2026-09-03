@@ -191,6 +191,13 @@ h1 {
   cursor: pointer;
 }
 
+/* What switching the monitoring off actually stopped. Sits in the same row and
+   wraps onto its own line when the row runs out of width. */
+.status-note {
+  font-size: 0.8rem;
+  color: var(--danger-solid);
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

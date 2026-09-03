@@ -29,13 +29,15 @@
       <div class="status-head">
         <h1 class="status-title">Loaded Spools on <span id="printer-name"></span></h1>
         <span id="tracking-mode" class="pill"></span>
-        <label class="status-toggle" title="Reads the AMS of this printer and writes what it finds to Spoolman">
-          <span>Sync</span>
+        <label class="status-toggle" title="Reads this printer over MQTT and writes what it finds to Spoolman">
+          <span>Monitoring</span>
           <span class="set-switch set-switch-alarm">
             <input type="checkbox" id="monitoring-toggle">
             <span class="set-switch-track"></span>
           </span>
         </label>
+        <!-- A switch never says what switching it off means, so this does -->
+        <span id="monitoring-note" class="status-note" hidden>paused · nothing is read from the printer, nothing written to Spoolman</span>
       </div>
       <div class="status-grid">
         <div class="status-item">

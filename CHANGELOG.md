@@ -26,7 +26,7 @@ Unreleased
          - On a phone the three pages fold into one button
       - Every page keeps to the same width as the settings page, 1180 px, instead of stretching to the window. The menu bar and the content under it line up, and a wide screen no longer pulls a spool table or a log line across the whole desk
       - The dashboard headline moved into the head of the status card and reads "Loaded Spools on <printer>": the AMS is no longer the only thing a slot can be, so naming it there was out of date. Headline, tracking mode and the sync switch now sit on one line, in that order
-      - The switch is the one the settings page uses, and it stays red while it is off, because off means nothing is read from the printer and nothing reaches Spoolman. It is labelled "Sync" rather than "Monitoring", which says what it does to Spoolman rather than what the service does internally
+      - The monitoring switch is the one the settings page uses, and it stays red while it is off, because off is not a preference here but a stopped service: it closes the MQTT connection to the printer, so nothing is read and nothing reaches Spoolman. That sentence is now on the card while the switch is off, since a switch on its own never says what turning it off stops
       - The server log is called "Server" in the log menu, not "Server log", since every entry in that menu is a log
    - Fixes:
       - "Log out" was shown on installations that never set a password, where it does nothing. The entry was hidden with the hidden attribute, which the menu's own "display: block" overrode; every element hidden that way stays hidden now, which also covers the AMS unit header on a phone
