@@ -732,6 +732,122 @@ body.show-footer #spool-list {
     min-height: 38px;
     padding: 6px 14px;
   }
+
+  /* ---- The two tables of the settings page ----
+     The printer list and the API keys are read left to right on a desktop and
+     do not fit a phone at all: the status and the buttons sat behind a
+     sideways scroll, which is the one place a phone will not look. Each row
+     becomes a block with its labels above the values, the same way a spool
+     row does. */
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  /* !important, because the desktop min-width of these two tables is set later
+     in the file and would keep forcing the sideways scroll. */
+  #printer-table .data-table,
+  #apikey-table .data-table {
+    min-width: 0 !important;
+  }
+
+  #printer-table,
+  #apikey-table { overflow-x: visible; }
+
+  #printer-table .data-table,
+  #printer-table tbody,
+  #printer-table tr,
+  #printer-table td,
+  #apikey-table .data-table,
+  #apikey-table tbody,
+  #apikey-table tr,
+  #apikey-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  #printer-table tr,
+  #apikey-table tr {
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    background: var(--row-bg);
+    padding: 4px 0 10px;
+    margin-bottom: 12px;
+  }
+
+  #printer-table td,
+  #apikey-table td {
+    border: none !important;
+    padding: 5px 12px;
+    text-align: left !important;
+  }
+
+  #printer-table td::before,
+  #apikey-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  /* The name is the heading of its card, so it carries no label of its own
+     and is set like one. */
+  #printer-table td:first-child,
+  #apikey-table td:first-child {
+    font-size: 1.02em;
+    font-weight: 700;
+    padding-top: 9px;
+  }
+
+  #printer-table td:first-child::before,
+  #apikey-table td:first-child::before { content: none; }
+
+  /* An empty data-label leaves an empty line above the buttons */
+  #printer-table td[data-label=""]::before,
+  #apikey-table td[data-label=""]::before { display: none; }
+
+  #printer-table .set-row-actions,
+  #apikey-table .set-row-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  #printer-table .set-row-actions .btn,
+  #apikey-table .set-row-actions .btn {
+    flex: 1;
+    margin-left: 0;
+    min-height: 36px;
+  }
+
+  /* The facts of the Service card, two to a line like the state of a printer
+     on the dashboard rather than one per line. !important for the same reason
+     as the tables above: the desktop rule sits later in the file. */
+  .set-facts { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important; }
+
+  /* The key of a new API key is long and has to be copied off the screen it is
+     shown on, so it gets the full width and the button its own line under it. */
+  .set-key-row { flex-wrap: wrap; }
+  .set-key-row input { flex: 1 0 100% !important; }
+  .set-key-row .btn { flex: 1; min-height: 36px; }
+
+  /* One spool per line in the assign dialog. As a flex row its parts each got
+     a column of their own, so the weight and the badge wrapped away from the
+     name they belong to. */
+  .sp-pick { display: block; }
+
+  .sp-pick input[type="radio"] {
+    margin-right: 6px;
+    vertical-align: middle;
+  }
 }
 
 table th, table td {
@@ -827,7 +943,11 @@ dialog {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 20px;
-  max-width: 800px;
+  /* Counted with the padding and the border, or a dialog sized to what the
+     screen allows ends up 42px wider than that and hangs over the edge of a
+     phone. The cap keeps the desktop width it always had. */
+  box-sizing: border-box;
+  max-width: min(800px, calc(100vw - 20px));
   text-align: left;
   box-shadow: var(--shadow-dialog);
   transition: background-color 0.3s, color 0.3s;
@@ -1283,15 +1403,19 @@ button {
 
 
 
+/* Pinned to both edges rather than given a width: at 99% of the viewport it
+   started at the padding of the body and ended 16px past the right edge of a
+   phone, which cut the last words of the line off. */
 .footer {
   position: fixed;
   bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 10px 0;
-  width: 99%;
+  padding: 10px 16px;
   background-color: var(--page-bg);
   color: var(--text);
 }
