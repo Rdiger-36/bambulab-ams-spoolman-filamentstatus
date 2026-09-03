@@ -621,9 +621,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // The name of a spool as the picker writes it, and what is known about it
-    // besides the name. Two pieces rather than one string, because they go on
-    // two lines of their own: a spool name runs long enough that the weight and
-    // the badges behind it end up wrapping into it.
+    // besides the name. Two pieces rather than one string, so the second can
+    // drop onto its own line when the row runs out of width, aligned under the
+    // name; while there is room the two sit on one line.
     function spoolPickerLabel(sp) {
         const fil   = sp.filament || {};
         const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
@@ -708,15 +708,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const suggested = ranked.filter(entry => entry.rank < 2).slice(0, ASSIGN_SUGGESTIONS);
         const suggestedIds = new Set(suggested.map(entry => entry.sp.id));
 
-        // Name on the first line, everything about it on the second, both
-        // starting at the same edge next to the radio button.
+        // Name and what is known about the spool: on one line while they fit,
+        // on two when they do not, both starting at the same edge next to the
+        // radio button.
         const pick = (entry) => `
             <label class="sp-pick">
                 <input type="radio" name="assign-spool" value="${entry.sp.id}">
                 <span class="sp-pick-text">
                     <span class="sp-pick-name">${spoolPickerLabel(entry.sp)}</span>
                     <span class="sp-pick-meta">
-                        <span class="gc-muted">${escapeHtml(spoolPickerWeight(entry.sp))}</span>${entry.rank === 0
+                        <span class="gc-muted">(${escapeHtml(spoolPickerWeight(entry.sp))})</span>${entry.rank === 0
                         ? `<span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
                         : ""}${mismatched.has(entry.sp.id)
                         ? `<span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`

@@ -563,20 +563,23 @@ h1 {
   margin-top: 3px;
 }
 
-/* Both lines start at the same edge, next to the radio button and not under
-   it, so the second reads as a continuation of the first. */
+/* One line while the two fit next to each other, two when they do not. Both
+   start at the same edge, next to the radio button and not under it, so a
+   wrapped second line reads as a continuation of the first. */
 .sp-pick-text {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 7px;
   min-width: 0;
 }
 
+/* Moves as one piece, so the weight never ends up on a different line than the
+   badge that qualifies it. */
 .sp-pick-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  font-size: 0.92em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px 10px;
 }
 
 .sp-pick:hover { background: #8881; }
