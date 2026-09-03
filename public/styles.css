@@ -453,7 +453,10 @@ h1 {
   padding: 5px 8px;
   border: 1px solid #8886;
   border-radius: 5px;
-  background: transparent;
+  /* A field colour rather than none. A transparent select is also what
+     Chromium paints its option list with, and on Windows that comes out white
+     over a dark page. See the `option` rule further down. */
+  background: var(--input-bg);
   color: inherit;
   font: inherit;
   font-size: 0.95em;
@@ -555,7 +558,7 @@ h1 {
   padding: 5px 8px;
   border: 1px solid #8886;
   border-radius: 5px;
-  background: transparent;
+  background: var(--input-bg);
   color: inherit;
   font: inherit;
   font-size: 0.95em;
@@ -963,6 +966,18 @@ table td.color-cell {
   }
 }
 
+
+/* The entries of an open select.
+   Chromium draws the list with the colours of the select itself, so a page that
+   leaves them to the browser gets the white list of the default canvas over its
+   dark page: that is what a dark Windows install showed. Named here so the list
+   is a dark list, `color-scheme` above so the scrollbar and the frame around it
+   follow as well. macOS draws the list itself and ignores both, which is why it
+   looked right there. */
+option {
+  background-color: var(--input-bg);
+  color: var(--text);
+}
 
 html.transition-enabled,
 html.transition-enabled body {
@@ -1565,7 +1580,9 @@ button {
   padding: 5px 8px;
   border: 1px solid #8886;
   border-radius: 5px;
-  background: transparent;
+  /* See .sp-field above: the background of a select is what its option list is
+     painted with. */
+  background: var(--input-bg);
   color: inherit;
   font: inherit;
   font-size: 0.95em;
