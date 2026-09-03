@@ -634,7 +634,8 @@ body.show-footer #spool-list {
   }
 
   .spool-table {
-    margin-top: 16px;
+    /* Air between two units, on top of what the band above says */
+    margin-top: 22px;
     /* drop the desktop card frame. Each row is its own card on mobile.
        !important beats the desktop .spool-table rules defined later in source. */
     border: none !important;
@@ -671,13 +672,41 @@ body.show-footer #spool-list {
     margin-bottom: 2px;
   }
 
-  /* The unit header, on a table whose rows are cards. A caption keeps its
-     table display even when everything around it is a block, and shrink wraps
-     into a column one word wide. */
+  /* The unit header, on a table whose rows are cards. A caption keeps its table
+     display even when everything around it is a block, and shrink wraps into a
+     column one word wide, so it is laid out by hand here.
+
+     On a phone the slots of two units are a long column of identical cards with
+     nothing but this line between them, so it is a band rather than a line of
+     small print: it names the unit it opens and shows where the one above it
+     ended. */
   caption.ams-env {
-    display: block;
-    padding: 0 2px 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    padding: 8px 11px;
+    margin-bottom: 10px;
+    background: var(--head-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
   }
+
+  /* The gap spaces them now, and a trailing margin would push the band open on
+     the right. */
+  caption.ams-env > span { margin-right: 0; }
+
+  caption.ams-env .ams-env-unit {
+    font-size: 1.06em;
+    color: var(--text);
+  }
+
+  /* The drying cycle carries a target and a countdown, which is more than fits
+     next to the humidity on a phone. Its own line, under the readings it
+     belongs to. */
+  caption.ams-env .ams-env-drying { flex-basis: 100%; }
+
+
 
   /* Make the action button comfortably tappable */
   .spool-table td[data-label="Action"] button {
