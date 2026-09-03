@@ -744,6 +744,18 @@ table td.color-cell {
   background: var(--row-hover-bg);
 }
 
+/* The action column holds one control per row, and the labels on those buttons
+   differ in length ("Assign Spool" against "No actions available"), so left
+   aligned they never stood under each other. Centred they do, and the header
+   follows them. Not on a phone, where every cell is its own labelled line and
+   a centred button would sit away from the label that names it. */
+@media (min-width: 761px) {
+  .spool-table th:last-child,
+  .spool-table td[data-label="Action"] {
+    text-align: center;
+  }
+}
+
 
 html.transition-enabled,
 html.transition-enabled body {
