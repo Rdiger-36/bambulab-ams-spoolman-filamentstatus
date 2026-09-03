@@ -109,7 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const current = document.getElementById("printer-serial").textContent;
 
             if (data.printer === current) {
-                document.getElementById("monitoring-toggle").checked = data.enabled;
+                setMonitoringSwitch(data.enabled);
             }
       } else if (data.type === "printers_update") {
             // A printer was added, renamed or removed on the settings page
@@ -236,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const spools = await spoolsResponse.json();
 
             currentPrinterId = printerId;
-            document.getElementById("monitoring-toggle").checked = status.monitoringEnabled === true;
+            setMonitoringSwitch(status.monitoringEnabled === true);
 
             updateStatus(status); // sets the global legacyMode flag
 
@@ -363,7 +363,33 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!parts.length) return "";
-        return `<span class="ams-env-unit">AMS ${escapeHtml(unitKey)}</span>${parts.join("")}`;
+        const unit = amsUnitLabel(unitKey, env);
+        return `<span class="ams-env-unit"${unit.title ? ` title="${escapeHtml(unit.title)}"` : ""}>${escapeHtml(unit.label)}</span>${parts.join("")}`;
+    }
+
+    // Names the unit as far as its own report allows.
+    //
+    // Nothing in the payload states the model, so it is read off what the unit
+    // can do. A single slot unit sits at AMS id 128 and up, which is the HT and
+    // nothing else. A dryer, which is `dry_time` and `dry_setting`, only exists
+    // on the 2 Pro and the HT. What is left, a unit that reports the five step
+    // level and nothing more, is either an original AMS or an AMS Lite: the two
+    // send byte for byte the same fields, so anything more precise than "AMS"
+    // there would be a guess. See extractAmsEnvironment() in src/ams.js and
+    // test/ams.env.test.js, which carries the four shapes seen on real hardware.
+    function amsUnitLabel(unitKey, env) {
+        if (unitKey.startsWith("HT-")) {
+            return { label: `AMS HT ${unitKey.slice(3)}`, title: "Single slot unit with a dryer" };
+        }
+
+        if (env?.drying) {
+            return { label: `AMS 2 Pro ${unitKey}`, title: "Reports a humidity percentage, a temperature and a dryer" };
+        }
+
+        return {
+            label: `AMS ${unitKey}`,
+            title: "An original AMS or an AMS Lite: both report the humidity level and nothing else, so the report cannot tell them apart",
+        };
     }
 
     // Rewrites the headers of the tables already on screen. The readings arrive
@@ -594,12 +620,19 @@ document.addEventListener("DOMContentLoaded", () => {
         return distances.reduce((total, one) => total + one, 0) / distances.length;
     }
 
+    // The name of a spool as the picker writes it, and what is known about it
+    // besides the name. Two pieces rather than one string, so the second can
+    // drop onto its own line when the row runs out of width, aligned under the
+    // name; while there is room the two sit on one line.
     function spoolPickerLabel(sp) {
         const fil   = sp.filament || {};
         const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
-        const left  = sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
         const swatch = swatchHtml(filamentColors(fil), fil.multi_color_direction);
-        return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"} <span class="gc-muted">(${left})</span>`;
+        return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"}`;
+    }
+
+    function spoolPickerWeight(sp) {
+        return sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
     }
 
     async function showAssignDialog(button, amsSpool) {
@@ -675,13 +708,22 @@ document.addEventListener("DOMContentLoaded", () => {
         const suggested = ranked.filter(entry => entry.rank < 2).slice(0, ASSIGN_SUGGESTIONS);
         const suggestedIds = new Set(suggested.map(entry => entry.sp.id));
 
+        // Name and what is known about the spool: on one line while they fit,
+        // on two when they do not, both starting at the same edge next to the
+        // radio button.
         const pick = (entry) => `
             <label class="sp-pick">
-                <input type="radio" name="assign-spool" value="${entry.sp.id}"> ${spoolPickerLabel(entry.sp)}${entry.rank === 0
-                    ? ` <span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
-                    : ""}${mismatched.has(entry.sp.id)
-                    ? ` <span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
-                    : ""}
+                <input type="radio" name="assign-spool" value="${entry.sp.id}">
+                <span class="sp-pick-text">
+                    <span class="sp-pick-name">${spoolPickerLabel(entry.sp)}</span>
+                    <span class="sp-pick-meta">
+                        <span class="gc-muted">(${escapeHtml(spoolPickerWeight(entry.sp))})</span>${entry.rank === 0
+                        ? `<span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
+                        : ""}${mismatched.has(entry.sp.id)
+                        ? `<span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
+                        : ""}
+                    </span>
+                </span>
             </label>`;
 
         // Everything a spool can be recognised by, so the search does not have to
@@ -2409,7 +2451,11 @@ document.addEventListener("DOMContentLoaded", () => {
         updateElementText("last-mqtt-update", data.lastMqttUpdate);
         updateElementText("last-mqtt-ams-update", data.lastMqttAmsUpdate);
         currentPrinterName = data.printerName || "";
-        updateElementText("printer-name", data.printerName);
+        // The headline names the printer and is the picker over the others, so
+        // it is written by menu.js rather than here. This only says which
+        // printer the dashboard settled on, which it decides itself on the
+        // first load.
+        syncMenuPrinter(data.PRINTER_ID);
         updateElementText("mode", data.MODE);
         updateElementText("printer-serial", data.PRINTER_ID);
         
@@ -2471,12 +2517,26 @@ document.addEventListener("DOMContentLoaded", () => {
 let currentPrinterId = null;
 
 
+/**
+ * Puts the switch into a state.
+ *
+ * Off is red rather than the grey the settings switches use, because off here
+ * is not a preference but a stopped service: the MQTT connection is closed, so
+ * nothing is read from the printer and nothing reaches Spoolman. The row under
+ * it says the same thing in words, with "Printer (MQTT)" going to "Disabled".
+ *
+ * @param {boolean} enabled - whether this printer is being monitored
+ */
+function setMonitoringSwitch(enabled) {
+    const toggle = document.getElementById("monitoring-toggle");
+    if (toggle) toggle.checked = enabled;
+}
+
 async function toggleMonitoring() {
     if (!currentPrinterId) return;
 
     const toggle = document.getElementById("monitoring-toggle");
     const enable = toggle.checked;
-
     const action = enable ? "start" : "stop";
 
     await fetch(`./api/printer/${currentPrinterId}/monitoring/${action}`, {

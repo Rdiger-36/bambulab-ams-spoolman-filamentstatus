@@ -16,27 +16,30 @@
 </head>
 <body class="show-footer">
   <div id="menubar">
-    <!-- Menu with the printer, settings and log entries, filled by menu.js -->
+    <!-- The whole bar, including the dark mode button, is filled by menu.js -->
     <div id="menu-root"></div>
-    <!-- Dark Mode Button -->
-    <button id="dark-mode-toggle">
-        <img id="dark-mode-icon" src="https://img.icons8.com/ios-glyphs/30/moon-symbol.png" alt="Toggle Dark Mode">
-    </button>
   </div>
 
   <!-- App Content -->
-  <div id="app">
-    <h1>Loaded Spools on AMS from <span id="printer-name"></span></h1>
+  <div id="app" class="page-width">
     <div id="status" class="status-card">
+      <!-- The title in the middle, the two things that are not the title at
+           the two ends: what it is tracked with, and whether it is running.
+           The printer name is a picker, filled by menu.js. -->
       <div class="status-head">
-        <span id="tracking-mode" class="pill"></span>
-        <span class="monitoring-align">
-          Monitoring
-          <label class="switch">
-            <input type="checkbox" id="monitoring-toggle">
-            <span class="slider round"></span>
+        <div class="status-head-side">
+          <span id="tracking-mode" class="pill"></span>
+        </div>
+        <h1 class="status-title">Loaded Spools on <span id="printer-name"></span></h1>
+        <div class="status-head-side status-head-side-end">
+          <label class="status-toggle" title="Reads this printer over MQTT and writes what it finds to Spoolman">
+            <span>Monitoring</span>
+            <span class="set-switch set-switch-alarm">
+              <input type="checkbox" id="monitoring-toggle">
+              <span class="set-switch-track"></span>
+            </span>
           </label>
-        </span>
+        </div>
       </div>
       <div class="status-grid">
         <div class="status-item">

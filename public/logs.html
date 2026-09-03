@@ -14,17 +14,22 @@
       } catch (error) { /* Storage blocked: stay in light mode. */ }
     </script>
 </head>
-<body class="hide-footer">
+<body class="hide-footer logs-page">
     <div id="menubar">
+        <!-- The whole bar, including the dark mode button, is filled by menu.js -->
         <div id="menu-root"></div>
-        <button id="download-logs" class="log-button">Download this log file...</button>
-        <button id="dark-mode-toggle" class="dark-mode-button">
-            <img id="dark-mode-icon" src="https://img.icons8.com/ios-glyphs/30/moon-symbol.png" alt="Mode Toggle">
-        </button>
     </div>
-    <h3 style="text-align: center;">Backend Logs for: <span id="headline"></span></h3>
-    <div id="log-box">
-        <div id="logs"></div>
+    <div class="page-width log-page">
+        <!-- The name is a picker over the logs, filled by menu.js -->
+        <h3 class="log-title">Backend Logs for: <span id="headline"></span></h3>
+        <div id="log-box">
+            <div id="logs"></div>
+        </div>
+        <!-- Under the log it downloads, and always on screen: the box above it
+             takes the height that is left rather than growing past it -->
+        <div class="log-actions">
+            <button id="download-logs" class="log-button">Download this log file...</button>
+        </div>
     </div>
     <script src="menu.js"></script>
     <script src="export.js"></script>

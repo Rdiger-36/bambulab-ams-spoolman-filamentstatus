@@ -735,13 +735,16 @@ function renderPrinters() {
         return;
     }
 
+    // The data-label of a cell is what the phone layout puts above its value,
+    // where there is no header row to read it off. See the responsive block in
+    // styles.css, which the spool tables use the same way.
     const rows = printers.map(printer => `
         <tr>
-            <td>${escapeHtml(printer.name)}</td>
-            <td class="set-mono">${escapeHtml(printer.id)}</td>
-            <td class="set-mono">${escapeHtml(printer.ip)}</td>
-            <td>${statusPill(printer.mqttStatus)}</td>
-            <td class="set-row-actions">
+            <td data-label="Name">${escapeHtml(printer.name)}</td>
+            <td class="set-mono" data-label="Serial number">${escapeHtml(printer.id)}</td>
+            <td class="set-mono" data-label="Address">${escapeHtml(printer.ip)}</td>
+            <td data-label="MQTT">${statusPill(printer.mqttStatus)}</td>
+            <td class="set-row-actions" data-label="">
                 <button class="btn btn-small" data-edit="${escapeHtml(printer.id)}">Edit</button>
                 <button class="btn btn-small btn-danger" data-delete="${escapeHtml(printer.id)}">Delete</button>
             </td>
@@ -960,10 +963,10 @@ function renderApiKeys() {
 
     const rows = apiKeys.map(key => `
         <tr>
-            <td>${escapeHtml(key.name)}</td>
-            <td>${escapeHtml(formatStamp(key.createdAt))}</td>
-            <td>${escapeHtml(key.lastUsedAt ? formatStamp(key.lastUsedAt) : "never")}</td>
-            <td class="set-row-actions">
+            <td data-label="Name">${escapeHtml(key.name)}</td>
+            <td data-label="Created">${escapeHtml(formatStamp(key.createdAt))}</td>
+            <td data-label="Last used">${escapeHtml(key.lastUsedAt ? formatStamp(key.lastUsedAt) : "never")}</td>
+            <td class="set-row-actions" data-label="">
                 <button class="btn btn-small btn-danger" data-revoke="${escapeHtml(key.id)}">Revoke</button>
             </td>
         </tr>`).join("");

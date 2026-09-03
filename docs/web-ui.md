@@ -8,7 +8,7 @@ The dashboard shows the running print, its layer progress, and every loaded spoo
 
 ![Dashboard](images/dashboard.png)
 
-Above each unit's table stands what the unit reports about itself: the relative humidity inside it, its temperature, and, while a drying cycle runs, its target temperature and the minutes left. Which of those appear depends on the hardware. An AMS 2 Pro and an AMS HT report all of it. The original AMS and the AMS Lite report only the five step humidity level, 1 being the driest, and have no temperature sensor. The AMS Lite has no humidity sensor either and always reports 5, so take that level for what it is. The external spool holder reports none of it and gets no header.
+On a phone each unit is one card, with that header on top and its slots as sections inside it. Above each unit's table stands what the unit reports about itself: which unit it is, the relative humidity inside it, its temperature, and, while a drying cycle runs, its target temperature and the minutes left. The name comes from what the unit can do, because nothing in the report states the model: a single slot unit is an **AMS HT**, one with a dryer and a humidity percentage an **AMS 2 Pro**, and everything else stays plain **AMS** — an original AMS and an AMS Lite send byte for byte the same fields, so naming either would be a guess. Which of those appear depends on the hardware. An AMS 2 Pro and an AMS HT report all of it. The original AMS and the AMS Lite report only the five step humidity level, 1 being the driest, and have no temperature sensor. The AMS Lite has no humidity sensor either and always reports 5, so take that level for what it is. The external spool holder reports none of it and gets no header.
 
 Under each spool stands whether its consumption can be booked:
 
@@ -38,7 +38,9 @@ The second tab carries the filament behind the spool, shared by every spool of i
 
 In manual mode the merge and create actions of a Bambu Lab spool work the same way: a button per slot, opening a dialog with what would be written to Spoolman.
 
-One menu on every page carries the dashboard, the printers, the settings and the logs, with the dark and light mode switch on the right:
+The same bar sits on every page and carries two things: where you can go, and your session. Left the three pages with the one you are on marked, right the dark and light mode switch and, once a [password](settings.md#the-web-ui-password) is set, **Log out**. **Logs** lists the server log and one entry per printer, by name, so the log you open is the one you picked rather than the one belonging to whichever printer was selected last. On a phone the three pages fold into one button.
+
+What the page is showing is picked in the page. The dashboard headline names the printer and the log viewer names the log, and that name is the control: click "Loaded Spools on Bambu P2S" in the head of the status card and the printers drop down. With a single printer there is nothing to pick and the name is plain text. The download of a log sits with the log for the same reason, above the box it belongs to.
 
 ![Menu](images/menu.png)
 

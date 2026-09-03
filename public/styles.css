@@ -8,6 +8,12 @@
    A colour that is the same in both themes stays a literal in its rule. There
    is nothing for a token to decide about it. */
 :root {
+  /* What the browser and the operating system draw themselves: the option list
+     of a select, scrollbars, radios, checkboxes, spin buttons, the focus ring.
+     None of it is reachable from this file, and this is the only lever on it.
+     Without it a dark page opens a light grey popup with grey text in it. */
+  color-scheme: light;
+
   /* Text */
   --text: #333;
   --text-soft: #333;
@@ -126,6 +132,16 @@
   --shadow-dialog: 0px 4px 6px rgba(0, 0, 0, 0.6);
 }
 
+/* Anything the JS hides with the `hidden` attribute stays hidden.
+   The attribute is only `display: none` in the browser's own stylesheet, so
+   every rule in this file that sets a display wins over it. That is what showed
+   the log out entry on installations without a password, and what the mobile
+   `caption.ams-env { display: block }` would do to a unit header that reports
+   nothing. Every panel of the menu bar is hidden this way too. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: Arial, sans-serif;
   margin: 0;
@@ -161,17 +177,52 @@ h1 {
   border-bottom: 1px solid var(--border-soft);
 }
 
-.status-head .monitoring-align {
-  margin-left: auto;
+/* The title in the middle, the two things that are not the title at the two
+   ends. Both ends take the same share of what is left over, which is what puts
+   the title in the actual centre of the card rather than in the middle of
+   whatever space the wider of the two happens to leave. */
+.status-head-side {
+  flex: 1 1 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
 }
 
+.status-head-side-end { justify-content: flex-end; }
+
+/* A block rather than a flex row: the words and the picker have to wrap as one
+   sentence when the card is narrow, instead of standing next to each other as
+   two columns that each wrap on their own. */
+.status-title {
+  font-size: 1.28rem;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+}
+
+.status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Facts of one size, in the middle of the card.
+   Every cell is the same width, so a wrapped row lines up under the one above
+   it instead of every line starting somewhere else. The tracks have a fixed
+   size rather than 1fr, which is what keeps them from being stretched apart
+   over the whole card, and the whole block is centred rather than left packed,
+   so the empty space of a half filled last row sits on both sides. */
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px 18px;
+  /* 165 and 24: six of them plus five gaps are 1110px, which is what a card at
+     the 1180px page width has room for, so the whole state of the printer is
+     one line and not five and a orphan. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 165px));
+  justify-content: center;
+  gap: 12px 24px;
 }
 
 .status-item {
@@ -402,7 +453,10 @@ h1 {
   padding: 5px 8px;
   border: 1px solid #8886;
   border-radius: 5px;
-  background: transparent;
+  /* A field colour rather than none. A transparent select is also what
+     Chromium paints its option list with, and on Windows that comes out white
+     over a dark page. See the `option` rule further down. */
+  background: var(--input-bg);
   color: inherit;
   font: inherit;
   font-size: 0.95em;
@@ -495,19 +549,65 @@ h1 {
 
 .sp-colour { display: flex; gap: 6px; align-items: center; }
 .sp-colour input[type="color"] { padding: 0; width: 34px; height: 30px; flex: none; cursor: pointer; }
-.sp-colour input:not([type="color"]) { flex: 1; text-transform: uppercase; }
+/* The hex field beside the swatch. Styled like every other field of the
+   dialog rather than left to the browser, which draws its own box and, under a
+   dark colour scheme, its own grey that matches nothing around it. */
+.sp-colour input:not([type="color"]) {
+  flex: 1;
+  text-transform: uppercase;
+  padding: 5px 8px;
+  border: 1px solid #8886;
+  border-radius: 5px;
+  background: var(--input-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+}
+
+.sp-colour input:not([type="color"]):focus {
+  outline: none;
+  border-color: var(--accent);
+}
 
 /* One pickable spool per row, so the whole row reacts rather than just the
-   radio button next to it. */
+   radio button next to it. Two lines: the name, and under it what is known
+   about that spool. On one line the weight and the badges wrapped into the
+   name, which is long enough on its own. */
 .sp-pick {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 9px;
   padding: 7px 10px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9em;
   transition: background-color 0.2s;
+}
+
+.sp-pick input[type="radio"] {
+  flex: none;
+  /* On the line of the name rather than in the middle of both lines */
+  margin-top: 3px;
+}
+
+/* One line while the two fit next to each other, two when they do not. Both
+   start at the same edge, next to the radio button and not under it, so a
+   wrapped second line reads as a continuation of the first. */
+.sp-pick-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 7px;
+  min-width: 0;
+}
+
+/* Moves as one piece, so the weight never ends up on a different line than the
+   badge that qualifies it. */
+.sp-pick-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px 10px;
 }
 
 .sp-pick:hover { background: #8881; }
@@ -588,31 +688,42 @@ body.show-footer #spool-list {
     box-sizing: border-box;
   }
 
+  /* One unit, one card. The slots used to be four free floating tiles with the
+     header hovering above them, so nothing but their order said they belonged
+     to the same AMS. The card is the unit now: its header is the band, and the
+     slots are sections inside it, parted by a line rather than by air.
+     !important beats the desktop .spool-table rules defined later in source. */
   .spool-table {
-    margin-top: 16px;
-    /* drop the desktop card frame. Each row is its own card on mobile.
-       !important beats the desktop .spool-table rules defined later in source. */
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    background: transparent !important;
+    margin-top: 22px;
+    border: 1px solid var(--border-card) !important;
+    border-radius: 10px !important;
+    background: var(--row-bg) !important;
+    box-shadow: var(--shadow-card) !important;
+    overflow: hidden;
   }
 
   .spool-table tr {
-    border: 1px solid var(--border-card);
-    border-radius: 8px;
-    margin-bottom: 14px;
-    overflow: hidden;
-    background: var(--row-bg);
+    border: none;
+    background: transparent;
+  }
+
+  /* The one line inside the card that separates two slots. The fields within a
+     slot carry no lines at all, so a line always means "next slot". */
+  .spool-table tr + tr {
+    border-top: 1px solid var(--border-card);
   }
 
   .spool-table td {
-    border: none;
-    border-bottom: 1px solid var(--border-row);
-    padding: 9px 12px;
+    /* !important for the same reason as above: the desktop rule that draws the
+       row separator sits later in the file. */
+    border: none !important;
+    padding: 5px 14px;
     text-align: left !important;
   }
-  .spool-table td:last-child { border-bottom: none; }
+
+  /* Air around a slot rather than between its fields */
+  .spool-table tr td:first-child { padding-top: 12px; }
+  .spool-table tr td:last-child { padding-bottom: 14px; }
 
   /* Per-cell label above the value (robust for multi-line cell content) */
   .spool-table td::before {
@@ -626,19 +737,163 @@ body.show-footer #spool-list {
     margin-bottom: 2px;
   }
 
-  /* The unit header, on a table whose rows are cards. A caption keeps its
-     table display even when everything around it is a block, and shrink wraps
-     into a column one word wide. */
+  /* The unit header, on a table whose rows are cards. A caption keeps its table
+     display even when everything around it is a block, and shrink wraps into a
+     column one word wide, so it is laid out by hand here.
+
+     On a phone the slots of two units are a long column of identical cards with
+     nothing but this line between them, so it is a band rather than a line of
+     small print: it names the unit it opens and shows where the one above it
+     ended. */
   caption.ams-env {
-    display: block;
-    padding: 0 2px 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* The head of the unit card, so it sits on it rather than above it */
+    margin: 0;
+    border: none;
+    border-bottom: 1px solid var(--border-card);
+    border-radius: 0;
+    /* Centred, both lines: the band spans the whole width, and its readings
+       left packed under a centred card head looked like a leftover. */
+    justify-content: center;
+    text-align: center;
+    gap: 4px 14px;
+    padding: 9px 12px;
+    background: var(--head-bg);
   }
+
+  /* The gap spaces them now, and a trailing margin would push the band open on
+     the right. */
+  caption.ams-env > span { margin-right: 0; }
+
+  caption.ams-env .ams-env-unit {
+    font-size: 1.06em;
+    color: var(--text);
+  }
+
+  /* The drying cycle carries a target and a countdown, which is more than fits
+     next to the humidity on a phone. Its own line, under the readings it
+     belongs to. */
+  caption.ams-env .ams-env-drying {
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+
 
   /* Make the action button comfortably tappable */
   .spool-table td[data-label="Action"] button {
     min-height: 38px;
     padding: 6px 14px;
   }
+
+  /* ---- The two tables of the settings page ----
+     The printer list and the API keys are read left to right on a desktop and
+     do not fit a phone at all: the status and the buttons sat behind a
+     sideways scroll, which is the one place a phone will not look. Each row
+     becomes a block with its labels above the values, the same way a spool
+     row does. */
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  /* !important, because the desktop min-width of these two tables is set later
+     in the file and would keep forcing the sideways scroll. */
+  #printer-table .data-table,
+  #apikey-table .data-table {
+    min-width: 0 !important;
+  }
+
+  #printer-table,
+  #apikey-table { overflow-x: visible; }
+
+  #printer-table .data-table,
+  #printer-table tbody,
+  #printer-table tr,
+  #printer-table td,
+  #apikey-table .data-table,
+  #apikey-table tbody,
+  #apikey-table tr,
+  #apikey-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  #printer-table tr,
+  #apikey-table tr {
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    background: var(--row-bg);
+    padding: 4px 0 10px;
+    margin-bottom: 12px;
+  }
+
+  #printer-table td,
+  #apikey-table td {
+    border: none !important;
+    padding: 5px 12px;
+    text-align: left !important;
+  }
+
+  #printer-table td::before,
+  #apikey-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  /* The name is the heading of its card, so it carries no label of its own
+     and is set like one. */
+  #printer-table td:first-child,
+  #apikey-table td:first-child {
+    font-size: 1.02em;
+    font-weight: 700;
+    padding-top: 9px;
+  }
+
+  #printer-table td:first-child::before,
+  #apikey-table td:first-child::before { content: none; }
+
+  /* An empty data-label leaves an empty line above the buttons */
+  #printer-table td[data-label=""]::before,
+  #apikey-table td[data-label=""]::before { display: none; }
+
+  #printer-table .set-row-actions,
+  #apikey-table .set-row-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  #printer-table .set-row-actions .btn,
+  #apikey-table .set-row-actions .btn {
+    flex: 1;
+    margin-left: 0;
+    min-height: 36px;
+  }
+
+  /* The facts of the Service card, two to a line like the state of a printer
+     on the dashboard rather than one per line. !important for the same reason
+     as the tables above: the desktop rule sits later in the file. */
+  .set-facts { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important; }
+
+  /* The key of a new API key is long and has to be copied off the screen it is
+     shown on, so it gets the full width and the button its own line under it. */
+  .set-key-row { flex-wrap: wrap; }
+  .set-key-row input { flex: 1 0 100% !important; }
+  .set-key-row .btn { flex: 1; min-height: 36px; }
+
 }
 
 table th, table td {
@@ -699,6 +954,30 @@ table td.color-cell {
   background: var(--row-hover-bg);
 }
 
+/* The action column holds one control per row, and the labels on those buttons
+   differ in length ("Assign Spool" against "No actions available"), so left
+   aligned they never stood under each other. Centred they do, and the header
+   follows them. Not on a phone, where every cell is its own labelled line and
+   a centred button would sit away from the label that names it. */
+@media (min-width: 761px) {
+  .spool-table th:last-child,
+  .spool-table td[data-label="Action"] {
+    text-align: center;
+  }
+}
+
+
+/* The entries of an open select.
+   Chromium draws the list with the colours of the select itself, so a page that
+   leaves them to the browser gets the white list of the default canvas over its
+   dark page: that is what a dark Windows install showed. Named here so the list
+   is a dark list, `color-scheme` above so the scrollbar and the frame around it
+   follow as well. macOS draws the list itself and ignores both, which is why it
+   looked right there. */
+option {
+  background-color: var(--input-bg);
+  color: var(--text);
+}
 
 html.transition-enabled,
 html.transition-enabled body {
@@ -709,6 +988,8 @@ html.transition-enabled body {
    paints the root itself so the canvas has a colour before the body has any
    height. The body takes the same two values from the tokens. */
 html.dark-mode {
+  /* Tells the browser to draw its own controls dark as well, see :root */
+  color-scheme: dark;
   background-color: var(--page-bg);
   color: var(--text);
 }
@@ -722,7 +1003,11 @@ dialog {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 20px;
-  max-width: 800px;
+  /* Counted with the padding and the border, or a dialog sized to what the
+     screen allows ends up 42px wider than that and hangs over the edge of a
+     phone. The cap keeps the desktop width it always had. */
+  box-sizing: border-box;
+  max-width: min(800px, calc(100vw - 20px));
   text-align: left;
   box-shadow: var(--shadow-dialog);
   transition: background-color 0.3s, color 0.3s;
@@ -751,14 +1036,57 @@ button {
   font-size: 14px;
 }
 
+.log-title {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+/* The download acts on the log and sits under it, in the middle, rather than in
+   the menu bar where it was a page action among navigation. */
+.log-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+/* The log page is a column the height of the window: the box takes what is left
+   after the bar, the headline and the button, so the button is on screen
+   whatever the log contains and however long the headline wraps. A fixed
+   max-height had to guess all three. */
+body.logs-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* An auto margin on a flex item wins over the stretch it would get otherwise,
+   so both of these have to be told to take the width; the margin then only
+   centres them within the 1180px. */
+body.logs-page #menubar {
+  flex: none;
+  width: 100%;
+}
+
+body.logs-page .log-page { width: 100%; }
+
+.log-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* Or the box refuses to shrink below the height of the log inside it */
+  min-height: 0;
+}
+
 #log-box {
-  margin-top: 15px;
+  margin-top: 8px;
   padding: 10px;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   background-color: var(--log-bg);
   color: var(--text);
-  max-height: calc(100vh - 100px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -791,10 +1119,15 @@ button {
 
 /* The settings page holds its content in a narrower column, so the bar lines
    up with it instead of running wider than everything below it. */
-body.settings-page #menubar {
+/* One measure for every page. The bar and the content under it share it, so
+   they line up, and a wide screen does not stretch a spool table, a log line or
+   a headline across the whole desk. `box-sizing` so the max width counts the
+   padding and the bar lines up with what is below it. */
+#menubar,
+.page-width,
+.set-page {
   max-width: 1180px;
   margin: 0 auto;
-  /* so the max width counts the padding and the bar lines up with the cards */
   box-sizing: border-box;
 }
 
@@ -819,198 +1152,326 @@ body.settings-page #menubar {
   transition: transform 0.3s ease;
 }
 
-.dropdown {
-  position: relative;
+/* ---- Menu bar ----
+   The three pages sit in the bar itself, the page you are on is marked, and the
+   two panels behind it are the printer picker and the log list. `#menu-root`
+   takes the free width so its own two groups can sit at the two ends of the
+   bar, with the dark mode button (and the download button of the log page)
+   staying to the right of it. */
+#menu-root {
+  flex: 1;
+  min-width: 0;
 }
 
-.dropdown-button {
-  background: var(--control-bg);
-  color: var(--text);
-  border: 1px solid var(--border-control);
+.menunav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.menu-pages,
+.menu-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Every clickable thing in the bar, whether it is a link to a page or a button
+   that opens a panel. */
+.menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
   border-radius: 6px;
-  padding: 6px 14px;
+  padding: 6px 12px;
+  background: none;
+  color: var(--text);
+  font: inherit;
   font-size: 0.88em;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
 }
 
-.dropdown-button::after {
+.menu-item:hover { background: var(--control-hover-bg); }
+
+.menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The page you are on. Border and weight rather than colour alone, so it is
+   still the marked one for somebody who cannot tell the two greys apart. */
+.menu-item[aria-current] {
+  background: var(--control-hover-bg);
+  border-color: var(--border-control);
+  font-weight: 700;
+}
+
+.menu-item[disabled] {
+  cursor: default;
+  opacity: 1;
+}
+
+.menu-item[disabled]:hover { background: none; }
+
+/* The two things at the end of the bar: the theme, then the session. */
+.menu-logout .menu-icon {
+  flex: none;
+  opacity: 0.75;
+}
+
+.menu-logout:hover .menu-icon { opacity: 1; }
+
+.menu-caret::after {
   content: "\203A";
   display: inline-block;
   transform: rotate(90deg);
-  margin-left: 8px;
   opacity: 0.6;
 }
 
-.dropdown-button:hover,
-.dropdown:hover .dropdown-button,
-.dropdown.open .dropdown-button {
-  background: var(--control-hover-bg);
+/* ---- Panels ---- */
+.menu-host {
+  position: relative;
 }
 
-
-
-/* ---- Menu panels ---- */
-.dropdown-content,
-.submenu-content {
-  display: none;
+.menu-panel {
   position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  /* Wide enough for the longest heading a panel carries, "Show on the
+     dashboard", so it stays on one line. */
+  min-width: 212px;
+  max-height: 60vh;
+  overflow-y: auto;
   background: var(--menu-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-menu);
-  padding: 4px;
-  min-width: 170px;
+  padding: 5px;
   z-index: 1000;
 }
 
-.dropdown-content {
-  top: calc(100% + 6px);
-  left: 0;
-}
-
-/* Bridges the gap between the button and the panel. Without it the pointer
-   leaves the menu on the way down and the panel closes under the cursor. */
-.dropdown-content::before {
-  content: "";
-  position: absolute;
-  left: 0;
+/* Opens towards the middle of the bar rather than off its right edge. */
+.menu-panel-end {
+  left: auto;
   right: 0;
-  top: -7px;
-  height: 7px;
 }
 
-
-.dropdown-content a,
-.submenu-content a,
-.submenu-label,
-.submenu-empty {
-  display: block;
-  padding: 7px 10px;
+.menu-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px 7px 8px;
   border-radius: 6px;
   color: var(--text);
   font-size: 0.88em;
   text-decoration: none;
   white-space: nowrap;
-}
-
-
-.dropdown-content a:hover,
-.submenu-content a:hover,
-.submenu:hover > .submenu-label,
-.submenu.open > .submenu-label {
-  background: var(--control-hover-bg);
-}
-
-
-.dropdown:hover > .dropdown-content,
-.dropdown.open > .dropdown-content {
-  display: block;
-}
-
-/* ---- Nested menu entries (printers, logs) ---- */
-.submenu {
-  position: relative;
-}
-
-.submenu-label {
-  /* A button, so it can be reached and opened with the keyboard */
-  width: 100%;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 0.88em;
-  text-align: left;
   cursor: pointer;
 }
 
-.dropdown-button:focus-visible,
-.submenu-label:focus-visible,
-.dropdown-content a:focus-visible,
-.submenu-content a:focus-visible {
+.menu-entry:hover { background: var(--control-hover-bg); }
+
+.menu-entry:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-
-.submenu-label::after {
-  content: "\203A";
-  float: right;
-  padding-left: 14px;
-  opacity: 0.6;
+/* The tick sits in a fixed column, so the entries line up whether or not one
+   of them carries it. */
+.menu-entry::before {
+  content: "\2713";
+  width: 12px;
+  flex: none;
+  opacity: 0;
+  color: var(--accent-text);
+  font-weight: 700;
 }
 
-.submenu-empty {
-  opacity: 0.6;
+.menu-entry[aria-current]::before { opacity: 1; }
+.menu-entry[aria-current] { font-weight: 700; }
+
+/* ---- The picker in the headline ----
+   The dashboard headline names the printer and the log viewer names the log,
+   and that name is the control. It has to read as one: a heading you can click,
+   not a button dropped into a sentence. Hence the dotted underline, which the
+   hover trades for the same background every other menu entry uses. */
+.title-pick-host {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  position: relative;
+  /* Sits in a line of text, so it goes on that line rather than pushing it */
+  vertical-align: baseline;
+}
+
+.title-pick {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 2px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The line sits under the name and not under the arrow, so the two read as a
+   word and a control rather than as one underlined lump. */
+.title-pick > span {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--border-control);
+}
+
+.title-pick:hover {
+  background: var(--control-hover-bg);
+}
+
+.title-pick:hover > span { text-decoration-color: transparent; }
+
+/* Set in the size of a heading, the shared caret would be as heavy as the
+   words next to it. */
+.title-pick.menu-caret::after {
+  font-size: 0.62em;
+  opacity: 0.5;
+}
+
+.title-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Nothing to choose: the name is what the page says, and says it as text. */
+.title-pick-plain {
   cursor: default;
+  padding: 0;
 }
 
-/* Opens next to its parent entry. The overlap keeps the pointer inside the
-   menu while moving across the gap, which would close it otherwise. */
-.submenu-content {
-  top: -5px;
-  left: calc(100% - 4px);
-  max-height: 60vh;
-  overflow-y: auto;
-  z-index: 1001;
+.title-pick-plain > span { text-decoration-line: none; }
+.title-pick-plain:hover { background: none; }
+
+/* The serial of the printer whose log this is. Next to the name rather than
+   inside it, so what you click is the name alone. */
+.title-note {
+  font-size: 0.72em;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.submenu:hover > .submenu-content,
-.submenu.open > .submenu-content {
-  display: block;
+/* Centred under the headline it belongs to, rather than under its left edge. */
+.title-panel {
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: 400;
+  font-size: 1rem;
+  text-align: left;
+}
+
+.menu-panel-head {
+  padding: 7px 10px 3px 8px;
+  font-size: 0.72em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Not the first thing in a panel: a heading under entries needs a line above
+   it, one at the very top does not. */
+.menu-panel-head:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* ---- Narrow screens ----
+   The pages fold into one button; the theme and the log out stay in the bar,
+   and what the page is showing is in the page itself either way. */
+.menu-burger {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  /* Two of the fixed 170px tracks do not fit a phone, and one of them centred
+     leaves a column with margins on both sides. Equal shares of the width
+     instead: still two cells of the same size, still lined up. */
+  .status-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px 18px;
+  }
+
+  /* Three across does not fit a phone, so the title takes the first line and
+     the two that describe the state share the second, centred under it. The
+     order is the reading order: what this is, then how it is doing. */
+  .status-head {
+    justify-content: center;
+    gap: 8px 14px;
+  }
+
+  .status-title {
+    order: -1;
+    flex-basis: 100%;
+  }
+
+  .status-head-side { flex: 0 1 auto; }
+  .status-head-side-end { justify-content: center; }
+
+  .menu-burger {
+    display: inline-flex;
+    border-color: var(--border-control);
+    background: var(--control-bg);
+  }
+
+  .menu-pages {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1000;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 200px;
+    background: var(--menu-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-menu);
+    padding: 5px;
+  }
+
+  .menunav.pages-open .menu-pages { display: flex; }
+
+  .menu-pages .menu-item {
+    border-color: transparent;
+    justify-content: space-between;
+  }
+
+  /* The log list opens inside the folded menu rather than over it, so one
+     panel does not cover the other on a screen this size. */
+  .menunav.pages-open .menu-pages .menu-panel {
+    position: static;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0 0 4px 14px;
+    min-width: 0;
+  }
 }
 
 #monitoring-control {
     margin-top: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 54px;
-  height: 28px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #d9534f; /* rot */
-  transition: .4s;
-  border-radius: 28px;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 22px;
-  width: 22px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .4s;
-  border-radius: 50%;
-}
-
-input:checked + .slider {
-  background-color: #5cb85c; /* grün */
-}
-
-input:checked + .slider:before {
-  transform: translateX(26px);
-}
-
-/* rechter Bereich Monitoring */
-.monitoring-align {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1032,15 +1493,19 @@ input:checked + .slider:before {
 
 
 
+/* Pinned to both edges rather than given a width: at 99% of the viewport it
+   started at the padding of the body and ended 16px past the right edge of a
+   phone, which cut the last words of the line off. */
 .footer {
   position: fixed;
   bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 10px 0;
-  width: 99%;
+  padding: 10px 16px;
   background-color: var(--page-bg);
   color: var(--text);
 }
@@ -1060,8 +1525,6 @@ input:checked + .slider:before {
 }
 /* ---- Settings page ---- */
 .set-page {
-  max-width: 1180px;
-  margin: 0 auto;
   padding-bottom: 6px;
 }
 
@@ -1147,7 +1610,9 @@ input:checked + .slider:before {
   padding: 5px 8px;
   border: 1px solid #8886;
   border-radius: 5px;
-  background: transparent;
+  /* See .sp-field above: the background of a select is what its option list is
+     painted with. */
+  background: var(--input-bg);
   color: inherit;
   font: inherit;
   font-size: 0.95em;
@@ -1223,6 +1688,11 @@ input:checked + .slider:before {
 
 .set-switch input:checked + .set-switch-track { background-color: #2ea35c; }
 .set-switch input:checked + .set-switch-track::before { transform: translateX(18px); }
+
+/* The one switch whose "off" is not a preference but a stopped service: while
+   the sync is off nothing is read from the printer and nothing reaches
+   Spoolman, so it stays red rather than going quiet grey like the settings. */
+.set-switch-alarm .set-switch-track { background-color: var(--danger-solid); }
 
 /* ---- A switch that belongs to the whole card, in its header ---- */
 .set-head-field {
