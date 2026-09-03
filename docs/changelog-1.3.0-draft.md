@@ -36,8 +36,9 @@ Version 1.3.0
       - The Spoolman location of a spool follows the AMS slot it sits in, and is cleared when it leaves
       - Log files are rotated instead of growing forever, and the log view and download read across the rotated history
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
+      - The Web UI can ask for a password, off unless one is set in the Network access card. One password for the installation, stored as a scrypt hash and never sent back to the browser, a session that lasts 30 days and survives a restart, and a lockout after repeated wrong guesses
       - Reworked menu bar and a dark mode that covers every page
-      - New ENVs: LEGACY_MODE, DATA_DIR, LOG_DIR, SUPERVISOR, LOG_MAX_SIZE_MB, LOG_KEEP_SERVER, LOG_KEEP_PRINTER, ALLOWED_HOSTS
+      - New ENVs: LEGACY_MODE, DATA_DIR, LOG_DIR, SUPERVISOR, LOG_MAX_SIZE_MB, LOG_KEEP_SERVER, LOG_KEEP_PRINTER, ALLOWED_HOSTS, AUTH_PASSWORD
    - Fixes:
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it

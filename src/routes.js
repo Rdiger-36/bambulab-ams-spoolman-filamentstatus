@@ -11,6 +11,7 @@ import { maskCodes, maskSerial, maskText } from "./anonymize.js";
 import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
+import { attemptLogin, authEnabled, clearSessionCookie, isAuthenticated, issueSession, setSessionCookie } from "./auth.js";
 import { tailLogLines, logFileSet } from "./logger.js";
 import { toClientSpool } from "./uispool.js";
 import { catalogueFacet, filterCatalogue, spoolWeightLimit, SLOT_OPTIONS } from "./utils.js";
@@ -193,6 +194,45 @@ function printerPrintingWithSpool(printers, spoolId) {
  * @param {object[]} printers - the printer list from printers.js
  */
 export function registerRoutes(app, printers) {
+    // ---------------------------------------------------------------------
+    // Login
+    //
+    // Public, because the login page is what somebody who is not logged in
+    // sees. Everything else in this file sits behind requireAuth() in
+    // backend.js, and answers 401 once a password is set. See auth.js.
+    // ---------------------------------------------------------------------
+
+    app.get("/api/auth/state", (req, res) => {
+        res.json({ required: authEnabled(), authenticated: !authEnabled() || isAuthenticated(req) });
+    });
+
+    app.post("/api/auth/login", (req, res) => {
+        if (!authEnabled()) return res.json({ ok: true, required: false });
+
+        const result = attemptLogin(String(req.body?.password ?? ""), req.ip);
+        if (!result.ok) {
+            // 429 rather than 401 while the address is waiting, so the page can
+            // say how long instead of repeating that the password was wrong.
+            const status = result.retryAfter ? 429 : 401;
+            return res.status(status).json({
+                ok: false,
+                error: result.retryAfter
+                    ? `Too many attempts. Try again in ${result.retryAfter} seconds.`
+                    : "Wrong password",
+                retryAfter: result.retryAfter,
+            });
+        }
+
+        setSessionCookie(req, res, result.cookie, result.expiresAt);
+        console.log("Server", serverLogFilePath, `[Auth] Logged in from ${req.ip}`);
+        res.json({ ok: true });
+    });
+
+    app.post("/api/auth/logout", (req, res) => {
+        clearSessionCookie(req, res);
+        res.json({ ok: true });
+    });
+
     app.get("/api/status/:printerId", (req, res) => {
         const printer = resolvePrinter(req.params.printerId, printers, res);
         if (!printer) return;
@@ -952,8 +992,14 @@ export function registerRoutes(app, printers) {
         }
 
         if (result.changed.length) {
+            // Never the value itself, and the log is downloadable from the Web
+            // UI, so a password change says only that it happened.
             console.log("Server", serverLogFilePath, `[Settings] Changed: ${result.changed.join(", ")}`);
         }
+
+        // A new password invalidates every session, so the caller is handed one
+        // signed with it rather than being sent to the login page mid save.
+        if (result.changed.includes("AUTH_PASSWORD") && authEnabled()) issueSession(req, res);
         // The interval is copied onto every printer object, so a change has to
         // be pushed into the running ones.
         if (result.changed.includes("UPDATE_INTERVAL")) syncPrinterIntervals();

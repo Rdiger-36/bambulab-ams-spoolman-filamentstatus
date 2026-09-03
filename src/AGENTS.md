@@ -26,6 +26,8 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
+| `auth.js` | The Web UI password: the signed session cookie, the lockout after repeated wrong guesses, and the middleware that puts every page and every route behind it. Does nothing while no password is set. |
+| `passwords.js` | scrypt hashing and verification, and nothing else. Its own module because `settings.js` needs it and may import nothing that logs. |
 | `security.js` | The request guard: which `Host` a request may be addressed to and which `Origin` may change something. Pure decisions plus the middleware `backend.js` puts in front of everything. The allow list is `settings.ALLOWED_HOSTS`, read per request. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
@@ -72,6 +74,12 @@ build their Spoolman payload from.
   would book twice or not at all.
 - **The Spoolman base URL comes from `spoolmanUrl()`**, not from a constant. It
   changes at runtime.
+- **The Web UI password is a hash, everywhere.** `settings.AUTH_PASSWORD` holds
+  what `passwords.js` produced, never what was typed, and the session cookie is
+  signed with a key derived from that hash. Two consequences to keep: changing
+  the password invalidates every session, which is why `PUT /api/settings` hands
+  the caller a fresh one, and nothing may put the value into a response, a log
+  line or an export.
 - **A settings write bumps a revision.** The settings page sends back the
   revision it read and a mismatch is answered with 409, so two open tabs cannot
   overwrite each other silently. `PUT /api/settings` accepts the bare field map
@@ -297,6 +305,12 @@ an info icon, for a field that belongs to the whole card rather than to a row of
 its own. Mark it `restartRequired`
 when the running process cannot adopt it, and handle the live application in the
 `PUT /api/settings` handler when it needs more than the new value being read.
+
+A field of type `password` is hashed by `coerceSetting()` on the way in and
+never leaves the process: `getSettingsView()` replaces it with null and reports
+only whether one is stored, and `updateSettings()` reads an empty string as
+"unchanged" so the settings page, which sends every field on every save, cannot
+wipe a value it was never shown. Removing one is an explicit null.
 
 **Adding an HTTP route:** add it inside `registerRoutes()` in `routes.js`.
 Respond `{ ok: false, error }` with a 4xx/5xx for failures; the frontend's

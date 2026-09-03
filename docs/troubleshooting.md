@@ -82,6 +82,22 @@ A `PUT` or `POST` answered with 403 while the pages load has the same cause
 behind a reverse proxy that rewrites the `Host` header: the same entry fixes
 it.
 
+## The password is gone
+
+A forgotten Web UI password is not recoverable, it is stored as a hash. Take it
+out of the configuration instead: stop the container, open
+`printers/settings.json`, remove the `AUTH_PASSWORD` line from `values`, and
+start the container again. The Web UI is open again until a new password is set
+on the settings page.
+
+If the container is what sets it, through an `AUTH_PASSWORD` environment
+variable on an installation that never saved the field, change it there instead.
+A value saved in the Web UI wins over the variable.
+
+Sessions end whenever the password changes, on every device, because the cookie
+is signed with it. A browser that suddenly asks again after somebody changed the
+password is doing what it should.
+
 ## Diagnostics and privacy
 
 Logs and configuration describe a home network: the address of every printer and of Spoolman, the serial numbers, and in `printers.json` the access codes. Every download that can carry them asks first and offers an anonymised variant.

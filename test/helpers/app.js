@@ -37,6 +37,7 @@ export async function startTestApp({ seedPrinters } = {}) {
     const { registerRoutes } = await import("../../src/routes.js");
     const { printers } = await import("../../src/printers.js");
     const { hostGuard } = await import("../../src/security.js");
+    const { requireAuth } = await import("../../src/auth.js");
 
     const app = express();
     // Same order as backend.js, so a route is exercised behind the guard rather
@@ -44,6 +45,9 @@ export async function startTestApp({ seedPrinters } = {}) {
     // test makes carries an IP address as its host and passes.
     app.use(hostGuard());
     app.use(express.json());
+    // Same order as backend.js. It does nothing until a password is set, so
+    // every other suite is unaffected.
+    app.use(requireAuth());
     registerRoutes(app, printers);
 
     const server = app.listen(0, "127.0.0.1");

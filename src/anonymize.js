@@ -18,6 +18,8 @@
  * of the output rather than just its absence.
  */
 
+import { isPasswordHash } from "./passwords.js";
+
 /** Replaces an access code entirely, per the rule that none of it is useful. */
 export const MASKED_CODE = "XXX";
 
@@ -237,17 +239,25 @@ export function exportPrinters(entries, anonymize) {
 /**
  * The settings as they are handed out in an export.
  *
- * Only the four fields that carry an address are touched; every other setting
- * is a number or a flag and says nothing about the installation.
+ * Only the fields that carry an address are touched; every other setting is a
+ * number or a flag and says nothing about the installation. A stored password
+ * hash is removed from both variants, like the printer access code: the values
+ * handed to this function come from the settings view, which already leaves it
+ * out, and this is what keeps that true if the caller ever changes.
  *
  * @param {object} values - the settings values
  * @param {boolean} anonymize - whether to mask the addresses
  * @returns {object} the values for the export
  */
 export function exportSettings(values, anonymize) {
-    if (!anonymize) return { ...values };
+    const withoutSecrets = { ...values };
+    for (const [key, value] of Object.entries(withoutSecrets)) {
+        if (isPasswordHash(value)) withoutSecrets[key] = MASKED_CODE;
+    }
 
-    const out = { ...values };
+    if (!anonymize) return withoutSecrets;
+
+    const out = withoutSecrets;
     for (const key of ["SPOOLMAN_ENDPOINT", "SPOOLMAN_FQDN"]) {
         if (out[key]) out[key] = maskUrl(out[key]);
     }

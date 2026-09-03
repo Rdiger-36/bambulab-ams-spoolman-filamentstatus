@@ -21,4 +21,8 @@ export const state = {
     // Web UI left open on a refused host retries forever, so each distinct
     // reason is logged once instead of on every attempt.
     refusedRequestsLogged: new Set(),
+    // Failed login attempts per remote address, see auth.js. Deliberately not
+    // persisted: a restart clearing the lockouts costs an attacker the seconds
+    // it takes to restart the service, which they cannot trigger anyway.
+    loginFailures: new Map(),
 };

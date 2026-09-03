@@ -1862,3 +1862,63 @@ input:checked + .slider:before {
   .sd-swatch { width: 48px; height: 48px; }
   .sd-edit { opacity: 0.65; }
 }
+
+/* ---- Login page ---- */
+
+.login-card {
+  max-width: 380px;
+  margin: 12vh auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  padding: 22px 24px 26px;
+  box-shadow: var(--shadow-card);
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.15em;
+  text-align: center;
+}
+
+.login-lead {
+  margin: 0 0 6px;
+  text-align: center;
+  font-size: 0.88em;
+  opacity: 0.75;
+}
+
+.login-label {
+  font-size: 0.88em;
+  font-weight: 600;
+}
+
+.login-card input[type="password"] {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--control-bg);
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-card input[type="password"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.login-card button {
+  margin-top: 4px;
+}
+
+.login-error {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--danger-solid);
+  text-align: center;
+}

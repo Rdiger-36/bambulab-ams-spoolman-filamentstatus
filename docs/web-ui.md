@@ -2,7 +2,7 @@
 
 [← Documentation](README.md)
 
-Reachable on `http://<host>:4000`. No authentication, see the warning under [Settings](settings.md).
+Reachable on `http://<host>:4000`. It asks for a password only if one is set under **Network access**, see [Settings](settings.md).
 
 The dashboard shows the running print, its layer progress, and every loaded spool joined with what the print needs from it: what is on the spool, how much this print takes, and what is left afterwards.
 
