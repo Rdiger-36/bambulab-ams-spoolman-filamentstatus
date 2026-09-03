@@ -363,7 +363,33 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!parts.length) return "";
-        return `<span class="ams-env-unit">AMS ${escapeHtml(unitKey)}</span>${parts.join("")}`;
+        const unit = amsUnitLabel(unitKey, env);
+        return `<span class="ams-env-unit"${unit.title ? ` title="${escapeHtml(unit.title)}"` : ""}>${escapeHtml(unit.label)}</span>${parts.join("")}`;
+    }
+
+    // Names the unit as far as its own report allows.
+    //
+    // Nothing in the payload states the model, so it is read off what the unit
+    // can do. A single slot unit sits at AMS id 128 and up, which is the HT and
+    // nothing else. A dryer, which is `dry_time` and `dry_setting`, only exists
+    // on the 2 Pro and the HT. What is left, a unit that reports the five step
+    // level and nothing more, is either an original AMS or an AMS Lite: the two
+    // send byte for byte the same fields, so anything more precise than "AMS"
+    // there would be a guess. See extractAmsEnvironment() in src/ams.js and
+    // test/ams.env.test.js, which carries the four shapes seen on real hardware.
+    function amsUnitLabel(unitKey, env) {
+        if (unitKey.startsWith("HT-")) {
+            return { label: `AMS HT ${unitKey.slice(3)}`, title: "Single slot unit with a dryer" };
+        }
+
+        if (env?.drying) {
+            return { label: `AMS 2 Pro ${unitKey}`, title: "Reports a humidity percentage, a temperature and a dryer" };
+        }
+
+        return {
+            label: `AMS ${unitKey}`,
+            title: "An original AMS or an AMS Lite: both report the humidity level and nothing else, so the report cannot tell them apart",
+        };
     }
 
     // Rewrites the headers of the tables already on screen. The readings arrive

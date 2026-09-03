@@ -24,6 +24,7 @@ Unreleased
          - What the page is showing is picked in the page instead. The dashboard headline names the printer and the log viewer names the log, and that name is now the picker; with one printer it stays plain text, because there is nothing to pick
          - The download of a log left the menu bar and sits above the log it downloads, where a page action belongs
          - On a phone the three pages fold into one button
+      - The header of an AMS unit names the unit: "AMS 2 Pro A", "AMS HT B". Nothing in the report states the model, so it is read off what the unit can do: a single slot unit is an HT, a dryer with a humidity percentage is a 2 Pro. An original AMS and an AMS Lite send byte for byte the same fields and stay a plain "AMS", which the tooltip of the name says
       - On a phone the header of an AMS unit is a band rather than a line of small print, so the long column of spool cards shows where one unit ends and the next begins, and a running drying cycle gets its own line under the humidity and the temperature
       - The action button of a spool sits in the middle of its column instead of at its left edge, so the buttons of two rows stand under each other whatever their labels say. On a phone nothing changes: there every cell is its own labelled line
       - Every page keeps to the same width as the settings page, 1180 px, instead of stretching to the window. The menu bar and the content under it line up, and a wide screen no longer pulls a spool table or a log line across the whole desk
