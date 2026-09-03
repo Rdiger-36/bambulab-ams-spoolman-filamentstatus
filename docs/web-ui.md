@@ -40,7 +40,7 @@ In manual mode the merge and create actions of a Bambu Lab spool work the same w
 
 The same bar sits on every page and carries two things: where you can go, and your session. Left the three pages with the one you are on marked, right the dark and light mode switch and, once a [password](settings.md#the-web-ui-password) is set, **Log out**. **Logs** lists the server log and one entry per printer, by name, so the log you open is the one you picked rather than the one belonging to whichever printer was selected last. On a phone the three pages fold into one button.
 
-What the page is showing is picked in the page. The dashboard headline names the printer and the log viewer names the log, and that name is the control: click "Loaded Spools on AMS from Bambu P2S" and the printers drop down. With a single printer there is nothing to pick and the name is plain text. The download of a log sits with the log for the same reason, above the box it belongs to.
+What the page is showing is picked in the page. The dashboard headline names the printer and the log viewer names the log, and that name is the control: click "Loaded Spools on Bambu P2S" in the head of the status card and the printers drop down. With a single printer there is nothing to pick and the name is plain text. The download of a log sits with the log for the same reason, above the box it belongs to.
 
 ![Menu](images/menu.png)
 

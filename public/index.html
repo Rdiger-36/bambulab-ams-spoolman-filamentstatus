@@ -22,17 +22,20 @@
 
   <!-- App Content -->
   <div id="app" class="page-width">
-    <h1>Loaded Spools on AMS from <span id="printer-name"></span></h1>
     <div id="status" class="status-card">
+      <!-- What this is, what it runs on, and whether it is running: the
+           headline, the tracking mode and the switch, in that order. The
+           printer name is a picker, filled by menu.js. -->
       <div class="status-head">
+        <h1 class="status-title">Loaded Spools on <span id="printer-name"></span></h1>
         <span id="tracking-mode" class="pill"></span>
-        <span class="monitoring-align">
-          Monitoring
-          <label class="switch">
+        <label class="status-toggle" title="Reads the AMS of this printer and writes what it finds to Spoolman">
+          <span>Sync</span>
+          <span class="set-switch set-switch-alarm">
             <input type="checkbox" id="monitoring-toggle">
-            <span class="slider round"></span>
-          </label>
-        </span>
+            <span class="set-switch-track"></span>
+          </span>
+        </label>
       </div>
       <div class="status-grid">
         <div class="status-item">

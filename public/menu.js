@@ -413,7 +413,7 @@ function logChoices() {
     const openSerial = params.get("serial");
 
     const choices = [{
-        label: "Server log",
+        label: "Server",
         current: !openSerial,
         action: () => { window.location.href = "logs.html?name=server"; },
     }];
@@ -477,7 +477,7 @@ function renderLogEntries() {
     const serverOpen = currentPage() === "logs" && !openSerial;
 
     panel.innerHTML = "";
-    panel.appendChild(panelEntry("Server log", () => {
+    panel.appendChild(panelEntry("Server", () => {
         window.location.href = "logs.html?name=server";
     }, { current: serverOpen }));
 
