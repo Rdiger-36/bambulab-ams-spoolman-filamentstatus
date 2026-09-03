@@ -115,8 +115,7 @@ const TPU = { type: "TPU", material: "TPU 90A", idx: "GFU02", name: "U02-T0", no
 export const AMS_UNITS = [
     {
         id: "0",
-        humidity: "4",
-        temp: "28.5",
+        ...amsProEnvironment("4", "42", "28.5"),
         tray: [
             // Already connected to a Spoolman spool below, so this slot proves
             // the colours survive the round trip through a filament record.
@@ -133,8 +132,9 @@ export const AMS_UNITS = [
     },
     {
         id: "1",
-        humidity: "5",
-        temp: "28.1",
+        // The one unit running its drying cycle, so the dashboard header has
+        // something to show for it.
+        ...amsProEnvironment("5", "51", "28.1", { dryTime: 214, dryTemp: 55, dryHours: 8, filament: "PLA" }),
         tray: [
             bambuTray(0, { ...SILK, colors: ["000000FF", "A34342FF"], uuid: "3E6B9F04C71D42A8B5E092F7A4C61D38", tagUid: "BAA8227400000110", remain: 92 }),
             bambuTray(1, { ...SILK, colors: ["1E63BFFF", "713D9CFF"], uuid: "7A41D8E52B6C4390A8F1057E9C2B4D66", tagUid: "BAA8227400000111", remain: 55 }),
@@ -147,8 +147,7 @@ export const AMS_UNITS = [
     },
     {
         id: "2",
-        humidity: "4",
-        temp: "27.8",
+        ...amsProEnvironment("4", "45", "27.8"),
         tray: [
             // Connected to a Spoolman spool below as well, and longitudinal, so
             // the two ways of drawing a colour set sit next to each other.
@@ -160,8 +159,7 @@ export const AMS_UNITS = [
     },
     {
         id: "3",
-        humidity: "6",
-        temp: "27.4",
+        ...amsProEnvironment("4", "39", "27.4"),
         tray: [
             bambuTray(0, { ...GRADIENT, colors: ["4EC939FF", "B6FF43FF"], uuid: "A19D573E0B4C48F2861E9D3A5F7C204B", tagUid: "BAA8227400000130", remain: 96 }),
             bambuTray(1, { ...GRADIENT, colors: ["FFFFFFFF", "E94B3CFF"], uuid: "F4082C6B9A5D41E7B3160F8D2E9A7C51", tagUid: "BAA8227400000131", remain: 68 }),
@@ -186,9 +184,40 @@ export const AMS_UNITS = [
     htUnit(135, [thirdPartyTray(0, "0ACC38FF")]),
 ];
 
-/** Wraps a tray list in the AMS unit envelope. */
+/**
+ * The environment block of an AMS 2 Pro, which is the only kind of unit that
+ * reports all of it: a humidity level from 1 (driest) to 5, the percentage
+ * behind it, a temperature and the drying cycle. An original AMS reports the
+ * level alone and a temperature of "0.0", an AMS Lite reports none of it, which
+ * is why extractAmsEnvironment() has to treat every field as optional.
+ *
+ * `dry_temperature` and `dry_duration` are -1 while nothing is set, exactly as
+ * a P2S reports them.
+ */
+function amsProEnvironment(level, percent, temp, drying = null) {
+    return {
+        humidity: level,
+        humidity_raw: percent,
+        temp,
+        dry_time: drying?.dryTime ?? 0,
+        dry_sf_reason: [],
+        dry_setting: {
+            dry_duration: drying?.dryHours ?? -1,
+            dry_filament: drying?.filament ?? "",
+            dry_temperature: drying?.dryTemp ?? -1,
+        },
+    };
+}
+
+/**
+ * Wraps a tray list in the AMS unit envelope.
+ *
+ * The AMS HT reports a humidity level of "0" next to a valid percentage, taken
+ * from the report in issue #40, so the header falls back to the percentage for
+ * it.
+ */
 function htUnit(id, tray) {
-    return { id: String(id), humidity: "3", temp: "26.9", tray };
+    return { id: String(id), info: "2004", ...amsProEnvironment("0", "24", "26.9"), tray };
 }
 
 /**

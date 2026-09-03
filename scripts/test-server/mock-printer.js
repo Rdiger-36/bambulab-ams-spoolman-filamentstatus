@@ -157,10 +157,6 @@ function buildReport() {
                 tray_read_done_bits: "ffff",
                 tray_reading_bits: "0",
                 version: 1,
-                // handleMqttMessage() treats an empty humidity or temperature as
-                // an incomplete report and skips the whole update.
-                humidity: "4",
-                temp: "28.0",
             },
         },
     });

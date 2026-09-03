@@ -1,4 +1,17 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - New Features:
+      - Each AMS unit says how it is doing above its slot table: relative humidity, the temperature inside it, and the drying cycle while one is running, with its target temperature and the minutes left
+         - What is shown depends on which unit it is, because the units report different things. An AMS 2 Pro and an AMS HT carry a real sensor and a dryer and show all of it. The original AMS and the AMS Lite report only the five step humidity level and show that, since their temperature field is a constant "0.0" rather than a reading. The AMS Lite has no humidity sensor either and was observed always reporting 5, which nothing in the payload separates from an original AMS whose air really is that humid, so the level says where it comes from. The external spool holder reports none of it and gets no header
+         - The readings are display only. They never reach Spoolman, they are kept out of the change detection that decides when a slot is reprocessed, and they are pushed to the browser at most every 30 seconds, so a unit that warms up by a tenth of a degree does not cause traffic
+   - Fixes:
+      - An AMS update is no longer let through by a check that could not fail. The report was tested for empty humidity and temperature fields on the AMS block, where a P2S never puts them: the check compared undefined against an empty string and passed on every report. The fields sit on the units, and that is where they are read now, while a unit that leaves one of them out entirely still counts as valid rather than as an incomplete report
+   - Development:
+      - extractAmsEnvironment() in src/ams.js is the one reading of the per-unit environment fields, covered in test/ams.env.test.js against the four unit shapes that have been observed: an AMS 2 Pro on a P2S, the AMS HT from issue #40, the original AMS from issue #7 and the AMS Lite from issue #4
+      - The mock printer of scripts/test-server reports the environment block the way real hardware does, one unit drying, and no longer sends the two fields on the AMS block that no firmware has been seen to send
+      - The release notes of every version, pre-releases included, carry the merged pull requests grouped into New Features, Fixes, Deprecations, Documentation and Maintenance, each naming who wrote it, plus the contributors of that release and the compare link. The grouping is the label a pull request carries, configured in .github/release.yml, which is why they are labelled before they are merged. A pre-release compares against whatever came before it, so a dev build lists only its own step, while a stable version compares against the last stable one and carries the whole line of work
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.7
    - New Features:
       - A spool that runs empty is archived in Spoolman on its own, off by default (issue #65)

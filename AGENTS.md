@@ -114,6 +114,13 @@ Not punctuation, and therefore allowed:
   wait. A PR may only be created once the user has given an explicit go-ahead
   for that specific PR. A general permission is not a standing one; ask again
   for the next.
+- Every pull request carries a label before it is merged, because the release
+  notes are grouped by it: `enhancement`, `bug`, `deprecation`, `documentation`
+  or `maintenance` (refactor, build, CI, dependencies, version bump).
+  `ignore-for-release` leaves one out entirely. A PR that does two things takes
+  both labels and is listed once, under whichever section comes first in
+  `.github/release.yml`. An unlabelled PR is not an error, it just lands under
+  "Everything else", which is where nobody looks.
 
 ### Scope
 

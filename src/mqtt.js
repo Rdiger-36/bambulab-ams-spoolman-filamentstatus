@@ -24,6 +24,7 @@ import { getMapping, clearMapping } from "./mappings.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
     processData,
+    extractAmsEnvironment,
     extractComparableTrayData,
     correctRemainInt,
     slotIsOccupied,
@@ -58,6 +59,44 @@ export function broadcastSSE(data) {
 /** Pushes one slot's new state to the dashboard. */
 export function broadcastSlotUpdate(printerId, spool) {
     broadcastSSE({ type: "slot_update", printer: printerId, spool: toClientSpool(spool) });
+}
+
+/**
+ * How long two AMS environment broadcasts have to be apart, in milliseconds.
+ *
+ * Humidity and temperature are the two values the printer reports on every
+ * report and that never sit still, which is why they are kept out of the tray
+ * comparison entirely (see extractComparableTrayData in ams.js). They are shown
+ * now, so they have to travel, but a tenth of a degree is not worth a push to
+ * every browser every few seconds.
+ */
+const AMS_ENV_BROADCAST_INTERVAL = 30_000;
+
+/**
+ * Keeps the AMS environment readings current and pushes them to the dashboard.
+ *
+ * Deliberately outside the AMS update interval and outside the tray change
+ * detection: the readings are display only, they never touch Spoolman, and a
+ * user watching a unit dry wants them sooner than the next spool update. The
+ * in-memory value is refreshed on every report, so /api/status answers with what
+ * arrived last; only the broadcast is throttled, and only a changed reading is
+ * sent at all.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object[]} amsUnits - `print.ams.ams` from the report
+ * @param {Date} now - the time the report was processed
+ */
+function broadcastAmsEnvironment(printer, amsUnits, now) {
+    const amsEnv = extractAmsEnvironment(amsUnits);
+    const serialised = JSON.stringify(amsEnv);
+    printer.amsEnv = amsEnv;
+
+    if (serialised === printer.lastAmsEnvBroadcast) return;
+    if (now.getTime() - (printer.lastAmsEnvBroadcastTime || 0) < AMS_ENV_BROADCAST_INTERVAL) return;
+
+    printer.lastAmsEnvBroadcast = serialised;
+    printer.lastAmsEnvBroadcastTime = now.getTime();
+    broadcastSSE({ type: "ams_env", printer: printer.id, amsEnv });
 }
 
 // Print states that signal the end of a print job
@@ -383,13 +422,23 @@ async function handleMqttMessage(printer, topic, message) {
 
             if (data?.print?.ams?.ams) {
                 const currentTime = new Date();
+                broadcastAmsEnvironment(printer, data.print.ams.ams, currentTime);
                 console.debug(printer.name, printer.logFilePath, "Check next Update Interval");
 
                 const intervalElapsed = currentTime.getTime() - printer.lastUpdateTime.getTime() > printer.update_interval;
                 if (intervalElapsed || printer.first_run) {
                     const wasFirstRun = printer.first_run;
                     printer.first_run = false;
-                    const isValidAmsData = data.print.ams.humidity !== "" && data.print.ams.temp !== "";
+                    // An incomplete report, which the firmware signals by sending
+                    // the environment fields as empty strings. They used to be
+                    // read off the AMS block, where a P2S never puts them: the
+                    // check compared undefined against "" and passed every time.
+                    // They sit on the units, and a unit that reports none at all
+                    // is an AMS Lite rather than an incomplete report, so a
+                    // missing field still counts as valid.
+                    const isValidAmsData = data.print.ams.ams.every(unit =>
+                        unit?.humidity !== "" && unit?.temp !== ""
+                    );
 
                     console.debug(printer.name, printer.logFilePath, "Fetch Data from Spoolman");
                     let spools = await getSpoolmanSpools();
