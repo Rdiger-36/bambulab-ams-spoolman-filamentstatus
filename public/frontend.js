@@ -2409,7 +2409,11 @@ document.addEventListener("DOMContentLoaded", () => {
         updateElementText("last-mqtt-update", data.lastMqttUpdate);
         updateElementText("last-mqtt-ams-update", data.lastMqttAmsUpdate);
         currentPrinterName = data.printerName || "";
-        updateElementText("printer-name", data.printerName);
+        // The headline names the printer and is the picker over the others, so
+        // it is written by menu.js rather than here. This only says which
+        // printer the dashboard settled on, which it decides itself on the
+        // first load.
+        syncMenuPrinter(data.PRINTER_ID);
         updateElementText("mode", data.MODE);
         updateElementText("printer-serial", data.PRINTER_ID);
         

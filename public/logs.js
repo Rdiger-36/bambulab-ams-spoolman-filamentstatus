@@ -16,11 +16,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const printerSerial = getQueryParam("serial");
   const name = getQueryParam("name");
 
+  // The headline names the log and is the picker over the others; menu.js
+  // fills it once the printer list is there. See renderTitlePicker().
   if (name === "server") {
-    document.getElementById("headline").textContent = "Server";
     logAPI = `./api/logs/server?limit=250`;
   } else if (printerSerial) {
-    document.getElementById("headline").textContent = `${name} - ${printerSerial}`;
     logAPI = `./api/logs/${printerSerial}?limit=250`;
   } else {
     logContainer.innerHTML = '<p>Error: No printer serial provided in the URL.</p>';
