@@ -68,6 +68,8 @@ Locked out of everything, keys included? Stop the container, delete `printers/ap
 
 Keys work whether or not a Web UI password is set. Without a password nothing is behind a login anyway and a key changes nothing about who can reach the service; with one, a key is the way in for everything that cannot log in.
 
+Setting a password does not touch the keys. Every browser session ends, every key keeps working, so a key created while the Web UI stood open to the network still has full access afterwards. The settings page says so and names the keys when you turn the password on for the first time; revoke the ones you do not recognise before you do.
+
 > [!NOTE]
 > The key travels in a header on purpose, never in the URL. A URL ends up in the log of every proxy in front of this service, and a value a browser can put in a URL is one a page on another site could put there too. A header cannot be set on a cross site request without a preflight, which the request guard refuses, so a key cannot be used against you by a page you happen to have open.
 

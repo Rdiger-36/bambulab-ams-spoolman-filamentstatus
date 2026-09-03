@@ -649,11 +649,14 @@ function collectSettings() {
 
 async function saveSettings(event) {
     event.preventDefault();
+    const values = collectSettings();
+    if (!await confirmKeysSurvivePassword(values)) return;
+
     const button = document.getElementById("save-settings");
     button.disabled = true;
 
     try {
-        const result = await sendJson("./api/settings", "PUT", { revision, values: collectSettings() });
+        const result = await sendJson("./api/settings", "PUT", { revision, values });
         applyView(result);
 
         if (restartPending) {
@@ -669,6 +672,38 @@ async function saveSettings(event) {
             : `Could not save: ${err.message}`, "bad");
         button.disabled = false;
     }
+}
+
+/**
+ * Says what a first password does not do, before it is saved.
+ *
+ * Setting one ends every browser session, which is what people expect it to do,
+ * and leaves every API key working, which is what they do not: a key is not
+ * signed with the password and nothing about it changes here. Somebody turning
+ * the password on is usually closing the Web UI to the network, and a key
+ * created while it stood open keeps full access afterwards.
+ *
+ * Only for the step from no password to a password. Changing one that is
+ * already set is not the surprising case: the keys were created next to it.
+ *
+ * @param {object} values - what the form is about to send
+ * @returns {Promise<boolean>} whether the save should go ahead
+ */
+async function confirmKeysSurvivePassword(values) {
+    const typed = typeof values.AUTH_PASSWORD === "string" && values.AUTH_PASSWORD !== "";
+    if (!typed || hasValue.AUTH_PASSWORD || !apiKeys.length) return true;
+
+    const list = apiKeys.map(key => `<li>${escapeHtml(key.name)}</li>`).join("");
+    return confirmAction({
+        title: "These API keys keep working",
+        html: `<p>The password ends every browser session, but it does not touch an API key. These
+                  ${apiKeys.length === 1 ? "key keeps" : `${apiKeys.length} keys keep`} full access to this
+                  service without ever being asked for it:</p>
+               <ul class="set-list">${list}</ul>
+               <p class="set-note">That is what a key is for. Revoke the ones you do not recognise, under
+                  API keys in this card, and save again.</p>`,
+        okLabel: "Set the password",
+    });
 }
 
 /* ---- Printers ---- */
