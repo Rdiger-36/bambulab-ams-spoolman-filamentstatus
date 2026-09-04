@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.11 has to be folded in here as well, or regenerate the
+Every dev build after dev.12 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -66,6 +66,15 @@ Version 1.3.0
       - The whole Web UI works on a phone. An AMS unit is one card there, with its header as the head and its slots as sections inside it, instead of four free floating tiles; the printer list, the spool tables and the API keys are cards with their labels above the values instead of a table behind a sideways scroll; and a dialog fits inside the screen
       - Every page keeps to the same width as the settings page, 1180 px, instead of stretching to the window, so the menu bar and the content under it line up and a wide screen no longer pulls a spool table or a log line across the whole desk
       - New ENVs: LEGACY_MODE, DATA_DIR, LOG_DIR, SUPERVISOR, LOG_MAX_SIZE_MB, LOG_KEEP_SERVER, LOG_KEEP_PRINTER, ALLOWED_HOSTS, AUTH_PASSWORD
+      - A finished print leaves a summary behind, opened from the "consumption booked" label on the card: result, start, end, duration, layers, and one row per filament with the slot it ran from, the grams and the spool it was booked onto
+         - The table is every filament of the sliced file and what became of it, so a line without a booking reads as part of the plate rather than as something the service mislaid. A filament that was not booked carries the reason, and the two failures are named apart because only one can be acted on: a slot printed it and no Spoolman spool is connected or assigned to that slot, or no slot of the printer carried it at all
+         - Filaments are named the way the slot tables name them, vendor, material and colour with the swatch in front, taken from the record the booking wrote or from the slot where the printer itself named it in print.mapping
+         - An error the printer names is carried into it, including the code a print stopped by hand reports. It arrives a report after the state does, so it is collected across reports rather than read from the one that ends the job
+         - The summary is held in memory only. It is dropped when the next print starts and does not survive a restart
+      - The card returns to idle on its own once a print has been over for "Clear print result after", ten minutes by default, 0 to keep it until it is cleared by hand. Next to the booking label is a Clear button carrying the countdown, which does it now; the summary stays reachable as "Last print" until the next print starts
+      - The card says more about a running print: when it started, how long it has been going, when it is expected to end, and a badge naming what the printer is busy with when it is not laying down filament, amber while it is getting ready
+         - The printer reports no start time of its own, so it is measured here and left out rather than invented after a restart mid print. The time left is stated at the precision the printer has, "~ 3 min" or "~ 6 Days 4 hours 30 min", and a paused print shows what it still needs instead of an end time that would move for as long as the pause lasts
+         - Stage names are the ones the community has settled on rather than a published table, so a code nobody has a name for is shown as its number
    - Fixes:
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it
@@ -85,6 +94,7 @@ Version 1.3.0
       - The confirmation dialogs of "Merge Spool", "Create Spool" and "Create Filament & Spool" fit a phone. They carry the tray UUID of the slot, 32 characters with nothing to break at, so the table could not shrink below its own content and a merge ended mid word. A value may break inside a word now, and on a phone the rows stack, the label above the value it names
       - Several dashboard fixes: the theme no longer flashes on page load, the confirmation dialog stays usable, the legacy table uses the full width, and a spool the printer cannot identify is labelled "3rd party"
       - The API is no longer reachable from every other website the browser has open. Every response carried "Access-Control-Allow-Origin: *", which tells the browser to hand the answer to any page that asks, so a page on any other site could read the printer list and the settings of an installation on the local network and could write to them as well. The header is gone, and a request that changes something is refused when it comes from another site, while a call from a script or a home automation, which carries no site at all, keeps working
+      - The layer counter no longer runs past the end of the print. A 26 layer plate showed "Layer 27 / 26" and 104% on its last layer, because the sliced file reports the highest layer index while the printer reports the layer count once it has finished, and one was added to both
    - Development:
       - Node 22, and the README is rebuilt around G-code tracking with new screenshots
       - One projection for what a client sees of a slot, one consumption match, and the rules both sides apply live in public/shared.js instead of in two implementations
