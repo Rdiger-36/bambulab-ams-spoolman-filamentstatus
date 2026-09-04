@@ -103,6 +103,17 @@
     </div>
   </dialog>
 
+  <!-- The closing report of the last print. Its own dialog rather than
+       #info-dialog for the same reason as the one above: it only reads, so the
+       confirm button that one is shaped around has nothing to do here. -->
+  <dialog id="print-summary-dialog">
+    <h3 id="print-summary-title"></h3>
+    <div id="print-summary-content"></div>
+    <div class="button-container">
+      <button class="btn" id="print-summary-close">Close</button>
+    </div>
+  </dialog>
+
   <dialog id="info-dialog">
     <h3><span id="button-header" style="display: block; text-align: center;"></span></h3>
     <div id="dialog-content"></div>

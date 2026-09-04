@@ -174,6 +174,73 @@ export function formatDate(date) {
 }
 
 /**
+ * A duration, at the precision the length of it deserves.
+ *
+ * Three shapes, because a print is anything from a ten minute plate to a five
+ * day one and no single shape reads well across that:
+ *
+ *   under an hour   mm:ss             05:13
+ *   under a day     HH:mm:ss          05:13:44
+ *   a day and over  D Days HH:mm      2 Days 05:13
+ *
+ * Seconds fall away once days are on the line: at that length they are noise,
+ * and the label they sit in is rewritten every second anyway. Days are not
+ * padded, so a print goes from "23:59:59" to "1 Days 00:00".
+ *
+ * Clock shape rather than prose throughout, because prose changes width as it
+ * counts. "10 min" to "9 min" to "59s" moved everything after it along the line
+ * on every step, which is what this replaced.
+ */
+export function formatCounter(ms) {
+    const total = Math.max(0, Math.round(ms / 1000));
+    const pad = value => String(value).padStart(2, "0");
+
+    const seconds = pad(total % 60);
+    const minutes = pad(Math.floor(total / 60) % 60);
+    const hours = Math.floor(total / 3600) % 24;
+    const days = Math.floor(total / 86400);
+
+    if (days) return `${days} Days ${pad(hours)}:${minutes}`;
+    if (total >= 3600) return `${pad(hours)}:${minutes}:${seconds}`;
+    return `${minutes}:${seconds}`;
+}
+
+/**
+ * Whether every moment of a print falls on today, which is the only case where
+ * the times alone say when something happened.
+ *
+ * Asked once for the pair rather than per timestamp, so the two ends of a print
+ * are always written the same way. A job that started yesterday and ends today
+ * would otherwise read "02.09.2026 22:10:04" next to a bare "07:31", and the
+ * short one is the half that needs the date most.
+ *
+ * @param {...(number|null|undefined)} moments - epoch milliseconds
+ * @returns {boolean} whether all of them are today, and none is missing
+ */
+export function allToday(...moments) {
+    const today = new Date().toDateString();
+    return moments.every(at => at != null && new Date(at).toDateString() === today);
+}
+
+/**
+ * One end of a print: the time of day while it all happens today, and the full
+ * date with seconds as soon as it does not.
+ *
+ * `withDate` is the answer allToday() gave for the whole pair, not a question
+ * about this one timestamp.
+ *
+ * @param {number} at - epoch milliseconds
+ * @param {boolean} withDate - whether to spell out the date
+ * @returns {string} the moment
+ */
+export function formatMoment(at, withDate) {
+    const date = new Date(at);
+    if (withDate) return formatDate(date);
+
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
  * The unit id the external spool holder is addressed under, and the label it
  * produces. The printer reports the holder as `print.vir_slot`, whose entry
  * carries `id` 255, so the number is the printer's rather than an invention.
@@ -195,6 +262,39 @@ export const EXTERNAL_SLOT = "External";
  * first place. Two lists would let the dialog offer what the route then refuses.
  */
 export const ACTIVE_PRINT_STATES = ["PREPARE", "RUNNING", "PAUSE"];
+
+/**
+ * The layer counter as a person reads it, from two numbers that do not count
+ * the same way.
+ *
+ * `totalLayers` comes out of the sliced file, where parseSliceInfo() takes it
+ * from the highest index in `layer_ranges`: a 25 there means the layers 0 to
+ * 25, so 26 of them. `layerNum` comes from MQTT and is 0-based while the print
+ * runs, which is what makes calcPartialConsumption() line up with those same
+ * ranges.
+ *
+ * The one place the two part company is the end of a print. A P2S sets
+ * `layer_num` to the layer count when it finishes, and 26 on a plate whose
+ * highest index is 25 is one past the last layer. Adding one to it gave
+ * "Layer 27 / 26" and 104%, so neither is allowed past the total: a layer after
+ * the last one does not exist under either reading of the field.
+ *
+ * Lives here rather than in the dashboard because it is the same convention the
+ * server's consumption maths rests on, and it was nowhere written down when it
+ * broke.
+ *
+ * @param {number|null|undefined} layerNum - `layer_num` from MQTT, 0-based
+ * @param {number|null|undefined} totalLayers - `totalLayers` from the slice, a
+ *   highest index rather than a count
+ * @returns {{layer: number, total: number|null, percent: number|null}}
+ */
+export function humanLayers(layerNum, totalLayers) {
+    const total = totalLayers != null ? totalLayers + 1 : null;
+    const counted = (layerNum ?? 0) + 1;
+    const layer = total != null ? Math.min(counted, total) : counted;
+
+    return { layer, total, percent: total ? Math.round((layer / total) * 100) : null };
+}
 
 /**
  * The actions a slot can offer, as `option` on the UI spool.

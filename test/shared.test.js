@@ -169,3 +169,86 @@ test("the dashboard imports them rather than keeping a copy", () => {
         assert.equal(frontend.includes(gone), false, `${gone} is back in public/frontend.js`);
     }
 });
+
+// The layer counter of the dashboard, and the off-by-one that reached it.
+//
+// A P2S printing the 26 layer "Cube" plate showed "Layer 27 / 26" and 104% on
+// its last layer: the slice reports the highest layer index (25) while the
+// printer reports the layer count (26) once it is done, and one was added to
+// both.
+test("the layer counter never runs past the end of the print", async () => {
+    const { humanLayers } = await import("../public/shared.js");
+
+    // The slice's 25 is a highest index, so the plate has 26 layers.
+    assert.deepEqual(humanLayers(0, 25),  { layer: 1,  total: 26, percent: 4 });
+    assert.deepEqual(humanLayers(12, 25), { layer: 13, total: 26, percent: 50 });
+    assert.deepEqual(humanLayers(25, 25), { layer: 26, total: 26, percent: 100 });
+
+    // What the P2S reports when it has finished: the count, one past the last
+    // index. This is the case that produced 27 / 26 and 104%.
+    assert.deepEqual(humanLayers(26, 25), { layer: 26, total: 26, percent: 100 });
+    // And anything further out, for a printer that counts differently again.
+    assert.deepEqual(humanLayers(99, 25), { layer: 26, total: 26, percent: 100 });
+});
+
+test("the layer counter copes with either number missing", async () => {
+    const { humanLayers } = await import("../public/shared.js");
+
+    // No slice info: the layer is still worth showing, the total is not known.
+    assert.deepEqual(humanLayers(3, null), { layer: 4, total: null, percent: null });
+    // No report yet, which is what an idle printer looks like.
+    assert.deepEqual(humanLayers(null, 25), { layer: 1, total: 26, percent: 4 });
+    assert.deepEqual(humanLayers(null, null), { layer: 1, total: null, percent: null });
+});
+
+// The clock behind the two counters on the dashboard: how long the print has
+// been running, and how long its result still has before it clears itself.
+// Three shapes, because a print is anything from a ten minute plate to a five
+// day one and no single one reads well across that.
+test("a duration under an hour is minutes and seconds", async () => {
+    const { formatCounter } = await import("../public/shared.js");
+    const s = 1000, m = 60 * s;
+
+    assert.equal(formatCounter(0), "00:00");
+    assert.equal(formatCounter(5 * s), "00:05");
+    assert.equal(formatCounter(90 * s), "01:30");
+    assert.equal(formatCounter(59 * m + 59 * s), "59:59");
+
+    // A deadline that has passed, not a count upwards again.
+    assert.equal(formatCounter(-5 * s), "00:00");
+});
+
+test("an hour brings the hours in, a day drops the seconds", async () => {
+    const { formatCounter } = await import("../public/shared.js");
+    const s = 1000, m = 60 * s, h = 60 * m, d = 24 * h;
+
+    assert.equal(formatCounter(h), "01:00:00");
+    assert.equal(formatCounter(5 * h + 13 * m + 44 * s), "05:13:44");
+    assert.equal(formatCounter(23 * h + 59 * m + 59 * s), "23:59:59");
+
+    // At this length the seconds are noise, so they go.
+    assert.equal(formatCounter(d), "1 Days 00:00");
+    assert.equal(formatCounter(2 * d + 5 * h + 13 * m + 44 * s), "2 Days 05:13");
+    // Days are not padded, unlike everything behind them.
+    assert.equal(formatCounter(12 * d + 7 * h), "12 Days 07:00");
+});
+
+test("both ends of a print are written the same way", async () => {
+    const { allToday, formatMoment } = await import("../public/shared.js");
+
+    const today = new Date();
+    today.setHours(13, 4, 17, 0);
+    const alsoToday = new Date(today);
+    alsoToday.setHours(17, 49, 3, 0);
+    const yesterday = new Date(today.getTime() - 24 * 3600 * 1000);
+
+    assert.equal(allToday(today.getTime(), alsoToday.getTime()), true);
+    assert.equal(allToday(yesterday.getTime(), today.getTime()), false);
+    // A start lost to a restart is not "today", so the pair takes the long form.
+    assert.equal(allToday(null, today.getTime()), false);
+    assert.equal(allToday(), true);
+
+    // The time alone while it all happens today, the full date once it does not.
+    assert.equal(formatMoment(today.getTime(), false), "13:04");
+    assert.match(formatMoment(today.getTime(), true), /^\d{2}\.\d{2}\.\d{4} 13:04:17$/);
+});

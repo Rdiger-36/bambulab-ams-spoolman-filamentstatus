@@ -284,7 +284,72 @@ h1 {
   gap: 12px;
   flex-wrap: wrap;
 }
-.gc-card-note { margin-left: auto; opacity: 0.7; }
+.gc-card-note {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The booking label and the countdown next to it are buttons rather than text,
+   because both do something: one opens the summary, the other clears the
+   result now. They are styled as links so a card that only reports a finished
+   print does not grow two more grey boxes. */
+.gc-card-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.gc-card-link:hover { opacity: 0.75; }
+.gc-card-link:disabled { cursor: default; opacity: 0.5; }
+.gc-card-booked { color: var(--ok); font-weight: 600; text-decoration-color: #8886; }
+
+/* A clock that is rewritten every second. Tabular figures are the whole of it:
+   every shape formatCounter() produces is fixed length within itself, so the
+   digits changing cannot change the width and no reserve is needed. The label
+   only resizes where the shape itself changes, at an hour and at a day, which
+   happens once each and never at all for the ten minute default. */
+.gc-counter { font-variant-numeric: tabular-nums; }
+
+/* ---- The closing report of a print ---- */
+
+/* Label and value pairs on one line, wrapping to as many lines as the width
+   needs. Used by the summary dialog and by the running print on the card, so
+   the two read alike. The pair is one flex item, so a value never wraps away
+   from the label it belongs to. */
+.gc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0 0 14px;
+  font-size: 0.85em;
+}
+.gc-fact-term { color: var(--text-muted); }
+
+/* Says where the rows of the table come from, so a "not booked" line reads as
+   a filament of the plate rather than as something the service mislaid. */
+.gc-summary-lead {
+  margin: 0 0 6px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.gc-summary-table { margin-top: 4px; }
+/* The reason a filament was not booked, under its result rather than in a
+   column of its own: it is a sentence, and only some rows carry one. */
+.gc-summary-note {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 2px;
+  max-width: 34ch;
+}
+
+#print-summary-content { max-height: 60vh; overflow-y: auto; }
 
 /* Print state badge. Colors follow the .pill light/dark pairs above so the
    badge stays readable in both themes. */

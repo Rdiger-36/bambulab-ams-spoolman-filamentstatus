@@ -83,6 +83,15 @@ export const SETTINGS_SCHEMA = {
         label: "Legacy mode",
         description: "Derives the spool weight from the AMS RFID remain percentage instead of tracking consumption from the sliced G-code. Disables 3rd party spool support and manual assignments.",
     },
+    PRINT_RESET_MINUTES: {
+        type: "integer",
+        default: 10,
+        min: 0,
+        max: 240,
+        group: "tracking",
+        label: "Clear print result after",
+        description: "Minutes a finished print stays on the dashboard before the card returns to idle. Its summary stays reachable until the next print. 0 keeps the result until it is cleared by hand.",
+    },
     UPDATE_INTERVAL: {
         type: "integer",
         default: 120000,
