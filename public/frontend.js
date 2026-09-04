@@ -2,10 +2,12 @@ import {
     ACTIVE_PRINT_STATES,
     EXTERNAL_SLOT,
     SLOT_OPTIONS,
+    allToday,
     correctRemainInt,
     filamentColors,
     formatCounter,
     formatDate,
+    formatMoment,
     humanLayers,
     normColor,
     slotColors,
@@ -2287,9 +2289,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const { layer: humanLayer, total: humanTotal } = humanLayers(summary.layerNum, summary.totalLayers);
 
+        // One decision for both ends of the print, so they are never written
+        // two different ways next to each other. A print whose start was lost
+        // to a restart falls back to the long form, which is the one that says
+        // what it knows without leaning on "today".
+        const sameDay = allToday(summary.startedAt, summary.endedAt);
+
         const facts = [
             ["Result", summary.state],
-            ["Ended", summary.endedAt ? formatDate(new Date(summary.endedAt)) : "unknown"],
+            ["Started", summary.startedAt ? formatMoment(summary.startedAt, !sameDay) : "unknown"],
+            ["Ended", summary.endedAt ? formatMoment(summary.endedAt, !sameDay) : "unknown"],
             ["Duration", formatDuration(summary.durationMs)],
             ["Layers", humanTotal ? `${humanLayer} / ${humanTotal}` : `${humanLayer}`],
         ];

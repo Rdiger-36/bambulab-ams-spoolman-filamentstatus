@@ -174,26 +174,70 @@ export function formatDate(date) {
 }
 
 /**
- * A duration for a label that is redrawn every second.
+ * A duration, at the precision the length of it deserves.
  *
- * Clock shape rather than prose, because prose changes width as it counts:
- * "10 min" to "9 min" to "59s" moved everything after it along the line on
- * every step. Always HH:mm:ss, every field padded, so the width is the same
- * from the first second to the twenty-third hour and nothing after it moves.
+ * Three shapes, because a print is anything from a ten minute plate to a five
+ * day one and no single shape reads well across that:
  *
- * A print can run for days, so days come out in front rather than being
- * added into the hours: "02 Days 05:13:44" says at a glance what "53:13:44"
- * makes you work out. Always "Days", never "Day", because the singular is a
- * character shorter and would move the clock behind it on the second day.
+ *   under an hour   mm:ss             05:13
+ *   under a day     HH:mm:ss          05:13:44
+ *   a day and over  D Days HH:mm      2 Days 05:13
+ *
+ * Seconds fall away once days are on the line: at that length they are noise,
+ * and the label they sit in is rewritten every second anyway. Days are not
+ * padded, so a print goes from "23:59:59" to "1 Days 00:00".
+ *
+ * Clock shape rather than prose throughout, because prose changes width as it
+ * counts. "10 min" to "9 min" to "59s" moved everything after it along the line
+ * on every step, which is what this replaced.
  */
 export function formatCounter(ms) {
     const total = Math.max(0, Math.round(ms / 1000));
     const pad = value => String(value).padStart(2, "0");
 
-    const clock = `${pad(Math.floor(total / 3600) % 24)}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
+    const seconds = pad(total % 60);
+    const minutes = pad(Math.floor(total / 60) % 60);
+    const hours = Math.floor(total / 3600) % 24;
     const days = Math.floor(total / 86400);
 
-    return days ? `${pad(days)} Days ${clock}` : clock;
+    if (days) return `${days} Days ${pad(hours)}:${minutes}`;
+    if (total >= 3600) return `${pad(hours)}:${minutes}:${seconds}`;
+    return `${minutes}:${seconds}`;
+}
+
+/**
+ * Whether every moment of a print falls on today, which is the only case where
+ * the times alone say when something happened.
+ *
+ * Asked once for the pair rather than per timestamp, so the two ends of a print
+ * are always written the same way. A job that started yesterday and ends today
+ * would otherwise read "02.09.2026 22:10:04" next to a bare "07:31", and the
+ * short one is the half that needs the date most.
+ *
+ * @param {...(number|null|undefined)} moments - epoch milliseconds
+ * @returns {boolean} whether all of them are today, and none is missing
+ */
+export function allToday(...moments) {
+    const today = new Date().toDateString();
+    return moments.every(at => at != null && new Date(at).toDateString() === today);
+}
+
+/**
+ * One end of a print: the time of day while it all happens today, and the full
+ * date with seconds as soon as it does not.
+ *
+ * `withDate` is the answer allToday() gave for the whole pair, not a question
+ * about this one timestamp.
+ *
+ * @param {number} at - epoch milliseconds
+ * @param {boolean} withDate - whether to spell out the date
+ * @returns {string} the moment
+ */
+export function formatMoment(at, withDate) {
+    const date = new Date(at);
+    if (withDate) return formatDate(date);
+
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 /**

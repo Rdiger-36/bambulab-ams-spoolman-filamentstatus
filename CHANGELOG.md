@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.11
    - Features:
-      - A finished print leaves a summary behind. "consumption booked" is a button now, and it opens what the print actually did: the result, when it ended, how long it took, how many layers, and one row per filament with the slot it ran from, the grams and the spool they were booked onto
+      - A finished print leaves a summary behind. "consumption booked" is a button now, and it opens what the print actually did: the result, when it started and ended, how long it took, how many layers, and one row per filament with the slot it ran from, the grams and the spool they were booked onto
          - The table is every filament of the sliced file and what became of it, which it says above itself, so a line without a booking reads as a filament of the plate rather than as something the service mislaid
          - A filament that was not booked carries the reason, which is the case somebody opens this for. The two are different failures and are named apart: one where a slot printed it and no Spoolman spool is connected or assigned to that slot, which is the one that can be fixed and says how, and one where no slot of the printer carried it at all, which is what the dashboard lists as required but not loaded. A filament the plate used none of is listed as unused, and Spoolman refusing a write or two indistinguishable spools are stated as such
          - A filament is named the way the slot tables name it, vendor, material and colour with its swatch in front, so one print reads the same in both places. A booked one takes the three off the Spoolman record the booking wrote, so the summary keeps saying what was booked even after the spool is edited or taken out
@@ -10,7 +10,8 @@ Version 1.3.0-dev.11
       - The card returns to idle on its own once a print has been over for a while. The state badge, the job name, the booking label and the "Needed" and "After print" columns all go back to what they show when nothing is printing
          - How long that takes is "Clear print result after" on the settings page, ten minutes by default. 0 keeps the result until it is cleared by hand
          - Next to the booking label is the remaining time, and it is a button: pressing it clears the result now. Every open dashboard follows at once rather than waiting out its update interval
-         - Every duration on the dashboard reads HH:mm:ss, padded from the first second, with tabular figures, so a counter that is rewritten every second never moves the words in front of it. A print that runs past a day carries the days ahead of the clock, "02 Days 05:13:44", rather than counting hours past 24
+         - Durations on the print displays are written at the precision their length deserves: mm:ss under an hour, HH:mm:ss under a day, and "2 Days 05:13" beyond that, where seconds are noise. Tabular figures and a floor at the width of HH:mm:ss, so passing the hour mark moves nothing on the line
+         - The start and the end of a print are the times alone while it all happens today, and the full date with seconds as soon as it does not, decided once for the pair so the two are never written two different ways side by side. The rest of the Web UI keeps the timestamps it had
          - The summary stays reachable after that, as "Last print", until the next print starts
          - The printer repeats its terminal state in every report for as long as it sits on it, so the clearing is remembered rather than derived from the state. Without that the next report would put the finished print straight back on the card
    - Fixes:

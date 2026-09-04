@@ -203,32 +203,52 @@ test("the layer counter copes with either number missing", async () => {
 
 // The clock behind the two counters on the dashboard: how long the print has
 // been running, and how long its result still has before it clears itself.
-test("a counter reads HH:mm:ss whatever the duration", async () => {
+// Three shapes, because a print is anything from a ten minute plate to a five
+// day one and no single one reads well across that.
+test("a duration under an hour is minutes and seconds", async () => {
     const { formatCounter } = await import("../public/shared.js");
-    const s = 1000, m = 60 * s, h = 60 * m;
+    const s = 1000, m = 60 * s;
 
-    // Padded from the first second, so nothing on the line moves as it counts.
-    assert.equal(formatCounter(0), "00:00:00");
-    assert.equal(formatCounter(5 * s), "00:00:05");
-    assert.equal(formatCounter(90 * s), "00:01:30");
-    assert.equal(formatCounter(59 * m + 59 * s), "00:59:59");
-    assert.equal(formatCounter(h), "01:00:00");
-    assert.equal(formatCounter(5 * h + 13 * m + 44 * s), "05:13:44");
+    assert.equal(formatCounter(0), "00:00");
+    assert.equal(formatCounter(5 * s), "00:05");
+    assert.equal(formatCounter(90 * s), "01:30");
+    assert.equal(formatCounter(59 * m + 59 * s), "59:59");
 
-    // A negative deadline is one that has passed, not a count upwards again.
-    assert.equal(formatCounter(-5 * s), "00:00:00");
+    // A deadline that has passed, not a count upwards again.
+    assert.equal(formatCounter(-5 * s), "00:00");
 });
 
-test("a print running over days counts the days in front", async () => {
+test("an hour brings the hours in, a day drops the seconds", async () => {
     const { formatCounter } = await import("../public/shared.js");
     const s = 1000, m = 60 * s, h = 60 * m, d = 24 * h;
 
-    // The hours roll into a day rather than growing past 24.
+    assert.equal(formatCounter(h), "01:00:00");
+    assert.equal(formatCounter(5 * h + 13 * m + 44 * s), "05:13:44");
     assert.equal(formatCounter(23 * h + 59 * m + 59 * s), "23:59:59");
-    assert.equal(formatCounter(d), "01 Days 00:00:00");
-    assert.equal(formatCounter(2 * d + 5 * h + 13 * m + 44 * s), "02 Days 05:13:44");
-    // Always "Days": the singular is a character shorter and would move the
-    // clock behind it on the second day.
-    assert.match(formatCounter(d), /^01 Days /);
-    assert.equal(formatCounter(12 * d), "12 Days 00:00:00");
+
+    // At this length the seconds are noise, so they go.
+    assert.equal(formatCounter(d), "1 Days 00:00");
+    assert.equal(formatCounter(2 * d + 5 * h + 13 * m + 44 * s), "2 Days 05:13");
+    // Days are not padded, unlike everything behind them.
+    assert.equal(formatCounter(12 * d + 7 * h), "12 Days 07:00");
+});
+
+test("both ends of a print are written the same way", async () => {
+    const { allToday, formatMoment } = await import("../public/shared.js");
+
+    const today = new Date();
+    today.setHours(13, 4, 17, 0);
+    const alsoToday = new Date(today);
+    alsoToday.setHours(17, 49, 3, 0);
+    const yesterday = new Date(today.getTime() - 24 * 3600 * 1000);
+
+    assert.equal(allToday(today.getTime(), alsoToday.getTime()), true);
+    assert.equal(allToday(yesterday.getTime(), today.getTime()), false);
+    // A start lost to a restart is not "today", so the pair takes the long form.
+    assert.equal(allToday(null, today.getTime()), false);
+    assert.equal(allToday(), true);
+
+    // The time alone while it all happens today, the full date once it does not.
+    assert.equal(formatMoment(today.getTime(), false), "13:04");
+    assert.match(formatMoment(today.getTime(), true), /^\d{2}\.\d{2}\.\d{4} 13:04:17$/);
 });
