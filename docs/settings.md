@@ -10,7 +10,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | :---- | :---- |
 | **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
 | **Tracking** | Operation mode and [legacy mode](legacy-mode.md) |
-| **Synchronisation** | AMS update interval, writing the AMS slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
+| **Synchronisation** | Slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
 | **Network access** | The Web UI password, the host names this service may be addressed under, and the API keys for callers that have no browser. All three are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |

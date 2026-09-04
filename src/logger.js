@@ -98,7 +98,7 @@ function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
 }
 
 const COLLAPSING_PREFIXES = [
-    "No new AMS Data or changes in Spoolman found.",
+    "No new slot data or changes in Spoolman found.",
     "MQTT not running for Printer",
     "Setting up MQTT connection for Printer",
     "MQTT client connected for Printer",

@@ -19,7 +19,7 @@ async function settle(file) {
 
 // One of the messages the logger collapses instead of appending (see
 // COLLAPSING_PREFIXES): it repeats every update interval during normal operation.
-const COLLAPSING = "No new AMS Data or changes in Spoolman found.";
+const COLLAPSING = "No new slot data or changes in Spoolman found.";
 
 function tmpLog(name) {
     const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "amslog-")), name);

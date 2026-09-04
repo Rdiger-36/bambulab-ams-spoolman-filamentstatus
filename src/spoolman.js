@@ -387,7 +387,7 @@ export async function createSpool(spoolData) {
 
     try {
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: postData });
-        console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
+        console.log(spoolData.printerName, spoolData.logFilePath, `    Spool successfully created for Slot => ${spoolData.amsId}!`);
         return { ok: true };
     } catch (error) {
         return failed(spoolData, "Spool creation", error);
@@ -500,7 +500,7 @@ export async function createFilamentAndSpool(spoolData) {
         console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
 
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
-        console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for AMS Slot => ${spoolData.amsId}!`);
+        console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for Slot => ${spoolData.amsId}!`);
         return { ok: true };
     } catch (error) {
         // The filament is there and the spool is not, which is the one half

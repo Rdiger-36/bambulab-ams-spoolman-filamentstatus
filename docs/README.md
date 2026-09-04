@@ -5,7 +5,7 @@ The documentation of **Bambulab AMS Spoolman Filament Status**. It belongs to th
 | Page | Covers |
 | :---- | :---- |
 | [Installation](installation.md) | Prerequisites, supported architectures, `docker run` and Docker Compose, first start |
-| [How it works](how-it-works.md) | Merging and creating in Spoolman, G-code tracking, operation modes, AMS slot names, archiving empty spools |
+| [How it works](how-it-works.md) | Merging and creating in Spoolman, G-code tracking, operation modes, slot names, archiving empty spools |
 | [Web UI](web-ui.md) | Dashboard, assigning a spool to a slot, the spool and filament dialog, menu and logs |
 | [Settings](settings.md) | Every card of the settings page, the printer dialog, the service actions, a printer that is switched off |
 | [Troubleshooting](troubleshooting.md) | Reading the logs, the `debug-printers` CLI, diagnostics and what an export contains |

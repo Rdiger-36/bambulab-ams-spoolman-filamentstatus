@@ -8,9 +8,9 @@
 //
 // What the page is showing does not belong in the bar, it belongs in the page.
 // The dashboard headline already names the printer and the log viewer already
-// names the log, so those names are the picker: click "Loaded Spools on AMS
-// from Bambu P2S" and the printers drop down. That is also what took the
-// download button out of the bar; it acts on the log and now sits with it.
+// names the log, so those names are the picker: click "Loaded Spools on Bambu
+// P2S" and the printers drop down. That is also what took the download button
+// out of the bar; it acts on the log and now sits with it.
 //
 // Before this, one "Menu" button hid all of it two levels deep, and the log
 // entry opened the log of whichever printer had been picked last, which is a
@@ -325,7 +325,7 @@ function panelHeading(text) {
 /**
  * The picker that lives in the headline of the page.
  *
- * The dashboard headline reads "Loaded Spools on AMS from Bambu P2S" and the
+ * The dashboard headline reads "Loaded Spools on Bambu P2S" and the
  * log viewer "Backend Logs for: Bambu P2S". Those names are the control: the
  * name a page already writes is the one thing that changes when you pick, so
  * the pick belongs there rather than in the navigation, where it would say the

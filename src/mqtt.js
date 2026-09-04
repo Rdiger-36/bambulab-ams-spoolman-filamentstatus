@@ -75,7 +75,7 @@ const AMS_ENV_BROADCAST_INTERVAL = 30_000;
 /**
  * Keeps the AMS environment readings current and pushes them to the dashboard.
  *
- * Deliberately outside the AMS update interval and outside the tray change
+ * Deliberately outside the slot update interval and outside the tray change
  * detection: the readings are display only, they never touch Spoolman, and a
  * user watching a unit dry wants them sooner than the next spool update. The
  * in-memory value is refreshed on every report, so /api/status answers with what
@@ -529,7 +529,7 @@ async function handleMqttMessage(printer, topic, message) {
                             const UpdateIntSec = printer.update_interval / 1000;
                             const nextUpdateTime = new Date(currentTime.getTime() + printer.update_interval);
                             const nextUpdate = formatDate(nextUpdateTime);
-                            console.log(printer.name, printer.logFilePath, `No new AMS Data or changes in Spoolman found. Processing AMS Data for this printer will be paused until ${nextUpdate} (${UpdateIntSec} seconds)...`);
+                            console.log(printer.name, printer.logFilePath, `No new slot data or changes in Spoolman found. Processing slot data for this printer will be paused until ${nextUpdate} (${UpdateIntSec} seconds)...`);
                             printer.lastUpdateTime = new Date();
                         }
 
