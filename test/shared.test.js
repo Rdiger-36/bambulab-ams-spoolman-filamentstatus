@@ -169,3 +169,34 @@ test("the dashboard imports them rather than keeping a copy", () => {
         assert.equal(frontend.includes(gone), false, `${gone} is back in public/frontend.js`);
     }
 });
+
+// The layer counter of the dashboard, and the off-by-one that reached it.
+//
+// A P2S printing the 26 layer "Cube" plate showed "Layer 27 / 26" and 104% on
+// its last layer: the slice reports the highest layer index (25) while the
+// printer reports the layer count (26) once it is done, and one was added to
+// both.
+test("the layer counter never runs past the end of the print", async () => {
+    const { humanLayers } = await import("../public/shared.js");
+
+    // The slice's 25 is a highest index, so the plate has 26 layers.
+    assert.deepEqual(humanLayers(0, 25),  { layer: 1,  total: 26, percent: 4 });
+    assert.deepEqual(humanLayers(12, 25), { layer: 13, total: 26, percent: 50 });
+    assert.deepEqual(humanLayers(25, 25), { layer: 26, total: 26, percent: 100 });
+
+    // What the P2S reports when it has finished: the count, one past the last
+    // index. This is the case that produced 27 / 26 and 104%.
+    assert.deepEqual(humanLayers(26, 25), { layer: 26, total: 26, percent: 100 });
+    // And anything further out, for a printer that counts differently again.
+    assert.deepEqual(humanLayers(99, 25), { layer: 26, total: 26, percent: 100 });
+});
+
+test("the layer counter copes with either number missing", async () => {
+    const { humanLayers } = await import("../public/shared.js");
+
+    // No slice info: the layer is still worth showing, the total is not known.
+    assert.deepEqual(humanLayers(3, null), { layer: 4, total: null, percent: null });
+    // No report yet, which is what an idle printer looks like.
+    assert.deepEqual(humanLayers(null, 25), { layer: 1, total: 26, percent: 4 });
+    assert.deepEqual(humanLayers(null, null), { layer: 1, total: null, percent: null });
+});

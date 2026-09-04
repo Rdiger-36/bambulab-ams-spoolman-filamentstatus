@@ -5,6 +5,7 @@ import {
     correctRemainInt,
     filamentColors,
     formatDate,
+    humanLayers,
     normColor,
     slotColors,
     spoolWeightLimit,
@@ -2075,9 +2076,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function buildGcodeCard(printData) {
         const active = ACTIVE_PRINT_STATES.includes(printData.gcodeState);
-        const humanLayer  = (printData.layerNum ?? 0) + 1;
-        const humanTotal  = printData.totalLayers != null ? printData.totalLayers + 1 : null;
-        const progressPct = humanTotal ? Math.round((humanLayer / humanTotal) * 100) : null;
+        const { layer: humanLayer, total: humanTotal, percent: progressPct } =
+            humanLayers(printData.layerNum, printData.totalLayers);
 
         const card = document.createElement("div");
         card.className = "gc-card";
@@ -2249,8 +2249,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         title.textContent = summary.jobName ? `Print: ${summary.jobName}` : "Last print";
 
-        const humanLayer = (summary.layerNum ?? 0) + 1;
-        const humanTotal = summary.totalLayers != null ? summary.totalLayers + 1 : null;
+        const { layer: humanLayer, total: humanTotal } = humanLayers(summary.layerNum, summary.totalLayers);
 
         const facts = [
             ["Result", summary.state],

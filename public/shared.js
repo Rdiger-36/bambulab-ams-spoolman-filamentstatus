@@ -197,6 +197,39 @@ export const EXTERNAL_SLOT = "External";
 export const ACTIVE_PRINT_STATES = ["PREPARE", "RUNNING", "PAUSE"];
 
 /**
+ * The layer counter as a person reads it, from two numbers that do not count
+ * the same way.
+ *
+ * `totalLayers` comes out of the sliced file, where parseSliceInfo() takes it
+ * from the highest index in `layer_ranges`: a 25 there means the layers 0 to
+ * 25, so 26 of them. `layerNum` comes from MQTT and is 0-based while the print
+ * runs, which is what makes calcPartialConsumption() line up with those same
+ * ranges.
+ *
+ * The one place the two part company is the end of a print. A P2S sets
+ * `layer_num` to the layer count when it finishes, and 26 on a plate whose
+ * highest index is 25 is one past the last layer. Adding one to it gave
+ * "Layer 27 / 26" and 104%, so neither is allowed past the total: a layer after
+ * the last one does not exist under either reading of the field.
+ *
+ * Lives here rather than in the dashboard because it is the same convention the
+ * server's consumption maths rests on, and it was nowhere written down when it
+ * broke.
+ *
+ * @param {number|null|undefined} layerNum - `layer_num` from MQTT, 0-based
+ * @param {number|null|undefined} totalLayers - `totalLayers` from the slice, a
+ *   highest index rather than a count
+ * @returns {{layer: number, total: number|null, percent: number|null}}
+ */
+export function humanLayers(layerNum, totalLayers) {
+    const total = totalLayers != null ? totalLayers + 1 : null;
+    const counted = (layerNum ?? 0) + 1;
+    const layer = total != null ? Math.min(counted, total) : counted;
+
+    return { layer, total, percent: total ? Math.round((layer / total) * 100) : null };
+}
+
+/**
  * The actions a slot can offer, as `option` on the UI spool.
  *
  * The server decides which one a slot gets and the dashboard turns it into a

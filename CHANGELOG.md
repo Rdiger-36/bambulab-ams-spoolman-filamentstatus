@@ -10,6 +10,9 @@ Version 1.3.0-dev.11
          - The summary stays reachable after that, as "Last print", until the next print starts
          - The printer repeats its terminal state in every report for as long as it sits on it, so the clearing is remembered rather than derived from the state. Without that the next report would put the finished print straight back on the card
    - Fixes:
+      - The layer counter stops running past the end of the print. A 26 layer plate showed "Layer 27 / 26" and 104% on its last layer
+         - The two numbers do not count the same way: the sliced file reports the highest layer index, 25 for that plate, while the printer reports the layer count once it has finished, 26. One was added to both, so the last layer of every print overshot
+         - The convention had never been written down, which is how it broke. It lives in humanLayers() in shared.js now, next to the note that the server's consumption maths rests on the same 0-based reading of the printer's layer number
       - Taking the spool off the external spool holder clears its location in Spoolman. The holder is only reported as a slot while it carries something, so an emptied holder does not appear in the report at all, and the code that clears a location only ran for slots the report still contained. The spool kept "<printer> - External" long after it had been taken off, and nothing would ever have cleared it
          - The same applies to an AMS unit that stops being reported, for instance an unplugged one: its slots are now released as well
          - A location that does not name this printer is still left alone, so anything set by hand survives
