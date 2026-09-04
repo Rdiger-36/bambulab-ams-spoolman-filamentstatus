@@ -34,7 +34,7 @@ import {
     patchSpoolFields,
     getCachedExternalFilaments,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
 import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
@@ -63,6 +63,40 @@ function resolvePrinter(printerId, printers, res) {
     const printer = printers.find(p => p.id === printerId);
     if (!printer) { res.status(404).json({ ok: false, error: "Printer not found" }); return null; }
     return printer;
+}
+
+/**
+ * How far along the running print is, for the card above the slot tables.
+ *
+ * Only ever filled while a print is actually running: the printer keeps
+ * reporting the last values of a job that is over, so a finished print would
+ * otherwise claim an estimated end in the past and a stage it left long ago.
+ *
+ * The estimated end is derived here rather than in the browser so that every
+ * client agrees on it, and it is derived from `mc_remaining_time`, which the
+ * printer reports in minutes and revises as it goes.
+ *
+ * @param {object} printer - the runtime printer
+ * @param {string} state - the effective gcode state, after clearing
+ * @returns {object} the fields to merge into the print response
+ */
+function liveProgress(printer, state) {
+    if (!ACTIVE_STATES.has(state)) {
+        return { startedAt: null, elapsedMs: null, remainingMinutes: null, estimatedEndAt: null, stage: null, preparing: false };
+    }
+
+    const remaining = printer.currentRemainingMinutes;
+
+    return {
+        startedAt: printer.printStartedAt ?? null,
+        elapsedMs: printer.printStartedAt ? Date.now() - printer.printStartedAt : null,
+        remainingMinutes: remaining ?? null,
+        // A remaining time of 0 is a real answer near the end of a print, so it
+        // is only the absence of the field that makes the estimate unknown.
+        estimatedEndAt: remaining != null ? Date.now() + remaining * 60_000 : null,
+        stage: printStageName(printer.currentStage),
+        preparing: isPreparingStage(printer.currentStage),
+    };
 }
 
 /**
@@ -625,6 +659,15 @@ export function registerRoutes(app, printers) {
             lastPrintSummary: printer.lastPrintSummary ?? null,
             printResetAt: printer.printResetAt ?? null,
             printResultCleared: cleared,
+            // What the printer says about the job it is doing now. All of it is
+            // meaningless once the print has ended, so a cleared or finished
+            // card gets nulls rather than the last values of a job that is over.
+            //
+            // startedAt is this service's own measurement: the printer reports
+            // no start time of its own, so it is the moment the state was first
+            // seen to be active. A restart mid print loses it, and the Web UI
+            // then says the duration is unknown instead of inventing one.
+            ...liveProgress(printer, state),
         });
     });
 

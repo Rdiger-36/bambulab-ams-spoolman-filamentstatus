@@ -2037,9 +2037,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const variants = {
             RUNNING: "gc-state-running", FINISH: "gc-state-done",
             FAILED:  "gc-state-error",   CANCEL: "gc-state-error",
-            PAUSE:   "gc-state-paused",
+            PAUSE:   "gc-state-paused",  PREPARE: "gc-state-prepare",
         };
         return `<span class="gc-state ${variants[state] || ""}">${state || "—"}</span>`;
+    }
+
+    /**
+     * The stage badge next to the state, while the printer is doing something
+     * other than laying down filament.
+     *
+     * Amber while it is getting ready — heating, homing, levelling, loading —
+     * and neutral for everything else it names, so a glance at the card says
+     * whether a print that has started is actually printing yet. Nothing is
+     * shown when the printer reports no stage, which is most of a running
+     * print.
+     */
+    function printStageBadge(printData) {
+        if (!printData.stage) return "";
+        const variant = printData.preparing ? "gc-state-prepare" : "";
+        return `<span class="gc-state gc-stage ${variant}">${escapeHtml(printData.stage)}</span>`;
     }
 
     async function loadGcodeView(printerId) {
@@ -2087,6 +2103,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let html = `<div class="gc-card-head">
             ${gcodeStateBadge(printData.gcodeState)}
+            ${printStageBadge(printData)}
             <strong>${printData.jobName ? escapeHtml(printData.jobName) : "No active print"}</strong>
             <span class="gc-card-note">${printResultControls(printData)}</span>
         </div>`;
@@ -2100,6 +2117,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             </div>`;
         }
+        if (active) html += printProgressFacts(printData);
         // The backend reports why consumption data is missing (e.g. the FTPS
         // download failed); without this the table would just show a placeholder with no
         // explanation.
@@ -2113,7 +2131,7 @@ document.addEventListener("DOMContentLoaded", () => {
             summaryButton.onclick = () => showPrintSummaryDialog(printData.lastPrintSummary);
         }
 
-        armCountdownTicker(card, printData.printResetAt);
+        armCardTicker(card, printData.printResetAt);
 
         const clearButton = card.querySelector("[data-print-clear]");
         if (clearButton) {
@@ -2130,6 +2148,46 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         return card;
+    }
+
+    /**
+     * When the running print started, when it is expected to end, and how long
+     * it has been going.
+     *
+     * Every value is left out rather than guessed when the printer has not said
+     * it: a service restarted mid print knows no start time, because the
+     * printer reports none and the measurement was this process's own.
+     */
+    function printProgressFacts(printData) {
+        const facts = [];
+
+        // One decision for both ends of the print, the same way the summary
+        // dialog makes it: the times alone while the whole job falls on today,
+        // the full date as soon as it runs over midnight at either end.
+        const withDate = !allToday(printData.startedAt, printData.estimatedEndAt);
+
+        if (printData.startedAt) facts.push(["Started", formatMoment(printData.startedAt, withDate)]);
+        // Carries the start so the ticker can keep it moving between two SSE
+        // events, which are up to a slot update interval apart.
+        if (printData.startedAt != null) {
+            // formatCounter, not formatDuration: the ticker rewrites this every
+            // second, so it is a counter and has to be rendered as one from the
+            // first paint rather than changing shape on the first tick.
+            facts.push([
+                "Running for",
+                formatCounter(printData.elapsedMs),
+                `class="gc-counter" data-elapsed-since="${printData.startedAt}"`,
+            ]);
+        }
+        if (printData.estimatedEndAt) {
+            // The time left in the same clock shape as everything else here.
+            // The printer reports it in minutes, and "1290 min" for a job with
+            // a day still to run is a division the reader should not have to do.
+            const left = formatCounter(printData.remainingMinutes * 60_000);
+            facts.push(["Expected to end", `${formatMoment(printData.estimatedEndAt, withDate)} (${left} left)`]);
+        }
+
+        return factsRow(facts);
     }
 
     /**
@@ -2166,48 +2224,57 @@ document.addEventListener("DOMContentLoaded", () => {
         return "";
     }
 
-    // The one timer that keeps the countdown moving. Held outside the card
+    // The one timer that keeps the card's clocks moving. Held outside the card
     // because every rebuild of it has to replace the previous one; two tickers
     // on two cards would both reload the view at the deadline.
-    let countdownTicker = null;
+    let cardTicker = null;
 
     /**
-     * Keeps the countdown label current and asks the server once when it runs
-     * out.
+     * Keeps the two moving labels on the card current: how long the running
+     * print has been going, and how long the finished one still has before it
+     * clears itself. Asks the server once when that deadline runs out.
      *
      * The dashboard is otherwise redrawn only when an SSE event arrives, which
-     * follows the slot update interval: at its default of two minutes the
-     * countdown would jump in two minute steps and the result would sit there
-     * for up to two minutes after its deadline. The server still decides when
-     * a result is cleared, in printResultCleared(); this only makes the client
-     * ask at the moment the answer changes.
+     * follows the slot update interval: at its default of two minutes both
+     * labels would move in two minute steps and a finished result would sit
+     * there for up to two minutes past its deadline. The server still decides
+     * when a result is cleared, in printResultCleared(); this only makes the
+     * client ask at the moment the answer changes.
      */
-    function armCountdownTicker(card, resetAt) {
-        clearInterval(countdownTicker);
-        countdownTicker = null;
+    function armCardTicker(card, resetAt) {
+        clearInterval(cardTicker);
+        cardTicker = null;
 
-        const label = card.querySelector("[data-countdown]");
-        if (!label || !resetAt) return;
+        const countdown = resetAt ? card.querySelector("[data-countdown]") : null;
+        const elapsed = card.querySelector("[data-elapsed-since]");
+        if (!countdown && !elapsed) return;
 
-        countdownTicker = setInterval(() => {
+        cardTicker = setInterval(() => {
             // The card was replaced by a later render, or the printer changed
             if (!card.isConnected) {
-                clearInterval(countdownTicker);
-                countdownTicker = null;
+                clearInterval(cardTicker);
+                cardTicker = null;
                 return;
             }
+
+            if (elapsed) {
+                elapsed.textContent = formatCounter(Date.now() - Number(elapsed.dataset.elapsedSince));
+            }
+
+            if (!countdown) return;
+
             if (Date.now() >= resetAt) {
                 // An open dialog keeps the ticker alive rather than ending it:
                 // rebuilding the view underneath one is what isDialogOpen()
                 // exists to prevent, and dropping the ticker here would leave
                 // the result standing until the next SSE event.
                 if (isDialogOpen() || !currentPrinterId) return;
-                clearInterval(countdownTicker);
-                countdownTicker = null;
+                clearInterval(cardTicker);
+                cardTicker = null;
                 loadGcodeView(currentPrinterId);
                 return;
             }
-            label.textContent = formatCountdown(resetAt);
+            countdown.textContent = formatCountdown(resetAt);
         }, 1000);
     }
 

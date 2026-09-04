@@ -66,6 +66,12 @@ function createRuntimePrinter(entry) {
         // stopped by hand reports the code one report after the state, and
         // clears it the report after that.
         lastPrintError: null,
+        // What the printer says about the job it is doing right now: the stage
+        // it is in (`stg_cur`) and the minutes it thinks are left
+        // (`mc_remaining_time`). Display only, refreshed on every report rather
+        // than on the slot interval, and meaningless once the print has ended.
+        currentStage: null,
+        currentRemainingMinutes: null,
         // The closing report of the last finished print: what was booked, what
         // was skipped and why. Held in memory only, dropped when the next print
         // starts, and never written anywhere.

@@ -366,6 +366,16 @@ h1 {
 .gc-state-done    { background: var(--info-bg); color: var(--accent-text); }
 .gc-state-error   { background: var(--bad-bg);  color: var(--bad); }
 .gc-state-paused  { background: var(--warn-bg); color: var(--warn); }
+/* A print that has started but is not laying down filament yet: heating,
+   homing, levelling, loading. Amber, because it is neither running nor a
+   problem, and it is what the card looks like for the first minutes of a job. */
+.gc-state-prepare { background: var(--warn-bg); color: var(--warn); }
+/* The stage sits next to the state and must not read as a second state. */
+.gc-stage { font-weight: 500; }
+
+/* The same pairs the summary dialog uses, here under the layer bar. Only the
+   spacing differs: on the card they follow something, in the dialog they lead. */
+.gc-card .gc-facts { margin: 10px 0 0; }
 
 
 /* ---- Layer progress ---- */
