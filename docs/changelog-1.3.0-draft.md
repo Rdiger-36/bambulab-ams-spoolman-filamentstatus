@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.10 has to be folded in here as well, or regenerate the
+Every dev build after dev.11 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -51,6 +51,7 @@ Version 1.3.0
          - It is a slot and not an AMS, so nothing is called an AMS slot any more where the holder can be meant: the two settings that carry the update interval and the location, the dashboard, and the dialogs of a slot. Two log lines change with it, "No new AMS Data or changes in Spoolman found ..." and "Spool successfully created for AMS Slot => ...", both of which now say "slot". A script that greps the log for either has to be adjusted
       - Multi colour filaments are read, drawn and created with all of their colours
       - The Spoolman location of a spool follows the AMS slot it sits in, and is cleared when it leaves
+         - A slot that stops being reported releases its spool as well, which is what an emptied external spool holder and an unplugged AMS unit look like: the holder is only reported while it carries something. A location that does not name this printer is left alone either way, so anything set by hand in Spoolman survives
       - Log files are rotated instead of growing forever, and the log view and download read across the rotated history
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
       - Each AMS unit says how it is doing above its slot table: relative humidity, the temperature inside it, and the drying cycle while one is running, with its target temperature and the minutes left

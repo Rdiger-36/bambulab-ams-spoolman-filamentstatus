@@ -1,4 +1,11 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0-dev.11
+   - Fixes:
+      - Taking the spool off the external spool holder clears its location in Spoolman. The holder is only reported as a slot while it carries something, so an emptied holder does not appear in the report at all, and the code that clears a location only ran for slots the report still contained. The spool kept "<printer> - External" long after it had been taken off, and nothing would ever have cleared it
+         - The same applies to an AMS unit that stops being reported, for instance an unplugged one: its slots are now released as well
+         - A location that does not name this printer is still left alone, so anything set by hand survives
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.10
    - Documentation:
       - The README says that the external spool holder exists. It has been a slot of its own since 1.3.0, named External, and nothing on the front page mentioned it: not what the service does, not the supported hardware, not the feature list. It is assigned by hand like any 3rd party spool and is not read in legacy mode, which the hardware section now says
@@ -6,9 +13,6 @@ Version 1.3.0-dev.10
       - The feature list names the humidity, temperature and drying readings per AMS unit, and says the Web UI works on a phone
       - "How it works" opens with what the printer reports about its slots rather than with the AMS report, since the holder is reported outside the AMS block altogether
    - Fixes:
-      - Taking the spool off the external spool holder clears its location in Spoolman. The holder is only reported as a slot while it carries something, so an emptied holder does not appear in the report at all, and the code that clears a location only ran for slots the report still contained. The spool kept "<printer> - External" long after it had been taken off, and nothing would ever have cleared it
-         - The same applies to an AMS unit that stops being reported, for instance an unplugged one: its slots are now released as well
-         - A location that does not name this printer is still left alone, so anything set by hand survives
       - The anonymised diagnostics bundle masks the RFID tag of a spool, in the ordinary log lines and in the debug dumps. Everything after the first four characters is replaced, the way a serial number keeps five: four is enough to see that two lines are about the same spool and far too few to recognise the spool by
          - A tag on its own is a piece of filament rather than a person, which is why it used to be handed out whole. A bundle carries every tag of a shelf at once though, next to the printer they sit in, and read across several reports that says what somebody owns and prints with
          - What a slot reports when it has no tag, "N/A" or an all zero uuid, is not a tag and stays as it is: it is the answer to half the questions a report about a 3rd party spool is asking
