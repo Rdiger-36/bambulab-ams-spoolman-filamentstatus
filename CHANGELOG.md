@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.10
    - Documentation:
       - The README says that the external spool holder exists. It has been a slot of its own since 1.3.0, named External, and nothing on the front page mentioned it: not what the service does, not the supported hardware, not the feature list. It is assigned by hand like any 3rd party spool and is not read in legacy mode, which the hardware section now says
       - "What changed in 1.3.0" carries the two changes an existing installation can trip over, the password and the API key, and the slot renumbering, next to the three that were already there
