@@ -2224,6 +2224,39 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${minutes} min ${total % 60}s`;
     }
 
+    /**
+     * A row of label and value pairs that turns into a column when the space
+     * runs out.
+     *
+     * The same block the running print uses above the slot tables, so the two
+     * read alike; it wraps per pair rather than breaking a value away from its
+     * label.
+     */
+    function factsRow(facts) {
+        if (!facts.length) return "";
+
+        return `<div class="gc-facts">${facts
+            .map(([term, value, attrs = ""]) =>
+                `<span class="gc-fact"><span class="gc-fact-term">${escapeHtml(term)}</span> <span ${attrs}>${escapeHtml(value)}</span></span>`)
+            .join("")}</div>`;
+    }
+
+    /**
+     * What to call the filament of one summary row.
+     *
+     * The same three fields, in the same order, that name a spool in the slot
+     * tables, so one print reads the same in both places. They are only there
+     * for a filament that was actually booked, because they come off the
+     * Spoolman record the booking wrote; anything else falls back to what the
+     * sliced file knew, which is a material and a hex code.
+     */
+    function summaryFilamentName(row) {
+        const named = [row.vendor, row.material, row.spoolName].filter(Boolean);
+        if (named.length) return named.join(" · ");
+
+        return [row.type, row.color].filter(Boolean).join(" ") || "Unknown filament";
+    }
+
     // How each outcome of a filament is labelled and coloured in the dialog.
     const SUMMARY_STATUS = {
         booked:    { label: "Booked",     className: "gc-ok" },
@@ -2258,9 +2291,7 @@ document.addEventListener("DOMContentLoaded", () => {
             ["Layers", humanTotal ? `${humanLayer} / ${humanTotal}` : `${humanLayer}`],
         ];
 
-        let html = `<dl class="gc-summary-facts">${facts
-            .map(([term, value]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd>`)
-            .join("")}</dl>`;
+        let html = factsRow(facts);
 
         if (summary.printError) {
             html += `<p class="gc-required">${escapeHtml(summary.printError)}</p>`;
@@ -2272,9 +2303,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (summary.rows?.length) {
             const rows = summary.rows.map(row => {
                 const status = SUMMARY_STATUS[row.status] ?? { label: row.status, className: "" };
-                const spool = row.spoolId
-                    ? `${escapeHtml(row.spoolName ?? "Spool")} (#${row.spoolId})`
-                    : "—";
+                const spool = row.spoolId ? `#${row.spoolId}` : "—";
                 // The same square the slot tables draw, from the whole colour
                 // set when the slice named one. normColor takes both shapes
                 // these arrive in, "#F55A74" from the slice and "F55A74FF"
@@ -2284,7 +2313,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     .filter(Boolean);
                 return `<tr>
                     <td data-label="Slot">${escapeHtml(row.amsId ?? "—")}</td>
-                    <td data-label="Filament">${swatchHtml(colors)}${escapeHtml([row.type, row.color].filter(Boolean).join(" "))}</td>
+                    <td data-label="Filament">${swatchHtml(colors)}${escapeHtml(summaryFilamentName(row))}</td>
                     <td data-label="Amount" style="text-align:right">${row.grams}g</td>
                     <td data-label="Spool">${spool}</td>
                     <td data-label="Result"><span class="${status.className}">${escapeHtml(status.label)}</span>${

@@ -479,6 +479,12 @@ async function bookConsumption(printer, consumption, state) {
             rows.push({
                 ...summaryRow(info, ambiguous ? "ambiguous" : "booked", ambiguous),
                 spoolId,
+                // The three fields the dashboard names a filament by. Taken
+                // from the record the booking wrote, so the summary keeps
+                // saying what was booked even after the spool is edited or
+                // taken out of the slot.
+                vendor: booked?.filament?.vendor?.name ?? null,
+                material: booked?.filament?.material ?? null,
                 spoolName: booked?.filament?.name ?? null,
                 mapped: !!matches[0].mapped,
                 remainingWeight: booked?.remaining_weight ?? null,
@@ -522,6 +528,11 @@ function summaryRow(info, status, note = null) {
         status,
         note,
         spoolId: null,
+        // Filled in only where a spool was actually booked. A filament that was
+        // skipped has no Spoolman record to name it by, so the dialog falls
+        // back to what the sliced file said it was.
+        vendor: null,
+        material: null,
         spoolName: null,
     };
 }

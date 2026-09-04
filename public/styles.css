@@ -312,16 +312,18 @@ h1 {
 
 /* ---- The closing report of a print ---- */
 
-/* Result, end, duration and layers as label/value pairs. Two columns on a
-   normal screen, and the value under its label once the dialog gets narrow. */
-.gc-summary-facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 14px;
+/* Label and value pairs on one line, wrapping to as many lines as the width
+   needs. Used by the summary dialog and by the running print on the card, so
+   the two read alike. The pair is one flex item, so a value never wraps away
+   from the label it belongs to. */
+.gc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
   margin: 0 0 14px;
+  font-size: 0.85em;
 }
-.gc-summary-facts dt { color: var(--text-muted); }
-.gc-summary-facts dd { margin: 0; }
+.gc-fact-term { color: var(--text-muted); }
 
 .gc-summary-table { margin-top: 4px; }
 /* The reason a filament was not booked, under its result rather than in a
