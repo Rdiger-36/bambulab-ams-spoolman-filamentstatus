@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Version 1.3.0-dev.11
+Version 1.3.0-dev.12
    - Features:
       - A finished print leaves a summary behind. "consumption booked" is a button now, and it opens what the print actually did: the result, when it started and ended, how long it took, how many layers, and one row per filament with the slot it ran from, the grams and the spool they were booked onto
          - The table is every filament of the sliced file and what became of it, which it says above itself, so a line without a booking reads as a filament of the plate rather than as something the service mislaid
@@ -27,6 +27,10 @@ Version 1.3.0-dev.11
       - The layer counter stops running past the end of the print. A 26 layer plate showed "Layer 27 / 26" and 104% on its last layer
          - The two numbers do not count the same way: the sliced file reports the highest layer index, 25 for that plate, while the printer reports the layer count once it has finished, 26. One was added to both, so the last layer of every print overshot
          - The convention had never been written down, which is how it broke. It lives in humanLayers() in shared.js now, next to the note that the server's consumption maths rests on the same 0-based reading of the printer's layer number
+
+-----------------------------------------------------------------------------------------------
+Version 1.3.0-dev.11
+   - Fixes:
       - Taking the spool off the external spool holder clears its location in Spoolman. The holder is only reported as a slot while it carries something, so an emptied holder does not appear in the report at all, and the code that clears a location only ran for slots the report still contained. The spool kept "<printer> - External" long after it had been taken off, and nothing would ever have cleared it
          - The same applies to an AMS unit that stops being reported, for instance an unplugged one: its slots are now released as well
          - A location that does not name this printer is still left alone, so anything set by hand survives
