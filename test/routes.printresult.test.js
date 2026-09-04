@@ -224,3 +224,48 @@ test("a printer named slot names the filament, an estimated one does not", async
     assert.equal(slotFilament(withSlot, { amsId: "A1", amsIdFromPrinter: true }), null);
     assert.equal(slotFilament({}, { amsId: "A4", amsIdFromPrinter: true }), null);
 });
+
+test("an error the printer names late still reaches the summary", async () => {
+    const { printErrorText } = await import("../src/mqtt.js");
+
+    // Nothing wrong: a P2S sends 0 in both fields and "0", not "", as the reason.
+    assert.equal(printErrorText({ print_error: 0, mc_print_error_code: "0", fail_reason: "0" }), null);
+    assert.equal(printErrorText({}), null);
+
+    // The code a hand stopped print reported, measured on a P2S.
+    assert.equal(printErrorText({ print_error: 50348044 }), "Printer error 50348044");
+    assert.equal(printErrorText({ print_error: 0, fail_reason: "3" }), "Fail reason 3");
+    assert.equal(printErrorText({ print_error: 7, fail_reason: "3" }), "Printer error 7, fail reason 3");
+
+});
+
+test("the summary takes an error that arrives after the print has ended", async () => {
+    const { handlePrintStateChange } = await import("../src/mqtt.js");
+
+    // The three reports a P2S sent when a print was stopped by hand, in order.
+    // The summary is built on the first, which still carries no code at all.
+    const target = {
+        name: "Test Printer",
+        logFilePath: "/dev/null",
+        currentGcodeState: "RUNNING",
+        currentJobName: "Cube",
+        currentLayerNum: 18,
+        currentSliceInfo: null,   // nothing to book, which this test is not about
+        sliceFetchDone: true,     // and nothing to fetch over FTPS either
+        consumptionBooked: false,
+        printStartedAt: Date.now() - 60_000,
+        lastPrintSummary: null,
+        lastPrintError: null,
+    };
+
+    await handlePrintStateChange(target, { gcode_state: "FAILED", print_error: 0, fail_reason: "0" });
+    assert.equal(target.lastPrintSummary.state, "FAILED");
+    assert.equal(target.lastPrintSummary.printError, null);
+
+    await handlePrintStateChange(target, { gcode_state: "FAILED", print_error: 50348044 });
+    assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
+
+    // And the report after that, which has it back at 0, must not erase it.
+    await handlePrintStateChange(target, { gcode_state: "FAILED", print_error: 0, fail_reason: "0" });
+    assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
+});

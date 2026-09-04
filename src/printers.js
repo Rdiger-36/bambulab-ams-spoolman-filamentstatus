@@ -61,6 +61,11 @@ function createRuntimePrinter(entry) {
         // report fields. A restart mid print therefore loses it, and the
         // summary says the duration is unknown rather than inventing one.
         printStartedAt: null,
+        // The last error the printer named during this print. Collected across
+        // reports rather than read from the one that ends the job: a P2S
+        // stopped by hand reports the code one report after the state, and
+        // clears it the report after that.
+        lastPrintError: null,
         // The closing report of the last finished print: what was booked, what
         // was skipped and why. Held in memory only, dropped when the next print
         // starts, and never written anywhere.

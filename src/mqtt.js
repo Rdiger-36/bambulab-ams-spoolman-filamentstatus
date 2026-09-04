@@ -123,7 +123,7 @@ export const ACTIVE_STATES = new Set(ACTIVE_PRINT_STATES);
  * @param {object} printer - the printer runtime object
  * @param {object} print - the `print` object from the MQTT report
  */
-async function handlePrintStateChange(printer, print) {
+export async function handlePrintStateChange(printer, print) {
     const newState    = print.gcode_state;
     // subtask_name is the job name used for the FTP file (/cache/<name>.gcode.3mf).
     // gcode_file (e.g. /data/Metadata/plate_1.gcode) is an internal path NOT
@@ -154,6 +154,25 @@ async function handlePrintStateChange(printer, print) {
         printer.lastPrintSummary       = null;
         printer.printResultDismissed   = false;
         printer.printResetAt           = null;
+        printer.lastPrintError         = null;
+    }
+
+    // Whatever the printer names as an error belongs to the print that was
+    // running, so it is collected on every report rather than read once.
+    //
+    // It does not arrive with the report that ends the job. Measured on a P2S
+    // stopped by hand: the state went to FAILED first, `print_error` 50348044
+    // came one report later, and the report after that had it back at 0. A
+    // summary built from the terminal report alone said nothing had gone wrong,
+    // and a user stop is worth naming too.
+    const errorNow = printErrorText(print);
+    if (errorNow) {
+        printer.lastPrintError = errorNow;
+        // The summary may already be built, and it is the record of this very
+        // print until the next one starts, so it takes the late arrival.
+        if (printer.lastPrintSummary && !printer.lastPrintSummary.printError) {
+            printer.lastPrintSummary.printError = errorNow;
+        }
     }
 
     // Fetch slice info once we reach RUNNING (the .gcode.3mf is reliably present
@@ -208,7 +227,7 @@ async function handlePrintStateChange(printer, print) {
             durationMs:  printer.printStartedAt ? Date.now() - printer.printStartedAt : null,
             layerNum,
             totalLayers: printer.currentSliceInfo?.totalLayers ?? null,
-            printError:  printErrorText(print),
+            printError:  errorNow ?? printer.lastPrintError ?? null,
             rows:        [],
             note:        null,
         };
@@ -249,7 +268,7 @@ async function handlePrintStateChange(printer, print) {
  * @param {object} print - the `print` object from the MQTT report
  * @returns {string|null} the error text, or null when there is none
  */
-function printErrorText(print) {
+export function printErrorText(print) {
     const code = Number(print?.print_error ?? print?.mc_print_error_code ?? 0);
     const reason = print?.fail_reason;
     const failed = reason && reason !== "0" && reason !== 0;
