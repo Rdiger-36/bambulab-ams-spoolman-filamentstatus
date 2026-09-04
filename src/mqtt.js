@@ -514,6 +514,10 @@ function summaryRow(info, status, note = null) {
         trayInfoIdx: info.tray_info_idx ?? null,
         type: info.type ?? null,
         color: info.color ?? null,
+        // The whole colour set when the slice named one, so a multi colour
+        // filament is drawn the way it is everywhere else in this UI rather
+        // than as its first colour alone.
+        colors: info.colors ?? null,
         grams: info.grams ?? 0,
         status,
         note,

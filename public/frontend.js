@@ -2276,9 +2276,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 const spool = row.spoolId
                     ? `${escapeHtml(row.spoolName ?? "Spool")} (#${row.spoolId})`
                     : "—";
+                // The same square the slot tables draw, from the whole colour
+                // set when the slice named one. normColor takes both shapes
+                // these arrive in, "#F55A74" from the slice and "F55A74FF"
+                // from the AMS.
+                const colors = (row.colors?.length ? row.colors : [row.color])
+                    .map(normColor)
+                    .filter(Boolean);
                 return `<tr>
                     <td data-label="Slot">${escapeHtml(row.amsId ?? "—")}</td>
-                    <td data-label="Filament">${escapeHtml([row.type, row.color].filter(Boolean).join(" "))}</td>
+                    <td data-label="Filament">${swatchHtml(colors)}${escapeHtml([row.type, row.color].filter(Boolean).join(" "))}</td>
                     <td data-label="Amount" style="text-align:right">${row.grams}g</td>
                     <td data-label="Spool">${spool}</td>
                     <td data-label="Result"><span class="${status.className}">${escapeHtml(status.label)}</span>${
