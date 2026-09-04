@@ -9,10 +9,9 @@
  * their network.
  *
  * What is deliberately *not* masked: printer names, because they are chosen by
- * the user and are what makes a log readable, and the RFID tag ids of the
- * spools, which identify a piece of filament rather than a person. A user who
- * considers their printer name identifying should pick the full export and
- * redact it themselves.
+ * the user and are what makes a log readable. A user who considers their
+ * printer name identifying should pick the full export and redact it
+ * themselves.
  *
  * Every function here is pure, which is what lets the tests pin the exact shape
  * of the output rather than just its absence.
@@ -34,6 +33,47 @@ const IPV4 = /\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/g;
 // every P2S. The tray_uuid of a spool is 32 characters and has no word boundary
 // inside it, so this cannot bite a piece of it out.
 const BAMBU_SERIAL = /\b(?=[0-9A-Z]{15}\b)[0-9A-Z]*\d[0-9A-Z]*\b/g;
+
+// The RFID tag of a spool, as it appears in a log line: the slot lines put it
+// in double brackets, `[[ A5F4AA83 ]]`. Anchoring on the brackets rather than
+// on the value is what makes the short tags safe to touch at all. An older AMS
+// reports eight hex characters, which is exactly the shape of a tray_color, so
+// a bare hex pattern of that length would mask every colour in the file.
+const BRACKETED_TAG = /\[\[ ([^\]]*?) \]\]/g;
+// The same value in the debug dumps, which are whole JSON documents: the slot
+// data carries it as `tray_uuid`, the Spoolman records as an `extra.tag` whose
+// value is the JSON encoded string, so the quotes around it are escaped.
+const JSON_TAG = /("(?:tray_uuid|tag)"\s*:\s*")((?:\\"|[^"])*)(")/g;
+// A tag of a current AMS is 32 hex characters, which nothing else in a log is,
+// so this catches one wherever it turns up without an anchor to hold on to.
+const LONG_TAG = /\b[0-9A-F]{32}\b/g;
+
+/** The placeholders a slot reports instead of a tag. Neither identifies a spool. */
+function isTagPlaceholder(value) {
+    return value === "" || value === "N/A" || /^0+$/.test(value);
+}
+
+/**
+ * Keeps the first four characters of an RFID tag and replaces the rest.
+ *
+ * A tag names one physical spool. On its own that is not a person, but a bundle
+ * carries every tag of a shelf next to the printer they sit in, and read across
+ * several reports it says what somebody owns and prints with. Four characters
+ * keep the one thing a report needs, that two lines are about the same spool or
+ * about two different ones, and are far too few to recognise a spool by.
+ *
+ * The placeholders a slot reports instead of a tag are returned unchanged. They
+ * say "this slot has no chip", which is half of every question about a 3rd
+ * party spool and identifies nothing.
+ *
+ * @param {string} value - the tag
+ * @returns {string} the masked tag, the same length as the input
+ */
+export function maskTag(value) {
+    const tag = String(value ?? "");
+    if (isTagPlaceholder(tag) || tag.length <= 4) return tag;
+    return tag.slice(0, 4) + "X".repeat(tag.length - 4);
+}
 
 /** True for a string that is an IPv4 address and nothing else. */
 function isIpv4(value) {
@@ -193,6 +233,21 @@ export function maskCodes(text, codes = []) {
  */
 export function maskText(text, known = {}) {
     let out = String(text ?? "");
+
+    // Tags first, and only where the text around the value says that it is one.
+    // A masked tag keeps four characters and is filled with X from there, so
+    // nothing a later pass looks for survives inside it.
+    out = out.replace(BRACKETED_TAG, (match, tag) => `[[ ${maskTag(tag)} ]]`);
+    out = out.replace(JSON_TAG, (match, head, value, tail) => {
+        // extra.tag holds the tag JSON encoded inside the JSON, so the value is
+        // the tag wrapped in its own escaped quotes. Those are part of what the
+        // field looks like in Spoolman and stay.
+        const quoted = value.startsWith('\\"') && value.endsWith('\\"');
+        const tag = quoted ? value.slice(2, -2) : value;
+        const masked = maskTag(tag);
+        return head + (quoted ? `\\"${masked}\\"` : masked) + tail;
+    });
+    out = out.replace(LONG_TAG, match => maskTag(match));
 
     // Serials before codes, and not the other way round: an eight character
     // access code can appear inside a fifteen character serial number, and
