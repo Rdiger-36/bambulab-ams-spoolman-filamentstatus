@@ -424,7 +424,7 @@ async function bookConsumption(printer, consumption, state) {
     if (!candidates.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools, nothing to book");
         return {
-            rows: Object.values(consumption).map(info => summaryRow(info, "skipped", unbookedReason(info))),
+            rows: Object.values(consumption).map(info => summaryRow(printer, info, "skipped", unbookedReason(info))),
             note: "No slot held a spool this service could identify, so nothing was booked.",
         };
     }
@@ -440,7 +440,7 @@ async function bookConsumption(printer, consumption, state) {
             // Zero gram filaments are skipped rather than written as zero, and
             // the summary says so instead of leaving the filament out: a plate
             // that used none of a loaded colour is a result, not an omission.
-            rows.push(summaryRow(info, "unused",
+            rows.push(summaryRow(printer, info, "unused",
                 "The sliced file lists this filament, but the plate used none of it."));
             continue;
         }
@@ -449,7 +449,7 @@ async function bookConsumption(printer, consumption, state) {
 
         if (!matches.length) {
             console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}), skipping ${grams}g (assign the spool in the Web UI to track it)`);
-            rows.push(summaryRow(info, "skipped", unbookedReason(info)));
+            rows.push(summaryRow(printer, info, "skipped", unbookedReason(info)));
             continue;
         }
 
@@ -476,7 +476,7 @@ async function bookConsumption(printer, consumption, state) {
             const booked = await useSpoolWeight(spoolId, grams, lastUsed);
             console.log(printer.name, printer.logFilePath, `[Print] Booked ${grams}g for spool ${spoolId} (${matches[0].amsId}, ${idx} ${type} ${color}${matches[0].mapped ? ", manually assigned" : ""})`);
             rows.push({
-                ...summaryRow(info, ambiguous ? "ambiguous" : "booked", ambiguous),
+                ...summaryRow(printer, info, ambiguous ? "ambiguous" : "booked", ambiguous),
                 spoolId,
                 // The three fields the dashboard names a filament by. Taken
                 // from the record the booking wrote, so the summary keeps
@@ -492,7 +492,7 @@ async function bookConsumption(printer, consumption, state) {
         } catch (err) {
             console.error(printer.name, printer.logFilePath, `[Print] Failed to book consumption for spool ${spoolId}: ${err.message}`);
             rows.push({
-                ...summaryRow(info, "failed", `Spoolman refused the booking: ${err.message}`),
+                ...summaryRow(printer, info, "failed", `Spoolman refused the booking: ${err.message}`),
                 spoolId,
                 mapped: !!matches[0].mapped,
             });
@@ -502,17 +502,6 @@ async function bookConsumption(printer, consumption, state) {
     return { rows, note: null };
 }
 
-/**
- * One filament of a print as the summary dialog shows it.
- *
- * `amsId` is set by resolveSliceSlots(), which runs before anything is booked,
- * so the slot is named even for a filament that was never booked at all.
- *
- * @param {object} info - one entry of a consumption map
- * @param {string} status - booked, ambiguous, skipped, unused or failed
- * @param {string|null} note - why, for everything that is not a plain booking
- * @returns {object} the row
- */
 /**
  * Why a filament of the sliced file carries no booking.
  *
@@ -535,7 +524,51 @@ export function unbookedReason(info) {
     return `The sliced file lists this filament and ${info.amsId} printed it, but no Spoolman spool is connected by tag or assigned to that slot, so nothing could be booked. Assign it in the Web UI to track it.`;
 }
 
-function summaryRow(info, status, note = null) {
+/**
+ * The Spoolman record sitting in the slot a filament ran from, when the slot is
+ * the printer's own answer rather than an estimate.
+ *
+ * `amsIdFromPrinter` is the whole condition. Where it is set, the slot came out
+ * of `print.mapping`, so the sliced file and the printer name the same slot and
+ * the spool in it is the one that really printed this filament. Where it is
+ * not, the slot is `orderedAmsSlots()` guessing from the slicer's list order,
+ * which is exactly the guess `matchConsumption()` refuses to book on without
+ * confirming, and naming a spool off it would put a filament on a slot nobody
+ * established it ran from.
+ *
+ * Read for the naming only. A row that was not booked keeps its empty spool
+ * column, because that column says what carried the booking and this spool
+ * carried none.
+ *
+ * @param {object} printer - the runtime printer
+ * @param {object} info - one entry of a consumption map, after resolveSliceSlots
+ * @returns {object|null} the Spoolman filament record, or null
+ */
+export function slotFilament(printer, info) {
+    if (!info.amsId || !info.amsIdFromPrinter) return null;
+
+    const uiSpool = (printer.spoolData || []).find(spool => spool.amsId === info.amsId);
+    return uiSpool?.existingSpool?.filament ?? null;
+}
+
+/**
+ * One filament of a print as the summary dialog shows it.
+ *
+ * `amsId` is set by resolveSliceSlots(), which runs before anything is booked,
+ * so the slot is named even for a filament that was never booked at all.
+ *
+ * @param {object} printer - the runtime printer, for the slot lookup
+ * @param {object} info - one entry of a consumption map
+ * @param {string} status - booked, ambiguous, skipped, unused or failed
+ * @param {string|null} note - why, for everything that is not a plain booking
+ * @returns {object} the row
+ */
+function summaryRow(printer, info, status, note = null) {
+    // What sits in the slot, for a row the booking will not name itself. A
+    // booked row overwrites these three from the record the booking wrote,
+    // which is the same filament by a stricter route.
+    const filament = slotFilament(printer, info);
+
     return {
         amsId: info.amsId ?? null,
         trayInfoIdx: info.tray_info_idx ?? null,
@@ -549,12 +582,12 @@ function summaryRow(info, status, note = null) {
         status,
         note,
         spoolId: null,
-        // Filled in only where a spool was actually booked. A filament that was
-        // skipped has no Spoolman record to name it by, so the dialog falls
-        // back to what the sliced file said it was.
-        vendor: null,
-        material: null,
-        spoolName: null,
+        // Null where neither the booking nor a printer named slot could say
+        // what the filament is. The dialog then falls back to what the sliced
+        // file knew, which is a material and a hex code.
+        vendor: filament?.vendor?.name ?? null,
+        material: filament?.material ?? null,
+        spoolName: filament?.name ?? null,
     };
 }
 

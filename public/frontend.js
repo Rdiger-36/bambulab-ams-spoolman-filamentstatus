@@ -2143,9 +2143,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const hasSummary = !!summary;
 
         if (printData.consumptionBooked) {
+            // The number is its own element so the ticker replaces only that,
+            // and the words in front of it keep their place on the line.
             const countdown = printData.printResetAt
                 ? `<button class="gc-card-link" data-print-clear
-                        title="Clear the result now instead of waiting">clears in ${formatCountdown(printData.printResetAt)}</button>`
+                        title="Clear the result now instead of waiting">clears in <span
+                        class="gc-counter" data-countdown>${formatCountdown(printData.printResetAt)}</span></button>`
                 : `<button class="gc-card-link" data-print-clear
                         title="Clear the result from the dashboard">clear</button>`;
             return `<button class="gc-card-link gc-card-booked" data-print-summary>✔ consumption booked</button>${countdown}`;
@@ -2178,7 +2181,7 @@ document.addEventListener("DOMContentLoaded", () => {
         clearInterval(countdownTicker);
         countdownTicker = null;
 
-        const label = card.querySelector("[data-print-clear]");
+        const label = card.querySelector("[data-countdown]");
         if (!label || !resetAt) return;
 
         countdownTicker = setInterval(() => {
@@ -2199,7 +2202,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 loadGcodeView(currentPrinterId);
                 return;
             }
-            label.textContent = `clears in ${formatCountdown(resetAt)}`;
+            label.textContent = formatCountdown(resetAt);
         }, 1000);
     }
 
@@ -2209,9 +2212,26 @@ document.addEventListener("DOMContentLoaded", () => {
      * does not sit on "1 min" and then jump to gone.
      */
     function formatCountdown(resetAt) {
-        const seconds = Math.max(0, Math.round((resetAt - Date.now()) / 1000));
-        if (seconds < 60) return `${seconds}s`;
-        return `${Math.round(seconds / 60)} min`;
+        return formatCounter(Math.max(0, resetAt - Date.now()));
+    }
+
+    /**
+     * A duration for a label that is redrawn every second.
+     *
+     * Clock shape rather than prose, because prose changes width as it counts:
+     * "10 min" to "9 min" to "59s" moved everything after it along the line on
+     * every step. Minutes are padded so the whole thing keeps one width for as
+     * long as it stays under an hour, and `.gc-counter` holds that width across
+     * the one step where it does not.
+     */
+    function formatCounter(ms) {
+        const total = Math.max(0, Math.round(ms / 1000));
+        const seconds = String(total % 60).padStart(2, "0");
+        const minutes = Math.floor(total / 60) % 60;
+        const hours = Math.floor(total / 3600);
+
+        if (hours) return `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`;
+        return `${String(minutes).padStart(2, "0")}:${seconds}`;
     }
 
     /** A duration in milliseconds as hours and minutes, or minutes and seconds. */

@@ -203,3 +203,24 @@ test("an unbooked filament is told apart from one no slot carried", async () => 
     assert.match(noSlot, /no slot of the printer carried it/);
     assert.equal(/Assign it in the Web UI/.test(noSlot), false);
 });
+
+test("a printer named slot names the filament, an estimated one does not", async () => {
+    const { slotFilament } = await import("../src/mqtt.js");
+
+    const filament = { name: "Black", material: "PLA Basic", vendor: { name: "Bambu Lab" } };
+    const withSlot = { spoolData: [{ amsId: "A4", existingSpool: { id: 17, filament } }] };
+
+    // print.mapping named the slot, so the sliced file and the printer agree
+    // and the spool in it is the one that printed this filament.
+    assert.equal(slotFilament(withSlot, { amsId: "A4", amsIdFromPrinter: true }), filament);
+
+    // The slot is orderedAmsSlots() reading the slicer's list order, which is
+    // the guess matchConsumption() refuses to book on without confirming it.
+    // Naming a spool off it would claim a slot nobody established.
+    assert.equal(slotFilament(withSlot, { amsId: "A4", amsIdFromPrinter: false }), null);
+
+    // No slot at all, and a slot holding nothing this service knows.
+    assert.equal(slotFilament(withSlot, { amsId: null, amsIdFromPrinter: true }), null);
+    assert.equal(slotFilament(withSlot, { amsId: "A1", amsIdFromPrinter: true }), null);
+    assert.equal(slotFilament({}, { amsId: "A4", amsIdFromPrinter: true }), null);
+});
