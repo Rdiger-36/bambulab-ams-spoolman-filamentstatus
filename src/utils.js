@@ -47,15 +47,21 @@ export function formatInterval(ms) {
  * Turns the numeric AMS unit and slot ids from MQTT into the slot label used
  * throughout the UI, the logs and the mapping file.
  *
- * Regular AMS units are 0 to 3 and carry four slots each, giving `A0` to `D3`.
+ * Regular AMS units are 0 to 3 and carry four slots each, giving `A1` to `D4`.
  * The single slot AMS HT units are 128 to 135 and have no slot number of their
  * own, giving `HT-A` to `HT-H`. 255 is the external spool holder, which the
  * printer reports outside the AMS block altogether and which has no slot number
  * either, giving `External`. Anything outside those ranges yields `Z`, which
  * marks a unit this service does not know how to address.
  *
+ * The slot number is the printer's, not the payload's: MQTT counts a unit's
+ * slots from 0, while the printer's own display, its touchscreen and Bambu
+ * Studio all count them from 1. The label is read next to that hardware, so it
+ * says what the hardware says.
+ *
  * The label is not only shown: it is the key an assignment is stored under in
  * `mappings.json`, so changing one orphans the assignments already on disk.
+ * `migrateStored()` in `mappings.js` renumbers the keys written before this.
  *
  * @param {number|string} amsID  - AMS unit id from `print.ams.ams[].id`
  * @param {number|string|null} slotID - slot id within the unit, null for none
@@ -65,9 +71,12 @@ export function convertAMSandSlot(amsID, slotID) {
     amsID = Number(amsID);
     const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
-    if (slotID === null) slotID = "";
+    // Anything that is not a slot number leaves the label without one, which is
+    // how a whole unit is named: `convertAMSandSlot(0, null)` is "A".
+    const number = Number(slotID);
+    const slot = slotID === null || slotID === "" || !Number.isFinite(number) ? "" : number + 1;
 
-    if (amsID >= 0 && amsID <= 3) return letters[amsID] + slotID;
+    if (amsID >= 0 && amsID <= 3) return letters[amsID] + slot;
     if (amsID >= 128 && amsID <= 135) return `HT-${letters[amsID - 128]}`;
     if (amsID === EXTERNAL_SPOOL_ID) return EXTERNAL_SLOT;
     return "Z";

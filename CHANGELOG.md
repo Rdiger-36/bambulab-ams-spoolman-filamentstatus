@@ -5,6 +5,11 @@ Unreleased
          - A script, a home automation or an integration that called this API without a key stops working and needs one. Create it under "API keys" in the Network access card and send it as "Authorization: Bearer <key>" or "X-API-Key: <key>". The Home Assistant integration is the one to look at first
          - Before this, an installation without a password answered every caller on the network, which is also why the key list could never say who was actually using the API
          - The Web UI is recognised by the Sec-Fetch-Site header the browser sets on every request a page makes, with the Referer as the fallback for browsers too old to send it. That is a fence and not a proof: whoever can open the Web UI can read those headers off their own browser or simply create a key. The proof is the password
+      - AMS slots are numbered the way the printer numbers them: the first slot of the first unit is A1, the last one of a fourth unit is D4. Every slot label moves up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool
+         - The assignments in printers/mappings.json are renumbered on the first start, so a spool assigned to the first slot stays with the first slot. The file gains a schemaVersion and holds the assignments under "printers", which is what makes it possible to tell an old A1, the second slot, from a new one, the first
+         - The Spoolman location of a spool follows on the next reading of the AMS, so "P1S - A0" becomes "P1S - A1" without anything to do by hand. Nothing else in Spoolman changes, and a location set by hand is still left alone
+         - A caller of the API sees the new labels in amsId, which is what to look at first for a script or a home automation reading them. The Home Assistant integration is the one to check
+         - Before this the labels counted from 0 while the printer's display, its touchscreen and Bambu Studio all counted from 1, so the second slot of the AMS was A1 on one screen and A2 on the other
    - New Features:
       - The Web UI can ask for a password. "Web UI password" in the Network access card of the settings page turns it on, and until one is set nothing changes: the Web UI stays open to the network, which is how every installation behaved before
          - With a password set, every page and every API call asks for it first. There is one password for the installation, not an account per person, which is what a service on a home network actually needs
@@ -52,6 +57,9 @@ Unreleased
       - isFromOwnUi() in src/security.js is the whole "is this the Web UI" decision as a pure function, covered in test/security.test.js. The test app's call() sends what a browser sends, so a suite that stands in for the Web UI passes and one that stands in for a script deliberately does not
       - The cors dependency is dropped
       - The allow list is read at the point of use rather than captured when the middleware is built, so a name added on the settings page applies to the very next request
+      - printers/mappings.json carries a schemaVersion beside its assignments, read by parseStoredFile() and applied by migrateStored() in src/mappings.js, both covered in test/mappings.test.js. A flat file is version 0 and is renumbered once and written back, since the labels alone cannot say which numbering they were written in
+      - convertAMSandSlot() adds one to the slot id the payload carries and is covered on its own in test/utils.test.js. orderedAmsSlots() counts a unit's slots from 1 with it, which is the path that decides which sliced filament comes out of which slot
+      - The diagnostics bundle masks the serials inside the mapping file's "printers" rather than the keys of the file itself, covered in test/diagnostics.test.js
       - The responsive block of public/styles.css sits at the end of the file, after the desktop rules it has to beat. It stood before them, so a handful of its declarations carried an !important whose only job was to undo the source order; those are gone with the move. The two that are left beat an inline style rather than an order: the column widths the JS column sync writes onto the cells, and the right alignment the weight columns carry in their markup
 
 -----------------------------------------------------------------------------------------------

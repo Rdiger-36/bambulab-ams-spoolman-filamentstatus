@@ -32,7 +32,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `security.js` | The request guard: which `Host` a request may be addressed to, which `Origin` may change something, and whether a request came from the Web UI itself (`isFromOwnUi()`, which `auth.js` uses). Pure decisions plus the middleware `backend.js` puts in front of everything. The allow list is `settings.ALLOWED_HOSTS`, read per request. |
 | `uispool.js` | `toClientSpool()`, the one projection from a runtime UI spool to what a client sees. Used by `/api/spools`, `/api/print`, the SSE slot update and `hasSpoolUiChanged()`. |
 | `state.js` | Shared mutable process state (Spoolman status, vendor id, SSE clients, last spool snapshot). |
-| `utils.js` | Date/interval formatting, `sleep`, AMS id to slot label (`A0`, `HT-A`), and `slotColors()`, the colour set of a slot. It lives here because both `ams.js` and `uispool.js` need it and `ams.js` already imports `uispool.js`. |
+| `utils.js` | Date/interval formatting, `sleep`, AMS id to slot label (`A1`, `HT-A`), and `slotColors()`, the colour set of a slot. It lives here because both `ams.js` and `uispool.js` need it and `ams.js` already imports `uispool.js`. |
 
 ## The two tracking modes
 
@@ -200,7 +200,7 @@ build their Spoolman payload from.
 - **The sliced file names the slot, and that beats every colour comparison.**
   The position of a filament in Bambu Studio's list is the AMS slot it was
   sliced for, verified against a real print on a P2S with two AMS units where
-  the ids 5, 7 and 8 were B0, B2 and B3. It is the only thing that separates two
+  the ids 5, 7 and 8 were B1, B3 and B4. It is the only thing that separates two
   spools identical in profile and colour, so `calcFullConsumption()` keys by
   that position: two filaments never merge, where a colour key added them
   together before anything looked at the AMS and the sum could not be split
@@ -208,7 +208,7 @@ build their Spoolman payload from.
 - **The printer says which slot a print runs each filament from, and that beats
   working it out.** `print.mapping` carries one entry per filament of the
   slicer's project, the unit in the high byte and the slot in the low one:
-  `0x0100` is B0, `0xFF00` the external holder, `0xFFFF` a filament the plate
+  `0x0100` is B1, `0xFF00` the external holder, `0xFFFF` a filament the plate
   does not use. `decodePrintMapping()` turns it into the same shape
   `orderedAmsSlots()` produces, so `resolveSliceSlots()` takes either without
   knowing which. It is captured at the transition to RUNNING and kept on the

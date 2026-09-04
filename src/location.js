@@ -10,7 +10,7 @@ import { patchSpoolLocation, getSpoolmanSpool } from "./spoolman.js";
  * `public/frontend.js`.
  *
  * @param {string} printerName - the printer's display name
- * @param {string} amsId - slot label, e.g. "A0", "HT-A" or "External"
+ * @param {string} amsId - slot label, e.g. "A1", "HT-A" or "External"
  * @returns {string} the location to store in Spoolman
  */
 export function slotLocation(printerName, amsId) {
@@ -25,8 +25,8 @@ export function slotLocation(printerName, amsId) {
  * reason other than the spool having been in an AMS once. A location is only
  * ours to clear when it names this printer, so anything else survives.
  *
- * The slot part is not checked: a spool moved from A0 to A1 carries
- * `Printer - A0` until the new slot is written, and that is still ours.
+ * The slot part is not checked: a spool moved from A1 to A2 carries
+ * `Printer - A1` until the new slot is written, and that is still ours.
  *
  * @param {string|null|undefined} location - the spool's current location
  * @param {string} printerName - the printer whose slot released the spool
@@ -100,8 +100,8 @@ export async function releaseSlotLocation(printer, spool) {
  * Collects the location changes of one AMS update and applies them at the end.
  *
  * Writing them as the slots are walked was wrong for the case a spool changes
- * slot: moving one from A1 to A0 wrote `Printer - A0` while A0 was processed
- * and then, one slot later, cleared it again, because A1 saw the spool it used
+ * slot: moving one from A2 to A1 wrote `Printer - A1` while A1 was processed
+ * and then, one slot later, cleared it again, because A2 saw the spool it used
  * to hold gone and had no way to know it had just reappeared elsewhere. Slot
  * order decided whether a move kept its location or lost it.
  *

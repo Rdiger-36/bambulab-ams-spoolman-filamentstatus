@@ -7,6 +7,7 @@ import { version, dataDir, logsDir, serverLogFilePath, mappingsPath, supervised 
 import { deprecatedConfig } from "./deprecation.js";
 import { logFileSet } from "./logger.js";
 import { printers } from "./printers.js";
+import { parseStoredFile } from "./mappings.js";
 import { apiKeyCount } from "./apikeys.js";
 import { getSettingsView, legacyMode } from "./settings.js";
 import { state } from "./state.js";
@@ -144,11 +145,14 @@ export async function buildDiagnosticsBundle({ anonymize = true } = {}) {
 
     const mappings = readJsonOrNull(mappingsPath);
     if (mappings) {
+        // Read through the mapping module's own parser, so the wrapper the file
+        // carries stays intact and only the assignments inside it are masked
+        const { printers: assignments, schemaVersion } = parseStoredFile(mappings);
         // Keyed by serial number, so the keys need masking as well
         const exported = anonymize
-            ? Object.fromEntries(Object.entries(mappings).map(([serial, value]) => [maskSerial(serial), value]))
-            : mappings;
-        zip.addFile("mappings.json", Buffer.from(JSON.stringify(exported, null, 4)));
+            ? Object.fromEntries(Object.entries(assignments).map(([serial, value]) => [maskSerial(serial), value]))
+            : assignments;
+        zip.addFile("mappings.json", Buffer.from(JSON.stringify({ schemaVersion, printers: exported }, null, 4)));
     }
 
     await addLogFiles(zip, "logs/server", serverLogFilePath, mask);

@@ -131,13 +131,13 @@ export function consumptionKey(trayInfoIdx, color, colors = null) {
  *
  * Bambu Studio's filament list is the printer's slot list, so the position in
  * it is the slot: the fifth entry is the fifth slot. Verified against a print
- * sliced for a P2S with two AMS units, where the ids 5, 7 and 8 were B0, B2
- * and B3.
+ * sliced for a P2S with two AMS units, where the ids 5, 7 and 8 were B1, B3
+ * and B4.
  *
  * The position is resolved against the slots the printer actually reports,
  * never against a computed geometry. A second file settled that: with two AMS
  * units and a spool on the external holder the list holds nine entries, and
- * arithmetic on "four slots per unit" turns the ninth into "C0", a unit that
+ * arithmetic on "four slots per unit" turns the ninth into "C1", a unit that
  * printer does not have. The list length is no help either, it is the project's
  * filament count and not the printer's: the same P2S produced files with six,
  * eight and nine entries.
@@ -188,8 +188,10 @@ const MAPPING_UNUSED = 0xFFFF;
  *
  * One entry per filament of the slicer's project, in the same order, so the
  * result drops straight into `resolveSliceSlots()`. Each is the unit in the
- * high byte and the slot in the low one: 0x0100 is B0, 0x0002 is A2, 0xFF00 is
+ * high byte and the slot in the low one: 0x0100 is B1, 0x0002 is A3, 0xFF00 is
  * the external holder, and 0xFFFF means the plate does not use that filament.
+ * Both bytes count from 0, while the labels count a unit's slots from 1, which
+ * is what `convertAMSandSlot()` is doing to the low byte.
  *
  * Read off a P2S across two prints, where all seven entries matched the slots
  * the print was really running from, including the holder and the unused
@@ -249,8 +251,8 @@ export function orderedAmsSlots(amsIds) {
     const ids = (amsIds || []).filter(id => typeof id === "string");
     const units = ["A", "B", "C", "D"];
 
-    const attached = units.filter(unit => ids.some(id => id[0] === unit && /^[0-3]$/.test(id[1])));
-    const fourSlotUnits = attached.flatMap(unit => [0, 1, 2, 3].map(slot => `${unit}${slot}`));
+    const attached = units.filter(unit => ids.some(id => id[0] === unit && /^[1-4]$/.test(id[1])));
+    const fourSlotUnits = attached.flatMap(unit => [1, 2, 3, 4].map(slot => `${unit}${slot}`));
 
     const highTemperature = ids.filter(id => /^HT-[A-H]$/.test(id)).sort();
     const external = ids.includes(EXTERNAL_SLOT) ? [EXTERNAL_SLOT] : [];

@@ -19,7 +19,7 @@ Startup and the AMS report:
 [LOG] Bambu Lab P1S - Setting up MQTT connection for Printer: 01PXXXXXXXXXX...
 [LOG] Bambu Lab P1S - MQTT client connected for Printer: 01PXXXXXXXXXX
 [LOG] Bambu Lab P1S - AMS [A] (hum: 5, temp: 0.0ºC)
-[LOG] Bambu Lab P1S -     - [A0] PLA Basic 000000FF [[ XXXXXX00000A ]] => Spool-ID 1 (G-code mode)
+[LOG] Bambu Lab P1S -     - [A1] PLA Basic 000000FF [[ XXXXXX00000A ]] => Spool-ID 1 (G-code mode)
 ```
 
 A slot that is already linked is logged once, when the loaded filament changes. The remain percentage of the AMS is not logged for it, the weight does not come from there.
@@ -30,8 +30,8 @@ A print, from start to booking:
 [LOG] Bambu Lab P1S - [Print] Print running: "bracket.gcode.3mf", fetching slice info via FTPS...
 [LOG] Bambu Lab P1S - [Print] Slice info loaded: 2 filament(s), 260 layers
 [LOG] Bambu Lab P1S - [Print] FINISH, booking filament consumption: {"GFA00|000000":{"tray_info_idx":"GFA00","color":"#000000","type":"PLA","grams":24.7}, ...}
-[LOG] Bambu Lab P1S - [Print] Booked 24.7g for spool 1 (A0, GFA00 PLA #000000)
-[LOG] Bambu Lab P1S - [Print] Booked 3.1g for spool 7 (A2, GFA01 PLA #FFFFFF, manually assigned)
+[LOG] Bambu Lab P1S - [Print] Booked 24.7g for spool 1 (A1, GFA00 PLA #000000)
+[LOG] Bambu Lab P1S - [Print] Booked 3.1g for spool 7 (A3, GFA01 PLA #FFFFFF, manually assigned)
 ```
 
 A slot that is neither tag-linked nor manually assigned is named and skipped, so the log says which spool is missing its link:

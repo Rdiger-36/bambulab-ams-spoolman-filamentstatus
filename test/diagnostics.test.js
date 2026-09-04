@@ -77,6 +77,22 @@ test("nothing identifying survives the anonymised bundle", async () => {
     assert.match(everything, /192\.168\.178\.XXX/);
 });
 
+test("the mapping file keeps its wrapper and loses only the serial", async () => {
+    // The assignments sit under "printers" with the schema version beside them,
+    // and masking the top level would have renamed those two rather than the
+    // serials one level down
+    fs.writeFileSync(
+        path.join(process.env.DATA_DIR, "mappings.json"),
+        JSON.stringify({ schemaVersion: 1, printers: { "01P00A000000042": { A1: { spoolId: 3 } } } }),
+    );
+
+    const mappings = JSON.parse((await bundle())["mappings.json"]);
+
+    assert.equal(mappings.schemaVersion, 1);
+    assert.deepEqual(Object.keys(mappings.printers), ["01P00XXXXXXXXXX"]);
+    assert.equal(mappings.printers["01P00XXXXXXXXXX"].A1.spoolId, 3);
+});
+
 test("the serial is masked in the log file names as well", async () => {
     const files = await bundle();
 
