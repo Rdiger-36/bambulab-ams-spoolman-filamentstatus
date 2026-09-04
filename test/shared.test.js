@@ -252,3 +252,28 @@ test("both ends of a print are written the same way", async () => {
     assert.equal(formatMoment(today.getTime(), false), "13:04");
     assert.match(formatMoment(today.getTime(), true), /^\d{2}\.\d{2}\.\d{4} 13:04:17$/);
 });
+
+// The time a print has left. The printer reports whole minutes and revises them
+// as it goes, so this one is deliberately not the clock shape the counters use:
+// "03:00 left" claimed a second hand the number does not have.
+test("the remaining time is stated at the precision the printer has", async () => {
+    const { formatRemaining } = await import("../public/shared.js");
+
+    assert.equal(formatRemaining(3), "~ 3 min");
+    assert.equal(formatRemaining(59), "~ 59 min");
+    assert.equal(formatRemaining(90), "~ 1 hour 30 min");
+    assert.equal(formatRemaining(270), "~ 4 hours 30 min");
+    assert.equal(formatRemaining(8910), "~ 6 Days 4 hours 30 min");
+
+    // Nothing larger to carry it, so the minutes stay; something larger and
+    // exact, so they go rather than reading "4 hours 0 min".
+    assert.equal(formatRemaining(60), "~ 1 hour");
+    assert.equal(formatRemaining(1440), "~ 1 Day");
+    assert.equal(formatRemaining(1470), "~ 1 Day 30 min");
+
+    // The printer sends 0 for the last stretch, and "~ 0 min" reads like a
+    // stopped clock.
+    assert.equal(formatRemaining(0), "< 1 min");
+    assert.equal(formatRemaining(null), null);
+    assert.equal(formatRemaining(undefined), null);
+});

@@ -135,6 +135,13 @@ export async function handlePrintStateChange(printer, print) {
     // Always keep layer_num up to date for partial-print calculation
     if (print.layer_num != null) printer.currentLayerNum = print.layer_num;
 
+    // What the printer says about the job right now. Read on every report, not
+    // only on a transition: these are the values that move while the state
+    // stays RUNNING, and they are what the dashboard shows next to the layer
+    // progress.
+    if (print.stg_cur != null)          printer.currentStage = Number(print.stg_cur);
+    if (print.mc_remaining_time != null) printer.currentRemainingMinutes = Number(print.mc_remaining_time);
+
     // A fresh print starts when we transition from a non-active state into an
     // active one. Reset tracking here (even on a reprint of the same file) so
     // consumption gets booked again for the new run.

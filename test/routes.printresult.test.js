@@ -6,9 +6,13 @@ import { fileURLToPath } from "url";
 
 import { startTestApp, call } from "./helpers/app.js";
 
-// What happens to a finished print on the dashboard: it is shown with its
-// booking label, it clears itself after PRINT_RESET_MINUTES or when somebody
-// says so, and its summary stays readable afterwards.
+// Everything the print card above the slot tables says, over HTTP.
+//
+// The first half is a print that has ended: it is shown with its booking
+// label, it clears itself after PRINT_RESET_MINUTES or when somebody says so,
+// and its summary stays readable afterwards. The second half is a print that
+// is running: when it started, when it is expected to end, and what the
+// printer is busy with.
 //
 // The one thing worth a test of its own is that clearing survives the printer
 // repeating itself. A P2S sends its terminal `gcode_state` in every report for
@@ -268,4 +272,100 @@ test("the summary takes an error that arrives after the print has ended", async 
     // And the report after that, which has it back at 0, must not erase it.
     await handlePrintStateChange(target, { gcode_state: "FAILED", print_error: 0, fail_reason: "0" });
     assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
+});
+
+// ---------------------------------------------------------------------------
+// What the card shows while a print is running: when it started, when it is
+// expected to end, and what the printer is busy with.
+// ---------------------------------------------------------------------------
+
+test("a running print reports its start, its estimate and its stage", async () => {
+    printer.currentGcodeState        = "RUNNING";
+    printer.consumptionBooked        = false;
+    printer.printResetAt             = null;
+    printer.printStartedAt           = Date.now() - 5 * 60_000;
+    printer.currentStage             = 2;      // heatbed preheating
+    printer.currentRemainingMinutes  = 42;
+
+    const { body } = await call(`${app.url}/api/print/${SERIAL}`);
+
+    assert.equal(body.startedAt, printer.printStartedAt);
+    assert.ok(body.elapsedMs >= 5 * 60_000);
+    assert.equal(body.remainingMinutes, 42);
+    assert.ok(body.estimatedEndAt > Date.now());
+    assert.equal(body.stage, "Heatbed preheating");
+    assert.equal(body.preparing, true);
+});
+
+test("a paused print reports no expected end, only the work left", async () => {
+    printer.currentGcodeState       = "PAUSE";
+    printer.consumptionBooked       = false;
+    printer.printResetAt            = null;
+    printer.printStartedAt          = Date.now() - 5 * 60_000;
+    printer.currentRemainingMinutes = 12;
+
+    const { body } = await call(`${app.url}/api/print/${SERIAL}`);
+
+    // PAUSE is an active state, so the print is still on the card and still
+    // counting: only the moment it would end is gone.
+    assert.equal(body.gcodeState, "PAUSE");
+    assert.ok(body.startedAt);
+    assert.ok(body.elapsedMs > 0);
+    assert.equal(body.remainingMinutes, 12);
+    // Adding what the job still needs to the clock would name an end that moves
+    // further away for as long as the pause lasts.
+    assert.equal(body.estimatedEndAt, null);
+});
+
+test("a finished print reports no live progress at all", async () => {
+    // The printer keeps sending the last values of the job it just finished.
+    // Reporting them would put an estimated end in the past on the card.
+    printer.currentStage            = 2;
+    printer.currentRemainingMinutes = 42;
+
+    const { body } = await call(`${app.url}/api/print/${SERIAL}`);
+
+    assert.equal(body.gcodeState, "FINISH");
+    assert.equal(body.startedAt, null);
+    assert.equal(body.estimatedEndAt, null);
+    assert.equal(body.stage, null);
+    assert.equal(body.preparing, false);
+});
+
+test("a remaining time of zero is an estimate, a missing one is not", async () => {
+    printer.currentGcodeState       = "RUNNING";
+    printer.consumptionBooked       = false;
+    printer.currentRemainingMinutes = 0;
+
+    const zero = await call(`${app.url}/api/print/${SERIAL}`);
+    assert.equal(zero.body.remainingMinutes, 0);
+    assert.ok(zero.body.estimatedEndAt);
+
+    printer.currentRemainingMinutes = null;
+    const missing = await call(`${app.url}/api/print/${SERIAL}`);
+    assert.equal(missing.body.remainingMinutes, null);
+    assert.equal(missing.body.estimatedEndAt, null);
+});
+
+test("an unknown stage is shown as its number rather than guessed at", async () => {
+    const { printStageName, isPreparingStage } = await import("../src/gcode.js");
+
+    assert.equal(printStageName(2), "Heatbed preheating");
+    assert.equal(printStageName(14), "Cleaning nozzle tip");
+    // Both seen on a P2S and outside the table the community settled on.
+    assert.equal(printStageName(54), "Stage 54");
+    assert.equal(printStageName(51), "Stage 51");
+    // Neither end names a stage. -1 is what the printer sends outside a print,
+    // and 0 is it laying down filament, which the state badge already says: a
+    // P2S sits on 0 for the whole body of a print, so naming it would put
+    // "RUNNING" and "Printing" side by side for almost the entire job.
+    assert.equal(printStageName(-1), null);
+    assert.equal(printStageName(0), null);
+    assert.equal(printStageName(null), null);
+
+    assert.equal(isPreparingStage(2), true);
+    assert.equal(isPreparingStage(13), true);
+    // A pause is its own state the printer already reports as PAUSE.
+    assert.equal(isPreparingStage(16), false);
+    assert.equal(isPreparingStage(54), false);
 });

@@ -578,3 +578,88 @@ function describeFtpsError(err) {
 
     return message;
 }
+
+/**
+ * What the printer is doing inside a running print, by the number it reports
+ * as `print.stg_cur`.
+ *
+ * These names are not published by Bambu Lab in a form this project can carry.
+ * The table is the one the community has settled on, and it is treated as a
+ * lead rather than a fact: an unknown number is shown as the number, so a
+ * firmware that adds a stage says "Stage 54" instead of a wrong name or an
+ * empty field. A P2S was seen announcing stages 51 and 54 for an ordinary
+ * plate, so the gaps are real and not hypothetical.
+ *
+ * -1 is what the printer reports when it is in no stage at all, which is every
+ * report outside a print and most reports during one: the stage is only set
+ * while something other than plain printing is going on.
+ */
+const PRINT_STAGES = {
+    1:  "Auto bed levelling",
+    2:  "Heatbed preheating",
+    3:  "Sweeping XY mech mode",
+    4:  "Changing filament",
+    5:  "M400 pause",
+    6:  "Paused, filament runout",
+    7:  "Heating hotend",
+    8:  "Calibrating extrusion",
+    9:  "Scanning bed surface",
+    10: "Inspecting first layer",
+    11: "Identifying build plate",
+    12: "Calibrating micro lidar",
+    13: "Homing toolhead",
+    14: "Cleaning nozzle tip",
+    15: "Checking extruder temperature",
+    16: "Paused by user",
+    17: "Paused, front cover falling",
+    18: "Calibrating lidar response",
+    19: "Calibrating extrusion flow",
+    20: "Paused, nozzle temperature malfunction",
+    21: "Paused, heatbed temperature malfunction",
+    22: "Unloading filament",
+    23: "Paused, skipped step",
+    24: "Loading filament",
+    25: "Calibrating motor noise",
+    26: "Paused, AMS lost",
+    27: "Paused, heat break fan too slow",
+    28: "Paused, chamber temperature control error",
+    29: "Cooling chamber",
+    30: "Paused by user G-code",
+    31: "Motor noise showoff",
+    32: "Paused, filament on nozzle detected",
+    33: "Paused, cutter error",
+    34: "Paused, first layer error",
+    35: "Paused, nozzle clog",
+};
+
+/**
+ * The stage of a running print as text, or null when the printer is in none.
+ *
+ * @param {number|null|undefined} code - `print.stg_cur` from an MQTT report
+ * @returns {string|null} the stage, or null when there is no stage to name
+ */
+export function printStageName(code) {
+    // 0 is the printer laying down filament, which the state badge next to this
+    // one already says. Measured on a P2S: it sits on 0 for the whole body of a
+    // print, so naming it would put "RUNNING" and "Printing" side by side for
+    // almost the entire job. -1 is the same answer from the other end, no stage
+    // at all, which is what it reports outside a print.
+    if (code == null || code <= 0) return null;
+    return PRINT_STAGES[code] ?? `Stage ${code}`;
+}
+
+/**
+ * Whether a stage means the printer is getting ready rather than laying down
+ * filament.
+ *
+ * Used for the badge that says a print has started but is not printing yet.
+ * Everything that heats, homes, levels, calibrates, cleans or loads counts;
+ * the paused stages do not, because a pause is its own state the printer
+ * already reports as PAUSE.
+ *
+ * @param {number|null|undefined} code - `print.stg_cur` from an MQTT report
+ * @returns {boolean} whether this stage is preparation
+ */
+export function isPreparingStage(code) {
+    return [1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 24, 25].includes(Number(code));
+}
