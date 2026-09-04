@@ -36,7 +36,7 @@ Based on the idea of a script from [Diogo Resende](https://github.com/dresende),
 
 Every Bambu Lab printer reports what its AMS holds, and every sliced print says how much of each filament it needs. This service listens to both and keeps [Spoolman](https://github.com/Donkie/Spoolman) in step with them: it recognises the spools in your AMS, links them to the spools in your inventory, and books what a print actually used onto the right one when the job is done, without you touching Spoolman.
 
-An original Bambu Lab spool is recognised by its RFID tag and linked on its own; a 3rd party spool is linked to a Spoolman spool once, by hand in the Web UI, and is tracked from then on like any other. Everything runs in one Docker container on your own network, over MQTT and FTPS to the printer. Nothing goes through the Bambu cloud.
+An original Bambu Lab spool is recognised by its RFID tag and linked on its own; a 3rd party spool is linked to a Spoolman spool once, by hand in the Web UI, and is tracked from then on like any other. The external spool holder is one more slot next to the AMS units and is treated the same way. Everything runs in one Docker container on your own network, over MQTT and FTPS to the printer. Nothing goes through the Bambu cloud.
 
 ![Dashboard](docs/images/dashboard-dark.png)
 
@@ -45,6 +45,8 @@ An original Bambu Lab spool is recognised by its RFID tag and linked on its own;
 - **G-code tracking is the new default.** Filament consumption is read from the sliced file of the print instead of the AMS RFID remain percentage, so 3rd party spools without a tag are covered as well. The previous behaviour lives on as [Legacy mode](docs/legacy-mode.md).
 - **Everything is configured in the Web UI now.** The [settings page](docs/settings.md) holds every setting and the printer list.
 - **Environment variables and hand-written `printers.json` are deprecated.** They keep working, see [Deprecated configuration](docs/deprecated-configuration.md).
+- **The Web UI can ask for a password, and the API needs a key.** Both are set under **Network access** on the [settings page](docs/settings.md). A script or an integration that called the API without a key needs one now.
+- **Slots are numbered the way the printer numbers them.** The first slot of the first unit is `A1`, so every slot label moved up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool.
 
 ## Attention
 
@@ -71,22 +73,26 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 
 Up to 12 AMS on one printer: max. 4 AMS Standard / 2 Pro plus 8 AMS HT.
 
+The external spool holder counts as one more slot, named `External`, on a printer that reports it. It carries no RFID chip, so it is assigned to a Spoolman spool by hand like any 3rd party spool, and it is not read in [legacy mode](docs/legacy-mode.md), where the weight comes from the chip.
+
 x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supported-architectures) says which device falls under which.
 
 ## Features
 
-- Real-time AMS status for every connected AMS, on any number of printers
+- Real-time status of every connected AMS and of the external spool holder, on any number of printers
+- The humidity, the temperature and a running drying cycle per AMS unit, as far as the unit reports them
 - Consumption tracked from the sliced G-code, so 3rd party spools are covered too
 - Automatic merging and creating of spools and filaments in Spoolman, or manually per click
-- Manual assignment of a Spoolman spool to an AMS slot for spools the printer cannot identify, checked against the material the printer reports
+- Manual assignment of a Spoolman spool to a slot for spools the printer cannot identify, checked against the material the printer reports
 - A detail dialog per slot: everything Spoolman holds about the spool and its filament, next to what the printer reports, with the remaining weight, lot number and comment editable in place
 - New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
-- Web UI with print dashboard, printer management, settings and log viewer, no container restart needed
+- Web UI with print dashboard, printer management, settings and log viewer, no container restart needed, and usable on a phone
+- An optional password in front of the Web UI, and named API keys for callers that have no browser
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
 
 ## How it works
 
-The printers publish their state via MQTT, this service listens and talks to Spoolman through its API. From what an AMS reports it merges a detected spool into a matching Spoolman spool, creates the spool when only the filament exists, or imports the filament from the SpoolmanDB and creates both, automatically or per click in `manual` mode.
+The printers publish their state via MQTT, this service listens and talks to Spoolman through its API. From what a printer reports about its slots it merges a detected spool into a matching Spoolman spool, creates the spool when only the filament exists, or imports the filament from the SpoolmanDB and creates both, automatically or per click in `manual` mode.
 
 While a print runs, the sliced `.gcode.3mf` is fetched from the printer via FTPS and the grams per filament are read from it. When the job reaches a final state, that amount is booked onto the linked spool; a cancelled print is booked proportionally to the layers printed. A slot that is linked to nothing is named in the log and skipped, so a missing link is visible rather than silently untracked.
 

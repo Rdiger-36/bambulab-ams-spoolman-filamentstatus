@@ -4,9 +4,9 @@
 
 The printers publish their state via MQTT, this service listens and talks to Spoolman through its API.
 
-From the AMS report it can:
+From what the printer reports about its slots, the AMS units and the external spool holder alike, it can:
 
-- **Merge spools**: a spool in the AMS whose material, colour and remaining weight match a spool in Spoolman that carries no tag is merged with it. The serial number of the AMS spool is written into the spool's extra field `tag`, which links the two from then on.
+- **Merge spools**: a spool in a slot whose material, colour and remaining weight match a spool in Spoolman that carries no tag is merged with it. The serial number of the detected spool is written into the spool's extra field `tag`, which links the two from then on.
 - **Create spools**: a detected spool with a matching registered filament in Spoolman, but no spool, gets one created, tag included.
 - **Create filaments and spools**: with no matching filament either, the filament is imported from the SpoolmanDB, registered, and the spool created on top of it.
 
@@ -18,7 +18,7 @@ Because the numbers come from the slicer and not from the RFID chip, this works 
 
 The link is dropped automatically as soon as a different filament is detected in that slot. It also resolves the rare case of two loaded spools that are identical in material and colour, which the RFID tag alone cannot tell apart.
 
-Two things follow from booking per print rather than per AMS report:
+Two things follow from booking per print rather than per report:
 
 - **A slot needs a link before its consumption can be booked**, either the tag of a Bambu Lab spool or a manual assignment. A filament the print uses from a slot that has neither is named in the log and skipped, so it is visible which spool is missing its link rather than silently going untracked.
 - **Nothing is written to Spoolman while a print runs.** The whole amount is booked when the job reaches its final state, so a spool in Spoolman stands still during the print and then jumps. The Web UI shows the progress in the meantime, per spool as "on spool / needed / rest".
