@@ -1,4 +1,10 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Development:
+      - A pull request that can break an existing installation carries a "breaking" label, and the generated release notes open with a "Breaking Changes" section built from it. The section is first in .github/release.yml, because such a change is almost always a feature or a fix as well and carries both labels, and a pull request is listed under the first section whose label it holds. Listed among the features, a renamed value or a caller that suddenly needs a key reads like something to look forward to
+      - The two breaking changes of 1.3.0 are labelled with it after the fact, #112 and #116, so the notes generated for the stable release carry them at the top. A pre-release that is already published keeps the notes it was published with
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.9
    - Breaking:
       - The API answers only two kinds of caller now: the Web UI of this installation, and a request carrying an API key. Anything else is answered with 401 and a sentence saying so. This holds whether or not a Web UI password is set; the pages themselves stay open to the network without one, it is /api/ that asks

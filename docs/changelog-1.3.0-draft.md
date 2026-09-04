@@ -85,6 +85,6 @@ Version 1.3.0
       - extractAmsEnvironment() in src/ams.js is the one reading of the per-unit environment fields, covered against the four unit shapes that have been observed
       - New test server under scripts/test-server: a mock printer and a mock Spoolman, started with one command
       - The test suite runs on node:test and covers public/ for the first time
-      - The release notes of every version carry the merged pull requests grouped by the label they were given, configured in .github/release.yml
+      - The release notes of every version carry the merged pull requests grouped by the label they were given, configured in .github/release.yml, with the breaking ones first
 
 -----------------------------------------------------------------------------------------------

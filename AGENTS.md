@@ -122,6 +122,13 @@ Not punctuation, and therefore allowed:
   both labels and is listed once, under whichever section comes first in
   `.github/release.yml`. An unlabelled PR is not an error, it just lands under
   "Everything else", which is where nobody looks.
+- `breaking` goes on top of one of those whenever an existing installation can
+  stop working the way it did: a renamed value the API hands out, a caller that
+  suddenly needs credentials, a setting that changes meaning. It is first in
+  `.github/release.yml`, so a PR labelled `breaking` and `enhancement` is listed
+  under "Breaking Changes" rather than among the features. The prose block in
+  `CHANGELOG.md` says the same thing under its own `Breaking:` heading, and the
+  two are written to agree.
 
 ### Scope
 
