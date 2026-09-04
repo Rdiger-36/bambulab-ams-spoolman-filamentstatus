@@ -13,13 +13,24 @@ import { slotColors } from "./utils.js";
  * identical in tray_info_idx and color.
  *
  * Shape:
- *   { "<printerId>": { "A0": { spoolId, fingerprint, updatedAt } } }
+ *   { schemaVersion, printers: { "<printerId>": { "A1": { spoolId, fingerprint, updatedAt } } } }
  *
  * The fingerprint identifies the physical spool as far as the AMS can describe
  * it. When it stops matching, a different spool was put into that slot and the
  * assignment is dropped rather than silently booking onto the wrong spool.
  */
 let mappings = null;
+
+/**
+ * The version of the file this module writes.
+ *
+ * 1 is the first version with a wrapper around the printers, and the first
+ * whose slot labels count a unit's slots from 1. Version 0 is the flat file
+ * every installation before it has on disk, whose keys are the same assignments
+ * under the labels `A0` to `D3`. Bump this whenever the meaning of what is
+ * stored changes and handle the old value in `migrateStored()`.
+ */
+export const MAPPINGS_SCHEMA_VERSION = 1;
 
 /**
  * Describes a slot's filament as precisely as the AMS allows for a chipless
@@ -93,22 +104,87 @@ function fingerprintMatches(stored, slot) {
 }
 
 /**
+ * Reads the two shapes the file can have.
+ *
+ * The first version stored the printers flat at the top level. Everything since
+ * wraps them, so the file can carry the version its slot labels were written
+ * with. A flat file is therefore version 0 rather than the current one: that is
+ * the whole signal the renumbering below has to go on, since a file holding
+ * `A1` alone says nothing about whether that is the second slot of the old
+ * labels or the first of the new ones.
+ *
+ * @param {object} parsed - the parsed file contents
+ * @returns {{printers: object, schemaVersion: number}}
+ */
+export function parseStoredFile(parsed) {
+    if (parsed && typeof parsed.printers === "object" && parsed.printers !== null && !Array.isArray(parsed.printers)) {
+        return {
+            printers: parsed.printers,
+            schemaVersion: Number.isInteger(parsed.schemaVersion) ? parsed.schemaVersion : MAPPINGS_SCHEMA_VERSION,
+        };
+    }
+
+    return { printers: parsed ?? {}, schemaVersion: 0 };
+}
+
+/**
+ * Brings a stored set of assignments up to the current schema version.
+ *
+ * Version 0 numbered a unit's slots from 0, so its keys are `A0` to `D3` where
+ * the same physical slots are now `A1` to `D4`. Every key is shifted by one, or
+ * the assignments of an existing install would sit one slot off: the spool the
+ * user assigned to the first slot would answer for the second and the last one
+ * would answer for nothing at all.
+ *
+ * Only the four slot units carry a number. `HT-A` to `HT-H` and `External` name
+ * a unit that has a single slot and are passed through, as is anything else the
+ * file happens to hold, because dropping a key nobody recognises loses an
+ * assignment over a label this version does not know yet.
+ *
+ * @param {object} printers - the stored assignments, keyed by printer id
+ * @param {number} schemaVersion - the version they were written with
+ * @returns {object} the assignments in the current shape
+ */
+export function migrateStored(printers, schemaVersion) {
+    if (schemaVersion >= MAPPINGS_SCHEMA_VERSION) return printers;
+
+    const renumber = slots => Object.fromEntries(
+        Object.entries(slots || {}).map(([amsId, entry]) => {
+            const match = /^([A-D])([0-3])$/.exec(amsId);
+            return [match ? `${match[1]}${Number(match[2]) + 1}` : amsId, entry];
+        }),
+    );
+
+    return Object.fromEntries(Object.entries(printers).map(([printerId, slots]) => [printerId, renumber(slots)]));
+}
+
+/**
  * Loads the mapping file once and caches it for the process lifetime.
  *
  * A missing file is the normal first run case and yields an empty map. So does
  * a corrupt one, because refusing to start over an unreadable convenience cache
  * would be worse than losing the assignments in it.
  *
- * @returns {object} the whole mapping structure, keyed by printer id
+ * A file that had to be migrated is written back immediately, so that the
+ * version on disk states what its labels mean rather than being renumbered
+ * again on every start.
+ *
+ * @returns {object} the assignments of every printer, keyed by printer id
  */
 function load() {
     if (mappings) return mappings;
 
+    let migrated = false;
+
     try {
-        mappings = JSON.parse(fs.readFileSync(mappingsPath, "utf-8"));
-        if (typeof mappings !== "object" || mappings === null || Array.isArray(mappings)) {
+        const parsed = JSON.parse(fs.readFileSync(mappingsPath, "utf-8"));
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
             throw new Error("mappings.json must contain an object");
         }
+
+        const file = parseStoredFile(parsed);
+        migrated = file.schemaVersion < MAPPINGS_SCHEMA_VERSION;
+        mappings = migrateStored(file.printers, file.schemaVersion);
         console.debug("Server", serverLogFilePath, "Spool mappings loaded:", JSON.stringify(mappings));
     } catch (err) {
         // Missing file is the normal first-run case; anything else is worth a log
@@ -116,6 +192,11 @@ function load() {
             console.error("Server", serverLogFilePath, "Could not read mappings.json, starting empty:", err.message);
         }
         mappings = {};
+    }
+
+    if (migrated) {
+        console.log("Server", serverLogFilePath, `[Mapping] Slot labels renumbered to schema ${MAPPINGS_SCHEMA_VERSION}, a unit's slots now count from 1 (A0 became A1)`);
+        persist();
     }
 
     return mappings;
@@ -126,8 +207,9 @@ function persist() {
     // Write to a temp file and rename, so a crash mid-write cannot leave a
     // truncated mappings.json behind.
     const tmp = `${mappingsPath}.tmp`;
+    const payload = { schemaVersion: MAPPINGS_SCHEMA_VERSION, printers: mappings };
     try {
-        fs.outputFileSync(tmp, JSON.stringify(mappings, null, 2));
+        fs.outputFileSync(tmp, JSON.stringify(payload, null, 2));
         fs.renameSync(tmp, mappingsPath);
     } catch (err) {
         console.error("Server", serverLogFilePath, "Failed to save mappings.json:", err.message);
@@ -176,7 +258,7 @@ export function getMapping(printerId, amsId, slot = null) {
  * stores an assignment that is never invalidated by a filament change.
  *
  * @param {string} printerId - printer serial
- * @param {string} amsId - slot label, e.g. "A0"
+ * @param {string} amsId - slot label, e.g. "A1"
  * @param {number|string} spoolId - Spoolman spool id
  * @param {object|null} slot - the AMS slot the assignment was made from
  * @returns {object} the stored entry

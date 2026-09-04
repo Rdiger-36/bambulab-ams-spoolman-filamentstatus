@@ -66,10 +66,10 @@ test("every consumption entry carries the slot it will be consumed from", async 
     const [f0, f1, f2, f3] = fixtureFilaments();
     printer.currentMapping = null;
     printer.spoolData = [
-        loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color }),
-        loadedSlot("A1", { id: 102, idx: f1.idx, type: "PLA", color: f1.color }),
-        loadedSlot("A2", { id: 103, idx: f2.idx, type: "PLA", color: f2.color }),
-        loadedSlot("A3", { id: 104, idx: f3.idx, type: "PLA", color: f3.color }),
+        loadedSlot("A1", { id: 101, idx: f0.idx, type: "PLA", color: f0.color }),
+        loadedSlot("A2", { id: 102, idx: f1.idx, type: "PLA", color: f1.color }),
+        loadedSlot("A3", { id: 103, idx: f2.idx, type: "PLA", color: f2.color }),
+        loadedSlot("A4", { id: 104, idx: f3.idx, type: "PLA", color: f3.color }),
     ];
 
     const { status, body } = await call(`${app.url}/api/print/${SERIAL}`);
@@ -77,37 +77,37 @@ test("every consumption entry carries the slot it will be consumed from", async 
     assert.equal(status, 200);
     const entries = Object.values(body.fullConsumption);
     assert.equal(entries.length, 4);
-    assert.deepEqual(entries.map(e => e.matchedAmsId), ["A0", "A1", "A2", "A3"]);
+    assert.deepEqual(entries.map(e => e.matchedAmsId), ["A1", "A2", "A3", "A4"]);
 
     // The partial map is annotated as well, or the "printed" figure would land
     // on no row at all.
-    assert.deepEqual(Object.values(body.consumption).map(e => e.matchedAmsId), ["A0", "A1", "A2", "A3"]);
+    assert.deepEqual(Object.values(body.consumption).map(e => e.matchedAmsId), ["A1", "A2", "A3", "A4"]);
 });
 
 test("what the printer reports beats the colours the file was sliced with", async () => {
     const [f0, f1, f2, f3] = fixtureFilaments();
-    // The printer runs filament 0 from A3 and filament 3 from A0, which is the
+    // The printer runs filament 0 from A4 and filament 3 from A1, which is the
     // remap it reports and the sliced colours cannot know about.
     const { decodePrintMapping } = await import("../src/gcode.js");
     printer.currentMapping = decodePrintMapping([0x0003, 0x0001, 0x0002, 0x0000]);
     printer.spoolData = [
-        loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color }),
-        loadedSlot("A1", { id: 102, idx: f1.idx, type: "PLA", color: f1.color }),
-        loadedSlot("A2", { id: 103, idx: f2.idx, type: "PLA", color: f2.color }),
-        loadedSlot("A3", { id: 104, idx: f3.idx, type: "PLA", color: f3.color }),
+        loadedSlot("A1", { id: 101, idx: f0.idx, type: "PLA", color: f0.color }),
+        loadedSlot("A2", { id: 102, idx: f1.idx, type: "PLA", color: f1.color }),
+        loadedSlot("A3", { id: 103, idx: f2.idx, type: "PLA", color: f2.color }),
+        loadedSlot("A4", { id: 104, idx: f3.idx, type: "PLA", color: f3.color }),
     ];
 
     const { body } = await call(`${app.url}/api/print/${SERIAL}`);
     const entries = Object.values(body.fullConsumption);
 
-    assert.deepEqual(entries.map(e => e.matchedAmsId), ["A3", "A1", "A2", "A0"]);
+    assert.deepEqual(entries.map(e => e.matchedAmsId), ["A4", "A2", "A3", "A1"]);
     // The slot the slice named stays next to it, because the two differ exactly
     // where the printer remapped the job and both are worth reading.
-    assert.deepEqual(entries.map(e => e.amsId), ["A3", "A1", "A2", "A0"]);
+    assert.deepEqual(entries.map(e => e.amsId), ["A4", "A2", "A3", "A1"]);
     assert.ok(entries.every(e => e.amsIdFromPrinter));
 
     // No slot carries two filaments here, which is what the claim on a reported
-    // slot is for: the colours of A0 and A3 both appear in the file.
+    // slot is for: the colours of A1 and A4 both appear in the file.
     const claimed = entries.map(e => e.matchedAmsId);
     assert.equal(new Set(claimed).size, claimed.length);
 });
@@ -117,7 +117,7 @@ test("a filament nothing loaded can serve stays unplaced", async () => {
     // shares its profile with the loaded slot, see the test below.
     const [f0] = fixtureFilaments();
     printer.currentMapping = null;
-    printer.spoolData = [loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color })];
+    printer.spoolData = [loadedSlot("A1", { id: 101, idx: f0.idx, type: "PLA", color: f0.color })];
 
     const { body } = await call(`${app.url}/api/print/${SERIAL}`);
     const unplaced = Object.values(body.fullConsumption).filter(e => e.matchedAmsId === null);
@@ -133,11 +133,11 @@ test("a slot carries only the filament that is really its own", async () => {
     // spool that never printed it, and the dashboard would show it there.
     const [f0] = fixtureFilaments();
     printer.currentMapping = null;
-    printer.spoolData = [loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color })];
+    printer.spoolData = [loadedSlot("A1", { id: 101, idx: f0.idx, type: "PLA", color: f0.color })];
 
     const { body } = await call(`${app.url}/api/print/${SERIAL}`);
     const entries = Object.values(body.fullConsumption);
-    const onA0 = entries.filter(e => e.matchedAmsId === "A0");
+    const onA0 = entries.filter(e => e.matchedAmsId === "A1");
 
     assert.equal(onA0.length, 1);
     assert.equal(onA0[0].color.replace("#", "").toUpperCase(), f0.color.toUpperCase());
@@ -149,7 +149,7 @@ test("an empty slot is not offered to the match", async () => {
     printer.currentMapping = null;
     // An empty slot whose last reported payload still looks like the filament.
     // Nothing may be booked or shown on it, so it must not become a candidate.
-    printer.spoolData = [loadedSlot("A0", { id: 101, idx: f0.idx, type: "PLA", color: f0.color, state: "Empty" })];
+    printer.spoolData = [loadedSlot("A1", { id: 101, idx: f0.idx, type: "PLA", color: f0.color, state: "Empty" })];
 
     const { body } = await call(`${app.url}/api/print/${SERIAL}`);
 

@@ -9,8 +9,8 @@ import { slotConfirmsSlice, matchConsumption, consumptionCandidate } from "../sr
 // written before that, so the slot is confirmed against what the AMS reports
 // for it now rather than taken on trust.
 
-const candidate = (idx, colors) => ({ id: 1, amsId: "B0", mapped: false, idx, colors });
-const entry = (idx, color, colors = null) => ({ tray_info_idx: idx, color, colors, amsId: "B0" });
+const candidate = (idx, colors) => ({ id: 1, amsId: "B1", mapped: false, idx, colors });
+const entry = (idx, color, colors = null) => ({ tray_info_idx: idx, color, colors, amsId: "B1" });
 
 test("a slot holding what the slice expected confirms it", () => {
     assert.equal(
@@ -68,11 +68,11 @@ test("a slot with no profile at all refuses", () => {
 /* ---- A reported slot is trusted, an estimated one is confirmed ---- */
 
 // Read off a live print. The slice held Army Green on the external holder, and
-// the print was started with the orange spool in A1 selected for that filament
-// by mistake. print.mapping said A1, which was right: A1 is what the printer
+// the print was started with the orange spool in A2 selected for that filament
+// by mistake. print.mapping said A2, which was right: A2 is what the printer
 // would have consumed.
-const armyGreenSlice = { index: 3, amsId: "A1", tray_info_idx: "GFL99", color: "#5E6345", colors: null };
-const orangeInA1 = { id: 9, amsId: "A1", mapped: true, idx: "GFL99", colors: ["f98c36"] };
+const armyGreenSlice = { index: 3, amsId: "A2", tray_info_idx: "GFL99", color: "#5E6345", colors: null };
+const orangeInA1 = { id: 9, amsId: "A2", mapped: true, idx: "GFL99", colors: ["f98c36"] };
 
 test("a slot the printer reported is not checked against the sliced colour", () => {
     // Confirming it rejected the one answer that was right. A filament
@@ -97,7 +97,7 @@ test("an estimated slot still has to hold what the slice expects", () => {
     const stage = (candidate, info) =>
         !!info.amsId && candidate.amsId === info.amsId && (info.amsIdFromPrinter || slotConfirmsSlice(candidate, info));
 
-    const matchingSlot = { id: 1, amsId: "A1", mapped: false, idx: "GFL99", colors: ["5e6345"] };
+    const matchingSlot = { id: 1, amsId: "A2", mapped: false, idx: "GFL99", colors: ["5e6345"] };
     assert.equal(stage(matchingSlot, { ...armyGreenSlice, amsIdFromPrinter: false }), true);
 });
 
@@ -124,18 +124,18 @@ const filament = (index, { idx = null, color = null, colors = null, type = "PLA"
 const matchedSlot = (entries, candidates, entry) => matchConsumption(entries, candidates).get(entry)?.[0]?.amsId ?? null;
 
 test("the slot the printer named wins, whatever colour sits in it", () => {
-    const sliced = filament(0, { idx: "GFL99", color: "#5E6345", amsId: "A1", fromPrinter: true });
-    const slots = [spool("A0", { id: 1, idx: "GFL99", color: "5E6345", tag: true }), spool("A1", { id: 2, idx: "GFL99", color: "F98C36", tag: true })];
+    const sliced = filament(0, { idx: "GFL99", color: "#5E6345", amsId: "A2", fromPrinter: true });
+    const slots = [spool("A1", { id: 1, idx: "GFL99", color: "5E6345", tag: true }), spool("A2", { id: 2, idx: "GFL99", color: "F98C36", tag: true })];
 
-    assert.equal(matchedSlot([sliced], slots, sliced), "A1");
+    assert.equal(matchedSlot([sliced], slots, sliced), "A2");
 });
 
 test("an estimated slot has to hold what the slice expects, or the stages below decide", () => {
-    const sliced = filament(0, { idx: "GFA00", color: "#5E6345", amsId: "A1" });
-    const slots = [spool("A0", { id: 1, idx: "GFA00", color: "5E6345", tag: true }), spool("A1", { id: 2, idx: "GFA00", color: "F98C36", tag: true })];
+    const sliced = filament(0, { idx: "GFA00", color: "#5E6345", amsId: "A2" });
+    const slots = [spool("A1", { id: 1, idx: "GFA00", color: "5E6345", tag: true }), spool("A2", { id: 2, idx: "GFA00", color: "F98C36", tag: true })];
 
-    // A1 is what the list order estimated, A0 is what actually holds the colour.
-    assert.equal(matchedSlot([sliced], slots, sliced), "A0");
+    // A2 is what the list order estimated, A1 is what actually holds the colour.
+    assert.equal(matchedSlot([sliced], slots, sliced), "A1");
 });
 
 test("a slot the printer named for one filament is not claimed by another", () => {
@@ -143,13 +143,13 @@ test("a slot the printer named for one filament is not claimed by another", () =
     // slots showed every figure twice, on the slot being consumed and on the
     // slot merely holding the colour the file was sliced with. The second one
     // reaches the colour stage and matches, unless the claim is respected.
-    const remapped = filament(0, { idx: "GFA00", color: "#FFFFFF", amsId: "A1", fromPrinter: true });
+    const remapped = filament(0, { idx: "GFA00", color: "#FFFFFF", amsId: "A2", fromPrinter: true });
     const other    = filament(1, { idx: "GFA00", color: "#FFFFFF", amsId: null });
-    const slots = [spool("A0", { id: 1, idx: "GFA00", color: "FFFFFF", tag: true }), spool("A1", { id: 2, idx: "GFA00", color: "FFFFFF", tag: true })];
+    const slots = [spool("A1", { id: 1, idx: "GFA00", color: "FFFFFF", tag: true }), spool("A2", { id: 2, idx: "GFA00", color: "FFFFFF", tag: true })];
 
     const matched = matchConsumption([remapped, other], slots);
-    assert.equal(matched.get(remapped)[0].amsId, "A1");
-    assert.deepEqual(matched.get(other).map(c => c.amsId), ["A0"]);
+    assert.equal(matched.get(remapped)[0].amsId, "A2");
+    assert.deepEqual(matched.get(other).map(c => c.amsId), ["A1"]);
 });
 
 test("the filament identity stage separates a gradient spool from the plain one", () => {
@@ -158,11 +158,11 @@ test("the filament identity stage separates a gradient spool from the plain one"
     // entry, so nothing ever hit and only the loosest stage did any work.
     const gradient = filament(0, { idx: "GFA00", color: "#8EC9E9", colors: ["#8EC9E9", "#E7C1D5"] });
     const slots = [
-        spool("A0", { id: 1, idx: "GFA00", color: "8EC9E9", tag: true }),
-        spool("A1", { id: 2, idx: "GFA00", color: "8EC9E9", cols: ["8EC9E9", "E7C1D5"], tag: true }),
+        spool("A1", { id: 1, idx: "GFA00", color: "8EC9E9", tag: true }),
+        spool("A2", { id: 2, idx: "GFA00", color: "8EC9E9", cols: ["8EC9E9", "E7C1D5"], tag: true }),
     ];
 
-    assert.equal(matchedSlot([gradient], slots, gradient), "A1");
+    assert.equal(matchedSlot([gradient], slots, gradient), "A2");
 });
 
 test("a 3rd party spool is matched on material and colour", () => {
@@ -182,35 +182,35 @@ test("a profile two filaments of the print share matches nothing on its own", ()
     // honest answer.
     const black = filament(0, { idx: "GFA00", color: "#000000" });
     const white = filament(1, { idx: "GFA00", color: "#FFFFFF" });
-    const slots = [spool("A0", { id: 1, idx: "GFA00", color: "000000", tag: true })];
+    const slots = [spool("A1", { id: 1, idx: "GFA00", color: "000000", tag: true })];
 
     const matched = matchConsumption([black, white], slots);
-    assert.equal(matched.get(black)[0].amsId, "A0");
+    assert.equal(matched.get(black)[0].amsId, "A1");
     assert.deepEqual(matched.get(white), []);
 });
 
 test("a unique profile still matches when the colours do not line up", () => {
     const sliced = filament(0, { idx: "GFB01", color: "#123456", type: "ABS" });
-    const slots = [spool("A2", { id: 3, idx: "GFB01", type: "ABS", color: "FFFFFF", tag: true })];
+    const slots = [spool("A3", { id: 3, idx: "GFB01", type: "ABS", color: "FFFFFF", tag: true })];
 
-    assert.equal(matchedSlot([sliced], slots, sliced), "A2");
+    assert.equal(matchedSlot([sliced], slots, sliced), "A3");
 });
 
 test("a manual assignment outranks an automatic match in the same stage", () => {
     const sliced = filament(0, { idx: "GFA00", color: "#000000" });
     const slots = [
-        spool("A0", { id: 1, idx: "GFA00", color: "000000", tag: true }),
-        spool("A1", { id: 2, idx: "GFA00", color: "000000", mapped: true }),
+        spool("A1", { id: 1, idx: "GFA00", color: "000000", tag: true }),
+        spool("A2", { id: 2, idx: "GFA00", color: "000000", mapped: true }),
     ];
 
-    assert.equal(matchedSlot([sliced], slots, sliced), "A1");
+    assert.equal(matchedSlot([sliced], slots, sliced), "A2");
 });
 
 test("two indistinguishable spools are both reported, for the caller to decide", () => {
     const sliced = filament(0, { idx: "GFA00", color: "#000000" });
     const slots = [
-        spool("A0", { id: 1, idx: "GFA00", color: "000000", tag: true }),
-        spool("A1", { id: 2, idx: "GFA00", color: "000000", tag: true }),
+        spool("A1", { id: 1, idx: "GFA00", color: "000000", tag: true }),
+        spool("A2", { id: 2, idx: "GFA00", color: "000000", tag: true }),
     ];
 
     assert.deepEqual(matchConsumption([sliced], slots).get(sliced).map(c => c.id), [1, 2]);
@@ -229,13 +229,13 @@ test("the runtime slot and its client projection produce the same candidate", ()
     // them from toClientSpool(), which has already turned that into null. Two
     // keys for one slot would be exactly the drift this function exists to end.
     const runtime = consumptionCandidate({
-        amsId: "A0",
+        amsId: "A1",
         connectedViaMapping: true,
         existingSpool: { id: 5 },
         slot: { tray_info_idx: "N/A", tray_type: "PLA", tray_color: "F98C36", cols: ["F98C36"] },
     });
     const projected = consumptionCandidate({
-        amsId: "A0",
+        amsId: "A1",
         connectedViaMapping: true,
         existingSpool: { id: 5 },
         slot: { tray_info_idx: null, tray_type: "PLA", tray_color: "f98c36", cols: ["f98c36"] },

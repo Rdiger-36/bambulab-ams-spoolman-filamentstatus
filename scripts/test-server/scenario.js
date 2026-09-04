@@ -109,7 +109,7 @@ const TPU = { type: "TPU", material: "TPU 90A", idx: "GFU02", name: "U02-T0", no
  * The AMS units as `print.ams.ams` carries them.
  *
  * The ids are the full range `convertAMSandSlot()` knows: 0 to 3 for the
- * regular units, giving A0 to D3, and 128 to 135 for the single slot AMS HT
+ * regular units, giving A1 to D4, and 128 to 135 for the single slot AMS HT
  * units, giving HT-A to HT-H.
  */
 export const AMS_UNITS = [
@@ -322,7 +322,7 @@ export const SEED_FILAMENTS = [
 /**
  * The spools the mock Spoolman starts with.
  *
- * The two tagged ones are what makes A0 and C0 report as connected. The two
+ * The two tagged ones are what makes A1 and C1 report as connected. The two
  * untagged ones are merge candidates and fill the assignment picker, where a
  * multi colour spool used to be the entry with no colour next to it.
  */

@@ -35,7 +35,7 @@ The download needs LAN access to the printer on port 990 (FTPS) with the printer
 Example of a merge in automatic mode:
 
 ```bash
-  - [A0] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
+  - [A1] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
         - Found mergeable Spool => Spoolman Spool ID: 1, Material: PETG HF, Color: HF Black
           merging Spool...
           Spool successfully merged with Spool-ID 1 => HF Black
@@ -47,10 +47,10 @@ From then on the slot is linked and the consumption of every print is booked ont
 
 | Slot in log | Slot on AMS | Slot in log | Slot on AMS |
 |--------------|----------------------|--------------|---------------------|
-| `A0` – `A3` | first AMS, slot 1 – 4 | `B0` – `B3` | second AMS, slot 1 – 4 |
+| `A1` – `A4` | first AMS, slot 1 – 4 | `B1` – `B4` | second AMS, slot 1 – 4 |
 | `HT-A` | first AMS HT | `HT-B` | second AMS HT |
 
-Continues up to `D3` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT.
+Continues up to `D4` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT.
 
 ## Archiving empty spools
 

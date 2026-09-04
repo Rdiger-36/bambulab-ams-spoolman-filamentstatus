@@ -34,7 +34,7 @@ const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot id
 const ARCHIVED_HINT = "This spool is archived in Spoolman because it ran empty. Take it out of the slot, or restore it in the spool details.";
 
 // Humidity, temperature and drying state per AMS unit, keyed by the unit part
-// of a slot label ("A" for A0 to A3, "HT-A" for a single slot unit). Mirrored
+// of a slot label ("A" for A1 to A4, "HT-A" for a single slot unit). Mirrored
 // from /api/status and kept fresh by the ams_env SSE event, which arrives at
 // most every 30 seconds because the readings never sit still.
 let amsEnvByUnit = {};

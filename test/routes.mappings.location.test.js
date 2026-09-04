@@ -74,10 +74,10 @@ function seed(id, location = null) {
     return spools.get(id);
 }
 
-/** Points the cached slot A0 at a spool, the way an AMS update would. */
+/** Points the cached slot A1 at a spool, the way an AMS update would. */
 function slotHolds(spool) {
     printer.spoolData = [{
-        amsId: "A0",
+        amsId: "A1",
         slotState: "Loaded (3rd party)",
         slot: { tray_uuid: "N/A", tray_type: "PLA", tray_color: "FF0000FF" },
         existingSpool: spool ? { ...spool } : null,
@@ -90,29 +90,29 @@ beforeEach(async () => {
     patches.length = 0;
     spools.clear();
     slotHolds(null);
-    await call(`${app.url}/api/mappings/${SERIAL}/A0`, "DELETE");
+    await call(`${app.url}/api/mappings/${SERIAL}/A1`, "DELETE");
     patches.length = 0;
 });
 
 test("assigning a spool writes the slot as its location", async () => {
     seed(1);
 
-    const { status } = await call(`${app.url}/api/mappings/${SERIAL}/A0`, "PUT", { spoolId: 1 });
+    const { status } = await call(`${app.url}/api/mappings/${SERIAL}/A1`, "PUT", { spoolId: 1 });
 
     assert.equal(status, 200);
-    assert.deepEqual(patches, [{ id: 1, payload: { location: "Test Printer - A0" } }]);
+    assert.deepEqual(patches, [{ id: 1, payload: { location: "Test Printer - A1" } }]);
 });
 
 test("unassigning a spool clears the location again", async () => {
-    const spool = seed(1, "Test Printer - A0");
+    const spool = seed(1, "Test Printer - A1");
     slotHolds(spool);
 
-    const { status, body } = await call(`${app.url}/api/mappings/${SERIAL}/A0`, "PUT", { spoolId: 1 });
+    const { status, body } = await call(`${app.url}/api/mappings/${SERIAL}/A1`, "PUT", { spoolId: 1 });
     assert.equal(status, 200);
     assert.ok(body.ok);
     patches.length = 0;
 
-    const removed = await call(`${app.url}/api/mappings/${SERIAL}/A0`, "DELETE");
+    const removed = await call(`${app.url}/api/mappings/${SERIAL}/A1`, "DELETE");
 
     assert.equal(removed.status, 200);
     assert.equal(removed.body.removed, true);
@@ -122,38 +122,38 @@ test("unassigning a spool clears the location again", async () => {
 test("unassigning leaves a location the user set by hand alone", async () => {
     const spool = seed(1, "Shelf A");
     slotHolds(spool);
-    await call(`${app.url}/api/mappings/${SERIAL}/A0`, "PUT", { spoolId: 1 });
+    await call(`${app.url}/api/mappings/${SERIAL}/A1`, "PUT", { spoolId: 1 });
     // The assignment claimed the slot, so put the hand-set location back the way
     // a user editing it in Spoolman afterwards would.
     spools.get(1).location = "Shelf A";
     slotHolds(spools.get(1));
     patches.length = 0;
 
-    await call(`${app.url}/api/mappings/${SERIAL}/A0`, "DELETE");
+    await call(`${app.url}/api/mappings/${SERIAL}/A1`, "DELETE");
 
     assert.deepEqual(patches, []);
     assert.equal(spools.get(1).location, "Shelf A");
 });
 
 test("reassigning a slot moves the location from the old spool to the new one", async () => {
-    const previous = seed(1, "Test Printer - A0");
+    const previous = seed(1, "Test Printer - A1");
     seed(2);
     slotHolds(previous);
-    await call(`${app.url}/api/mappings/${SERIAL}/A0`, "PUT", { spoolId: 1 });
+    await call(`${app.url}/api/mappings/${SERIAL}/A1`, "PUT", { spoolId: 1 });
     patches.length = 0;
 
-    await call(`${app.url}/api/mappings/${SERIAL}/A0`, "PUT", { spoolId: 2 });
+    await call(`${app.url}/api/mappings/${SERIAL}/A1`, "PUT", { spoolId: 2 });
 
     assert.deepEqual(patches, [
         { id: 1, payload: { location: "" } },
-        { id: 2, payload: { location: "Test Printer - A0" } },
+        { id: 2, payload: { location: "Test Printer - A1" } },
     ]);
 });
 
 test("unassigning a slot that had nothing assigned writes nothing", async () => {
-    seed(1, "Test Printer - A0");
+    seed(1, "Test Printer - A1");
 
-    const { status, body } = await call(`${app.url}/api/mappings/${SERIAL}/A0`, "DELETE");
+    const { status, body } = await call(`${app.url}/api/mappings/${SERIAL}/A1`, "DELETE");
 
     assert.equal(status, 200);
     assert.equal(body.removed, false);
@@ -163,7 +163,7 @@ test("unassigning a slot that had nothing assigned writes nothing", async () => 
 test("a rejected assignment writes no location", async () => {
     // Spool 7 is not in Spoolman, so the route answers 404 before anything is
     // stored, and nothing may have been written on the way there either.
-    const { status } = await call(`${app.url}/api/mappings/${SERIAL}/A0`, "PUT", { spoolId: 7 });
+    const { status } = await call(`${app.url}/api/mappings/${SERIAL}/A1`, "PUT", { spoolId: 7 });
 
     assert.equal(status, 404);
     assert.deepEqual(patches, []);

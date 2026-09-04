@@ -96,7 +96,7 @@ test("the generic pattern leaves the RFID tag of a spool alone", () => {
     // 32 characters with no word boundary inside, so no 15 character run of it
     // can match. The tag identifies a piece of filament, not a person.
     const uuid = "18F1DE9B4FF74902A7CAA100D8F2CB5F";
-    assert.equal(maskText(`[A0] PLA Basic 000000FF [[ ${uuid} ]]`, {}), `[A0] PLA Basic 000000FF [[ ${uuid} ]]`);
+    assert.equal(maskText(`[A1] PLA Basic 000000FF [[ ${uuid} ]]`, {}), `[A1] PLA Basic 000000FF [[ ${uuid} ]]`);
 });
 
 test("every address in a log is masked, configured or not", () => {

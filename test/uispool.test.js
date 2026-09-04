@@ -19,7 +19,7 @@ after(async () => { await app.close(); });
 /** A UI spool as processSlot() builds it for an identified Bambu Lab spool. */
 function uiSpool(overrides = {}) {
     return {
-        amsId: "A0",
+        amsId: "A1",
         slot: {
             id: 0,
             tray_uuid: "ABCD",
@@ -98,7 +98,7 @@ test("the readable name and the consumption key are derived once, on the server"
 test("a missing assignment reads as false rather than absent", () => {
     // The UI branches on these, so an undefined would silently render as "not
     // tracked" wherever a builder forgot to set it
-    const client = toClientSpool({ amsId: "A1", slot: {}, slotState: "Empty" });
+    const client = toClientSpool({ amsId: "A2", slot: {}, slotState: "Empty" });
 
     assert.equal(client.connectedViaTag, false);
     assert.equal(client.connectedViaMapping, false);
@@ -111,7 +111,7 @@ test("the N/A placeholder does not reach a client", () => {
     // backend marker, and a client that receives it renders it, which is how an
     // emptied slot ended up labelled "N/A" with a `#N/A` colour swatch.
     const client = toClientSpool({
-        amsId: "A0",
+        amsId: "A1",
         slotState: "Empty",
         slot: { id: 0, state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" },
     });
@@ -128,7 +128,7 @@ test("a 3rd party slot keeps what the printer does know", () => {
     // Material and colour set on the AMS are real values and have to survive,
     // even though the same record carries placeholders next to them.
     const client = toClientSpool({
-        amsId: "B0",
+        amsId: "B1",
         slotState: "Loaded (3rd party)",
         slot: { id: 0, state: 11, tray_info_idx: "GFL99", tray_type: "PLA", tray_sub_brands: "N/A", tray_color: "0ACC38FF", tray_weight: "0", tray_uuid: "N/A", remain: 0 },
     });
@@ -219,7 +219,7 @@ test("a slot without cols still reports the one colour the printer sends", () =>
 
 test("an empty slot reports no colours at all", () => {
     const client = toClientSpool({
-        amsId: "A1",
+        amsId: "A2",
         slotState: "Empty",
         slot: { id: 1, state: 10, remain: 0, tray_color: "N/A", tray_sub_brands: "N/A", tray_weight: 0, tray_uuid: "N/A" },
     });

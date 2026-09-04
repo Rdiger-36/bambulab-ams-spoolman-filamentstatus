@@ -27,10 +27,10 @@ before(async () => {
     printer = printers.find(p => p.id === SERIAL);
     printer.currentGcodeState = "IDLE";
     printer.spoolData = [{
-        amsId: "A0",
+        amsId: "A1",
         slotState: "Loaded (Bambu Lab)",
         existingSpool: { id: SPOOL_ID, remaining_weight: 500, filament: { name: "spool 42" } },
-        slot: { tray_uuid: "uuid-A0" },
+        slot: { tray_uuid: "uuid-A1" },
     }];
 });
 
