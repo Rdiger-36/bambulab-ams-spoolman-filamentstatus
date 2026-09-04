@@ -174,6 +174,29 @@ export function formatDate(date) {
 }
 
 /**
+ * A duration for a label that is redrawn every second.
+ *
+ * Clock shape rather than prose, because prose changes width as it counts:
+ * "10 min" to "9 min" to "59s" moved everything after it along the line on
+ * every step. Always HH:mm:ss, every field padded, so the width is the same
+ * from the first second to the twenty-third hour and nothing after it moves.
+ *
+ * A print can run for days, so days come out in front rather than being
+ * added into the hours: "02 Days 05:13:44" says at a glance what "53:13:44"
+ * makes you work out. Always "Days", never "Day", because the singular is a
+ * character shorter and would move the clock behind it on the second day.
+ */
+export function formatCounter(ms) {
+    const total = Math.max(0, Math.round(ms / 1000));
+    const pad = value => String(value).padStart(2, "0");
+
+    const clock = `${pad(Math.floor(total / 3600) % 24)}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
+    const days = Math.floor(total / 86400);
+
+    return days ? `${pad(days)} Days ${clock}` : clock;
+}
+
+/**
  * The unit id the external spool holder is addressed under, and the label it
  * produces. The printer reports the holder as `print.vir_slot`, whose entry
  * carries `id` 255, so the number is the printer's rather than an invention.

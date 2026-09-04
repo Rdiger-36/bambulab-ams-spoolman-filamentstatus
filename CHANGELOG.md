@@ -10,7 +10,7 @@ Version 1.3.0-dev.11
       - The card returns to idle on its own once a print has been over for a while. The state badge, the job name, the booking label and the "Needed" and "After print" columns all go back to what they show when nothing is printing
          - How long that takes is "Clear print result after" on the settings page, ten minutes by default. 0 keeps the result until it is cleared by hand
          - Next to the booking label is the remaining time, and it is a button: pressing it clears the result now. Every open dashboard follows at once rather than waiting out its update interval
-         - It counts down in minutes and seconds, in a fixed width with tabular figures, so the words in front of it stay put instead of sliding along the line on every step
+         - Every duration on the dashboard reads HH:mm:ss, padded from the first second, with tabular figures, so a counter that is rewritten every second never moves the words in front of it. A print that runs past a day carries the days ahead of the clock, "02 Days 05:13:44", rather than counting hours past 24
          - The summary stays reachable after that, as "Last print", until the next print starts
          - The printer repeats its terminal state in every report for as long as it sits on it, so the clearing is remembered rather than derived from the state. Without that the next report would put the finished print straight back on the card
    - Fixes:

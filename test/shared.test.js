@@ -200,3 +200,35 @@ test("the layer counter copes with either number missing", async () => {
     assert.deepEqual(humanLayers(null, 25), { layer: 1, total: 26, percent: 4 });
     assert.deepEqual(humanLayers(null, null), { layer: 1, total: null, percent: null });
 });
+
+// The clock behind the two counters on the dashboard: how long the print has
+// been running, and how long its result still has before it clears itself.
+test("a counter reads HH:mm:ss whatever the duration", async () => {
+    const { formatCounter } = await import("../public/shared.js");
+    const s = 1000, m = 60 * s, h = 60 * m;
+
+    // Padded from the first second, so nothing on the line moves as it counts.
+    assert.equal(formatCounter(0), "00:00:00");
+    assert.equal(formatCounter(5 * s), "00:00:05");
+    assert.equal(formatCounter(90 * s), "00:01:30");
+    assert.equal(formatCounter(59 * m + 59 * s), "00:59:59");
+    assert.equal(formatCounter(h), "01:00:00");
+    assert.equal(formatCounter(5 * h + 13 * m + 44 * s), "05:13:44");
+
+    // A negative deadline is one that has passed, not a count upwards again.
+    assert.equal(formatCounter(-5 * s), "00:00:00");
+});
+
+test("a print running over days counts the days in front", async () => {
+    const { formatCounter } = await import("../public/shared.js");
+    const s = 1000, m = 60 * s, h = 60 * m, d = 24 * h;
+
+    // The hours roll into a day rather than growing past 24.
+    assert.equal(formatCounter(23 * h + 59 * m + 59 * s), "23:59:59");
+    assert.equal(formatCounter(d), "01 Days 00:00:00");
+    assert.equal(formatCounter(2 * d + 5 * h + 13 * m + 44 * s), "02 Days 05:13:44");
+    // Always "Days": the singular is a character shorter and would move the
+    // clock behind it on the second day.
+    assert.match(formatCounter(d), /^01 Days /);
+    assert.equal(formatCounter(12 * d), "12 Days 00:00:00");
+});

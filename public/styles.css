@@ -310,12 +310,13 @@ h1 {
 .gc-card-link:disabled { cursor: default; opacity: 0.5; }
 .gc-card-booked { color: var(--ok); font-weight: 600; text-decoration-color: #8886; }
 
-/* A number that is rewritten every second. Tabular figures so the digits do not
-   change width as they count, and a floor under the width so dropping from an
-   hour to minutes does not pull the line along with it. */
+/* A clock that is rewritten every second. Tabular figures so the digits do not
+   change width as they count, and a floor at the width of HH:mm:ss so the whole
+   first day passes without anything on the line moving. A print that runs into
+   a second day grows by the "DD Days " in front, once. */
 .gc-counter {
   display: inline-block;
-  min-width: 5ch;
+  min-width: 8ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

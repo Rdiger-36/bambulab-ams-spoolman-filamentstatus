@@ -4,6 +4,7 @@ import {
     SLOT_OPTIONS,
     correctRemainInt,
     filamentColors,
+    formatCounter,
     formatDate,
     humanLayers,
     normColor,
@@ -2216,32 +2217,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     /**
-     * A duration for a label that is redrawn every second.
-     *
-     * Clock shape rather than prose, because prose changes width as it counts:
-     * "10 min" to "9 min" to "59s" moved everything after it along the line on
-     * every step. Minutes are padded so the whole thing keeps one width for as
-     * long as it stays under an hour, and `.gc-counter` holds that width across
-     * the one step where it does not.
+     * How long a finished print took, in the same shape the live counters use,
+     * so a duration reads the same whether it is still running or over. The one
+     * difference is that this one can be unknown: a service restarted mid print
+     * never saw the job start.
      */
-    function formatCounter(ms) {
-        const total = Math.max(0, Math.round(ms / 1000));
-        const seconds = String(total % 60).padStart(2, "0");
-        const minutes = Math.floor(total / 60) % 60;
-        const hours = Math.floor(total / 3600);
-
-        if (hours) return `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`;
-        return `${String(minutes).padStart(2, "0")}:${seconds}`;
-    }
-
-    /** A duration in milliseconds as hours and minutes, or minutes and seconds. */
     function formatDuration(ms) {
         if (ms == null) return "unknown";
-        const total = Math.round(ms / 1000);
-        const hours = Math.floor(total / 3600);
-        const minutes = Math.floor((total % 3600) / 60);
-        if (hours) return `${hours} h ${minutes} min`;
-        return `${minutes} min ${total % 60}s`;
+        return formatCounter(ms);
     }
 
     /**
