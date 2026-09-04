@@ -21,13 +21,11 @@ theory or in tests. Ordered by how likely a user is to hit it.
   0.38 g that was booked. A finished print, as opposed to a cancelled one, has
   still not been observed, and neither has a booking onto the external spool
   holder, which needs a run past layer 170.
-- [ ] **An AMS HT.** Nobody involved has one, so where its slots sit in Bambu
-  Studio's filament list is unknown and `orderedAmsSlots()` leaves them out. It
-  only matters for a printer that does not report `print.mapping`, which answers
-  the same question. A single sliced file from a printer with one settles it:
-  compare `filament_colour` in `Metadata/project_settings.config` against the
-  slots the printer reports, position for position, the way the external holder
-  was settled.
+- [x] **An AMS HT.** Settled on 2026-09-04 from a sliced file off a P1S with two
+  AMS units, an AMS HT and a spool on the external holder, read against the
+  slots the printer reported over MQTT: the HT is the last position of the list,
+  after the external holder, although the printer numbers the holder 254 and the
+  HT 128. One printer, so one measurement. See `test/gcode.htexternal.test.js`.
 - [ ] **AMS Lite.** Everything was tested on a P2S with two AMS units. The AMS
   Lite was never in scope for G-code tracking; the README only documents its
   legacy mode limitation.
@@ -36,6 +34,47 @@ theory or in tests. Ordered by how likely a user is to hit it.
 - [ ] **The update check with a newer release.** Only the prerelease path was
   observed, where the running version is ahead of the latest release. The
   "version X is available" path has never been rendered against a real answer.
+- [ ] **Low priority, waiting on other people's hardware: slice files from more
+  printer families.** The ordering in `orderedAmsSlots()` rests on three
+  printers, and two of its three rules on one printer each. Users with the
+  hardware below have been asked; the branch `fix/slice-slot-order` is where
+  this continues. Two things are needed per device, and the second is what makes
+  the first readable:
+
+    1. a sliced `.gcode.3mf` of a plate using several filaments, sliced after
+       synchronising the project with the printer in Bambu Studio
+    2. the slots the printer reports, from
+       `node scripts/capture-trays.js <ip> <code> <serial>`, taken without
+       moving a spool in between
+
+  `Metadata/project_settings.config` carries `filament_ids` and
+  `filament_colour` for the whole project, and reading those against the
+  reported slots gives the position of every slot, which is the measurement.
+  What each of them would settle:
+
+  - **X1E with one AMS** (the X1, X1C and P1S family). Whether the order holds
+    on the X1 family at all, and what an original AMS does to it: every file so
+    far came from an AMS 2 Pro or the AMS of a P2S.
+  - **A1 mini with an AMS Lite.** The Lite was never in scope for G-code
+    tracking, and it is the one unit whose four slots might not be listed the
+    way the others are. It also carries an external spool, so the position of
+    the holder is measurable on it a second time.
+  - **X2D with an AMS 2 Pro and an AMS HT** (the H2D and H2C family, and with
+    the P2S one variant of the H2S). The second dual nozzle sample. It would say
+    whether the extruder grouping the H2C showed is how that whole family lists
+    its filaments, and whether the holder still comes before the HT when the
+    list is grouped rather than ordered by unit.
+
+  Two questions ride along with these:
+
+  - **Does anything but a P2S report `print.mapping`?** Unknown for the P1, X1
+    and H2 families. It needs a print that is actually running, so a slice file
+    alone does not answer it. Where it is reported, the ordering above is not
+    used at all.
+  - **What `group_id` in `slice_info.config` means.** In the H2C file the four
+    filaments carried 0, 3, 2, 1, and ordering the right extruder's filaments by
+    it reproduced their AMS order exactly. One file, so it is a lead and not a
+    finding; a second dual nozzle file either kills it or makes it worth using.
 
 ## Verified against the printer
 
