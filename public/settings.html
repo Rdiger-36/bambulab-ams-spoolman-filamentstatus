@@ -26,6 +26,11 @@
             <span class="set-page-note">Stored in printers/settings.json and applied without a restart, unless a field says otherwise.</span>
         </div>
 
+        <!-- Filled by settings.js from /api/notices, and hidden while nothing
+             on this installation is still configured from the environment.
+             Apart from #set-banner, which carries one message at a time. -->
+        <div id="set-env-info" class="set-page-info" hidden></div>
+
         <div id="set-banner" class="set-banner"></div>
 
         <div class="set-card">
