@@ -1,5 +1,10 @@
 -----------------------------------------------------------------------------------------------
 Unreleased
+   - Documentation:
+      - The README says that the external spool holder exists. It has been a slot of its own since 1.3.0, named External, and nothing on the front page mentioned it: not what the service does, not the supported hardware, not the feature list. It is assigned by hand like any 3rd party spool and is not read in legacy mode, which the hardware section now says
+      - "What changed in 1.3.0" carries the two changes an existing installation can trip over, the password and the API key, and the slot renumbering, next to the three that were already there
+      - The feature list names the humidity, temperature and drying readings per AMS unit, and says the Web UI works on a phone
+      - "How it works" opens with what the printer reports about its slots rather than with the AMS report, since the holder is reported outside the AMS block altogether
    - Fixes:
       - The anonymised diagnostics bundle masks the RFID tag of a spool, in the ordinary log lines and in the debug dumps. Everything after the first four characters is replaced, the way a serial number keeps five: four is enough to see that two lines are about the same spool and far too few to recognise the spool by
          - A tag on its own is a piece of filament rather than a person, which is why it used to be handed out whole. A bundle carries every tag of a shelf at once though, next to the printer they sit in, and read across several reports that says what somebody owns and prints with
