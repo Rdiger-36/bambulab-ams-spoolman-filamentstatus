@@ -1607,6 +1607,12 @@ body.logs-page .log-page { width: 100%; }
 
 .data-table td:first-child { font-weight: 600; }
 
+/* A value can carry a run of characters with nothing to break at — the tray
+   UUID of a spool is 32 of them — and a cell cannot shrink below that. In the
+   confirmation dialogs it pushed the table past the width of a phone, where
+   the dialog cut the rest of the value off rather than scrolling to it. */
+.data-table td { overflow-wrap: anywhere; }
+
 
 /* The "required but not loaded" list sits inside the print card, so it stays
    tighter than a table of its own. */
@@ -2431,6 +2437,32 @@ body.logs-page .log-page { width: 100%; }
   /* The facts of the Service card, two to a line like the state of a printer
      on the dashboard rather than one per line. */
   .set-facts { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+  /* The confirmation dialogs read as a label and a value per row. Held in two
+     columns the label keeps a third of a phone to itself and the value is
+     broken over five ragged lines next to it, so the row becomes a block here
+     as well: the label over the value it names. */
+  #dialog-content .data-table,
+  #dialog-content .data-table tbody,
+  #dialog-content .data-table tr,
+  #dialog-content .data-table th,
+  #dialog-content .data-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  #dialog-content .data-table th {
+    /* The desktop rule keeps the label on one line, which is what made the
+       column wide in the first place. */
+    white-space: normal;
+    border-bottom: none;
+    padding: 8px 0 0;
+  }
+
+  #dialog-content .data-table td { padding: 2px 0 8px; }
+
+  #dialog-content .data-table tr:last-child td { padding-bottom: 0; }
 
   /* The key of a new API key is long and has to be copied off the screen it is
      shown on, so it gets the full width and the button its own line under it. */
