@@ -1936,6 +1936,33 @@ body.logs-page .log-page { width: 100%; }
 }
 
 .set-banner:empty { display: none; }
+
+/* The standing note at the head of the settings page, next to the badges that
+   mark a single field. Blue rather than amber, because it describes how this
+   installation is configured and not something that went wrong, and it stays
+   on the page instead of being dismissed: the dashboard dialog is shown once
+   per installation, and the rule it carries matters every time somebody edits
+   a compose file. */
+.set-page-info {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--info-bg);
+  color: var(--text);
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 0.9em;
+}
+
+.set-page-info h2 {
+  margin: 0 0 4px;
+  font-size: 0.95em;
+  color: var(--accent-text);
+}
+
+.set-page-info p { margin: 4px 0; }
+
+.set-page-info p:last-child { margin-bottom: 0; }
+
 .set-banner-ok   { background: var(--ok-bg);   color: var(--ok); }
 .set-banner-warn { background: var(--warn-bg); color: var(--warn); }
 .set-banner-bad  { background: var(--bad-bg);  color: var(--bad); }

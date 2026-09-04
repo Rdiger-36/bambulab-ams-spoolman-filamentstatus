@@ -65,6 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     loadSettings();
+    loadEnvInfo();
     loadPrinters();
     loadApiKeys();
     loadSystemInfo();
@@ -78,9 +79,77 @@ document.addEventListener("DOMContentLoaded", () => {
             // A renamed or removed printer changes the menu as well
             refreshMenubarPrinters();
         }
-        if (data.type === "settings_update" && !formDirty) loadSettings();
+        if (data.type === "settings_update" && !formDirty) {
+            loadSettings();
+            // A save anywhere can be the one that takes the last variable out of
+            // service, which is exactly when this note has to change.
+            loadEnvInfo();
+        }
     };
 });
+
+/* ---- The standing note about environment variables ---- */
+
+/**
+ * The standing note at the head of the page, for as long as a setting is still
+ * taken from an environment variable.
+ *
+ * The badge on a field says that this one value comes from a variable. What it
+ * cannot say is what happens on the next save, which is the part that surprises
+ * people: the page sends every field, so the first save writes the whole
+ * configuration into `settings.json` and every one of those variables goes
+ * quiet, including the ones nobody touched.
+ *
+ * Shown exactly when a field carries the badge, and not dismissible, unlike the
+ * dialog the dashboard shows once per installation: this is read again by
+ * whoever opens the settings page a year later with the compose file in the
+ * other window. An install that never used the variables never sees it, and one
+ * that used them loses it the moment the save takes them out of service.
+ */
+async function loadEnvInfo() {
+    const box = document.getElementById("set-env-info");
+    if (!box) return;
+
+    let notice;
+    try {
+        notice = (await fetchJson("./api/notices"))["env-config"];
+    } catch {
+        // A standing hint is not worth an error message of its own.
+        box.hidden = true;
+        return;
+    }
+
+    // Exactly the condition the badges follow: no field carries one, so there is
+    // nothing here to explain. Emptied as well, so a save that ends the last
+    // variable does not leave its own text behind the hidden attribute.
+    if (!notice?.variables?.length) {
+        box.hidden = true;
+        box.innerHTML = "";
+        return;
+    }
+
+    const code = list => `<code>${list.map(escapeHtml).join("</code>, <code>")}</code>`;
+    const parts = ["<h2>Information</h2>"];
+
+    parts.push(`<p>These settings are still taken from environment variables, which is
+                   <b>deprecated since 1.3.0</b>: ${code(notice.variables)}. They are marked
+                   <span class="pill pill-gcode">from the environment</span> in the fields below.</p>`);
+    parts.push(`<p>Saving on this page writes <b>every</b> setting into
+                   <code>printers/settings.json</code>, not only the field that was changed. After
+                   that the file owns them all and none of these variables changes anything any
+                   more, whatever the compose file says.</p>`);
+
+    if (notice.printerVariables?.length) {
+        parts.push(notice.printerVariablesIgnored
+            ? `<p>${code(notice.printerVariables)} are set but have no effect:
+                  <code>printers.json</code> exists and owns the printer list.</p>`
+            : `<p>The printer list was seeded from ${code(notice.printerVariables)} and written to
+                  <code>printers.json</code>, which owns it from now on.</p>`);
+    }
+
+    box.innerHTML = parts.join("");
+    box.hidden = false;
+}
 
 /* ---- Banner and dirty state ---- */
 
@@ -658,6 +727,8 @@ async function saveSettings(event) {
     try {
         const result = await sendJson("./api/settings", "PUT", { revision, values });
         applyView(result);
+        // This save may have been the one that took the variables out of service
+        loadEnvInfo();
 
         if (restartPending) {
             showRestartNotice();
