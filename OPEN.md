@@ -178,6 +178,15 @@ The version deliberately stays on a `-dev` prerelease for now, currently
   notes. The draft covers up to `dev.11` and carries two open questions of its
   own, on the deprecation of the environment variables and on a test count that
   goes stale.
+- [ ] Delete the `v1.3.0-dev.*` releases once `v1.3.0` is out, and keep their
+  tags. A pre-release carries the generated pull request list of one dev step
+  and that step's changelog section, and neither is lost with it: the pull
+  requests keep their labels, and the dev blocks stay in the history of
+  `CHANGELOG.md` after the consolidated block replaces them. The tag is the part
+  that carries something of its own, which is the commit that went into
+  `:1.3.0-dev.<n>` on ghcr, where the image outlives the release either way. A
+  ref costs nothing and the compare links of the remaining notes are built from
+  it.
 
 Tag behaviour, after the hardening in `c053561`:
 
