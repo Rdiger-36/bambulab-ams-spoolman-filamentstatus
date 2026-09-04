@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { externalSpoolUnits } from "../src/mqtt.js";
+import { externalSpoolUnits, releaseVanishedSlots } from "../src/mqtt.js";
 import { processData, slotIsOccupied } from "../src/ams.js";
 import { convertAMSandSlot, EXTERNAL_SLOT } from "../src/utils.js";
 
@@ -96,4 +96,43 @@ test("a holder is one filament, never part of a four slot unit", () => {
     // units and where exactly is not pinned down by any observed file.
     assert.equal(EXTERNAL_SLOT.startsWith("HT-"), false);
     assert.equal("ABCD".includes(EXTERNAL_SLOT[0]), false);
+});
+
+// A slot that disappears from the report has no processSlot() run of its own,
+// so releasePreviousSpool() never fires for it. Taking the spool off the holder
+// is exactly that case: externalSpoolUnits() emits no unit any more.
+function recordingSync() {
+    const released = [];
+    return { released, release(spool) { released.push(spool.id); } };
+}
+
+test("a slot that is gone from the report releases its spool", () => {
+    const sync = recordingSync();
+    const prevByAmsId = {
+        A1: { amsId: "A1", existingSpool: { id: 1 } },
+        [EXTERNAL_SLOT]: { amsId: EXTERNAL_SLOT, existingSpool: { id: 7 } },
+    };
+    // Only A1 was rebuilt this update, the holder yielded no unit at all
+    const spoolData = [{ amsId: "A1" }];
+
+    releaseVanishedSlots(sync, prevByAmsId, spoolData, [{ id: 1 }, { id: 7 }]);
+
+    assert.deepEqual(sync.released, [7]);
+});
+
+test("a slot still in the report is left to processSlot", () => {
+    const sync = recordingSync();
+    const prevByAmsId = { [EXTERNAL_SLOT]: { amsId: EXTERNAL_SLOT, existingSpool: { id: 7 } } };
+
+    releaseVanishedSlots(sync, prevByAmsId, [{ amsId: EXTERNAL_SLOT }], [{ id: 7 }]);
+
+    assert.deepEqual(sync.released, []);
+});
+
+test("a vanished slot that held no spool releases nothing", () => {
+    const sync = recordingSync();
+
+    releaseVanishedSlots(sync, { [EXTERNAL_SLOT]: { amsId: EXTERNAL_SLOT, existingSpool: null } }, [], []);
+
+    assert.deepEqual(sync.released, []);
 });
