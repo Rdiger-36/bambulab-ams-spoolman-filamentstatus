@@ -2146,14 +2146,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const hasSummary = !!summary;
 
         if (printData.consumptionBooked) {
-            // The number is its own element so the ticker replaces only that,
-            // and the words in front of it keep their place on the line.
+            // A real button, because it does something to the dashboard, unlike
+            // the label next to it that only opens a description of what
+            // already happened. The number is its own element inside it so the
+            // ticker replaces only that and the word in front keeps its place.
             const countdown = printData.printResetAt
-                ? `<button class="gc-card-link" data-print-clear
-                        title="Clear the result now instead of waiting">clears in <span
+                ? `<button class="btn btn-small" data-print-clear
+                        title="Clear the result now instead of waiting for the countdown">Clear <span
                         class="gc-counter" data-countdown>${formatCountdown(printData.printResetAt)}</span></button>`
-                : `<button class="gc-card-link" data-print-clear
-                        title="Clear the result from the dashboard">clear</button>`;
+                : `<button class="btn btn-small" data-print-clear
+                        title="Clear the result from the dashboard">Clear</button>`;
             return `<button class="gc-card-link gc-card-booked" data-print-summary>✔ consumption booked</button>${countdown}`;
         }
 
@@ -2210,12 +2212,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     /**
-     * A deadline as the rough time left, for a label that is only redrawn when
-     * the view reloads. Seconds are shown under a minute so the last stretch
-     * does not sit on "1 min" and then jump to gone.
+     * The time left on the Clear button, brackets and all.
+     *
+     * The brackets belong to this function rather than to the markup around it,
+     * because the ticker rewrites the whole thing every second and the two
+     * would otherwise have to agree on them separately.
      */
     function formatCountdown(resetAt) {
-        return formatCounter(Math.max(0, resetAt - Date.now()));
+        return `(${formatCounter(Math.max(0, resetAt - Date.now()))})`;
     }
 
     /**

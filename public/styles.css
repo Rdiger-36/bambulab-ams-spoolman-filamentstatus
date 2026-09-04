@@ -286,7 +286,6 @@ h1 {
 }
 .gc-card-note {
   margin-left: auto;
-  opacity: 0.7;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -310,17 +309,12 @@ h1 {
 .gc-card-link:disabled { cursor: default; opacity: 0.5; }
 .gc-card-booked { color: var(--ok); font-weight: 600; text-decoration-color: #8886; }
 
-/* A clock that is rewritten every second. Tabular figures so the digits do not
-   change width as they count, and a floor at the width of HH:mm:ss, which is
-   the widest of the two shapes a print under a day takes: mm:ss is narrower and
-   is held out to the same width, so passing the hour mark moves nothing. A
-   print that runs into a second day grows past the floor, once. */
-.gc-counter {
-  display: inline-block;
-  min-width: 8ch;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* A clock that is rewritten every second. Tabular figures are the whole of it:
+   every shape formatCounter() produces is fixed length within itself, so the
+   digits changing cannot change the width and no reserve is needed. The label
+   only resizes where the shape itself changes, at an hour and at a day, which
+   happens once each and never at all for the ten minute default. */
+.gc-counter { font-variant-numeric: tabular-nums; }
 
 /* ---- The closing report of a print ---- */
 
