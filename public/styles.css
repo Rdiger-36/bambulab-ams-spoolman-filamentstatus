@@ -325,6 +325,14 @@ h1 {
 }
 .gc-fact-term { color: var(--text-muted); }
 
+/* Says where the rows of the table come from, so a "not booked" line reads as
+   a filament of the plate rather than as something the service mislaid. */
+.gc-summary-lead {
+  margin: 0 0 6px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
 .gc-summary-table { margin-top: 4px; }
 /* The reason a filament was not booked, under its result rather than in a
    column of its own: it is a sentence, and only some rows carry one. */

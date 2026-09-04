@@ -424,8 +424,7 @@ async function bookConsumption(printer, consumption, state) {
     if (!candidates.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools, nothing to book");
         return {
-            rows: Object.values(consumption).map(info => summaryRow(info, "skipped",
-                "No spool in this slot is connected by tag or assigned by hand.")),
+            rows: Object.values(consumption).map(info => summaryRow(info, "skipped", unbookedReason(info))),
             note: "No slot held a spool this service could identify, so nothing was booked.",
         };
     }
@@ -441,7 +440,8 @@ async function bookConsumption(printer, consumption, state) {
             // Zero gram filaments are skipped rather than written as zero, and
             // the summary says so instead of leaving the filament out: a plate
             // that used none of a loaded colour is a result, not an omission.
-            rows.push(summaryRow(info, "unused", "The print used none of this filament."));
+            rows.push(summaryRow(info, "unused",
+                "The sliced file lists this filament, but the plate used none of it."));
             continue;
         }
 
@@ -449,8 +449,7 @@ async function bookConsumption(printer, consumption, state) {
 
         if (!matches.length) {
             console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}), skipping ${grams}g (assign the spool in the Web UI to track it)`);
-            rows.push(summaryRow(info, "skipped",
-                "No connected or assigned Spoolman spool. Assign it in the Web UI to track it."));
+            rows.push(summaryRow(info, "skipped", unbookedReason(info)));
             continue;
         }
 
@@ -514,6 +513,28 @@ async function bookConsumption(printer, consumption, state) {
  * @param {string|null} note - why, for everything that is not a plain booking
  * @returns {object} the row
  */
+/**
+ * Why a filament of the sliced file carries no booking.
+ *
+ * Both halves are worth saying and they are different failures. A filament
+ * without a slot was in the plate and nothing on the printer ran it, which is
+ * the case the dashboard lists as required but not loaded. A filament with a
+ * slot did run, and the spool in that slot is simply not linked to a Spoolman
+ * record, which is the one a user can fix.
+ *
+ * The sliced file is named in both, because everything in this table came from
+ * it and a row that only says "not booked" reads like the service lost it.
+ *
+ * @param {object} info - one entry of a consumption map, after resolveSliceSlots
+ * @returns {string} the reason, as a sentence
+ */
+export function unbookedReason(info) {
+    if (!info.amsId) {
+        return "The sliced file lists this filament, but no slot of the printer carried it during this print.";
+    }
+    return `The sliced file lists this filament and ${info.amsId} printed it, but no Spoolman spool is connected by tag or assigned to that slot, so nothing could be booked. Assign it in the Web UI to track it.`;
+}
+
 function summaryRow(info, status, note = null) {
     return {
         amsId: info.amsId ?? null,

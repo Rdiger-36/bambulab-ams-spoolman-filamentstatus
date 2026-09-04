@@ -2322,6 +2322,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 </tr>`;
             }).join("");
 
+            // Said once above the table rather than repeated per row: every
+            // line here is a filament of the sliced file, including the ones
+            // that were never booked, and without that the table reads like a
+            // list of bookings with gaps in it.
+            html += `<p class="gc-summary-lead">Every filament of the sliced file, and what became of it.</p>`;
+
             // .spool-table as well, so the dialog inherits the card stacking
             // every other table on this page falls back to under 760px rather
             // than pushing five columns sideways inside a modal.

@@ -185,3 +185,21 @@ test("PRINT_RESET_MINUTES keeps 0 and clamps what is out of range", async () => 
     assert.deepEqual(coerceSetting("PRINT_RESET_MINUTES", "9999"), { value: 240 });
     assert.equal(settings.PRINT_RESET_MINUTES, 10);
 });
+
+test("an unbooked filament is told apart from one no slot carried", async () => {
+    const { unbookedReason } = await import("../src/mqtt.js");
+
+    // In the plate, and a slot ran it, but nothing links that slot to Spoolman.
+    // This is the one a user can fix, so it says how.
+    const inSlot = unbookedReason({ amsId: "A4" });
+    assert.match(inSlot, /sliced file/);
+    assert.match(inSlot, /A4 printed it/);
+    assert.match(inSlot, /Assign it in the Web UI/);
+
+    // In the plate and nothing on the printer carried it: the dashboard's
+    // "required but not loaded". Nothing to assign, so it does not ask.
+    const noSlot = unbookedReason({ amsId: null });
+    assert.match(noSlot, /sliced file/);
+    assert.match(noSlot, /no slot of the printer carried it/);
+    assert.equal(/Assign it in the Web UI/.test(noSlot), false);
+});
