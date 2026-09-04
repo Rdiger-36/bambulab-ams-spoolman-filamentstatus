@@ -654,7 +654,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const slot = amsSpool.slot || {};
         dialogContent.innerHTML = `
-            <p style="margin-top:0">AMS slot <strong>${escapeHtml(amsSpool.amsId)}</strong> holds a spool the printer cannot identify
+            <p style="margin-top:0">Slot <strong>${escapeHtml(amsSpool.amsId)}</strong> holds a spool the printer cannot identify
                (${escapeHtml([slot.tray_type, slot.tray_sub_brands].filter(Boolean).join(" · ") || "unknown filament")}).
                Link it to a Spoolman spool so its consumption can be booked.</p>
             <div class="sp-tabs">
@@ -1036,7 +1036,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <span>Comment</span>
                     <input id="sp-comment" placeholder="optional">
                 </label>
-                <p class="gc-muted sp-note">The spool is linked to this AMS slot right away. A chipless spool reports no weight,
+                <p class="gc-muted sp-note">The spool is linked to this slot right away. A chipless spool reports no weight,
                    so full and remaining weight have to be entered by hand.</p>
                 <p id="sp-error" class="gc-bad"></p>
             </div>`;
@@ -1353,7 +1353,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function showUnassignDialog(button, amsSpool) {
         const sp = amsSpool.existingSpool;
         const content = `
-            <p>Remove the assignment of AMS slot <strong>${amsSpool.amsId}</strong>
+            <p>Remove the assignment of slot <strong>${amsSpool.amsId}</strong>
                ${sp ? `from Spoolman spool <strong>#${sp.id}</strong>` : ""}?</p>
             <p class="gc-muted" style="font-size:0.85em">Consumption for this slot will no longer be booked until it is assigned again.
                Already booked weight is not reverted.</p>`;
@@ -1457,7 +1457,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // for an unlinked slot. As soon as a spool is linked, the Spoolman record is
     // the one a user keeps, so the swatch follows it and stops disagreeing with
     // the spool page it links to. Where the two differ, the detail dialog names
-    // both under "Colour (AMS)" and "Colour (Spoolman)".
+    // both under "Colour (printer)" and "Colour (Spoolman)".
     //
     // The direction is never reported by the AMS, so it always comes from
     // whichever filament record was matched.
@@ -1617,8 +1617,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ? ` <span class="gc-warn" title="Spoolman holds ${escapeHtml(spool.filament?.material ?? "another material")} for the spool linked to this slot">⚠</span>`
             : "";
 
-        const amsRows = detailRows([
-            ["AMS slot", detailText(amsSpool.amsId)],
+        const slotRows = detailRows([
+            ["Slot", detailText(amsSpool.amsId)],
             ["State", detailText(amsSpool.slotState)],
             // The id alone says nothing to read, so the filament Bambu Studio would
             // print it as leads and the id follows it. An id no profile is known
@@ -1626,8 +1626,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ["Tray profile", profile
                 ? `${escapeHtml(profile.name)} <span class="gc-muted">(${escapeHtml(slot.tray_info_idx)})</span>`
                 : detailText(slot.tray_info_idx)],
-            ["Material (AMS)", `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
-            ["Colour (AMS)", detailColors(slotColors(slot), direction)],
+            ["Material (printer)", `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
+            ["Colour (printer)", detailColors(slotColors(slot), direction)],
             ["Serialnumber", detailText(slot.tray_uuid)],
             // An empty slot and a spool without a tag both report 0 rather than
             // nothing, and neither of them weighs nothing.
@@ -1646,7 +1646,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div></div>
                 <div class="sd-scroll">
                     <div class="sd-section">Printer</div>
-                    ${amsRows}
+                    ${slotRows}
                 </div>`;
             return;
         }
@@ -1685,7 +1685,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ])}
 
                 <div class="sd-section">Printer</div>
-                ${amsRows}
+                ${slotRows}
             </div>`;
 
         pane.addEventListener("click", event => {
@@ -2493,7 +2493,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // tooltip: an untagged 3rd party spool is a normal state, not a fault.
         const title = slotState === "Loaded (3rd party)"
             ? THIRD_PARTY_HINT
-            : "No spool data from the AMS for this slot.";
+            : "No spool data from the printer for this slot.";
         return `<span title="${title}">⚠️</span>`;
     }
 

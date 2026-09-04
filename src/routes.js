@@ -75,7 +75,7 @@ function resolvePrinter(printerId, printers, res) {
  * @param {string} missing - what to call the slot in the error message
  * @returns {object|null} the cached UI spool, or null
  */
-function resolveUiSpool(printer, amsId, res, missing = "AMS slot not found") {
+function resolveUiSpool(printer, amsId, res, missing = "Slot not found") {
     const uiSpool = (printer.spoolData || []).find(s => s.amsId === amsId);
     if (!uiSpool) { res.status(404).json({ ok: false, error: missing }); return null; }
     return uiSpool;

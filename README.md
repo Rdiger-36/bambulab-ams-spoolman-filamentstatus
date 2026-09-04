@@ -90,7 +90,7 @@ The printers publish their state via MQTT, this service listens and talks to Spo
 
 While a print runs, the sliced `.gcode.3mf` is fetched from the printer via FTPS and the grams per filament are read from it. When the job reaches a final state, that amount is booked onto the linked spool; a cancelled print is booked proportionally to the layers printed. A slot that is linked to nothing is named in the log and skipped, so a missing link is visible rather than silently untracked.
 
-➡️ **[How it works](docs/how-it-works.md)**: G-code tracking, operation modes, AMS slot names, archiving empty spools
+➡️ **[How it works](docs/how-it-works.md)**: G-code tracking, operation modes, slot names, archiving empty spools
 
 ## Getting started
 
@@ -103,7 +103,7 @@ You need a running Spoolman instance and, per printer, its serial number, access
 | Page | Covers |
 | :---- | :---- |
 | [Installation](docs/installation.md) | Prerequisites, supported architectures, `docker run` and Docker Compose, first start |
-| [How it works](docs/how-it-works.md) | Merging and creating in Spoolman, G-code tracking, operation modes, AMS slot names, archiving empty spools |
+| [How it works](docs/how-it-works.md) | Merging and creating in Spoolman, G-code tracking, operation modes, slot names, archiving empty spools |
 | [Web UI](docs/web-ui.md) | Dashboard, assigning a spool to a slot, the spool and filament dialog, menu and logs |
 | [Settings](docs/settings.md) | Every card of the settings page, the printer dialog, the service actions, a printer that is switched off |
 | [Troubleshooting](docs/troubleshooting.md) | Reading the logs, the `debug-printers` CLI, diagnostics and what an export contains |

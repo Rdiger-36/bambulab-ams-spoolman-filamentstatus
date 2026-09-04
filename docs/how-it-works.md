@@ -43,14 +43,15 @@ Example of a merge in automatic mode:
 
 From then on the slot is linked and the consumption of every print is booked onto that spool.
 
-## AMS slot names
+## Slot names
 
-| Slot in log | Slot on AMS | Slot in log | Slot on AMS |
+| Slot in log | Slot on the printer | Slot in log | Slot on the printer |
 |--------------|----------------------|--------------|---------------------|
 | `A1` – `A4` | first AMS, slot 1 – 4 | `B1` – `B4` | second AMS, slot 1 – 4 |
 | `HT-A` | first AMS HT | `HT-B` | second AMS HT |
+| `External` | external spool holder | | |
 
-Continues up to `D4` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT.
+Continues up to `D4` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT. The external spool holder is reported outside the AMS block and has no slot number of its own, so it is one slot named `External`.
 
 ## Archiving empty spools
 
