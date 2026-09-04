@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.9 has to be folded in here as well, or regenerate the
+Every dev build after dev.10 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -41,9 +41,14 @@ Version 1.3.0
       - The assignment picker suggests the spools that fit the slot first, by material family and colour, and warns when slot and spool disagree on the material
       - Settings page for everything that used to be an environment variable, plus the printer list, applied without a restart
       - Service card with version, platform, uptime, tracking mode and Spoolman connection, plus update check, reconnect all printers, pause monitoring and a diagnostics download
+      - The diagnostics download is one archive with everything a bug report needs: version and platform, the settings with the origin of each value, the printer list, the assignments and the logs including their rotated history. It is offered anonymised, which is the default
+         - Anonymised replaces the last octet of every IP address, everything after the first five characters of a serial number, everything after the first four characters of the RFID tag of a spool, the Spoolman host name, and it shortens the data and log paths. Enough of a serial or a tag survives to see that two lines are about the same printer or the same spool, and too little to identify either
+         - What a slot reports when it has no chip, "N/A" or an all zero uuid, is not a tag and stays as it is: it is the answer to half the questions a report about a 3rd party spool is asking
+         - The Web UI password, the API keys and the printer access codes are in no variant of the archive, anonymised or not
       - Clicking the filament name of a slot opens a dialog with everything the printer and Spoolman hold about it; remaining weight, lot number and comment can be corrected there
       - A spool that runs empty is archived in Spoolman on its own, off by default, with a threshold in grams
       - The external spool holder is shown as a slot of its own and can be assigned
+         - It is a slot and not an AMS, so nothing is called an AMS slot any more where the holder can be meant: the two settings that carry the update interval and the location, the dashboard, and the dialogs of a slot. Two log lines change with it, "No new AMS Data or changes in Spoolman found ..." and "Spool successfully created for AMS Slot => ...", both of which now say "slot". A script that greps the log for either has to be adjusted
       - Multi colour filaments are read, drawn and created with all of their colours
       - The Spoolman location of a spool follows the AMS slot it sits in, and is cleared when it leaves
       - Log files are rotated instead of growing forever, and the log view and download read across the rotated history
@@ -88,6 +93,6 @@ Version 1.3.0
       - extractAmsEnvironment() in src/ams.js is the one reading of the per-unit environment fields, covered against the four unit shapes that have been observed
       - New test server under scripts/test-server: a mock printer and a mock Spoolman, started with one command
       - The test suite runs on node:test and covers public/ for the first time
-      - The release notes of every version carry the merged pull requests grouped by the label they were given, configured in .github/release.yml, with the breaking ones first
+      - The release notes of every version carry the merged pull requests grouped by the label they were given, configured in .github/release.yml, with the breaking ones first. The release body opens with that list and ends with the changelog section, rather than burying the list under sixty lines of prose
 
 -----------------------------------------------------------------------------------------------
