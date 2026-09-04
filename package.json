@@ -10,7 +10,7 @@
     "mqtt": "^5.15.2"
   },
   "name": "bambulab-ams-spoolman-filamentstatus",
-  "version": "1.3.0-dev.10",
+  "version": "1.3.0-dev.11",
   "main": "app.js",
   "type": "module",
   "engines": {
