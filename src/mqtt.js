@@ -508,6 +508,8 @@ async function handleMqttMessage(printer, topic, message) {
                                 }
                             }
 
+                            releaseVanishedSlots(locationSync, prevByAmsId, printer.spoolData, spools);
+
                             await locationSync.flush();
 
                             state.lastSpoolData = spools;
@@ -578,6 +580,33 @@ function releasePreviousSpool(locationSync, amsId, prevByAmsId, spools) {
 
     const current = (spools || []).find(s => s.id === prevSpoolId);
     locationSync.release(current ?? prevByAmsId[amsId].existingSpool);
+}
+
+/**
+ * Releases the spools of slots the report no longer contains at all.
+ *
+ * `releasePreviousSpool()` only runs from inside `processSlot()`, so it can
+ * only clear a location when the slot it belonged to is still in the report. A
+ * slot can also disappear outright: taking the spool off the external holder
+ * makes `externalSpoolUnits()` emit no unit, and an unplugged AMS drops out of
+ * `print.ams.ams` the same way. Nothing then walked that slot, nothing released
+ * it, and the spool kept "Printer - External" in Spoolman forever.
+ *
+ * Compared against the slots this update actually built, not against the
+ * report, so a slot that was skipped as invalid counts as gone as well.
+ *
+ * @param {object} locationSync - the collector for this AMS update
+ * @param {object} prevByAmsId - the previous UI spools, keyed by slot label
+ * @param {object[]} spoolData - the UI spools this update built
+ * @param {object[]} spools - Spoolman spools, as fetched for this AMS update
+ */
+export function releaseVanishedSlots(locationSync, prevByAmsId, spoolData, spools) {
+    const seen = new Set((spoolData || []).map(s => s.amsId));
+
+    for (const amsId of Object.keys(prevByAmsId)) {
+        if (seen.has(amsId)) continue;
+        releasePreviousSpool(locationSync, amsId, prevByAmsId, spools);
+    }
 }
 
 // How many AMS updates a slot may wait for its remain reading before a spool is
