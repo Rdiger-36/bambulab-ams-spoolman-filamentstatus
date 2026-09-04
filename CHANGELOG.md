@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.9
    - Breaking:
       - The API answers only two kinds of caller now: the Web UI of this installation, and a request carrying an API key. Anything else is answered with 401 and a sentence saying so. This holds whether or not a Web UI password is set; the pages themselves stay open to the network without one, it is /api/ that asks
          - A script, a home automation or an integration that called this API without a key stops working and needs one. Create it under "API keys" in the Network access card and send it as "Authorization: Bearer <key>" or "X-API-Key: <key>". The Home Assistant integration is the one to look at first
