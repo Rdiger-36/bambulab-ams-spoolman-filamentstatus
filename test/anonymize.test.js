@@ -9,6 +9,7 @@ import {
     maskIp,
     maskPath,
     maskSerial,
+    maskTag,
     maskText,
     maskUrl,
 } from "../src/anonymize.js";
@@ -92,11 +93,54 @@ test("a P2S serial is caught by the generic pattern, not only a P1S one", () => 
     assert.equal(maskText("Printer 22E8BJ581201877 offline", {}), "Printer 22E8BXXXXXXXXXX offline");
 });
 
-test("the generic pattern leaves the RFID tag of a spool alone", () => {
-    // 32 characters with no word boundary inside, so no 15 character run of it
-    // can match. The tag identifies a piece of filament, not a person.
+test("an RFID tag keeps its first four characters", () => {
+    assert.equal(maskTag("A5F4AA83"), "A5F4XXXX");
+    assert.equal(maskTag("18F1DE9B4FF74902A7CAA100D8F2CB5F"), "18F1XXXXXXXXXXXXXXXXXXXXXXXXXXXX");
+    // Same length, so a log line does not change shape
+    assert.equal(maskTag("A5F4AA83").length, "A5F4AA83".length);
+});
+
+test("what a slot reports instead of a tag is not a tag and stays", () => {
+    assert.equal(maskTag("N/A"), "N/A");
+    assert.equal(maskTag(""), "");
+    // The all zero uuid is how a chipless spool reads, which is the answer to
+    // half the questions a report is about
+    assert.equal(maskTag("00000000000000000000000000000000"), "00000000000000000000000000000000");
+});
+
+test("the RFID tag of a spool is masked in a log line", () => {
     const uuid = "18F1DE9B4FF74902A7CAA100D8F2CB5F";
-    assert.equal(maskText(`[A1] PLA Basic 000000FF [[ ${uuid} ]]`, {}), `[A1] PLA Basic 000000FF [[ ${uuid} ]]`);
+    assert.equal(
+        maskText(`[A1] PLA Basic 000000FF [[ ${uuid} ]]`, {}),
+        "[A1] PLA Basic 000000FF [[ 18F1XXXXXXXXXXXXXXXXXXXXXXXXXXXX ]]",
+    );
+    // The eight character tag of an older AMS has the shape of a tray colour,
+    // so only the brackets tell the two apart
+    assert.equal(
+        maskText("[A1] PLA Basic FF6A13FF [[ A5F4AA83 ]]", {}),
+        "[A1] PLA Basic FF6A13FF [[ A5F4XXXX ]]",
+    );
+});
+
+test("a colour is not mistaken for a tag", () => {
+    assert.equal(maskText("[A1] PLA Basic FF6A13FF (85%)", {}), "[A1] PLA Basic FF6A13FF (85%)");
+});
+
+test("the tag is masked in the debug dumps as well", () => {
+    assert.equal(
+        maskText(`{"tray_color":"FF6A13FF","tray_uuid":"A5F4AA83"}`, {}),
+        `{"tray_color":"FF6A13FF","tray_uuid":"A5F4XXXX"}`,
+    );
+    // extra.tag holds the tag JSON encoded inside the JSON, escaped quotes and
+    // all, which is what Spoolman stores
+    assert.equal(
+        maskText(`{"extra":{"tag":"\\"A5F4AA83\\""}}`, {}),
+        `{"extra":{"tag":"\\"A5F4XXXX\\""}}`,
+    );
+});
+
+test("a placeholder tag survives every pass of the masking", () => {
+    assert.equal(maskText(`[External] N/A [[ N/A ]] {"tray_uuid":"N/A"}`, {}), `[External] N/A [[ N/A ]] {"tray_uuid":"N/A"}`);
 });
 
 test("every address in a log is masked, configured or not", () => {
