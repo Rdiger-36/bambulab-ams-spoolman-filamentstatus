@@ -8,6 +8,7 @@ import {
     formatCounter,
     formatDate,
     formatMoment,
+    formatRemaining,
     humanLayers,
     normColor,
     slotColors,
@@ -2179,12 +2180,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 `class="gc-counter" data-elapsed-since="${printData.startedAt}"`,
             ]);
         }
-        if (printData.estimatedEndAt) {
-            // The time left in the same clock shape as everything else here.
-            // The printer reports it in minutes, and "1290 min" for a job with
-            // a day still to run is a division the reader should not have to do.
-            const left = formatCounter(printData.remainingMinutes * 60_000);
-            facts.push(["Expected to end", `${formatMoment(printData.estimatedEndAt, withDate)} (${left} left)`]);
+        // Not the clock shape the counters use: the printer reports whole
+        // minutes and revises them as it goes, so a clock would claim a second
+        // hand this number does not have.
+        const left = formatRemaining(printData.remainingMinutes);
+
+        if (printData.gcodeState === "PAUSE") {
+            // No end time while it is paused. What the printer still reports is
+            // the work left, not a moment, and putting that on the clock would
+            // name an end that moves further away the longer the pause lasts.
+            if (left) facts.push(["Left after resuming", left]);
+        } else if (printData.estimatedEndAt) {
+            facts.push(["Expected to end", `${formatMoment(printData.estimatedEndAt, withDate)} (${left})`]);
         }
 
         return factsRow(facts);

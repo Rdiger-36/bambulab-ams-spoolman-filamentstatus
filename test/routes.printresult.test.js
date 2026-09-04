@@ -297,6 +297,26 @@ test("a running print reports its start, its estimate and its stage", async () =
     assert.equal(body.preparing, true);
 });
 
+test("a paused print reports no expected end, only the work left", async () => {
+    printer.currentGcodeState       = "PAUSE";
+    printer.consumptionBooked       = false;
+    printer.printResetAt            = null;
+    printer.printStartedAt          = Date.now() - 5 * 60_000;
+    printer.currentRemainingMinutes = 12;
+
+    const { body } = await call(`${app.url}/api/print/${SERIAL}`);
+
+    // PAUSE is an active state, so the print is still on the card and still
+    // counting: only the moment it would end is gone.
+    assert.equal(body.gcodeState, "PAUSE");
+    assert.ok(body.startedAt);
+    assert.ok(body.elapsedMs > 0);
+    assert.equal(body.remainingMinutes, 12);
+    // Adding what the job still needs to the clock would name an end that moves
+    // further away for as long as the pause lasts.
+    assert.equal(body.estimatedEndAt, null);
+});
+
 test("a finished print reports no live progress at all", async () => {
     // The printer keeps sending the last values of the job it just finished.
     // Reporting them would put an estimated end in the past on the card.
@@ -335,9 +355,12 @@ test("an unknown stage is shown as its number rather than guessed at", async () 
     // Both seen on a P2S and outside the table the community settled on.
     assert.equal(printStageName(54), "Stage 54");
     assert.equal(printStageName(51), "Stage 51");
-    // -1 is what the printer sends when it is in no stage, which is most of a
-    // running print and every report outside one.
+    // Neither end names a stage. -1 is what the printer sends outside a print,
+    // and 0 is it laying down filament, which the state badge already says: a
+    // P2S sits on 0 for the whole body of a print, so naming it would put
+    // "RUNNING" and "Printing" side by side for almost the entire job.
     assert.equal(printStageName(-1), null);
+    assert.equal(printStageName(0), null);
     assert.equal(printStageName(null), null);
 
     assert.equal(isPreparingStage(2), true);

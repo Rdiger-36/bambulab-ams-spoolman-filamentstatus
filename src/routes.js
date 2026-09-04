@@ -86,6 +86,12 @@ function liveProgress(printer, state) {
     }
 
     const remaining = printer.currentRemainingMinutes;
+    // A paused print has no expected end. The printer keeps reporting what the
+    // job still needs, and adding that to the clock names a moment that slides
+    // forward for as long as the pause lasts, so it would be wrong every time
+    // anybody read it. The time it still needs is the honest half of that, and
+    // it is what the dashboard shows instead.
+    const paused = state === "PAUSE";
 
     return {
         startedAt: printer.printStartedAt ?? null,
@@ -93,7 +99,7 @@ function liveProgress(printer, state) {
         remainingMinutes: remaining ?? null,
         // A remaining time of 0 is a real answer near the end of a print, so it
         // is only the absence of the field that makes the estimate unknown.
-        estimatedEndAt: remaining != null ? Date.now() + remaining * 60_000 : null,
+        estimatedEndAt: !paused && remaining != null ? Date.now() + remaining * 60_000 : null,
         stage: printStageName(printer.currentStage),
         preparing: isPreparingStage(printer.currentStage),
     };

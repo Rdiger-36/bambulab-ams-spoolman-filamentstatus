@@ -206,6 +206,38 @@ export function formatCounter(ms) {
 }
 
 /**
+ * The time a print has left, at the precision the printer actually has.
+ *
+ * `mc_remaining_time` is reported in whole minutes and revised as the print
+ * goes, so it is an estimate that moves. Rendered as a clock it read "03:00
+ * left" and claimed a second hand the number does not have; the tilde and the
+ * words say what it is.
+ *
+ * Zero is its own case. The printer sends it for the last stretch of a print,
+ * and "~ 0 min" reads like a stopped clock.
+ *
+ * @param {number|null|undefined} minutes - `mc_remaining_time` from the report
+ * @returns {string|null} the estimate, or null when there is none
+ */
+export function formatRemaining(minutes) {
+    if (minutes == null) return null;
+    if (minutes <= 0) return "< 1 min";
+
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor(minutes / 60) % 24;
+    const rest = minutes % 60;
+
+    const parts = [];
+    if (days) parts.push(`${days} ${days === 1 ? "Day" : "Days"}`);
+    if (hours) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+    // The minutes are dropped only when something larger carries the estimate
+    // already, so "4 hours" stays "4 hours" rather than becoming "4 hours 0 min".
+    if (rest || !parts.length) parts.push(`${rest} min`);
+
+    return `~ ${parts.join(" ")}`;
+}
+
+/**
  * Whether every moment of a print falls on today, which is the only case where
  * the times alone say when something happened.
  *

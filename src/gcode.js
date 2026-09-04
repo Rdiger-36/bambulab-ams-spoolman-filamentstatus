@@ -595,7 +595,6 @@ function describeFtpsError(err) {
  * while something other than plain printing is going on.
  */
 const PRINT_STAGES = {
-    0:  "Printing",
     1:  "Auto bed levelling",
     2:  "Heatbed preheating",
     3:  "Sweeping XY mech mode",
@@ -640,7 +639,12 @@ const PRINT_STAGES = {
  * @returns {string|null} the stage, or null when there is no stage to name
  */
 export function printStageName(code) {
-    if (code == null || code < 0) return null;
+    // 0 is the printer laying down filament, which the state badge next to this
+    // one already says. Measured on a P2S: it sits on 0 for the whole body of a
+    // print, so naming it would put "RUNNING" and "Printing" side by side for
+    // almost the entire job. -1 is the same answer from the other end, no stage
+    // at all, which is what it reports outside a print.
+    if (code == null || code <= 0) return null;
     return PRINT_STAGES[code] ?? `Stage ${code}`;
 }
 
