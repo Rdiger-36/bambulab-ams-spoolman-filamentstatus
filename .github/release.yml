@@ -8,11 +8,19 @@
 #
 # This is why pull requests are labelled before they are merged: an unlabelled
 # one ends up under "Everything else", where nobody looks for it.
+#
+# "Breaking" comes first for the same reason: a change that can break an existing
+# installation is almost always a feature or a fix as well, so it carries both
+# labels, and the first category wins. Listed under New Features it reads like
+# something to look forward to.
 changelog:
   exclude:
     labels:
       - ignore-for-release
   categories:
+    - title: Breaking Changes
+      labels:
+        - breaking
     - title: New Features
       labels:
         - enhancement

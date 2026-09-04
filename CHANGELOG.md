@@ -1,4 +1,11 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Development:
+      - A pull request that can break an existing installation carries a "breaking" label, and the generated release notes open with a "Breaking Changes" section built from it. The section is first in .github/release.yml, because such a change is almost always a feature or a fix as well and carries both labels, and a pull request is listed under the first section whose label it holds. Listed among the features, a renamed value or a caller that suddenly needs a key reads like something to look forward to
+      - The three breaking changes of 1.3.0 are labelled with it after the fact, #110, #112 and #116, so the notes generated for the stable release carry them at the top. #110 is the one that is easy to miss: it is a fix, and it locks out exactly the installations that are reached under a real domain name until the name is entered once. A pre-release that is already published keeps the notes it was published with, apart from v1.3.0-dev.9, which is corrected by hand
+      - The release body ends with the changelog section instead of opening with it. The section of a version like 1.3.0 is sixty lines of prose, so above the fold it buried the one line per pull request, the contributors and the docker pull under itself. What changed, who wrote it and how to pull it come first now, and the detail sits under its own "Detailed changes" heading at the end
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.9
    - Breaking:
       - The API answers only two kinds of caller now: the Web UI of this installation, and a request carrying an API key. Anything else is answered with 401 and a sentence saying so. This holds whether or not a Web UI password is set; the pages themselves stay open to the network without one, it is /api/ that asks

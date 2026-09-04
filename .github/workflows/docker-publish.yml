@@ -183,20 +183,13 @@ jobs:
           CONTRIBUTORS="$(grep -oE 'by @[A-Za-z0-9-]+' <<< "${GENERATED}" \
             | sed 's/^by //' | sort -u | tr '\n' ' ' || true)"
 
+          # The order is what a reader needs in the order they need it: what
+          # changed as one line per pull request, who wrote it, how to pull it,
+          # and only then the changelog section, which for a version like 1.3.0
+          # is sixty lines of prose. Above the fold it buried everything else,
+          # the docker pull included.
           {
-            if [[ -n "${NOTES//[[:space:]]/}" ]]; then
-              # Fenced, because the changelog is indented plain text: as
-              # markdown its deeper levels would collapse into code blocks
-              # halfway and read as a mess.
-              echo '```'
-              printf '%s\n' "${NOTES}"
-              echo '```'
-            else
-              echo "No CHANGELOG.md section for ${VERSION}."
-            fi
-
             if [[ -n "${GENERATED//[[:space:]]/}" ]]; then
-              echo
               printf '%s\n' "${GENERATED}"
             fi
 
@@ -220,6 +213,20 @@ jobs:
             if [[ "${PRERELEASE}" == "true" ]]; then
               echo
               echo "This is a pre-release. \`:latest\` still points at the last stable version."
+            fi
+
+            echo
+            echo "### Detailed changes"
+            echo
+            if [[ -n "${NOTES//[[:space:]]/}" ]]; then
+              # Fenced, because the changelog is indented plain text: as
+              # markdown its deeper levels would collapse into code blocks
+              # halfway and read as a mess.
+              echo '```'
+              printf '%s\n' "${NOTES}"
+              echo '```'
+            else
+              echo "No CHANGELOG.md section for ${VERSION}."
             fi
           } > release-notes.md
 
