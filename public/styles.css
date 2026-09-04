@@ -667,235 +667,6 @@ body.show-footer #spool-list {
   margin-bottom: 80px;
 }
 
-/* ---- Responsive tables: stack each row as a card on small screens ---- */
-@media (max-width: 760px) {
-  /* Both the classic AMS table and the G-code table share .spool-table */
-  .spool-table thead {
-    /* hide the header row, labels come from data-label per cell */
-    position: absolute;
-    width: 1px; height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-  }
-
-  .spool-table,
-  .spool-table tbody,
-  .spool-table tr,
-  .spool-table td {
-    display: block;
-    width: 100% !important;       /* override JS column-sync inline widths */
-    min-width: 0 !important;
-    box-sizing: border-box;
-  }
-
-  /* One unit, one card. The slots used to be four free floating tiles with the
-     header hovering above them, so nothing but their order said they belonged
-     to the same AMS. The card is the unit now: its header is the band, and the
-     slots are sections inside it, parted by a line rather than by air.
-     !important beats the desktop .spool-table rules defined later in source. */
-  .spool-table {
-    margin-top: 22px;
-    border: 1px solid var(--border-card) !important;
-    border-radius: 10px !important;
-    background: var(--row-bg) !important;
-    box-shadow: var(--shadow-card) !important;
-    overflow: hidden;
-  }
-
-  .spool-table tr {
-    border: none;
-    background: transparent;
-  }
-
-  /* The one line inside the card that separates two slots. The fields within a
-     slot carry no lines at all, so a line always means "next slot". */
-  .spool-table tr + tr {
-    border-top: 1px solid var(--border-card);
-  }
-
-  .spool-table td {
-    /* !important for the same reason as above: the desktop rule that draws the
-       row separator sits later in the file. */
-    border: none !important;
-    padding: 5px 14px;
-    text-align: left !important;
-  }
-
-  /* Air around a slot rather than between its fields */
-  .spool-table tr td:first-child { padding-top: 12px; }
-  .spool-table tr td:last-child { padding-bottom: 14px; }
-
-  /* Per-cell label above the value (robust for multi-line cell content) */
-  .spool-table td::before {
-    content: attr(data-label);
-    display: block;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--text-muted);
-    font-weight: 600;
-    margin-bottom: 2px;
-  }
-
-  /* The unit header, on a table whose rows are cards. A caption keeps its table
-     display even when everything around it is a block, and shrink wraps into a
-     column one word wide, so it is laid out by hand here.
-
-     On a phone the slots of two units are a long column of identical cards with
-     nothing but this line between them, so it is a band rather than a line of
-     small print: it names the unit it opens and shows where the one above it
-     ended. */
-  caption.ams-env {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    /* The head of the unit card, so it sits on it rather than above it */
-    margin: 0;
-    border: none;
-    border-bottom: 1px solid var(--border-card);
-    border-radius: 0;
-    /* Centred, both lines: the band spans the whole width, and its readings
-       left packed under a centred card head looked like a leftover. */
-    justify-content: center;
-    text-align: center;
-    gap: 4px 14px;
-    padding: 9px 12px;
-    background: var(--head-bg);
-  }
-
-  /* The gap spaces them now, and a trailing margin would push the band open on
-     the right. */
-  caption.ams-env > span { margin-right: 0; }
-
-  caption.ams-env .ams-env-unit {
-    font-size: 1.06em;
-    color: var(--text);
-  }
-
-  /* The drying cycle carries a target and a countdown, which is more than fits
-     next to the humidity on a phone. Its own line, under the readings it
-     belongs to. */
-  caption.ams-env .ams-env-drying {
-    flex-basis: 100%;
-    text-align: center;
-  }
-
-
-
-  /* Make the action button comfortably tappable */
-  .spool-table td[data-label="Action"] button {
-    min-height: 38px;
-    padding: 6px 14px;
-  }
-
-  /* ---- The two tables of the settings page ----
-     The printer list and the API keys are read left to right on a desktop and
-     do not fit a phone at all: the status and the buttons sat behind a
-     sideways scroll, which is the one place a phone will not look. Each row
-     becomes a block with its labels above the values, the same way a spool
-     row does. */
-  .data-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-  }
-
-  /* !important, because the desktop min-width of these two tables is set later
-     in the file and would keep forcing the sideways scroll. */
-  #printer-table .data-table,
-  #apikey-table .data-table {
-    min-width: 0 !important;
-  }
-
-  #printer-table,
-  #apikey-table { overflow-x: visible; }
-
-  #printer-table .data-table,
-  #printer-table tbody,
-  #printer-table tr,
-  #printer-table td,
-  #apikey-table .data-table,
-  #apikey-table tbody,
-  #apikey-table tr,
-  #apikey-table td {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  #printer-table tr,
-  #apikey-table tr {
-    border: 1px solid var(--border-card);
-    border-radius: 8px;
-    background: var(--row-bg);
-    padding: 4px 0 10px;
-    margin-bottom: 12px;
-  }
-
-  #printer-table td,
-  #apikey-table td {
-    border: none !important;
-    padding: 5px 12px;
-    text-align: left !important;
-  }
-
-  #printer-table td::before,
-  #apikey-table td::before {
-    content: attr(data-label);
-    display: block;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--text-muted);
-    font-weight: 600;
-    margin-bottom: 2px;
-  }
-
-  /* The name is the heading of its card, so it carries no label of its own
-     and is set like one. */
-  #printer-table td:first-child,
-  #apikey-table td:first-child {
-    font-size: 1.02em;
-    font-weight: 700;
-    padding-top: 9px;
-  }
-
-  #printer-table td:first-child::before,
-  #apikey-table td:first-child::before { content: none; }
-
-  /* An empty data-label leaves an empty line above the buttons */
-  #printer-table td[data-label=""]::before,
-  #apikey-table td[data-label=""]::before { display: none; }
-
-  #printer-table .set-row-actions,
-  #apikey-table .set-row-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  #printer-table .set-row-actions .btn,
-  #apikey-table .set-row-actions .btn {
-    flex: 1;
-    margin-left: 0;
-    min-height: 36px;
-  }
-
-  /* The facts of the Service card, two to a line like the state of a printer
-     on the dashboard rather than one per line. !important for the same reason
-     as the tables above: the desktop rule sits later in the file. */
-  .set-facts { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important; }
-
-  /* The key of a new API key is long and has to be copied off the screen it is
-     shown on, so it gets the full width and the button its own line under it. */
-  .set-key-row { flex-wrap: wrap; }
-  .set-key-row input { flex: 1 0 100% !important; }
-  .set-key-row .btn { flex: 1; min-height: 36px; }
-
-}
-
 table th, table td {
   border: 1px solid var(--border-strong);
   background-color: var(--table-td-bg);
@@ -1836,6 +1607,12 @@ body.logs-page .log-page { width: 100%; }
 
 .data-table td:first-child { font-weight: 600; }
 
+/* A value can carry a run of characters with nothing to break at — the tray
+   UUID of a spool is 32 of them — and a cell cannot shrink below that. In the
+   confirmation dialogs it pushed the table past the width of a phone, where
+   the dialog cut the rest of the value off rather than scrolling to it. */
+.data-table td { overflow-wrap: anywhere; }
+
 
 /* The "required but not loaded" list sits inside the print card, so it stays
    tighter than a table of its own. */
@@ -2436,4 +2213,261 @@ body.logs-page .log-page { width: 100%; }
   font-size: 0.85em;
   color: var(--danger-solid);
   text-align: center;
+}
+
+
+/* ---- Responsive tables: stack each row as a card on small screens ---- */
+@media (max-width: 760px) {
+  /* Both the classic AMS table and the G-code table share .spool-table */
+  .spool-table thead {
+    /* hide the header row, labels come from data-label per cell */
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .spool-table,
+  .spool-table tbody,
+  .spool-table tr,
+  .spool-table td {
+    display: block;
+    width: 100% !important;       /* override JS column-sync inline widths */
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+
+  /* One unit, one card. The slots used to be four free floating tiles with the
+     header hovering above them, so nothing but their order said they belonged
+     to the same AMS. The card is the unit now: its header is the band, and the
+     slots are sections inside it, parted by a line rather than by air. */
+  .spool-table {
+    margin-top: 22px;
+    border: 1px solid var(--border-card);
+    border-radius: 10px;
+    background: var(--row-bg);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+
+  .spool-table tr {
+    border: none;
+    background: transparent;
+  }
+
+  /* The one line inside the card that separates two slots. The fields within a
+     slot carry no lines at all, so a line always means "next slot". */
+  .spool-table tr + tr {
+    border-top: 1px solid var(--border-card);
+  }
+
+  .spool-table td {
+    /* The desktop rule draws a row separator, which inside a card would be a
+       line between two fields of the same slot. */
+    border: none;
+    padding: 5px 14px;
+    /* !important, because the weight columns carry an inline text-align: right
+       written by the row markup. On a phone every cell is its own labelled
+       line, so the value belongs under the label rather than at the far edge. */
+    text-align: left !important;
+  }
+
+  /* Air around a slot rather than between its fields */
+  .spool-table tr td:first-child { padding-top: 12px; }
+  .spool-table tr td:last-child { padding-bottom: 14px; }
+
+  /* Per-cell label above the value (robust for multi-line cell content) */
+  .spool-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  /* The unit header, on a table whose rows are cards. A caption keeps its table
+     display even when everything around it is a block, and shrink wraps into a
+     column one word wide, so it is laid out by hand here.
+
+     On a phone the slots of two units are a long column of identical cards with
+     nothing but this line between them, so it is a band rather than a line of
+     small print: it names the unit it opens and shows where the one above it
+     ended. */
+  caption.ams-env {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* The head of the unit card, so it sits on it rather than above it */
+    margin: 0;
+    border: none;
+    border-bottom: 1px solid var(--border-card);
+    border-radius: 0;
+    /* Centred, both lines: the band spans the whole width, and its readings
+       left packed under a centred card head looked like a leftover. */
+    justify-content: center;
+    text-align: center;
+    gap: 4px 14px;
+    padding: 9px 12px;
+    background: var(--head-bg);
+  }
+
+  /* The gap spaces them now, and a trailing margin would push the band open on
+     the right. */
+  caption.ams-env > span { margin-right: 0; }
+
+  caption.ams-env .ams-env-unit {
+    font-size: 1.06em;
+    color: var(--text);
+  }
+
+  /* The drying cycle carries a target and a countdown, which is more than fits
+     next to the humidity on a phone. Its own line, under the readings it
+     belongs to. */
+  caption.ams-env .ams-env-drying {
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+
+
+  /* Make the action button comfortably tappable */
+  .spool-table td[data-label="Action"] button {
+    min-height: 38px;
+    padding: 6px 14px;
+  }
+
+  /* ---- The two tables of the settings page ----
+     The printer list and the API keys are read left to right on a desktop and
+     do not fit a phone at all: the status and the buttons sat behind a
+     sideways scroll, which is the one place a phone will not look. Each row
+     becomes a block with its labels above the values, the same way a spool
+     row does. */
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  /* The desktop min-width of these two tables would keep forcing the sideways
+     scroll the cards exist to remove. */
+  #printer-table .data-table,
+  #apikey-table .data-table {
+    min-width: 0;
+  }
+
+  #printer-table,
+  #apikey-table { overflow-x: visible; }
+
+  #printer-table .data-table,
+  #printer-table tbody,
+  #printer-table tr,
+  #printer-table td,
+  #apikey-table .data-table,
+  #apikey-table tbody,
+  #apikey-table tr,
+  #apikey-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  #printer-table tr,
+  #apikey-table tr {
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    background: var(--row-bg);
+    padding: 4px 0 10px;
+    margin-bottom: 12px;
+  }
+
+  #printer-table td,
+  #apikey-table td {
+    border: none;
+    padding: 5px 12px;
+    text-align: left;
+  }
+
+  #printer-table td::before,
+  #apikey-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  /* The name is the heading of its card, so it carries no label of its own
+     and is set like one. */
+  #printer-table td:first-child,
+  #apikey-table td:first-child {
+    font-size: 1.02em;
+    font-weight: 700;
+    padding-top: 9px;
+  }
+
+  #printer-table td:first-child::before,
+  #apikey-table td:first-child::before { content: none; }
+
+  /* An empty data-label leaves an empty line above the buttons */
+  #printer-table td[data-label=""]::before,
+  #apikey-table td[data-label=""]::before { display: none; }
+
+  #printer-table .set-row-actions,
+  #apikey-table .set-row-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  #printer-table .set-row-actions .btn,
+  #apikey-table .set-row-actions .btn {
+    flex: 1;
+    margin-left: 0;
+    min-height: 36px;
+  }
+
+  /* The facts of the Service card, two to a line like the state of a printer
+     on the dashboard rather than one per line. */
+  .set-facts { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+  /* The confirmation dialogs read as a label and a value per row. Held in two
+     columns the label keeps a third of a phone to itself and the value is
+     broken over five ragged lines next to it, so the row becomes a block here
+     as well: the label over the value it names. */
+  #dialog-content .data-table,
+  #dialog-content .data-table tbody,
+  #dialog-content .data-table tr,
+  #dialog-content .data-table th,
+  #dialog-content .data-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  #dialog-content .data-table th {
+    /* The desktop rule keeps the label on one line, which is what made the
+       column wide in the first place. */
+    white-space: normal;
+    border-bottom: none;
+    padding: 8px 0 0;
+  }
+
+  #dialog-content .data-table td { padding: 2px 0 8px; }
+
+  #dialog-content .data-table tr:last-child td { padding-bottom: 0; }
+
+  /* The key of a new API key is long and has to be copied off the screen it is
+     shown on, so it gets the full width and the button its own line under it. */
+  .set-key-row { flex-wrap: wrap; }
+  .set-key-row input { flex: 1 0 100%; }
+  .set-key-row .btn { flex: 1; min-height: 36px; }
+
 }
