@@ -36,7 +36,7 @@ import {
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
-import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 import {
     claimSlotLocation,
@@ -539,14 +539,25 @@ export function registerRoutes(app, printers) {
         const printer = resolvePrinter(req.params.printerId, printers, res);
         if (!printer) return;
 
+        // A finished print that has been cleared, by the countdown or by hand,
+        // is reported as an idle printer: no job name, no slice info and no
+        // figures, which is what empties the "Needed" and "After print" columns
+        // without touching what the printer actually reports. Its summary is
+        // still sent, because the dialog behind it stays reachable until the
+        // next print starts.
+        //
+        // An explicit ?job= is the manual FTPS test and keeps working either
+        // way; it names its own file and does not read the printer's state.
+        const cleared = !req.query.job && printResultCleared(printer);
+
         // Allow ?job=<name> to test the FTPS fetch for a specific file manually
-        const jobName   = req.query.job || printer.currentJobName || null;
-        const state     = printer.currentGcodeState || "IDLE";
-        const layerNum  = printer.currentLayerNum   || 0;
+        const jobName   = req.query.job || (cleared ? null : printer.currentJobName) || null;
+        const state     = cleared ? "IDLE" : (printer.currentGcodeState || "IDLE");
+        const layerNum  = cleared ? 0 : (printer.currentLayerNum || 0);
 
         // Fetch fresh slice info if a job is known (or explicitly requested),
         // otherwise fall back to the cached version
-        let sliceInfo = req.query.job ? null : (printer.currentSliceInfo || null);
+        let sliceInfo = req.query.job || cleared ? null : (printer.currentSliceInfo || null);
         if (jobName && !sliceInfo) {
             try {
                 sliceInfo = await fetchSliceInfo(printer, jobName);
@@ -606,8 +617,37 @@ export function registerRoutes(app, printers) {
             loadedSpools,
             fullConsumption,
             consumption,
-            consumptionBooked: printer.consumptionBooked ?? false,
+            consumptionBooked: cleared ? false : (printer.consumptionBooked ?? false),
+            // The closing report of the last print, and when the card clears
+            // itself. Both survive the clearing: the summary is what the
+            // dialog shows afterwards, and the deadline is what the countdown
+            // next to the booking label counts down to.
+            lastPrintSummary: printer.lastPrintSummary ?? null,
+            printResetAt: printer.printResetAt ?? null,
+            printResultCleared: cleared,
         });
+    });
+
+    // Clears the finished print from the dashboard now instead of waiting for
+    // the countdown. The summary stays: this ends the result card, not the
+    // record of what the print did.
+    app.post("/api/print/:printerId/clear", (req, res) => {
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
+
+        if (ACTIVE_STATES.has(printer.currentGcodeState)) {
+            return res.status(409).json({
+                ok: false,
+                error: `${printer.name} is printing (${printer.currentGcodeState}). The result can be cleared once the job has ended.`,
+            });
+        }
+
+        printer.printResultDismissed = true;
+        // Its own type rather than a slot update, which carries a spool nothing
+        // changed about. Every open dashboard drops the result at once instead
+        // of waiting out its update interval.
+        broadcastSSE({ type: "print_result_cleared", printer: printer.id });
+        res.json({ ok: true });
     });
 
     // ---------------------------------------------------------------------

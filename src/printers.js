@@ -55,6 +55,26 @@ function createRuntimePrinter(entry) {
         currentLayerNum: 0,
         consumptionBooked: false,
         sliceFetchDone: false,
+        // When the running print became active, in epoch milliseconds. Measured
+        // here because the printer reports no start time of its own: a P2S
+        // carries neither `gcode_start_time` nor anything like it in its 98
+        // report fields. A restart mid print therefore loses it, and the
+        // summary says the duration is unknown rather than inventing one.
+        printStartedAt: null,
+        // The closing report of the last finished print: what was booked, what
+        // was skipped and why. Held in memory only, dropped when the next print
+        // starts, and never written anywhere.
+        lastPrintSummary: null,
+        // Whether the result of the last print has been cleared from the
+        // dashboard, by the timer below or by hand. It cannot be derived from
+        // the state: the printer keeps repeating its terminal `gcode_state` in
+        // every report for as long as it sits there, so without this flag the
+        // next report would put the finished print straight back on the card.
+        printResultDismissed: false,
+        // When the result clears itself, in epoch milliseconds. Null when no
+        // timer is running, which is the case before the first print and when
+        // PRINT_RESET_MINUTES is 0.
+        printResetAt: null,
         // Humidity, temperature and drying state per AMS unit, for the header
         // of each unit's table. Display only: it never reaches Spoolman, and it
         // is refreshed on every report rather than on the slot update interval.

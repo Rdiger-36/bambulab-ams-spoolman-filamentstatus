@@ -1,5 +1,14 @@
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.11
+   - Features:
+      - A finished print leaves a summary behind. "consumption booked" is a button now, and it opens what the print actually did: the result, when it ended, how long it took, how many layers, and one row per filament with the slot it ran from, the grams and the spool they were booked onto
+         - A filament that was not booked is listed with the reason rather than left out, which is the case somebody opens this for: no spool assigned in that slot, Spoolman refusing the write, or two spools so alike that the sliced file could not tell them apart either. A filament the plate used none of is listed as unused
+         - The summary is held in memory only. It is dropped when the next print starts and it does not survive a restart, so nothing about a print is written anywhere it would have to be cleaned up later
+      - The card returns to idle on its own once a print has been over for a while. The state badge, the job name, the booking label and the "Needed" and "After print" columns all go back to what they show when nothing is printing
+         - How long that takes is "Clear print result after" on the settings page, ten minutes by default. 0 keeps the result until it is cleared by hand
+         - Next to the booking label is the remaining time, and it is a button: pressing it clears the result now. Every open dashboard follows at once rather than waiting out its update interval
+         - The summary stays reachable after that, as "Last print", until the next print starts
+         - The printer repeats its terminal state in every report for as long as it sits on it, so the clearing is remembered rather than derived from the state. Without that the next report would put the finished print straight back on the card
    - Fixes:
       - Taking the spool off the external spool holder clears its location in Spoolman. The holder is only reported as a slot while it carries something, so an emptied holder does not appear in the report at all, and the code that clears a location only ran for slots the report still contained. The spool kept "<printer> - External" long after it had been taken off, and nothing would ever have cleared it
          - The same applies to an AMS unit that stops being reported, for instance an unplugged one: its slots are now released as well

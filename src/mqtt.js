@@ -145,6 +145,15 @@ async function handlePrintStateChange(printer, print) {
         printer.currentMapping    = null;
         printer.consumptionBooked = false;
         printer.sliceFetchDone    = false;
+
+        // The result of the previous print goes here, not on the terminal
+        // state: it stays readable for as long as nothing new is printing,
+        // which is what makes the summary worth keeping after the card itself
+        // has returned to idle.
+        printer.printStartedAt         = Date.now();
+        printer.lastPrintSummary       = null;
+        printer.printResultDismissed   = false;
+        printer.printResetAt           = null;
     }
 
     // Fetch slice info once we reach RUNNING (the .gcode.3mf is reliably present
@@ -188,7 +197,26 @@ async function handlePrintStateChange(printer, print) {
     if (TERMINAL_STATES.has(newState) && ACTIVE_STATES.has(prevState) && !printer.consumptionBooked) {
         printer.consumptionBooked = true;
 
+        // Built before the booking so that the run is summarised even when
+        // there is nothing to book. A print whose slice info never arrived is
+        // exactly the case somebody opens the summary for.
+        const summary = {
+            state:       newState,
+            jobName:     printer.currentJobName || null,
+            endedAt:     Date.now(),
+            startedAt:   printer.printStartedAt,
+            durationMs:  printer.printStartedAt ? Date.now() - printer.printStartedAt : null,
+            layerNum,
+            totalLayers: printer.currentSliceInfo?.totalLayers ?? null,
+            printError:  printErrorText(print),
+            rows:        [],
+            note:        null,
+        };
+        printer.lastPrintSummary = summary;
+        armPrintResultReset(printer);
+
         if (!printer.currentSliceInfo) {
+            summary.note = "No slice info was cached for this print, so nothing could be booked.";
             console.log(printer.name, printer.logFilePath, `[Print] ${newState}, no slice info cached, skipping consumption tracking`);
             return;
         }
@@ -197,8 +225,72 @@ async function handlePrintStateChange(printer, print) {
             ? calcFullConsumption(printer.currentSliceInfo)
             : calcPartialConsumption(printer.currentSliceInfo, layerNum);
 
-        await bookConsumption(printer, consumption, newState);
+        const outcome = await bookConsumption(printer, consumption, newState);
+        summary.rows = outcome.rows;
+        summary.note = outcome.note;
     }
+}
+
+/**
+ * The printer's own complaint about the print, as text, or null when it is
+ * happy.
+ *
+ * A P2S reports `print_error` as a number and `mc_print_error_code` as the same
+ * value in a string, both 0 on a clean run. `fail_reason` is a string that is
+ * "0" rather than empty when nothing failed, which is why it is compared
+ * against both.
+ *
+ * The numbers are not translated into Bambu's error catalogue here. That
+ * catalogue is large, versioned per firmware and not published in a form this
+ * project can carry, so the code is shown as the printer gave it and the user
+ * can look it up. Saying "error 131074" is honest; inventing a description for
+ * it is not.
+ *
+ * @param {object} print - the `print` object from the MQTT report
+ * @returns {string|null} the error text, or null when there is none
+ */
+function printErrorText(print) {
+    const code = Number(print?.print_error ?? print?.mc_print_error_code ?? 0);
+    const reason = print?.fail_reason;
+    const failed = reason && reason !== "0" && reason !== 0;
+
+    if (!code && !failed) return null;
+    if (code && failed)   return `Printer error ${code}, fail reason ${reason}`;
+    if (code)             return `Printer error ${code}`;
+    return `Fail reason ${reason}`;
+}
+
+/**
+ * Starts the countdown after which the finished print leaves the dashboard.
+ *
+ * `PRINT_RESET_MINUTES` of 0 means the result stays until somebody clears it,
+ * so no deadline is set and the Web UI offers the button without a countdown.
+ *
+ * Nothing is scheduled with a timer: the deadline is a timestamp the dashboard
+ * and the API compare against the clock. A timer would have to be cancelled on
+ * every printer removal and would fire into a process that may have restarted,
+ * while a timestamp survives being read from anywhere and needs no cleanup.
+ *
+ * @param {object} printer - the runtime printer
+ */
+function armPrintResultReset(printer) {
+    const minutes = Number(settings.PRINT_RESET_MINUTES);
+    printer.printResetAt = minutes > 0 ? Date.now() + minutes * 60_000 : null;
+}
+
+/**
+ * Whether the finished print should no longer be shown on the card.
+ *
+ * True once it has been cleared by hand, or once its deadline has passed. The
+ * deadline is evaluated on read rather than on a timer, so this is the single
+ * place that decides it and every reader agrees.
+ *
+ * @param {object} printer - the runtime printer
+ * @returns {boolean} whether the result is cleared
+ */
+export function printResultCleared(printer) {
+    if (printer.printResultDismissed) return true;
+    return printer.printResetAt != null && Date.now() >= printer.printResetAt;
 }
 
 /**
@@ -289,14 +381,21 @@ async function archiveWhenEmpty(printer, spool) {
  * Which filament belongs to which of them is `matchConsumption()` in ams.js,
  * shared with the dashboard route so both answer the question the same way.
  *
+ * Returns what it did rather than only logging it, because the same account has
+ * to reach the summary dialog in the Web UI. The rows carry the outcome of
+ * every filament of the print, the skipped ones included: a filament that was
+ * not booked is the thing a user opens that dialog to understand.
+ *
  * @param {object} printer - the runtime printer
  * @param {object} consumption - a map from calcFullConsumption or the partial one
  * @param {string} state - the terminal state that triggered this, for the log
+ * @returns {Promise<{rows: object[], note: string|null}>} one row per filament,
+ *   and a note when nothing could be booked at all
  */
 async function bookConsumption(printer, consumption, state) {
     if (!printer.spoolData?.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No spool data available for consumption booking");
-        return;
+        return { rows: [], note: "No spool data was available, so nothing could be booked." };
     }
 
     // What the printer said its slots were beats working them out from the
@@ -324,21 +423,34 @@ async function bookConsumption(printer, consumption, state) {
 
     if (!candidates.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools, nothing to book");
-        return;
+        return {
+            rows: Object.values(consumption).map(info => summaryRow(info, "skipped",
+                "No spool in this slot is connected by tag or assigned by hand.")),
+            note: "No slot held a spool this service could identify, so nothing was booked.",
+        };
     }
 
     const lastUsed = new Date().toISOString();
     const entries = Object.values(consumption);
     const matched = matchConsumption(entries, candidates);
+    const rows = [];
 
     for (const info of entries) {
         const { tray_info_idx: idx, color, type, grams } = info;
-        if (grams <= 0) continue;
+        if (grams <= 0) {
+            // Zero gram filaments are skipped rather than written as zero, and
+            // the summary says so instead of leaving the filament out: a plate
+            // that used none of a loaded colour is a result, not an omission.
+            rows.push(summaryRow(info, "unused", "The print used none of this filament."));
+            continue;
+        }
 
         const matches = matched.get(info) ?? [];
 
         if (!matches.length) {
             console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}), skipping ${grams}g (assign the spool in the Web UI to track it)`);
+            rows.push(summaryRow(info, "skipped",
+                "No connected or assigned Spoolman spool. Assign it in the Web UI to track it."));
             continue;
         }
 
@@ -357,14 +469,57 @@ async function bookConsumption(printer, consumption, state) {
         }
 
         const { id: spoolId } = matches[0];
+        const ambiguous = matches.length > 1
+            ? `${matches.length} spools were indistinguishable; the full amount went to this one.`
+            : null;
+
         try {
             const booked = await useSpoolWeight(spoolId, grams, lastUsed);
             console.log(printer.name, printer.logFilePath, `[Print] Booked ${grams}g for spool ${spoolId} (${matches[0].amsId}, ${idx} ${type} ${color}${matches[0].mapped ? ", manually assigned" : ""})`);
+            rows.push({
+                ...summaryRow(info, ambiguous ? "ambiguous" : "booked", ambiguous),
+                spoolId,
+                spoolName: booked?.filament?.name ?? null,
+                mapped: !!matches[0].mapped,
+                remainingWeight: booked?.remaining_weight ?? null,
+            });
             await archiveWhenEmpty(printer, booked);
         } catch (err) {
             console.error(printer.name, printer.logFilePath, `[Print] Failed to book consumption for spool ${spoolId}: ${err.message}`);
+            rows.push({
+                ...summaryRow(info, "failed", `Spoolman refused the booking: ${err.message}`),
+                spoolId,
+                mapped: !!matches[0].mapped,
+            });
         }
     }
+
+    return { rows, note: null };
+}
+
+/**
+ * One filament of a print as the summary dialog shows it.
+ *
+ * `amsId` is set by resolveSliceSlots(), which runs before anything is booked,
+ * so the slot is named even for a filament that was never booked at all.
+ *
+ * @param {object} info - one entry of a consumption map
+ * @param {string} status - booked, ambiguous, skipped, unused or failed
+ * @param {string|null} note - why, for everything that is not a plain booking
+ * @returns {object} the row
+ */
+function summaryRow(info, status, note = null) {
+    return {
+        amsId: info.amsId ?? null,
+        trayInfoIdx: info.tray_info_idx ?? null,
+        type: info.type ?? null,
+        color: info.color ?? null,
+        grams: info.grams ?? 0,
+        status,
+        note,
+        spoolId: null,
+        spoolName: null,
+    };
 }
 
 /**

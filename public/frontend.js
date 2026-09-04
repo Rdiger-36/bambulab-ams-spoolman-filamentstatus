@@ -10,7 +10,7 @@ import {
     spoolWeightLimit,
 } from "./shared.js";
 import { bambuProfile, materialsAgree, slotMaterial } from "./materials.js";
-import { escapeHtml, fetchJson } from "./ui.js";
+import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 
 let autoButton = null;
 // When false (default) the spool weight is tracked from the sliced G-code, so the
@@ -103,6 +103,9 @@ document.addEventListener("DOMContentLoaded", () => {
             // fight the column width sync for nothing.
             setAmsEnv(data.amsEnv);
             refreshAmsEnvCaptions();
+        } else if (data.type === 'print_result_cleared' && data.printer === printerId) {
+            // Somebody cleared the finished print, here or in another tab
+            if (!legacyMode) scheduleGcodeRefresh();
         } else if (data.type === 'refresh' && data.printer === printerId) {
           refreshMenubarPrinters();
         } else if (data.type === "monitoring_update") {
@@ -195,7 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // the table underneath an open dialog replaces the row it was opened from,
     // so every dialog that reads a row has to be listed here.
     function isDialogOpen() {
-        return ["info-dialog", "spool-detail-dialog"]
+        return ["info-dialog", "spool-detail-dialog", "print-summary-dialog"]
             .some(id => document.getElementById(id)?.open);
     }
     
@@ -2081,8 +2084,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let html = `<div class="gc-card-head">
             ${gcodeStateBadge(printData.gcodeState)}
-            <strong>${printData.jobName ? printData.jobName : "No active print"}</strong>
-            <span class="gc-card-note">${printData.consumptionBooked ? "✔ consumption booked" : ""}</span>
+            <strong>${printData.jobName ? escapeHtml(printData.jobName) : "No active print"}</strong>
+            <span class="gc-card-note">${printResultControls(printData)}</span>
         </div>`;
         if (active && humanTotal) {
             html += `<div class="gc-progress">
@@ -2101,7 +2104,203 @@ document.addEventListener("DOMContentLoaded", () => {
             html += `<p class="gc-required" style="margin:10px 0 0">${printData.error}</p>`;
         }
         card.innerHTML = html;
+
+        const summaryButton = card.querySelector("[data-print-summary]");
+        if (summaryButton) {
+            summaryButton.onclick = () => showPrintSummaryDialog(printData.lastPrintSummary);
+        }
+
+        armCountdownTicker(card, printData.printResetAt);
+
+        const clearButton = card.querySelector("[data-print-clear]");
+        if (clearButton) {
+            clearButton.onclick = async () => {
+                clearButton.disabled = true;
+                try {
+                    await sendJson(`./api/print/${currentPrinterId}/clear`, "POST", {});
+                    await loadGcodeView(currentPrinterId);
+                } catch (err) {
+                    clearButton.disabled = false;
+                    alert(`Could not clear the print result: ${err.message}`);
+                }
+            };
+        }
+
         return card;
+    }
+
+    /**
+     * The right hand side of the card head after a print has ended.
+     *
+     * Three states, in the order they happen: the booking label with a
+     * countdown while the result is still shown, nothing at all while a print
+     * is running, and a quiet button on its own once the result has been
+     * cleared but its summary is still there. The summary is dropped by the
+     * server when the next print starts, so this stops offering it by itself.
+     */
+    function printResultControls(printData) {
+        const summary = printData.lastPrintSummary;
+        const hasSummary = !!summary;
+
+        if (printData.consumptionBooked) {
+            const countdown = printData.printResetAt
+                ? `<button class="gc-card-link" data-print-clear
+                        title="Clear the result now instead of waiting">clears in ${formatCountdown(printData.printResetAt)}</button>`
+                : `<button class="gc-card-link" data-print-clear
+                        title="Clear the result from the dashboard">clear</button>`;
+            return `<button class="gc-card-link gc-card-booked" data-print-summary>✔ consumption booked</button>${countdown}`;
+        }
+
+        if (hasSummary && printData.printResultCleared) {
+            return `<button class="gc-card-link" data-print-summary>Last print</button>`;
+        }
+
+        return "";
+    }
+
+    // The one timer that keeps the countdown moving. Held outside the card
+    // because every rebuild of it has to replace the previous one; two tickers
+    // on two cards would both reload the view at the deadline.
+    let countdownTicker = null;
+
+    /**
+     * Keeps the countdown label current and asks the server once when it runs
+     * out.
+     *
+     * The dashboard is otherwise redrawn only when an SSE event arrives, which
+     * follows the slot update interval: at its default of two minutes the
+     * countdown would jump in two minute steps and the result would sit there
+     * for up to two minutes after its deadline. The server still decides when
+     * a result is cleared, in printResultCleared(); this only makes the client
+     * ask at the moment the answer changes.
+     */
+    function armCountdownTicker(card, resetAt) {
+        clearInterval(countdownTicker);
+        countdownTicker = null;
+
+        const label = card.querySelector("[data-print-clear]");
+        if (!label || !resetAt) return;
+
+        countdownTicker = setInterval(() => {
+            // The card was replaced by a later render, or the printer changed
+            if (!card.isConnected) {
+                clearInterval(countdownTicker);
+                countdownTicker = null;
+                return;
+            }
+            if (Date.now() >= resetAt) {
+                // An open dialog keeps the ticker alive rather than ending it:
+                // rebuilding the view underneath one is what isDialogOpen()
+                // exists to prevent, and dropping the ticker here would leave
+                // the result standing until the next SSE event.
+                if (isDialogOpen() || !currentPrinterId) return;
+                clearInterval(countdownTicker);
+                countdownTicker = null;
+                loadGcodeView(currentPrinterId);
+                return;
+            }
+            label.textContent = `clears in ${formatCountdown(resetAt)}`;
+        }, 1000);
+    }
+
+    /**
+     * A deadline as the rough time left, for a label that is only redrawn when
+     * the view reloads. Seconds are shown under a minute so the last stretch
+     * does not sit on "1 min" and then jump to gone.
+     */
+    function formatCountdown(resetAt) {
+        const seconds = Math.max(0, Math.round((resetAt - Date.now()) / 1000));
+        if (seconds < 60) return `${seconds}s`;
+        return `${Math.round(seconds / 60)} min`;
+    }
+
+    /** A duration in milliseconds as hours and minutes, or minutes and seconds. */
+    function formatDuration(ms) {
+        if (ms == null) return "unknown";
+        const total = Math.round(ms / 1000);
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        if (hours) return `${hours} h ${minutes} min`;
+        return `${minutes} min ${total % 60}s`;
+    }
+
+    // How each outcome of a filament is labelled and coloured in the dialog.
+    const SUMMARY_STATUS = {
+        booked:    { label: "Booked",     className: "gc-ok" },
+        ambiguous: { label: "Booked",     className: "gc-warn" },
+        skipped:   { label: "Not booked", className: "gc-warn" },
+        unused:    { label: "Unused",     className: "" },
+        failed:    { label: "Failed",     className: "gc-bad" },
+    };
+
+    /**
+     * The closing report of the last print.
+     *
+     * Read only, and built from what the server recorded when the print ended
+     * rather than from the slots as they are now: a spool swapped since then
+     * must not change what the dialog says was booked onto it.
+     */
+    function showPrintSummaryDialog(summary) {
+        if (!summary) return;
+
+        const dialog = document.getElementById("print-summary-dialog");
+        const title = document.getElementById("print-summary-title");
+        const content = document.getElementById("print-summary-content");
+
+        title.textContent = summary.jobName ? `Print: ${summary.jobName}` : "Last print";
+
+        const humanLayer = (summary.layerNum ?? 0) + 1;
+        const humanTotal = summary.totalLayers != null ? summary.totalLayers + 1 : null;
+
+        const facts = [
+            ["Result", summary.state],
+            ["Ended", summary.endedAt ? formatDate(new Date(summary.endedAt)) : "unknown"],
+            ["Duration", formatDuration(summary.durationMs)],
+            ["Layers", humanTotal ? `${humanLayer} / ${humanTotal}` : `${humanLayer}`],
+        ];
+
+        let html = `<dl class="gc-summary-facts">${facts
+            .map(([term, value]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd>`)
+            .join("")}</dl>`;
+
+        if (summary.printError) {
+            html += `<p class="gc-required">${escapeHtml(summary.printError)}</p>`;
+        }
+        if (summary.note) {
+            html += `<p class="gc-required">${escapeHtml(summary.note)}</p>`;
+        }
+
+        if (summary.rows?.length) {
+            const rows = summary.rows.map(row => {
+                const status = SUMMARY_STATUS[row.status] ?? { label: row.status, className: "" };
+                const spool = row.spoolId
+                    ? `${escapeHtml(row.spoolName ?? "Spool")} (#${row.spoolId})`
+                    : "—";
+                return `<tr>
+                    <td data-label="Slot">${escapeHtml(row.amsId ?? "—")}</td>
+                    <td data-label="Filament">${escapeHtml([row.type, row.color].filter(Boolean).join(" "))}</td>
+                    <td data-label="Amount" style="text-align:right">${row.grams}g</td>
+                    <td data-label="Spool">${spool}</td>
+                    <td data-label="Result"><span class="${status.className}">${escapeHtml(status.label)}</span>${
+                        row.note ? `<div class="gc-summary-note">${escapeHtml(row.note)}</div>` : ""
+                    }</td>
+                </tr>`;
+            }).join("");
+
+            // .spool-table as well, so the dialog inherits the card stacking
+            // every other table on this page falls back to under 760px rather
+            // than pushing five columns sideways inside a modal.
+            html += `<table class="spool-table gc-summary-table"><thead><tr>
+                <th>Slot</th><th>Filament</th><th style="text-align:right">Amount</th><th>Spool</th><th>Result</th>
+            </tr></thead><tbody>${rows}</tbody></table>`;
+        } else if (!summary.note) {
+            html += `<p class="gc-required">This print booked nothing.</p>`;
+        }
+
+        content.innerHTML = html;
+        document.getElementById("print-summary-close").onclick = () => dialog.close();
+        dialog.showModal();
+        document.getElementById("print-summary-close").focus();
     }
 
     // Build one table per AMS unit, like the classic view: normal AMS up to 4
