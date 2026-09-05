@@ -128,6 +128,13 @@ You need a running Spoolman instance and, per printer, its serial number, access
 
 Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues).
 
+## Credits
+
+- [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) is the filament catalogue new filaments are filled in from, and a subset of it is what the mock Spoolman of the test server serves.
+- [ha-bambulab](https://github.com/greghesp/ha-bambulab), the Home Assistant integration for Bambu Lab printers, is where the printer reports under `test/fixtures/reports` come from. They are what real A1, X1C, H2D, X2D, P1P and A2L printers sent, hardware nobody working on this project owns.
+
+The licences of both are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Support me
 
 <a href="https://www.buymeacoffee.com/Rdiger36"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="36" /></a>
