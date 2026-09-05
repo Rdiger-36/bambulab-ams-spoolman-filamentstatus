@@ -1,7 +1,7 @@
 import mqtt from "mqtt";
 import got from "got";
 import * as net from "node:net";
-import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
+import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
@@ -1782,8 +1782,22 @@ function printerStillOffline(printer, now) {
  * This is the single retry driver for MQTT. On every offline check interval each
  * enabled printer is probed with a plain TCP connect before setupMqtt is
  * attempted, so an unreachable printer costs one short timeout rather than a
- * hanging MQTT handshake. The whole loop idles while Spoolman is down, since
- * there would be nothing to write AMS data to.
+ * hanging MQTT handshake.
+ *
+ * It keeps running while Spoolman is down. It used to idle instead, on the
+ * grounds that there would be nothing to write AMS data to, and because this is
+ * the only thing that reconnects MQTT that made a printer connection hostage to
+ * an unrelated service. Measured on 2026-09-05: a network drop took both down
+ * within nine seconds, the close handler promised a retry "within 20 seconds
+ * via the monitor loop", and for the five minutes until the process was
+ * restarted there was not one reconnect attempt and not one reachability check,
+ * while the printer answered on port 8883 the whole time.
+ *
+ * Nothing is written to Spoolman by keeping the connection up:
+ * `handleMqttMessage()` refuses to process a report while Spoolman is down, and
+ * always did. That guard is what the idling was really for, and it sits where
+ * it belongs. Staying connected also means the printer is already there when
+ * Spoolman comes back, rather than waiting out another interval first.
  *
  * A printer that does not answer is asked again on a growing interval rather
  * than on every tick, see `printerStillOffline()`. The loop keeps ticking at the
@@ -1794,58 +1808,90 @@ function printerStillOffline(printer, now) {
  */
 export async function monitorPrinters(printers) {
     while (true) {
-        if (state.spoolmanStatus === "Disconnected") {
-            await sleep(RECONNECT_INTERVAL);
+        await servicePrinters(printers);
+        await sleep(settings.OFFLINE_CHECK_INTERVAL);
+    }
+}
+
+/**
+ * One pass of the monitor loop over the printer list.
+ *
+ * Split out of `monitorPrinters()` so that a pass can be run and asserted on.
+ * The loop itself never returns, so a test could only start it and hope; what
+ * needs proving is what one pass does, and in particular that it does it while
+ * Spoolman is down.
+ *
+ * @param {object[]} printers - the printer list
+ */
+export async function servicePrinters(printers) {
+    for (const printer of printers) {
+        if (!printer.monitoringEnabled) {
+            printer.mqttRunning = false;
+            printer.mqttStatus = "Disabled";
             continue;
         }
 
-        for (const printer of printers) {
-            if (!printer.monitoringEnabled) {
-                printer.mqttRunning = false;
-                printer.mqttStatus = "Disabled";
-                continue;
-            }
+        const now = Date.now();
+        // Not yet due: this printer failed its last check and is waiting out
+        // its backoff. A connected one has no wait, so it is never skipped.
+        if (printer.nextCheckAt && now < printer.nextCheckAt) continue;
 
-            const now = Date.now();
-            // Not yet due: this printer failed its last check and is waiting out
-            // its backoff. A connected one has no wait, so it is never skipped.
-            if (printer.nextCheckAt && now < printer.nextCheckAt) continue;
+        try {
+            const isAlive = await checkPrinterAvailability(printer.ip, 8883);
 
-            try {
-                const isAlive = await checkPrinterAvailability(printer.ip, 8883);
+            if (isAlive) {
+                if (printerIsBack(printer)) {
+                    console.log(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is reachable again`);
+                }
 
-                if (isAlive) {
-                    if (printerIsBack(printer)) {
-                        console.log(printer.name, printer.logFilePath, `Printer ${printer.id} with IP ${printer.ip} is reachable again`);
-                    }
-
-                    if (!printer.mqttRunning && !printer.isReconnecting) {
-                        if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
-                            printer.monitoringEnabled = false;
-                            printer.mqttRunning = false;
-                            printer.mqttStatus = "Disabled";
-                            console.log(printer.name, printer.logFilePath, "Monitoring disabled (max retries reached).");
-                            continue;
-                        }
-                        console.log(printer.name, printer.logFilePath, `MQTT not running for Printer: ${printer.id}, attempting to reconnect...`);
-                        setupMqtt(printer);
-                    }
-                } else {
+                if (!printer.mqttRunning && !printer.isReconnecting) {
                     if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
                         printer.monitoringEnabled = false;
                         printer.mqttRunning = false;
                         printer.mqttStatus = "Disabled";
-                        console.log(printer.name, printer.logFilePath, "Printer is unreachable and the retry limit is exceeded, monitoring disabled.");
+                        console.log(printer.name, printer.logFilePath, "Monitoring disabled (max retries reached).");
                         continue;
                     }
-                    printerStillOffline(printer, now);
+                    console.log(printer.name, printer.logFilePath, `MQTT not running for Printer: ${printer.id}, attempting to reconnect...`);
+                    setupMqtt(printer);
                 }
-            } catch (error) {
-                console.error(printer.name, printer.logFilePath, `Error monitoring Printer: ${printer.id} - ${error.message}`);
+            } else {
+                if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
+                    printer.monitoringEnabled = false;
+                    printer.mqttRunning = false;
+                    printer.mqttStatus = "Disabled";
+                    console.log(printer.name, printer.logFilePath, "Printer is unreachable and the retry limit is exceeded, monitoring disabled.");
+                    continue;
+                }
+                printerStillOffline(printer, now);
             }
+        } catch (error) {
+            console.error(printer.name, printer.logFilePath, `Error monitoring Printer: ${printer.id} - ${error.message}`);
         }
-        await sleep(settings.OFFLINE_CHECK_INTERVAL);
     }
+}
+
+/**
+ * Names why a request to Spoolman failed, in one short phrase.
+ *
+ * The health checks used to discard the error entirely, so an outage produced a
+ * run of identical lines that said only "unreachable". These are different
+ * problems: no route to the host is a network question, a refused connection
+ * means the address is right and nothing is listening, a timeout means something
+ * answered too slowly to be usable, and a parse failure means the endpoint is
+ * not the Spoolman anybody thinks it is.
+ *
+ * The code is preferred over the message because `got` wraps the message in its
+ * own text, and the code is what a search engine and the user's router agree on.
+ *
+ * @param {Error} err - whatever the request threw
+ * @returns {string} a short reason, never empty
+ */
+export function describeRequestError(err) {
+    const code = err?.code || err?.cause?.code;
+    if (code) return code;
+    if (err instanceof SyntaxError) return "the answer was not JSON";
+    return err?.message || "no reason given";
 }
 
 /**
@@ -1869,8 +1915,9 @@ export async function monitorSpoolman() {
             } else {
                 console.error("Server", serverLogFilePath, "Spoolman reported an unhealthy status, retrying...");
             }
-        } catch {
-            console.error("Server", serverLogFilePath, "Spoolman is unreachable. Retrying in 30 seconds...");
+        } catch (err) {
+            console.error("Server", serverLogFilePath,
+                `Spoolman is unreachable (${describeRequestError(err)}). Retrying in 30 seconds...`);
         }
         await sleep(30000);
     }
@@ -1897,8 +1944,15 @@ export async function monitorSpoolmanBackground() {
                 console.error("Server", serverLogFilePath, "Spoolman reported an unhealthy status!");
                 state.spoolmanStatus = "Disconnected";
             }
-        } catch {
-            console.error("Server", serverLogFilePath, "Spoolman is unreachable. Retrying in 60 seconds...");
+        } catch (err) {
+            // The reason, not just the fact. This used to swallow the error, and
+            // an outage on 2026-09-05 then produced five identical lines saying
+            // nothing: whether the address was still unroutable, whether the
+            // request timed out, or whether the endpoint answered something
+            // unparseable are three different problems with three different
+            // answers, and the log could not tell them apart.
+            console.error("Server", serverLogFilePath,
+                `Spoolman is unreachable (${describeRequestError(err)}). Retrying in 60 seconds...`);
             state.spoolmanStatus = "Disconnected";
         }
         await sleep(60000);
