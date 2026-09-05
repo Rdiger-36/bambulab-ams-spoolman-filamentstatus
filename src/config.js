@@ -34,7 +34,6 @@ export const supervised = process.env.SUPERVISED === "1";
 
 export const version = "1.3.0-dev.12";
 export const PORT = 4000;
-export const RECONNECT_INTERVAL = 60000;
 
 // Raw environment values. They seed settings.json and printers.json on the
 // first run only; afterwards those files own the values. This is the only

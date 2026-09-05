@@ -1,4 +1,12 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0-dev.14
+   - Fixes:
+      - A printer reconnects after a network drop even while Spoolman is still unreachable. Measured on 2026-09-05: a drop took both connections down within nine seconds, the MQTT close handler said it would retry "within 20 seconds via the monitor loop", and for the five minutes until the process was restarted there was not one reconnect attempt and not one reachability check, while the printer answered on port 8883 the whole time
+         - The monitor loop is the only thing that reconnects MQTT, and it idled for as long as Spoolman was down, on the grounds that there would be nothing to write AMS data to. That made a printer connection hostage to an unrelated service
+         - Nothing is written to Spoolman by keeping the connection up: the message handler refuses to process a report while Spoolman is down, and always did. That guard is what the idling was really for, and it sits where it belongs. Staying connected also means the printer is already there when Spoolman comes back, instead of waiting out another interval first
+      - The Spoolman health check says why it failed. It used to discard the error, so an outage produced a run of identical lines saying only "unreachable"; no route to the host, a refused connection, a timeout and an answer that is not JSON are four different problems with four different answers
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.12
    - Features:
       - A finished print leaves a summary behind. "consumption booked" is a button now, and it opens what the print actually did: the result, when it started and ended, how long it took, how many layers, and one row per filament with the slot it ran from, the grams and the spool they were booked onto
