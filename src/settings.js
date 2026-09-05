@@ -225,7 +225,7 @@ export const SETTINGS_SCHEMA = {
         // 50 rather than 10: measured on a P2S the capture runs at about 21 MB
         // an hour, so the original default held 85 minutes across all its files
         // and a fault that only shows up now and then was never in it.
-        description: "Size a trace file may reach before it is rotated. This is what decides how far back a trace reaches: a P2S sends a full report every 1.4 seconds, which is around 21 MB an hour, so this size plus the kept files is roughly that many hours of history.",
+        description: "Size a trace file may reach before it is rotated. This is what decides how far back a trace reaches: measured on a P2S it runs at around 22 MB an hour, idle and through a print alike, so this size plus the kept files is roughly that many hours of history.",
     },
     MQTT_TRACE_KEEP: {
         type: "integer",
