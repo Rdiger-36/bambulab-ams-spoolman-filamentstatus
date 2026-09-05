@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.12 has to be folded in here as well, or regenerate the
+Every dev build after dev.13 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -53,6 +53,11 @@ Version 1.3.0
       - The Spoolman location of a spool follows the AMS slot it sits in, and is cleared when it leaves
          - A slot that stops being reported releases its spool as well, which is what an emptied external spool holder and an unplugged AMS unit look like: the holder is only reported while it carries something. A location that does not name this printer is left alone either way, so anything set by hand in Spoolman survives
       - Log files are rotated instead of growing forever, and the log view and download read across the rotated history
+      - How much gets logged is a level rather than a switch, in "Log detail..." in the Logging card: errors, normal, debug and trace, with the areas that write next to it and the raw MQTT capture below. The payload dumps that used to come with debug logging sit at trace, because they are written on every update interval and made a debug log unreadable within minutes. A stored DEBUG is migrated to the debug level on the first start
+         - Errors and the ordinary progress lines are never filtered by area, so switching one off cannot hide a failure
+      - Every MQTT message a printer sends can be captured into logs/<serial>.mqtt.log, one line per message, with its own size and history budget. It is what the printer really sent rather than what this service made of it, and it is every kind of message, not only the status reports this service reads: a P2S print produced seven, of which one is looked at anywhere. Measured on a P2S it runs at about 22 MB an hour, idle and under a print alike. Readable and downloadable like any other log and part of the diagnostics archive
+      - Every printer can have log settings of its own, "Log" next to it in the Printers card, so one machine can run at trace with its capture going while the rest of the service stays quiet
+      - A clean print does not inherit the failure of the one before it. A P2S keeps repeating its previous complaint for a report or two after a new print has started, so the summary of a FINISH could say the print had failed
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
       - Each AMS unit says how it is doing above its slot table: relative humidity, the temperature inside it, and the drying cycle while one is running, with its target temperature and the minutes left
          - What is shown depends on which unit it is, because the units report different things. An AMS 2 Pro and an AMS HT carry a real sensor and a dryer and show all of it; the original AMS and the AMS Lite report only the five step humidity level and show that. The external spool holder reports none of it and gets no header

@@ -31,7 +31,7 @@ matter for them are below.
 | `public/` | Vanilla JS/HTML/CSS frontend. No build step, no framework, no bundler; files are served as-is. `login.html` and `login.js` are the exception to everything below: they are served before anybody is logged in and therefore import nothing from the rest of the UI. `menu.js` renders the whole menu bar for every page, the dark mode button included, so each page includes it before its own script and provides an empty `#menu-root` in its `#menubar`. It also fills the printer picker that lives in the page's own headline, `#printer-name` on the dashboard and `#headline` on the log viewer: the bar carries navigation and the session, the page carries what it is showing. `shared.js` holds the pure decisions the frontend and the server both make, including the slot options, the active print states and the external slot label; it lives here because a browser has to be able to load it unbuilt, and `src/` imports it from here. `ui.js` holds what every page does with the API and with a string, `fetchJson()` and `escapeHtml()`, which is browser only and therefore not in `shared.js`. `frontend.js` and `settings.js` are modules and import both; `menu.js` and `export.js` are classic scripts read off the global scope. |
 | `test/` | `node:test` suites (`npm test`). Fixtures in `test/fixtures/` are real slicer output, not synthetic. |
 | `printers/` | Runtime data, gitignored. `printers.json` (printer list), `settings.json` (runtime configuration), `mappings.json` (slot assignments) and `apikeys.json` (the API keys, as hashes). All four are written by the service and editable by hand, `apikeys.json` only with a restart: it is read once and then held in memory. |
-| `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`. |
+| `logs/` | Runtime logs, gitignored. One file per printer plus `server.log`, and `<serial>.mqtt.log` for a printer whose raw MQTT trace is switched on. The trace has its own size and history budget, because a printer reports every few seconds and every report is a full document. |
 | `scripts/` | `debug.sh` (symlinked to `debug-printers` in the image), the standalone `mqtt.js` probe, `capture-trays.js` (prints a printer's slots once and exits: the AMS trays, the external holder and the slots the running print reports), and `test-server/`, which runs a mock printer, a mock Spoolman and the service against both. |
 | `Home Assistant Addon/` | Docs only for the HA add-on wrapper. |
 
@@ -43,13 +43,20 @@ matter for them are below.
   file named `"text"`. Import `src/logger.js` before anything that logs;
   `backend.js` does this first, on purpose. For output that must bypass the
   override, use the exported `originalConsoleLog` / `originalConsoleError`.
+- **A debug line names the area it belongs to.** `debug(category, device,
+  logFilePath, ...args)` and `trace(...)` from `src/logger.js` are what new code
+  calls, with a category from `LOG_CATEGORIES` in `settings.js`. `console.debug`
+  still works and is never filtered by category, which makes it the wrong
+  default: a line nobody can switch off is a line nobody can turn down. `trace`
+  is for the whole payloads behind a debug line, never for the line itself.
 - **ESM only.** `"type": "module"`; use `import`, not `require`.
 - **Every file under `printers/` is written through its owning module only**:
   `printers.json` through `printers.js`, `settings.json` through `settings.js`,
   `mappings.json` through `mappings.js`, `apikeys.json` through `apikeys.js`.
   All four write temp file plus rename, so a crash mid-write cannot truncate
-  them. Runtime state never reaches `printers.json`; only id, code, ip and name
-  are persisted.
+  them. Runtime state never reaches `printers.json`; only id, code, ip, name and
+  the optional `logDetail` are persisted, and `logDetail` is left out entirely
+  while the printer follows the global log settings.
 - **Never commit `printers/`, `logs/`, or `.env`.** They hold the printer access
   code and LAN addresses and are gitignored. Keep it that way.
 - **Two tracking modes, mutually exclusive.** Default tracks consumption from

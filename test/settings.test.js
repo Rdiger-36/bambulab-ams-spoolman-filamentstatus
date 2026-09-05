@@ -42,9 +42,9 @@ test("coerceSetting rejects a number that is not one", () => {
 });
 
 test("coerceSetting reads a boolean from both a string and a real boolean", () => {
-    assert.equal(coerceSetting("DEBUG", "true").value, true);
-    assert.equal(coerceSetting("DEBUG", false).value, false);
-    assert.ok(coerceSetting("DEBUG", "maybe").error);
+    assert.equal(coerceSetting("MQTT_TRACE", "true").value, true);
+    assert.equal(coerceSetting("MQTT_TRACE", false).value, false);
+    assert.ok(coerceSetting("MQTT_TRACE", "maybe").error);
 });
 
 test("coerceSetting turns an empty string into null for a text field", () => {
@@ -80,10 +80,10 @@ test("resolveSettings keeps the layer below an unusable value and reports it", (
 });
 
 test("describeSources names where each value came from", () => {
-    const sources = describeSources({ MODE: "automatic" }, { DEBUG: "true" });
+    const sources = describeSources({ MODE: "automatic" }, { LOG_LEVEL: "debug" });
 
     assert.equal(sources.MODE, "file");
-    assert.equal(sources.DEBUG, "environment");
+    assert.equal(sources.LOG_LEVEL, "environment");
     assert.equal(sources.SET_LOCATION, "default");
 });
 

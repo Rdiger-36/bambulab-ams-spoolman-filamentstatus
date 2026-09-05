@@ -1484,6 +1484,45 @@ body.logs-page .log-page { width: 100%; }
   line-height: 1.3;
 }
 
+/* ---- Log detail dialog ----
+   The level is a ladder rather than a list of unrelated choices, so it is drawn
+   as a slider with its steps written underneath. */
+.set-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 2px 0 0;
+}
+
+.set-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78em;
+  opacity: 0.75;
+  /* The thumb sits inside the track, so the outer labels are pulled in to stay
+     over the position they name rather than over the end of the box */
+  padding: 0 2px;
+}
+
+.set-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.set-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.95em;
+}
+
+.set-check input { accent-color: var(--accent); }
+
+/* One column: the dialog is narrow and every field here carries a description
+   long enough that two columns would break the reading order. */
+#logdetail-dialog { min-width: min(520px, 92vw); }
+#logdetail-dialog .set-form { grid-template-columns: 1fr; }
+
 /* A toggle reads better next to its label than under it */
 .set-field-toggle {
   display: grid;

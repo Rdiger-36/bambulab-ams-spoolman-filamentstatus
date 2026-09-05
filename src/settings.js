@@ -13,11 +13,34 @@ import { hashPassword, isPasswordHash } from "./passwords.js";
  * only seeds a setting that has never been written, which also keeps a setting
  * added in a later version honouring its variable on an existing install.
  *
- * This module must not import logger.js. logger.js reads DEBUG from here, and
- * an import cycle between the two would run this file before the console
- * overrides exist. Problems found while loading are collected in
+ * This module must not import logger.js. logger.js reads the log level from
+ * here, and an import cycle between the two would run this file before the
+ * console overrides exist. Problems found while loading are collected in
  * `settingsLoadIssues` and logged by backend.js once logging is up.
  */
+
+/**
+ * How much detail a log file carries, quietest first.
+ *
+ * The order is the ladder: a line is written when its own level sits at or
+ * below the configured one, which is what lets the settings page draw it as a
+ * slider rather than as four unrelated choices. `normal` is what an
+ * installation ran with before this existed and `debug` is the old
+ * `DEBUG=true`, minus the full payload dumps that moved up to `trace`: they are
+ * written on every update interval and they were the reason a debug log became
+ * unreadable within minutes.
+ */
+export const LOG_LEVELS = ["errors", "normal", "debug", "trace"];
+
+/**
+ * The areas a debug or trace line can belong to.
+ *
+ * Only those two are filtered. Errors and the ordinary progress lines are
+ * always written, because an area switched off must not be able to hide a
+ * failure. A line whose category is not in this list is never filtered either,
+ * which is what keeps an uncategorised `console.debug` visible.
+ */
+export const LOG_CATEGORIES = ["mqtt", "ams", "spoolman", "gcode", "print", "service"];
 
 /**
  * Field definitions.
@@ -25,7 +48,9 @@ import { hashPassword, isPasswordHash } from "./passwords.js";
  * `restartRequired` marks a setting the running process cannot adopt safely;
  * the UI shows it and the value is stored but only takes effect on the next
  * start. `advanced` moves a field into the collapsed part of its group, for
- * everything an ordinary install never touches.
+ * everything an ordinary install never touches. `dialog` takes a field out of
+ * the card's field grid entirely and hands it to the named dialog, for a group
+ * of fields that belong together and that a printer can override.
  */
 export const SETTINGS_SCHEMA = {
     SPOOLMAN_ENDPOINT: {
@@ -160,15 +185,57 @@ export const SETTINGS_SCHEMA = {
         label: "Max connection retries",
         description: "Failed connection attempts before monitoring is disabled for a printer. 0 retries forever.",
     },
-    DEBUG: {
+    LOG_LEVEL: {
+        type: "enum",
+        options: LOG_LEVELS,
+        default: "normal",
+        group: "logging",
+        // Edited in the log detail dialog rather than in the field grid, next to
+        // the categories it works with. Listed here so the dialog can render it
+        // from the schema instead of holding a second copy of the ladder.
+        dialog: "logDetail",
+        label: "Log level",
+        description: "How much every log file carries. Errors writes failures only, normal adds the ordinary progress lines, debug adds the internal steps, and trace adds the full Spoolman and AMS payloads behind them.",
+    },
+    LOG_CATEGORIES: {
+        type: "set",
+        options: LOG_CATEGORIES,
+        default: [...LOG_CATEGORIES],
+        group: "logging",
+        dialog: "logDetail",
+        label: "Logged areas",
+        description: "Which parts of the service write their debug and trace lines. Errors and the ordinary progress lines are never filtered, so switching an area off cannot hide a failure.",
+    },
+    MQTT_TRACE: {
         type: "boolean",
         default: false,
         group: "logging",
-        // Sits in the card header rather than the field grid: it is a switch for
-        // the whole card, and it leaves the three rotation settings a clean row.
-        header: true,
-        label: "Debug logging",
-        description: "Writes verbose debug lines into the log files.",
+        dialog: "logDetail",
+        label: "Capture raw MQTT messages",
+        description: "Writes every report a printer sends into its own trace file, unparsed and one line per message. For analysing a problem afterwards against the data the printer really sent. It stays on until it is switched off.",
+    },
+    MQTT_TRACE_MAX_SIZE_MB: {
+        type: "integer",
+        default: 50,
+        min: 1,
+        max: 500,
+        group: "logging",
+        dialog: "logDetail",
+        label: "Trace file size (MB)",
+        // 50 rather than 10: measured on a P2S the capture runs at about 21 MB
+        // an hour, so the original default held 85 minutes across all its files
+        // and a fault that only shows up now and then was never in it.
+        description: "Size a trace file may reach before it is rotated. This is what decides how far back a trace reaches: measured on a P2S it runs at around 22 MB an hour, idle and through a print alike, so this size plus the kept files is roughly that many hours of history.",
+    },
+    MQTT_TRACE_KEEP: {
+        type: "integer",
+        default: 2,
+        min: 0,
+        max: 20,
+        group: "logging",
+        dialog: "logDetail",
+        label: "Kept trace files",
+        description: "How many rotated trace files to keep per printer, next to the current one.",
     },
     LOG_MAX_SIZE_MB: {
         type: "integer",
@@ -297,6 +364,19 @@ export function coerceSetting(key, raw) {
         return { value };
     }
 
+    // A set is stored as an array and accepted as one or as the comma separated
+    // string an environment variable can carry. Unknown members are dropped
+    // rather than rejected, so a category removed in a later version does not
+    // make the whole stored value unreadable; an empty result is a legitimate
+    // "nothing selected" and is kept.
+    if (field.type === "set") {
+        const list = Array.isArray(raw) ? raw : String(raw).split(",");
+        const value = list
+            .map(entry => String(entry).trim().toLowerCase())
+            .filter(entry => field.options.includes(entry));
+        return { value: [...new Set(value)] };
+    }
+
     if (field.type === "enum") {
         if (key === "MODE") {
             const resolved = resolveMode(String(raw));
@@ -328,7 +408,9 @@ export function resolveSettings(stored = {}, env = {}, issues = []) {
     const resolved = {};
 
     for (const [key, field] of Object.entries(SETTINGS_SCHEMA)) {
-        resolved[key] = field.default;
+        // Copied, not referenced: a set default is an array and handing the
+        // schema's own object out would let a later write mutate the default
+        resolved[key] = Array.isArray(field.default) ? [...field.default] : field.default;
 
         for (const [layer, source] of [["environment", env], ["settings.json", stored]]) {
             if (source == null || !Object.prototype.hasOwnProperty.call(source, key)) continue;
@@ -385,7 +467,7 @@ export function envSeededKeys() {
  * The shape version of `settings.json`. Bump it when a stored key is renamed or
  * its meaning changes, and handle the old value in `migrateStored()`.
  */
-export const SETTINGS_SCHEMA_VERSION = 1;
+export const SETTINGS_SCHEMA_VERSION = 2;
 
 let storedSettings = {};
 // Notices the user has dismissed in the Web UI, keyed by notice id. Stored
@@ -426,9 +508,17 @@ export function parseStoredFile(parsed) {
 /**
  * Brings a stored set of values up to the current schema version.
  *
- * Nothing to do yet: version 0 is the flat file, whose keys are the same. This
- * is the place for a rename, so that an old file does not lose the value
- * silently.
+ * Version 0 is the flat file, whose keys are the same as version 1's. Version 2
+ * replaced the `DEBUG` switch with the `LOG_LEVEL` ladder: a stored `true`
+ * becomes `debug` and a stored `false` becomes `normal`.
+ *
+ * Both are written, including the `false`. A value in this file is one the user
+ * saved, and the file beats the environment variable: an installation whose
+ * `.env` carries `DEBUG=true` and whose file says `false` is one where somebody
+ * turned debug logging off in the Web UI and expects it to stay off. Dropping
+ * the `false` would leave `LOG_LEVEL` unowned, the `DEBUG` variable would seed
+ * it on the next start, and the upgrade would quietly turn debug logging back
+ * on against an explicit decision.
  *
  * @param {object} values - the stored values
  * @param {number} schemaVersion - the version they were written with
@@ -436,7 +526,19 @@ export function parseStoredFile(parsed) {
  */
 export function migrateStored(values, schemaVersion) {
     if (schemaVersion >= SETTINGS_SCHEMA_VERSION) return values;
-    return values;
+
+    const migrated = { ...values };
+
+    if (schemaVersion < 2 && Object.prototype.hasOwnProperty.call(migrated, "DEBUG")) {
+        const wasOn = migrated.DEBUG === true
+            || ["true", "1", "yes", "on"].includes(String(migrated.DEBUG).trim().toLowerCase());
+        delete migrated.DEBUG;
+        // A LOG_LEVEL already set wins, which is the case of a file written by a
+        // newer version and read back by this one
+        if (migrated.LOG_LEVEL === undefined) migrated.LOG_LEVEL = wasOn ? "debug" : "normal";
+    }
+
+    return migrated;
 }
 
 /** Reads the settings file, treating a missing or unreadable file as empty. */
@@ -624,6 +726,8 @@ export function getSettingsView() {
             advanced: !!field.advanced,
             // Rendered in the card header instead of the field grid
             header: !!field.header,
+            // Rendered by the named dialog rather than by the card at all
+            dialog: field.dialog ?? null,
         })),
         spoolmanUrl: spoolmanUrl(),
         // Set while a stored value waits for the next start, so the page can
@@ -683,7 +787,15 @@ export function updateSettings(patch, expectedRevision) {
 
     if (errors.length) return { ok: false, errors };
 
-    const changed = Object.keys(accepted).filter(key => settings[key] !== accepted[key]);
+    // A set coerces into a fresh array every time, so identity would report it
+    // as changed on every save. Order is not part of its meaning, hence sorted.
+    const changed = Object.keys(accepted).filter(key => {
+        const [before, after] = [settings[key], accepted[key]];
+        if (Array.isArray(before) && Array.isArray(after)) {
+            return [...before].sort().join(",") !== [...after].sort().join(",");
+        }
+        return before !== after;
+    });
 
     Object.assign(settings, accepted);
     storedSettings = { ...settings };

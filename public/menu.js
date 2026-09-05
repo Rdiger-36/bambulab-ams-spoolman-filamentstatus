@@ -407,10 +407,18 @@ function printerChoices() {
     }));
 }
 
-/** What the log viewer's picker offers: the server log and every printer log. */
+/**
+ * What the log viewer's picker offers: the server log, every printer log, and
+ * the raw MQTT trace of every printer.
+ *
+ * The traces are a group of their own rather than a switch on the page. They
+ * are a different file with a different content, and a picker that already
+ * names every log is where a reader looks for one more.
+ */
 function logChoices() {
     const params = new URLSearchParams(window.location.search);
     const openSerial = params.get("serial");
+    const openTrace = params.get("stream") === "mqtt";
 
     const choices = [{
         label: "Server",
@@ -423,8 +431,21 @@ function logChoices() {
             label: printer.name,
             heading: "Printers",
             note: printer.id,
-            current: printer.id === openSerial,
+            current: printer.id === openSerial && !openTrace,
             action: () => openPrinterLog(printer),
+        });
+    }
+
+    for (const printer of menuPrinters) {
+        choices.push({
+            // Named apart from the log above it: once picked, this label is what
+            // the headline carries, and two entries reading the same would leave
+            // the page unable to say which of the two files it is showing
+            label: `${printer.name} (raw MQTT)`,
+            heading: "Raw MQTT traces",
+            note: printer.id,
+            current: printer.id === openSerial && openTrace,
+            action: () => openPrinterLog(printer, true),
         });
     }
 
@@ -443,8 +464,9 @@ function logChoices() {
     return choices;
 }
 
-function openPrinterLog(printer) {
-    window.location.href = `logs.html?serial=${encodeURIComponent(printer.id)}&name=${encodeURIComponent(printer.name)}`;
+function openPrinterLog(printer, trace = false) {
+    const query = `serial=${encodeURIComponent(printer.id)}&name=${encodeURIComponent(printer.name)}`;
+    window.location.href = `logs.html?${query}${trace ? "&stream=mqtt" : ""}`;
 }
 
 /**

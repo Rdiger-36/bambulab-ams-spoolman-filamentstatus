@@ -1,7 +1,7 @@
 import { promises as fsp } from "fs";
 import path from "path";
 import { serverLogFilePath } from "./config.js";
-import { settings } from "./settings.js";
+import { settings, LOG_LEVELS, LOG_CATEGORIES } from "./settings.js";
 import { formatDateLog } from "./utils.js";
 
 const originalConsoleLog = console.log;
@@ -52,7 +52,7 @@ function enqueueAppend(filePath, content) {
 
         __bytesSinceCheck.set(filePath, 0);
         // Already inside the queue, so this must not queue itself again
-        await rotateNow(filePath, maxLogBytes(), keepFor(filePath));
+        await rotateNow(filePath, maxBytesFor(filePath), keepFor(filePath));
     });
 }
 
@@ -121,6 +121,59 @@ function safeStringify(args) {
 }
 
 /**
+ * Per-file overrides of the log level and the categories, keyed by log file.
+ *
+ * A printer can be turned up to trace while the rest of the service stays
+ * quiet, which is what makes a problem on one machine analysable without
+ * drowning the others. Held here rather than read from `printers.js`, because
+ * that module imports this one and the cycle would run the console overrides
+ * too late. `printers.js` pushes the values in instead.
+ */
+const __logDetail = new Map();
+
+/**
+ * Sets or clears the override for one log file.
+ *
+ * @param {string} logFilePath - the file the override applies to
+ * @param {{level?: string, categories?: string[]}|null} detail - null inherits
+ *   the global settings again
+ */
+export function setLogDetail(logFilePath, detail) {
+    if (detail && (detail.level || detail.categories)) __logDetail.set(logFilePath, detail);
+    else __logDetail.delete(logFilePath);
+}
+
+/** The override in force for a file, or an empty object. */
+function detailFor(logFilePath) {
+    return __logDetail.get(logFilePath) || {};
+}
+
+/**
+ * Whether a line of this level and category reaches a given file.
+ *
+ * The level is a ladder: a line is written while its own level sits at or below
+ * the configured one. The category filters `debug` and `trace` only, so an area
+ * switched off can never hide an error or an ordinary progress line. A category
+ * the schema does not know is never filtered, which keeps an uncategorised
+ * `console.debug` visible.
+ *
+ * @param {string} level - the level of the line
+ * @param {string|null} category - the area it belongs to
+ * @param {string} logFilePath - the file it would be written to
+ */
+export function shouldLog(level, category, logFilePath) {
+    const detail = detailFor(logFilePath);
+    const configured = detail.level ?? settings.LOG_LEVEL;
+    const ceiling = LOG_LEVELS.indexOf(configured);
+
+    if (LOG_LEVELS.indexOf(level) > (ceiling === -1 ? LOG_LEVELS.indexOf("normal") : ceiling)) return false;
+    if (level !== "debug" && level !== "trace") return true;
+    if (!LOG_CATEGORIES.includes(category)) return true;
+
+    return (detail.categories ?? settings.LOG_CATEGORIES ?? LOG_CATEGORIES).includes(category);
+}
+
+/**
  * Writes a log line to stdout and to the given file.
  *
  * Overrides the global console.log with a different signature, so every call
@@ -133,10 +186,12 @@ function safeStringify(args) {
  * @param {...any} args - message parts, objects are JSON encoded
  */
 console.log = (device, logFilePath, ...args) => {
+    const path = logFilePath || serverLogFilePath;
+    if (!shouldLog("normal", null, path)) return;
+
     const logMessage = `[LOG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
     originalConsoleLog(logMessage);
 
-    const path = logFilePath || serverLogFilePath;
     const messageText = args.map(a => String(a)).join(" ");
     const collapsePrefix = COLLAPSING_PREFIXES.find(p => messageText.startsWith(p));
     if (collapsePrefix) {
@@ -158,18 +213,50 @@ console.error = (device, logFilePath, ...args) => {
     enqueueAppend(path, errorMessage + "\n");
 };
 
+/** Writes one filtered line, shared by the debug and trace entry points. */
+function writeFiltered(level, category, device, logFilePath, args) {
+    const path = logFilePath || serverLogFilePath;
+    if (!shouldLog(level, category, path)) return;
+
+    const message = `[${level.toUpperCase()}] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
+    originalConsoleLog(message);
+    enqueueAppend(path, message + "\n");
+}
+
 /**
- * Writes a debug line, but only while debug logging is enabled in the settings.
- * Same signature as the console.log override.
+ * Writes a debug line for one area of the service.
+ *
+ * The category is what the log detail dialog switches, so a call that belongs
+ * to a named area passes it rather than going through `console.debug`.
+ *
+ * @param {string} category - one of LOG_CATEGORIES
+ * @param {string} device - printer name, or "Server"
+ * @param {string|null} logFilePath - target file, defaults to the server log
+ * @param {...any} args - message parts, objects are JSON encoded
+ */
+export function debug(category, device, logFilePath, ...args) {
+    writeFiltered("debug", category, device, logFilePath, args);
+}
+
+/**
+ * Writes a trace line: the full payloads behind a debug line.
+ *
+ * Separate from debug because these are whole documents written on every update
+ * interval, and carrying them at debug level is what used to make a debug log
+ * unreadable within minutes. Same arguments as `debug()`.
+ */
+export function trace(category, device, logFilePath, ...args) {
+    writeFiltered("trace", category, device, logFilePath, args);
+}
+
+/**
+ * The uncategorised debug line. Same signature as the console.log override, and
+ * never filtered by category, only by level. `debug()` above is the one to
+ * reach for; this stays so that a call left on the console still lands in the
+ * right file rather than in the raw stdout.
  */
 console.debug = (device, logFilePath, ...args) => {
-    if (settings.DEBUG) {
-        const debugMessage = `[DEBUG] ${formatDateLog(new Date())} - ${device} - ${safeStringify(args)}`;
-        originalConsoleLog(debugMessage);
-
-        const path = logFilePath || serverLogFilePath;
-        enqueueAppend(path, debugMessage + "\n");
-    }
+    writeFiltered("debug", null, device, logFilePath, args);
 };
 
 /**
@@ -231,14 +318,56 @@ export function flushLogs(filePath) {
 
 export { originalConsoleLog, originalConsoleError };
 
+/**
+ * Marks a file as the raw MQTT trace of a printer.
+ *
+ * The trace carries every report a printer sends, which is orders of magnitude
+ * more than the ordinary log, so it gets its own size and history budget. The
+ * suffix is what the rotation reads: the alternative was a second registry that
+ * `printers.js` would have to keep in step with the paths it already builds.
+ */
+export const TRACE_SUFFIX = ".mqtt.log";
+
+/** Whether a path is a raw MQTT trace rather than an ordinary log. */
+function isTraceFile(filePath) {
+    return filePath.endsWith(TRACE_SUFFIX);
+}
+
 /** The size a log file may reach before it is rotated. */
-function maxLogBytes() {
-    return settings.LOG_MAX_SIZE_MB * 1024 * 1024;
+function maxBytesFor(filePath) {
+    const megabytes = isTraceFile(filePath) ? settings.MQTT_TRACE_MAX_SIZE_MB : settings.LOG_MAX_SIZE_MB;
+    return megabytes * 1024 * 1024;
 }
 
 /** How many old files are kept next to this one. */
 function keepFor(filePath) {
+    if (isTraceFile(filePath)) return settings.MQTT_TRACE_KEEP;
     return filePath === serverLogFilePath ? settings.LOG_KEEP_SERVER : settings.LOG_KEEP_PRINTER;
+}
+
+/**
+ * Appends one raw MQTT report to a printer's trace file.
+ *
+ * Written as received and on one line, with only a timestamp in front: parsing
+ * or pretty printing it would cost work inside the message handler, and the
+ * point of the file is the bytes the printer really sent. Goes through the same
+ * write queue and the same size based rotation as every other file, so a trace
+ * left on cannot outgrow its configured budget.
+ *
+ * @param {string} traceFilePath - the printer's trace file
+ * @param {Buffer|string} payload - the report as it arrived
+ */
+export function appendTrace(traceFilePath, payload) {
+    // One report per line is what makes the file readable at all, and a P2S
+    // pretty-prints: measured on real hardware, half of every 17 KB report was
+    // the printer's own indentation. The newline and the indentation that
+    // follows it go together, because dropping only the newline left all of it
+    // behind. Matching the newline is what makes this safe without parsing: a
+    // raw newline cannot appear inside a JSON string, so everything replaced
+    // here is structural. Collapsing runs of spaces on their own would not be:
+    // a job name is a string value and may hold two spaces of its own.
+    const line = String(payload).replace(/\r?\n[ \t]*/g, " ");
+    return enqueueAppend(traceFilePath, `${formatDateLog(new Date())} ${line}\n`);
 }
 
 /**
@@ -260,7 +389,7 @@ function keepFor(filePath) {
 export function rotateLogFile(filePath, { maxBytes, keep } = {}) {
     return enqueueTask(filePath, () => rotateNow(
         filePath,
-        maxBytes ?? maxLogBytes(),
+        maxBytes ?? maxBytesFor(filePath),
         keep ?? keepFor(filePath),
     ));
 }

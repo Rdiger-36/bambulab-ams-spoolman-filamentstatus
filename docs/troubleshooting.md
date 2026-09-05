@@ -42,6 +42,36 @@ A slot that is neither tag-linked nor manually assigned is named and skipped, so
 
 The same logs are readable in the Web UI, per printer and for the server.
 
+## How much gets logged
+
+**Log detail...** in the **Logging** card of the settings page opens the level, the areas and the raw MQTT capture. The **Log** button next to a printer opens the same dialog for that printer alone, which is what lets one machine be turned up while the rest of the service stays quiet.
+
+The level is a ladder, quietest first:
+
+| Level | Writes |
+| :---- | :---- |
+| `errors` | Failures only |
+| `normal` | Plus the ordinary progress lines. The default, and what an installation ran with before this existed |
+| `debug` | Plus the internal steps: which check ran, which branch a slot took, which request went to Spoolman |
+| `trace` | Plus the whole payloads behind those steps: the Spoolman spool list, the processed AMS data, every request body |
+
+The areas (`mqtt`, `ams`, `spoolman`, `gcode`, `print`, `service`) filter the `debug` and `trace` lines only. Errors and the ordinary progress lines are always written, so switching an area off can never hide a failure.
+
+> [!NOTE]
+> `debug` used to mean everything, payload dumps included. Those moved up to `trace`, because they are written on every update interval and they were what made a debug log unreadable within minutes. If you are looking for the full documents, pick `trace`.
+>
+> The `DEBUG` environment variable still seeds an installation that has never saved a level: `DEBUG=true` becomes `LOG_LEVEL=debug`. A stored `DEBUG` is migrated on the first start of this version.
+
+## Capturing everything the printer sends
+
+**Capture raw MQTT messages** in the same dialog writes every report a printer sends into `logs/<serial>.mqtt.log`, unparsed and one line per message. It is the file to attach to a bug report about behaviour nobody can reproduce on demand: it is what the printer really sent, not what this service made of it, including the reports that were dropped because the previous one was still being processed.
+
+It has its own size and history budget next to the log, because a printer reports far more than it logs. Measured on a P2S, idle and through a whole print alike: **roughly 22 MB an hour**. A full status report every 1.4 seconds, around 8 KB each once the printer's own indentation is folded away, plus the smaller messages between them. **Trace file size** is what decides how far back a trace reaches, and it multiplies with **Kept trace files**: the default of 50 MB with 2 kept files is about six hours of history, and a full day needs around 170 MB per file.
+
+It stays on until it is switched off. Nothing turns it off by itself, on purpose: a fault that shows up twice a day is not caught by a capture that ended an hour ago. Size it for the gap between two occurrences of whatever you are hunting, and turn it off again afterwards.
+
+The trace is readable in the Web UI like any other log, under **Raw MQTT traces** in the picker in the headline of the log page, and it is in the diagnostics archive as `logs/<serial>.mqtt.current.log`. The download asks the same anonymising question every other log download asks, and it matters more here: a raw report carries every field the printer knows about itself.
+
 ## Debug-Printers CLI
 
 The container ships a script that checks the network and MQTT status of a printer from inside the container:

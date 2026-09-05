@@ -15,34 +15,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const printerSerial = getQueryParam("serial");
   const name = getQueryParam("name");
+  // The raw MQTT trace of a printer: a file of its own next to the log, so it
+  // is the same page against a different stream rather than a page of its own.
+  const stream = getQueryParam("stream") === "mqtt" ? "&stream=mqtt" : "";
+
+  // A trace line is a whole printer report rather than a sentence, several
+  // kilobytes of it, and the page reloads every five seconds. Asking for the
+  // same 250 lines would be megabytes over the wire per refresh, for a wall of
+  // text nobody reads on screen: the file is what gets downloaded and analysed.
+  const limit = stream ? 50 : 250;
 
   // The headline names the log and is the picker over the others; menu.js
   // fills it once the printer list is there. See renderTitlePicker().
   if (name === "server") {
-    logAPI = `./api/logs/server?limit=250`;
+    logAPI = `./api/logs/server?limit=${limit}`;
   } else if (printerSerial) {
-    logAPI = `./api/logs/${printerSerial}?limit=250`;
+    logAPI = `./api/logs/${printerSerial}?limit=${limit}${stream}`;
   } else {
     logContainer.innerHTML = '<p>Error: No printer serial provided in the URL.</p>';
     return;
   }
-  
+
   const downloadBtn = document.getElementById("download-logs");
   if (downloadBtn) {
     downloadBtn.addEventListener("click", () => {
       const downloadUrl = (name === "server")
         ? `./api/logs/server/download`
-        : `./api/logs/${printerSerial}/download`;
+        : `./api/logs/${printerSerial}/download${stream ? "?stream=mqtt" : ""}`;
 
       // A log carries every address and serial the service has seen, and these
       // files end up attached to bug reports, so the choice is asked rather
-      // than assumed.
+      // than assumed. A trace carries more than a log does: it is every field
+      // the printer reports, so the same choice matters more here.
       downloadWithExportMode({
         url: downloadUrl,
-        title: "Download the log",
+        title: stream ? "Download the raw MQTT trace" : "Download the log",
         what: name === "server"
           ? "The server log, including its rotated history."
-          : `The log of ${name}, including its rotated history.`,
+          : stream
+            ? `Every MQTT report captured from ${name}, including the rotated history.`
+            : `The log of ${name}, including its rotated history.`,
       });
     });
   }

@@ -48,7 +48,7 @@ test("saving clamps into the documented range and writes the file", async () => 
 
     const stored = app.readJson("settings.json");
     assert.equal(stored.values.UPDATE_INTERVAL, 5000);
-    assert.equal(stored.schemaVersion, 1);
+    assert.equal(stored.schemaVersion, 2);
 });
 
 test("a save against a replaced state is refused", async () => {

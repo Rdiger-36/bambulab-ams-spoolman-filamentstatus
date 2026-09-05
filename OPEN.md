@@ -37,6 +37,38 @@ theory or in tests. Ordered by how likely a user is to hit it.
   observed, where the running version is ahead of the latest release. The
   "version X is available" path has never been rendered against a real answer.
 
+## Log detail and the raw MQTT capture
+
+Added on the `feat/log-detail-and-mqtt-trace` branch: the `LOG_LEVEL` ladder
+that replaced `DEBUG`, the per-area switches, the per-printer override and the
+raw MQTT capture. Most of it was exercised against the P2S on 2026-09-05,
+including two whole prints, the rotation of a capture file and its download.
+What was not:
+
+- [ ] **Two or more printers.** The per-printer override was only ever run
+  against one. Three things are unseen because of it: the star that marks a
+  printer no longer following the Logging card once more than one carries it,
+  the plural in the line that names them, and two overrides in force at the same
+  time, which is the case the per-file registry in `logger.js` exists for. It
+  needs the same second printer as the entry above.
+- [ ] **Legacy mode.** Everything was measured in G-code mode. Nothing in the
+  logging is supposed to care, which is exactly why nobody has looked.
+- [ ] **The log detail dialog on a phone.** It is the first dialog in this
+  project with a slider and a wrapping row of checkboxes, and the responsive
+  block in `styles.css` was never checked against it. The other dialogs were.
+- [ ] **The `errors` level with a real failure.** That an area switched off
+  cannot hide an error is proven on the running service; that an error still
+  reaches the file at the quietest level is covered only by
+  `test/logdetail.test.js`. It needs a failure provoked on purpose, for instance
+  by pointing the Spoolman endpoint at a dead port for a minute.
+- [ ] **`calcPartialConsumption()` reads `layer_num` as an inclusive 0-based
+  index**, which is the other reading of the field. Measured on the P2S through
+  the capture, `layer_num` runs 0 to the layer count and stays there through
+  FINISH, so `humanLayers()` was corrected to show it as it stands. The booking
+  maths was deliberately left alone: it only runs on a cancelled or failed
+  print, and no cancelled print has been captured to settle which reading it
+  needs. A deliberate cancel with the capture running answers it.
+
 ## Verified against the printer
 
 On 2026-08-31 the image was run against the real P2S on the LAN, pointed at a

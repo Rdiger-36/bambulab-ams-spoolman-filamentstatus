@@ -274,10 +274,112 @@ test("the summary takes an error that arrives after the print has ended", async 
     assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
 });
 
+test("the previous print's complaint does not follow the next one into its summary", async () => {
+    const { handlePrintStateChange } = await import("../src/mqtt.js");
+
+    // The reports a P2S really sent, read out of the raw MQTT capture. It does
+    // not clear fail_reason when the state changes: the report that first said
+    // RUNNING still carried the code of a print that had failed two days
+    // earlier, and only the next report, five seconds later, had it back at 0.
+    const target = {
+        name: "Test Printer",
+        logFilePath: "/dev/null",
+        currentGcodeState: "FAILED",
+        currentJobName: null,
+        currentLayerNum: 0,
+        currentSliceInfo: null,
+        sliceFetchDone: true,
+        consumptionBooked: false,
+        printStartedAt: null,
+        lastPrintSummary: null,
+        lastPrintError: null,
+        staleErrorText: null,
+    };
+
+    // Sitting on the previous print's result, which is where a printer waits
+    await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "50348044", print_error: 0 });
+
+    // The new print starts, and the printer is still repeating the old code
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
+    assert.equal(target.lastPrintError, null, "the old code must not be collected into the new print");
+
+    // The printer catches up
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "0", print_error: 0 });
+    await handlePrintStateChange(target, { gcode_state: "FINISH", fail_reason: "0", print_error: 0 });
+
+    assert.equal(target.lastPrintSummary.state, "FINISH");
+    assert.equal(target.lastPrintSummary.printError, null, "a clean FINISH has no error");
+});
+
+test("a real failure inside the print is still collected once the old one cleared", async () => {
+    const { handlePrintStateChange } = await import("../src/mqtt.js");
+
+    // The hold-back must not swallow a genuine error. It lasts only while the
+    // printer keeps repeating the exact complaint it started with.
+    const target = {
+        name: "Test Printer",
+        logFilePath: "/dev/null",
+        currentGcodeState: "FAILED",
+        currentJobName: null,
+        currentLayerNum: 0,
+        currentSliceInfo: null,
+        sliceFetchDone: true,
+        consumptionBooked: false,
+        printStartedAt: null,
+        lastPrintSummary: null,
+        lastPrintError: null,
+        staleErrorText: null,
+    };
+
+    await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "50348044", print_error: 0 });
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "0", print_error: 0 });
+
+    // Something goes wrong in this print, and it happens to be the same code
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
+    assert.equal(target.lastPrintError, "Fail reason 50348044");
+
+    await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "0", print_error: 0 });
+    assert.equal(target.lastPrintSummary.printError, "Fail reason 50348044");
+});
+
 // ---------------------------------------------------------------------------
 // What the card shows while a print is running: when it started, when it is
 // expected to end, and what the printer is busy with.
 // ---------------------------------------------------------------------------
+
+test("a terminal state nothing is known about reads as idle, not as a result", async () => {
+    const { printResultCleared } = await import("../src/mqtt.js");
+
+    // What a service started after a print ended is handed: the printer repeats
+    // its last gcode_state for as long as it sits on it, and this process has no
+    // job name, no summary and no booking to go with it. The card showed a green
+    // FINISH badge next to "No active print", two answers to the same question.
+    assert.equal(printResultCleared({
+        currentGcodeState: "FINISH",
+        currentJobName: null,
+        lastPrintSummary: null,
+        printResetAt: null,
+    }), true);
+
+    // A result this process really produced is kept, which is the whole point of
+    // PRINT_RESET_MINUTES being 0: it stays until somebody clears it.
+    assert.equal(printResultCleared({
+        currentGcodeState: "FINISH",
+        currentJobName: "Cube",
+        lastPrintSummary: { state: "FINISH" },
+        printResetAt: null,
+    }), false);
+
+    // An active print is not a result and must never be cleared, even when the
+    // printer left the job name empty
+    assert.equal(printResultCleared({
+        currentGcodeState: "RUNNING",
+        currentJobName: null,
+        lastPrintSummary: null,
+        printResetAt: null,
+    }), false);
+});
 
 test("a running print reports its start, its estimate and its stage", async () => {
     printer.currentGcodeState        = "RUNNING";
@@ -347,14 +449,18 @@ test("a remaining time of zero is an estimate, a missing one is not", async () =
     assert.equal(missing.body.estimatedEndAt, null);
 });
 
-test("an unknown stage is shown as its number rather than guessed at", async () => {
+test("a named stage reads as its name, an unnamed one as its number", async () => {
     const { printStageName, isPreparingStage } = await import("../src/gcode.js");
 
     assert.equal(printStageName(2), "Heatbed preheating");
     assert.equal(printStageName(14), "Cleaning nozzle tip");
-    // Both seen on a P2S and outside the table the community settled on.
-    assert.equal(printStageName(54), "Stage 54");
-    assert.equal(printStageName(51), "Stage 51");
+    // The two a P2S announces on an ordinary plate. They were shown as their
+    // number until the machine said what they are.
+    assert.equal(printStageName(51), "Printing calibration lines");
+    assert.equal(printStageName(54), "Heating heatbed to target");
+    // Still no guessing for the ones nothing has named.
+    assert.equal(printStageName(52), "Stage 52");
+    assert.equal(printStageName(99), "Stage 99");
     // Neither end names a stage. -1 is what the printer sends outside a print,
     // and 0 is it laying down filament, which the state badge already says: a
     // P2S sits on 0 for the whole body of a print, so naming it would put
@@ -365,7 +471,10 @@ test("an unknown stage is shown as its number rather than guessed at", async () 
 
     assert.equal(isPreparingStage(2), true);
     assert.equal(isPreparingStage(13), true);
+    // Both come before the model: the calibration lines are laid down next to
+    // the plate, and a bed still coming up to temperature has not started.
+    assert.equal(isPreparingStage(51), true);
+    assert.equal(isPreparingStage(54), true);
     // A pause is its own state the printer already reports as PAUSE.
     assert.equal(isPreparingStage(16), false);
-    assert.equal(isPreparingStage(54), false);
 });

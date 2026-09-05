@@ -35,6 +35,11 @@ export const supervised = process.env.SUPERVISED === "1";
 export const version = "1.3.0-dev.12";
 export const PORT = 4000;
 
+/** The spellings a boolean environment variable is accepted in. */
+function isTruthy(raw) {
+    return ["true", "1", "yes", "on"].includes(String(raw ?? "").trim().toLowerCase());
+}
+
 // Raw environment values. They seed settings.json and printers.json on the
 // first run only; afterwards those files own the values. This is the only
 // module that reads process.env, everything else reads settings.js.
@@ -51,7 +56,15 @@ export const envSeed = {
     MAX_RETRIES: process.env.MAX_RETRIES,
     NEVER_MERGE_IF_TAG: process.env.NEVER_MERGE_IF_TAG,
     SET_LOCATION: process.env.SET_LOCATION,
-    DEBUG: process.env.DEBUG,
+    // DEBUG was the switch before the level ladder existed. It still seeds an
+    // installation that has never saved a level, so a container definition
+    // carrying DEBUG=true keeps writing debug lines after the upgrade. An
+    // explicit LOG_LEVEL wins over it.
+    LOG_LEVEL: process.env.LOG_LEVEL ?? (isTruthy(process.env.DEBUG) ? "debug" : undefined),
+    LOG_CATEGORIES: process.env.LOG_CATEGORIES,
+    MQTT_TRACE: process.env.MQTT_TRACE,
+    MQTT_TRACE_MAX_SIZE_MB: process.env.MQTT_TRACE_MAX_SIZE_MB,
+    MQTT_TRACE_KEEP: process.env.MQTT_TRACE_KEEP,
     LOG_MAX_SIZE_MB: process.env.LOG_MAX_SIZE_MB,
     LOG_KEEP_SERVER: process.env.LOG_KEEP_SERVER,
     LOG_KEEP_PRINTER: process.env.LOG_KEEP_PRINTER,

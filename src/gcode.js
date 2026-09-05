@@ -3,6 +3,7 @@ import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
 import { EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
+import { debug, trace } from "./logger.js";
 import { normColor } from "../public/shared.js";
 
 /**
@@ -48,6 +49,8 @@ export async function fetchSliceInfo(printer, jobName) {
         });
 
         const candidates = resolveRemotePaths(jobName);
+        debug("gcode", printer.name, printer.logFilePath,
+            `[Print] Looking for the sliced file as ${candidates.join(" or ")}`);
 
         let buf = null;
         for (const path of candidates) {
@@ -58,17 +61,35 @@ export async function fetchSliceInfo(printer, jobName) {
                 });
                 await client.downloadTo(writable, path);
                 buf = Buffer.concat(chunks);
+                debug("gcode", printer.name, printer.logFilePath,
+                    `[Print] Downloaded ${path}, ${buf.length} bytes`);
                 break;
-            } catch {
-                // try next candidate path
+            } catch (err) {
+                // Trying the next candidate is the normal path, not a failure:
+                // where the file sits depends on how the job was sent. The
+                // reason is still worth having, because "no slice info" with
+                // every attempt silent is the hardest version of this to answer.
+                debug("gcode", printer.name, printer.logFilePath,
+                    `[Print] Not at ${path}: ${err.message}`);
             }
         }
 
-        if (!buf) return null;
+        if (!buf) {
+            debug("gcode", printer.name, printer.logFilePath,
+                "[Print] None of the candidate paths held the sliced file");
+            return null;
+        }
 
         const zip = new AdmZip(buf);
+        trace("gcode", printer.name, printer.logFilePath,
+            `[Print] Archive entries: ${JSON.stringify(zip.getEntries().map(e => e.entryName))}`);
+
         const entry = zip.getEntry("Metadata/slice_info.config");
-        if (!entry) return null;
+        if (!entry) {
+            debug("gcode", printer.name, printer.logFilePath,
+                "[Print] The archive carries no Metadata/slice_info.config");
+            return null;
+        }
 
         // The whole archive is already in memory, so the second entry costs
         // nothing on the wire. It is the only place the colour set of a multi
@@ -76,11 +97,23 @@ export async function fetchSliceInfo(printer, jobName) {
         // filament, the first of the set. Missing on older slicers, and then
         // the single colour is all there is, exactly as before.
         const settings = zip.getEntry("Metadata/project_settings.config");
+        if (!settings) {
+            // Older slicers do not write it, and then the single colour per
+            // filament is all there is. Worth naming, because it is what a
+            // multi colour spool matching as a plain one comes down to.
+            debug("gcode", printer.name, printer.logFilePath,
+                "[Print] No project_settings.config, so no multi colour sets for this print");
+        }
 
-        return parseSliceInfo(
+        const parsed = parseSliceInfo(
             entry.getData().toString("utf8"),
             settings ? settings.getData().toString("utf8") : null,
         );
+
+        trace("gcode", printer.name, printer.logFilePath,
+            `[Print] Parsed slice info: ${JSON.stringify(parsed)}`);
+
+        return parsed;
     } finally {
         client.close();
     }
@@ -630,6 +663,11 @@ const PRINT_STAGES = {
     33: "Paused, cutter error",
     34: "Paused, first layer error",
     35: "Paused, nozzle clog",
+    // The two a P2S announces on an ordinary plate, which is why they were the
+    // ones showing up as a bare number. Named from the machine rather than from
+    // a published table: 36 to 50 stay unnamed and fall back to "Stage <n>".
+    51: "Printing calibration lines",
+    54: "Heating heatbed to target",
 };
 
 /**
@@ -661,5 +699,9 @@ export function printStageName(code) {
  * @returns {boolean} whether this stage is preparation
  */
 export function isPreparingStage(code) {
-    return [1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 24, 25].includes(Number(code));
+    // 51 and 54 belong here for the same reason as the rest: the printer is
+    // busy with something that comes before the model. The calibration lines
+    // are laid down next to the plate, not on it, and a bed still coming up to
+    // temperature has not started either.
+    return [1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 24, 25, 51, 54].includes(Number(code));
 }
