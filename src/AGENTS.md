@@ -192,9 +192,17 @@ build their Spoolman payload from.
   every chipless spool read-only: it writes the RFID remain percentage and the
   holder has no chip. Older firmware called it `vt_tray` and sent a single
   object; a P2S on 2026 firmware does not send that key at all. Only a holder
-  that carries something is emitted, because what an empty one reports has not
-  been observed and an entry of empty strings would still reach
+  that carries something is emitted: an empty one is reported in full with the
+  three material fields empty, and that record would still reach
   `slotIsOccupied()` carrying its temperature fields.
+- **A report that does not mention the holder means "unchanged", not "empty".**
+  A P2S carries `vir_slot` in every report with AMS data, a P1S sends delta
+  reports with the AMS block and no `vt_tray` (issue #131). The handler reads
+  the holder through `rememberedExternalSpoolUnits()`, which keeps the last
+  report that named it in `printer.lastExternalUnits` and forgets it on every
+  connection. Only a report carrying the key, an empty holder included,
+  replaces it. `node scripts/test-server/index.js --delta-reports` is the
+  reproduction.
 - **An archived spool is looked up separately, and only by its tag.** Spoolman
   leaves archived spools out of `/api/v1/spool`, so a spool this service
   archived when it ran empty is gone from the list while it is still sitting in

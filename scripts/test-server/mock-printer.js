@@ -132,19 +132,30 @@ function topicMatches(filter, topic) {
     return filterParts.length === topicParts.length;
 }
 
-/** The report the printer publishes, in the shape `handleMqttMessage()` reads. */
-function buildReport() {
+/**
+ * The report the printer publishes, in the shape `handleMqttMessage()` reads.
+ *
+ * A full report carries the external spool holder next to the AMS block, the
+ * way a P2S sends it in every report. A delta report is what a P1S is suspected
+ * of sending between two full ones (issue #131): the AMS block is there, the
+ * holder is not mentioned at all, and `msg` is 1 rather than 0. The service has
+ * to read the missing key as "nothing changed" rather than as an empty holder,
+ * or the External slot vanishes on every second report.
+ *
+ * @param {boolean} delta - leave the holder out, as a delta report does
+ */
+function buildReport(delta) {
     return JSON.stringify({
         print: {
             command: "push_status",
-            msg: 0,
+            msg: delta ? 1 : 0,
             sequence_id: String(Date.now()),
             gcode_state: "IDLE",
             layer_num: 0,
             subtask_name: "",
             // The external spool holder, which the printer reports outside the
             // AMS block. Older firmware called the same thing vt_tray.
-            vir_slot: EXTERNAL_SPOOL,
+            ...(delta ? {} : { vir_slot: EXTERNAL_SPOOL }),
             nozzle_temper: 24.4,
             bed_temper: 23.1,
             ams: {
@@ -170,12 +181,16 @@ function buildReport() {
  * @param {number} options.port - TLS port, 8883 on a real printer
  * @param {number} options.interval - milliseconds between two reports
  * @param {(line: string) => void} options.log - where connection lines go
+ * @param {boolean} [options.deltaReports] - make every second report a delta
+ *   that leaves the external spool holder out, the way a P1S is suspected of
+ *   doing. See `buildReport()`
  * @returns {Promise<{close: () => Promise<void>, reports: () => number}>}
  */
-export function startMockPrinter({ serial, port, interval, log }) {
+export function startMockPrinter({ serial, port, interval, log, deltaReports = false }) {
     const topic = `device/${serial}/report`;
     const clients = new Set();
     let reports = 0;
+    let built = 0;
 
     const server = tls.createServer({ ...selfSignedCertificate() }, socket => {
         const client = { socket, subscriptions: [] };
@@ -223,7 +238,10 @@ export function startMockPrinter({ serial, port, interval, log }) {
     server.on("tlsClientError", () => {});
 
     const timer = setInterval(() => {
-        const report = buildReport();
+        // Full, delta, full, delta: the first report a client sees is the one
+        // it has to build the slots from, so the full one comes first.
+        const report = buildReport(deltaReports && built % 2 === 1);
+        built++;
         let sent = 0;
 
         for (const client of clients) {
@@ -238,7 +256,8 @@ export function startMockPrinter({ serial, port, interval, log }) {
     return new Promise((resolve, reject) => {
         server.once("error", reject);
         server.listen(port, () => {
-            log(`listening on ${port}, publishing ${topic} every ${interval} ms`);
+            log(`listening on ${port}, publishing ${topic} every ${interval} ms` +
+                (deltaReports ? ", every second one a delta without the holder" : ""));
             resolve({
                 reports: () => reports,
                 close: () => new Promise(done => {

@@ -190,7 +190,9 @@ Not punctuation, and therefore allowed:
   the multi colour filaments from the Bambu Lab hex code tables, plus the
   external spool holder, which is every position this service can address. It
   covers what no unit test and no ordinary spool collection reaches. `--no-service`
-  runs only the two mocks, for pointing a container at them. Stop it before
+  runs only the two mocks, for pointing a container at them. `--delta-reports`
+  leaves the external holder out of every second report, the way a P1S sends
+  delta reports (issue #131). Stop it before
   running `npm test`: the suite expects nothing on 8883, and a broker answering
   there leaves the connection tests waiting for a report.
 - Against real hardware: `--real-printer <ip> <code> <serial>` replaces the mock

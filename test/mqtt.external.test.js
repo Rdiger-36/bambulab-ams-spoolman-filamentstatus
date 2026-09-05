@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { externalSpoolUnits, releaseVanishedSlots } from "../src/mqtt.js";
+import { externalSpoolUnits, rememberedExternalSpoolUnits, releaseVanishedSlots } from "../src/mqtt.js";
 import { processData, slotIsOccupied } from "../src/ams.js";
 import { convertAMSandSlot, EXTERNAL_SLOT } from "../src/utils.js";
 
@@ -89,6 +89,49 @@ test("the colour of an empty holder is not evidence of a spool", () => {
     // put an invisible swatch on a row for a spool that was not there.
     assert.deepEqual(emptyVirSlot.cols, ["FFFFFF00"]);
     assert.deepEqual(externalSpoolUnits({ vir_slot: [{ ...emptyVirSlot, cols: ["FFFFFF00"] }] }), []);
+});
+
+// A P2S mentions the holder in every report that carries AMS data. A P1S sends
+// delta reports that carry the AMS block and leave the holder out, and reading
+// those as an empty holder is what made the External slot show and vanish with
+// every report in issue #131.
+test("a report that does not mention the holder keeps what the last one said", () => {
+    const printer = { lastExternalUnits: null };
+
+    const first = rememberedExternalSpoolUnits(printer, { vir_slot: [virSlot] });
+    assert.equal(first.length, 1);
+
+    // The AMS block alone, as a delta report carries it
+    const delta = rememberedExternalSpoolUnits(printer, { ams: { ams: [] } });
+    assert.deepEqual(delta, first);
+
+    // Older firmware, the single object shape, remembered the same way
+    rememberedExternalSpoolUnits(printer, { vt_tray: { ...virSlot, tray_color: "545454FF" } });
+    assert.equal(rememberedExternalSpoolUnits(printer, {}).at(0).tray[0].tray_color, "545454FF");
+});
+
+test("a report that names an empty holder replaces what was remembered", () => {
+    const printer = { lastExternalUnits: null };
+    rememberedExternalSpoolUnits(printer, { vir_slot: [virSlot] });
+
+    // "Nothing there" is the key with nothing loaded behind it, not a missing
+    // key. All three shapes the printers send for it count.
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, { vir_slot: [emptyVirSlot] }), []);
+    rememberedExternalSpoolUnits(printer, { vir_slot: [virSlot] });
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, { vir_slot: [] }), []);
+    rememberedExternalSpoolUnits(printer, { vt_tray: virSlot });
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, { vt_tray: null }), []);
+
+    // And the emptiness is what is remembered from then on
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, { ams: { ams: [] } }), []);
+});
+
+test("nothing is remembered before the first report that names the holder", () => {
+    const printer = { lastExternalUnits: null };
+
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, { ams: { ams: [] } }), []);
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, undefined), []);
+    assert.equal(printer.lastExternalUnits, null);
 });
 
 test("a holder is one filament, never part of a four slot unit", () => {

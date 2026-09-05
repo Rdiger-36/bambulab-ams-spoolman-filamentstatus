@@ -384,12 +384,14 @@ export function printResultCleared(printer) {
  * `tray_uuid`, empty `tray_sub_brands`, `tray_weight` "0" and `remain` 0. That
  * is why it is handed to the same pipeline as a unit of its own rather than
  * given a branch: `processSlot` then classifies it as the 3rd party spool it
- * is, and it becomes assignable like any other. Measured on a P2S, `vir_slot`
- * was present in all 24 reports that carried AMS data and in none of the ones
- * that carried none, so a missing key needs no memory of the last value.
+ * is, and it becomes assignable like any other.
  *
  * `vt_tray` is the same thing on older firmware, a single object rather than an
  * array. The P2S measured here no longer sends the key at all.
+ *
+ * This reads one report and nothing else. Whether a report that does not
+ * mention the holder means "nothing there" or "nothing changed" is not this
+ * function's to decide, see `rememberedExternalSpoolUnits()`.
  *
  * Only emitted for a holder that actually carries something. An empty holder is
  * still reported, and reported in full: measured on a P2S with nothing on it,
@@ -414,6 +416,40 @@ export function externalSpoolUnits(print) {
 
     if (!loaded.length) return [];
     return [{ id: String(EXTERNAL_SPOOL_ID), tray: loaded }];
+}
+
+/**
+ * The external spool holder as the printer last described it.
+ *
+ * A P2S puts `vir_slot` into every report that carries AMS data, measured in
+ * all 24 of them, so reading the report at hand was enough there. A P1S does
+ * not: it sends delta reports that carry the AMS block and leave `vt_tray` out.
+ * Read on their own, those said the holder was empty, so the External slot was
+ * released and its location cleared, and the next full report created it again.
+ * Issue #131 is that, a spool that showed and vanished every few reports.
+ *
+ * So a report that does not mention the holder at all leaves what the last one
+ * said in place, and a report that carries the key replaces it, an empty holder
+ * included. "Nothing changed" and "nothing there" look the same in the AMS
+ * data, and only the printer's own key tells them apart.
+ *
+ * The memory starts empty on every connection: what an earlier connection
+ * remembered may describe a holder that was emptied while nobody was listening,
+ * and the first report that names the holder fills it again. A stale memory
+ * is therefore bounded by one full report, not by the process lifetime.
+ *
+ * Whether a P1S delta ever carries a partial `vt_tray`, one without the
+ * material fields, is not known. Such a record would be read as an empty
+ * holder. The raw capture asked for in #131 is what will say.
+ *
+ * @param {object} printer - the printer runtime object, which carries the memory
+ * @param {object} print - `data.print` from an MQTT report
+ * @returns {object[]} zero or one unit, shaped like an entry of `print.ams.ams`
+ */
+export function rememberedExternalSpoolUnits(printer, print) {
+    const mentioned = print != null && ("vir_slot" in print || "vt_tray" in print);
+    if (mentioned) printer.lastExternalUnits = externalSpoolUnits(print);
+    return printer.lastExternalUnits ?? [];
 }
 
 /**
@@ -795,7 +831,7 @@ async function handleMqttMessage(printer, topic, message) {
                         // from the RFID remain percentage and the holder has no
                         // chip, so there would be nothing to write, which is the
                         // same reason a 3rd party slot is read-only there.
-                        const externalUnits = legacyMode() ? [] : externalSpoolUnits(data.print);
+                        const externalUnits = legacyMode() ? [] : rememberedExternalSpoolUnits(printer, data.print);
                         const processedAmsData = processData([...data.print.ams.ams, ...externalUnits]);
                         const newTrayData = extractComparableTrayData(processedAmsData);
                         const lastTrayData = extractComparableTrayData(printer.lastAmsData || []);
@@ -1557,6 +1593,9 @@ export async function setupMqtt(printer) {
         printer.mqttClient = client;
         printer.reconnectAttempts = 0;
         printer.isReconnecting = false;
+        // What the previous connection knew about the external spool holder
+        // may be stale by now. See rememberedExternalSpoolUnits().
+        printer.lastExternalUnits = null;
 
         console.log(printer.name, printer.logFilePath, `MQTT client connected for Printer: ${printer.id}`);
         await client.subscribeAsync(`device/${printer.id}/report`);

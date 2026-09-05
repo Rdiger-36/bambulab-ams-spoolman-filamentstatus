@@ -108,6 +108,10 @@ function createRuntimePrinter(entry) {
         update_interval: settings.UPDATE_INTERVAL,
         lastUpdateTime: new Date(),
         first_run: true,
+        // The external spool holder as the last report that mentioned it
+        // described it, see rememberedExternalSpoolUnits() in mqtt.js. Null
+        // until a report names the holder, and again on every connection.
+        lastExternalUnits: null,
         monitoringEnabled: true,
         // The growing wait between two reachability checks of a printer that
         // does not answer. See monitorPrinters() in mqtt.js.

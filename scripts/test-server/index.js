@@ -27,11 +27,18 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  * Usage:
  *   node scripts/test-server/index.js [--spoolman-port 7912] [--printer-port 8883]
  *                                     [--interval 3000] [--no-service]
+ *                                     [--delta-reports]
  *                                     [--real-printer <ip> <code> <serial>]
  *                                     [--spoolman <url>] [--mode manual|automatic]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
+ *
+ * `--delta-reports` makes the mock printer leave the external spool holder out
+ * of every second report, with `msg` 1, the way a P1S is suspected of sending
+ * delta reports between two full ones (issue #131). The holder has to stay on
+ * the dashboard through it; before the fix it vanished and came back with
+ * every report.
  *
  * `--real-printer` skips the mock printer and points the service at a physical
  * one, while Spoolman stays the mock. That is the way to see how a spool nobody
@@ -66,6 +73,7 @@ function readOptions(argv) {
         printerPort: 8883,
         interval: 3000,
         service: true,
+        deltaReports: false,
         realPrinter: null,
         spoolman: null,
         mode: "manual",
@@ -78,6 +86,7 @@ function readOptions(argv) {
             case "--printer-port": options.printerPort = Number(value); i++; break;
             case "--interval": options.interval = Number(value); i++; break;
             case "--no-service": options.service = false; break;
+            case "--delta-reports": options.deltaReports = true; break;
             case "--spoolman":
                 if (!value || !/^https?:\/\//.test(value)) {
                     console.error("--spoolman takes a base URL, for example http://spoolman.example:7912");
@@ -165,6 +174,7 @@ async function main() {
             port: options.printerPort,
             interval: options.interval,
             log: prefixed("printer"),
+            deltaReports: options.deltaReports,
         });
 
         const scenario = describeScenario();
