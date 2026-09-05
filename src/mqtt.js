@@ -3,7 +3,7 @@ import got from "got";
 import * as net from "node:net";
 import { serverLogFilePath, RECONNECT_INTERVAL } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
-import { originalConsoleLog } from "./logger.js";
+import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
 import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
@@ -40,6 +40,7 @@ import {
     matchConsumption,
 } from "./ams.js";
 import { toClientSpool } from "./uispool.js";
+import { traceEnabled } from "./printers.js";
 
 /**
  * Sends an event to every connected SSE client. A payload that cannot be
@@ -642,7 +643,7 @@ async function handleMqttMessage(printer, topic, message) {
         try {
             printer.mqttStatus = "Connected";
             const data = JSON.parse(message);
-            console.debug(printer.name, printer.logFilePath, `Processing MQTT message for Printer: ${printer.id}`);
+            debug("mqtt", printer.name, printer.logFilePath, `Processing MQTT message for Printer: ${printer.id}`);
 
             // Reception freshness: every received message proves the connection is
             // live, regardless of the AMS processing interval below. Update the
@@ -668,12 +669,12 @@ async function handleMqttMessage(printer, topic, message) {
                 await handlePrintStateChange(printer, data.print);
             }
 
-            console.debug(printer.name, printer.logFilePath, "Check if message contains AMS Data");
+            debug("mqtt", printer.name, printer.logFilePath, "Check if message contains AMS Data");
 
             if (data?.print?.ams?.ams) {
                 const currentTime = new Date();
                 broadcastAmsEnvironment(printer, data.print.ams.ams, currentTime);
-                console.debug(printer.name, printer.logFilePath, "Check next Update Interval");
+                debug("mqtt", printer.name, printer.logFilePath, "Check next Update Interval");
 
                 const intervalElapsed = currentTime.getTime() - printer.lastUpdateTime.getTime() > printer.update_interval;
                 if (intervalElapsed || printer.first_run) {
@@ -690,12 +691,12 @@ async function handleMqttMessage(printer, topic, message) {
                         unit?.humidity !== "" && unit?.temp !== ""
                     );
 
-                    console.debug(printer.name, printer.logFilePath, "Fetch Data from Spoolman");
+                    debug("spoolman", printer.name, printer.logFilePath, "Fetch Data from Spoolman");
                     let spools = await getSpoolmanSpools();
 
                     if (state.spoolmanStatus !== "Disconnected") {
-                        console.debug(printer.name, printer.logFilePath, "Registered Spools:");
-                        console.debug(printer.name, printer.logFilePath, JSON.stringify(spools));
+                        trace("spoolman", printer.name, printer.logFilePath, "Registered Spools:");
+                        trace("spoolman", printer.name, printer.logFilePath, JSON.stringify(spools));
 
                         // Seed the baseline on the very first pass only. Testing for an
                         // empty array here re-seeded it on every pass for as long as
@@ -723,8 +724,8 @@ async function handleMqttMessage(printer, topic, message) {
                         const trayDataChanged = hasTrayDataChanged(newTrayData, lastTrayData);
 
                         if (isValidAmsData && (spoolsChanged || trayDataChanged)) {
-                            console.debug(printer.name, printer.logFilePath, "Loaded AMS Spools:");
-                            console.debug(printer.name, printer.logFilePath, JSON.stringify(processedAmsData));
+                            trace("ams", printer.name, printer.logFilePath, "Loaded AMS Spools:");
+                            trace("ams", printer.name, printer.logFilePath, JSON.stringify(processedAmsData));
 
                             const prevByAmsId = Object.fromEntries(
                                 (printer.spoolData || []).map(s => [s.amsId, s])
@@ -738,7 +739,7 @@ async function handleMqttMessage(printer, topic, message) {
 
                             for (const ams of processedAmsData) {
                                 if (!Array.isArray(ams.tray)) {
-                                    console.debug(printer.name, printer.logFilePath, "Data from Slots are not valid");
+                                    debug("ams", printer.name, printer.logFilePath, "Data from Slots are not valid");
                                     continue;
                                 }
 
@@ -798,10 +799,10 @@ async function handleMqttMessage(printer, topic, message) {
                         console.error("Server", serverLogFilePath, "Spoolman is currently unreachable. A background check will automatically attempt to reconnect...");
                     }
                 } else {
-                    console.debug(printer.name, printer.logFilePath, "Data will not be processed because of manually set interval");
+                    debug("mqtt", printer.name, printer.logFilePath, "Data will not be processed because of manually set interval");
                 }
             } else {
-                console.debug(printer.name, printer.logFilePath, `No processable Data found for JSON filter data.printer.ams.ams`);
+                debug("mqtt", printer.name, printer.logFilePath, `No processable Data found for JSON filter data.printer.ams.ams`);
             }
         } catch (error) {
             console.error(printer.name, printer.logFilePath, `Error processing message for Printer: ${printer.id} - ${error.message}`);
@@ -946,7 +947,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         && !slotIsOccupied(slot);
 
     if (!validSlot || emptyWithPlaceholders) {
-        console.debug(printer.name, printer.logFilePath, validSlot
+        debug("ams", printer.name, printer.logFilePath, validSlot
             ? "No Data found in Slots (empty slot with N/A values)"
             : "No Data found in Slots");
         const newUiSpool = buildEmptySpool(printer, amsId, slot);
@@ -958,7 +959,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
     // Reached by anything the printer could not identify, including a slot whose
     // only sign of life is `state`, which the empty branch above no longer takes.
     if (slot.tray_uuid === "N/A" || slot.tray_sub_brands === "N/A") {
-        console.debug(printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
+        debug("ams", printer.name, printer.logFilePath, "Slot is read-only (3rd party spool)");
         // `tray_sub_brands` used to be overwritten with the material here, so
         // the slot had a name at all. The projection now drops the "N/A"
         // placeholder on its own, and the dashboard builds the name from the
@@ -1010,7 +1011,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
     if (spools.length !== 0) {
         for (const spool of spools) {
             if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
-                console.debug(printer.name, printer.logFilePath, " Connected Spool found: " + JSON.stringify(spool));
+                trace("spoolman", printer.name, printer.logFilePath, " Connected Spool found: " + JSON.stringify(spool));
                 found = true;
 
                 // Normalize remain for comparison; slot.remain itself is left
@@ -1039,7 +1040,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
                 if (legacyMode()) {
                     // Legacy: derive remaining weight from the AMS RFID remain %
                     if (!slotChanged) {
-                        console.debug(printer.name, printer.logFilePath, " No change for connected spool; skipping PATCH");
+                        debug("spoolman", printer.name, printer.logFilePath, " No change for connected spool; skipping PATCH");
                         break;
                     }
 
@@ -1047,14 +1048,14 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
                     // nothing to patch until the AMS has read one. It arrives
                     // within about 20 seconds of the spool going in.
                     if (currRemain === null) {
-                        console.debug(printer.name, printer.logFilePath, " Remain not reported yet; skipping PATCH until the AMS has read it");
+                        debug("spoolman", printer.name, printer.logFilePath, " Remain not reported yet; skipping PATCH until the AMS has read it");
                         break;
                     }
 
                     const remainingWeight = Math.round((currRemain / 100) * slot.tray_weight);
 
-                    console.debug(printer.name, printer.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spool.id}`);
-                    console.debug(printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime }));
+                    debug("spoolman", printer.name, printer.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spool.id}`);
+                    trace("spoolman", printer.name, printer.logFilePath, "    Payload:", JSON.stringify({ remaining_weight: remainingWeight, last_used: currentTime }));
 
                     try {
                         await patchSpoolWeight(spool.id, remainingWeight, currentTime);
@@ -1104,7 +1105,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
     }
 
     if (!found) {
-        console.debug(printer.name, printer.logFilePath, " Connected Spool not found, process with merging and creation logic");
+        debug("spoolman", printer.name, printer.logFilePath, " Connected Spool not found, process with merging and creation logic");
         console.log(printer.name, printer.logFilePath, ` [${amsId}] ${slot.tray_sub_brands} ${slot.tray_color} (${slot.remain == null ? "remain unknown" : `${slot.remain}%`}) [[ ${slot.tray_uuid} ]]`);
 
         // The three automatic actions differ only in the option they stand for
@@ -1483,6 +1484,13 @@ export async function setupMqtt(printer) {
         await client.subscribeAsync(`device/${printer.id}/report`);
 
         client.on("message", (topic, message) => {
+            // Ahead of the handler, and deliberately outside it: handleMqttMessage
+            // returns immediately while a previous report is still being
+            // processed and while Spoolman is down, and those are exactly the
+            // reports an analysis afterwards is missing. Writing is queued and
+            // not awaited, so it costs the handler nothing.
+            if (traceEnabled(printer)) appendTrace(printer.traceFilePath, message);
+
             handleMqttMessage(printer, topic, message);
         });
 
@@ -1682,7 +1690,7 @@ function printerStillOffline(printer, now) {
     printer.mqttRunning = false;
 
     if (printer.offlineWaitLogged === wait) {
-        console.debug(printer.name, printer.logFilePath, `Printer ${printer.id} is still unreachable, next try in ${formatInterval(wait)}`);
+        debug("mqtt", printer.name, printer.logFilePath, `Printer ${printer.id} is still unreachable, next try in ${formatInterval(wait)}`);
         return;
     }
 

@@ -160,6 +160,9 @@ export async function buildDiagnosticsBundle({ anonymize = true } = {}) {
     for (const printer of printers) {
         const base = `logs/${anonymize ? maskSerial(printer.id) : printer.id}`;
         await addLogFiles(zip, base, printer.logFilePath, mask);
+        // The raw MQTT trace, when one was captured. Masked like every other
+        // file, and simply absent for a printer the trace was never on for.
+        await addLogFiles(zip, `${base}.mqtt`, printer.traceFilePath, mask);
     }
 
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "_");

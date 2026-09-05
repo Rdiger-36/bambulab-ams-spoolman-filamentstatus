@@ -2,6 +2,7 @@ import got from "got";
 import { serverLogFilePath } from "./config.js";
 import { spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
+import { debug, trace } from "./logger.js";
 import { correctRemainInt } from "./ams.js";
 
 /**
@@ -382,8 +383,8 @@ async function createExtraField() {
 export async function createSpool(spoolData) {
     const postData = buildSpoolPayload(spoolData, spoolData.matchingInternalFilament.id);
 
-    console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
-    console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
+    debug("spoolman", spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
+    trace("spoolman", spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
 
     try {
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: postData });
@@ -481,8 +482,8 @@ export async function createFilamentAndSpool(spoolData) {
     try {
         const filamentPayload = buildFilamentPayload(spoolData);
 
-        console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/filament`);
-        console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(filamentPayload));
+        debug("spoolman", spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/filament`);
+        trace("spoolman", spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(filamentPayload));
 
         const filamentResponse = await got.post(`${spoolmanUrl()}/api/v1/filament`, {
             json: filamentPayload,
@@ -496,8 +497,8 @@ export async function createFilamentAndSpool(spoolData) {
     try {
         const spoolPayload = buildSpoolPayload(spoolData, filamentId);
 
-        console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
-        console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
+        debug("spoolman", spoolData.printerName, spoolData.logFilePath, "    Sending POST request to:", `${spoolmanUrl()}/api/v1/spool`);
+        trace("spoolman", spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(spoolPayload));
 
         await got.post(`${spoolmanUrl()}/api/v1/spool`, { json: spoolPayload, responseType: "json" });
         console.log(spoolData.printerName, spoolData.logFilePath, `    Filament and Spool successfully created for Slot => ${spoolData.amsId}!`);
@@ -520,8 +521,8 @@ export async function createFilamentAndSpool(spoolData) {
 export async function mergeSpool(spoolData) {
     const postData = { extra: { tag: `\"${spoolData.slot.tray_uuid}\"` } };
 
-    console.debug(spoolData.printerName, spoolData.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`);
-    console.debug(spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
+    debug("spoolman", spoolData.printerName, spoolData.logFilePath, "    Sending PATCH request to:", `${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`);
+    trace("spoolman", spoolData.printerName, spoolData.logFilePath, "    Payload:", JSON.stringify(postData));
 
     try {
         await got.patch(`${spoolmanUrl()}/api/v1/spool/${spoolData.mergeableSpool.id}`, { json: postData });

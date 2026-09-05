@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import { mappingsPath, serverLogFilePath } from "./config.js";
 import { normColor } from "./gcode.js";
 import { slotColors } from "./utils.js";
+import { trace } from "./logger.js";
 
 /**
  * Manual AMS slot -> Spoolman spool assignments.
@@ -185,7 +186,7 @@ function load() {
         const file = parseStoredFile(parsed);
         migrated = file.schemaVersion < MAPPINGS_SCHEMA_VERSION;
         mappings = migrateStored(file.printers, file.schemaVersion);
-        console.debug("Server", serverLogFilePath, "Spool mappings loaded:", JSON.stringify(mappings));
+        trace("service", "Server", serverLogFilePath, "Spool mappings loaded:", JSON.stringify(mappings));
     } catch (err) {
         // Missing file is the normal first-run case; anything else is worth a log
         if (err.code !== "ENOENT") {

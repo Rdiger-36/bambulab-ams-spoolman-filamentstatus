@@ -1,11 +1,18 @@
 import fs from "fs-extra";
 import path from "path";
-import { rotateLogFile } from "./logger.js"; // importing it also activates the console overrides
+import { rotateLogFile, setLogDetail, debug, TRACE_SUFFIX } from "./logger.js"; // importing it also activates the console overrides
 import { configPath, serverLogFilePath, envPrinterSeed, logsDir } from "./config.js";
-import { settings } from "./settings.js";
+import { settings, LOG_LEVELS, LOG_CATEGORIES } from "./settings.js";
 import { formatDateLog } from "./utils.js";
 
-/** The fields of a printer that live in printers.json. Everything else is runtime state. */
+/**
+ * The fields of a printer that live in printers.json. Everything else is runtime
+ * state.
+ *
+ * `logDetail` is optional and every field inside it is too, which is what
+ * "inherit the global setting" looks like on disk. It is checked separately
+ * from these four, because they are all required strings and it is neither.
+ */
 const PERSISTED_FIELDS = ["id", "code", "ip", "name"];
 
 // Whether this start built the printer list from PRINTER_ID, PRINTER_CODE and
@@ -14,6 +21,62 @@ const PERSISTED_FIELDS = ["id", "code", "ip", "name"];
 // already owns the list" — and cannot do that by looking at the file, because
 // the seed is written to it during this very import.
 let seededFromEnvironment = false;
+
+/**
+ * Reads a stored per-printer log override, dropping anything unusable.
+ *
+ * Every field is optional and an unset one means "inherit the global setting",
+ * so an unrecognised level or category is dropped rather than rejected: an
+ * entry written by a newer version, or edited by hand, must not be able to stop
+ * a printer from loading. An empty category list is a legitimate value and is
+ * kept, which is how "no debug output from this printer" is stored.
+ *
+ * @param {*} raw - the stored `logDetail`, or anything else
+ * @returns {{level?: string, categories?: string[], mqttTrace?: boolean}} the usable fields
+ */
+export function normalizeLogDetail(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+
+    const detail = {};
+
+    if (typeof raw.level === "string" && LOG_LEVELS.includes(raw.level)) {
+        detail.level = raw.level;
+    }
+
+    if (Array.isArray(raw.categories)) {
+        detail.categories = [...new Set(
+            raw.categories
+                .map(entry => String(entry).trim().toLowerCase())
+                .filter(entry => LOG_CATEGORIES.includes(entry)),
+        )];
+    }
+
+    if (typeof raw.mqttTrace === "boolean") detail.mqttTrace = raw.mqttTrace;
+
+    return detail;
+}
+
+/**
+ * Whether the raw MQTT trace is on for a printer: its own setting when it has
+ * one, the global switch otherwise.
+ */
+export function traceEnabled(printer) {
+    return printer.logDetail?.mqttTrace ?? settings.MQTT_TRACE;
+}
+
+/**
+ * Pushes a printer's level and category override into the logger.
+ *
+ * The logger cannot read it from here, because this module imports it. Called
+ * whenever a printer is created or its override changes, and with an empty
+ * override to go back to inheriting the global settings.
+ *
+ * @param {object} printer - the runtime printer object
+ */
+export function applyLogDetail(printer) {
+    const { level, categories } = printer.logDetail || {};
+    setLogDetail(printer.logFilePath, level || categories ? { level, categories } : null);
+}
 
 /**
  * Builds the mutable runtime object every other module works with from a
@@ -33,6 +96,12 @@ function createRuntimePrinter(entry) {
         ip: entry.ip,
         name: entry.name,
         logFilePath: path.join(logsDir, `${entry.id}.log`),
+        // The raw MQTT trace, next to the ordinary log and with its own size
+        // budget. Written only while the trace is switched on for this printer.
+        traceFilePath: path.join(logsDir, `${entry.id}${TRACE_SUFFIX}`),
+        // Per-printer override of the log level, the categories and the trace.
+        // Every field is optional; a missing one inherits the global setting.
+        logDetail: normalizeLogDetail(entry.logDetail),
         mqttStatus: "Disconnected",
         spoolmanStatus: "Disconnected",
         mqttRunning: false,
@@ -127,14 +196,24 @@ function redactPrinter({ code, ...rest }) {
     return rest;
 }
 
-/** Normalises an entry to the shape stored in printers.json. */
+/**
+ * Normalises an entry to the shape stored in printers.json.
+ *
+ * `logDetail` is left out when nothing is overridden, so a printer that follows
+ * the global settings keeps the file as short as it was before this existed.
+ */
 export function normalizePrinterEntry(entry) {
-    return {
+    const normalized = {
         id: entry.id.trim().toUpperCase(),
         code: entry.code.trim(),
         ip: entry.ip.trim(),
         name: entry.name.trim(),
     };
+
+    const logDetail = normalizeLogDetail(entry.logDetail);
+    if (Object.keys(logDetail).length) normalized.logDetail = logDetail;
+
+    return normalized;
 }
 
 /**
@@ -167,7 +246,7 @@ export function loadPrintersConfig() {
         entries = parsed.map(normalizePrinterEntry);
         // Never log the access code. The log files are downloadable from the Web
         // UI and end up attached to bug reports.
-        console.debug("Server", serverLogFilePath, "Printers loaded successfully:", entries.map(redactPrinter));
+        debug("service", "Server", serverLogFilePath, "Printers loaded successfully:", entries.map(redactPrinter));
     } catch (error) {
         if (error.code !== "ENOENT") {
             console.error("Server", serverLogFilePath, "Error loading printers configuration:", error.message);
@@ -183,12 +262,13 @@ export function loadPrintersConfig() {
                 name: "Bambu Lab Printer",
             })];
         } else {
-            console.debug("Server", serverLogFilePath, "No printers.json and no printer environment variables, starting with an empty list.");
+            debug("service", "Server", serverLogFilePath, "No printers.json and no printer environment variables, starting with an empty list.");
             entries = [];
         }
     }
 
     const runtime = entries.map(createRuntimePrinter);
+    runtime.forEach(applyLogDetail);
 
     // Persist the seeded list so that printers.json is the source of truth from
     // the first start on, which is what makes the Web UI able to edit it.
@@ -212,12 +292,21 @@ export function printerListSeededFromEnv() {
  * @param {object[]} list - the runtime printer list to persist
  */
 export function savePrinters(list = printers) {
-    const entries = list.map(printer => ({
-        id: printer.id,
-        code: printer.code,
-        ip: printer.ip,
-        name: printer.name,
-    }));
+    const entries = list.map(printer => {
+        const entry = {
+            id: printer.id,
+            code: printer.code,
+            ip: printer.ip,
+            name: printer.name,
+        };
+
+        // Left out entirely while the printer follows the global settings, so
+        // the file of an installation that never opens the dialog is unchanged
+        const logDetail = normalizeLogDetail(printer.logDetail);
+        if (Object.keys(logDetail).length) entry.logDetail = logDetail;
+
+        return entry;
+    });
 
     const tmp = `${configPath}.tmp`;
     fs.ensureDirSync(path.dirname(configPath));
@@ -261,8 +350,31 @@ export function addPrinter(entry) {
 
     const printer = createRuntimePrinter(normalizePrinterEntry(entry));
     printers.push(printer);
+    applyLogDetail(printer);
     savePrinters();
     ensurePrinterLogFile(printer);
+
+    return { ok: true, printer };
+}
+
+/**
+ * Replaces the log override of one printer and persists it.
+ *
+ * Its own entry point rather than a field of `updatePrinter()`, because that one
+ * validates address and access code and decides whether to reconnect, and none
+ * of that has anything to do with how much a printer writes to its log.
+ *
+ * @param {string} printerId - serial number of the printer
+ * @param {object|null} detail - the override, or null to follow the global settings
+ * @returns {{ok: true, printer: object}|{ok: false, error: string}}
+ */
+export function updatePrinterLogDetail(printerId, detail) {
+    const printer = printers.find(p => p.id === printerId);
+    if (!printer) return { ok: false, error: "Printer not found" };
+
+    printer.logDetail = normalizeLogDetail(detail);
+    applyLogDetail(printer);
+    savePrinters();
 
     return { ok: true, printer };
 }

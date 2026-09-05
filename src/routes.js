@@ -8,7 +8,7 @@ import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { buildDiagnosticsBundle, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
-import { addPrinter, updatePrinter, removePrinter, syncPrinterIntervals } from "./printers.js";
+import { addPrinter, updatePrinter, updatePrinterLogDetail, removePrinter, syncPrinterIntervals } from "./printers.js";
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { attemptLogin, authEnabled, clearSessionCookie, isAuthenticated, issueSession, setSessionCookie } from "./auth.js";
@@ -369,11 +369,16 @@ export function registerRoutes(app, printers) {
             const limitRaw = req.query.limit;
             const limit = Math.max(1, Math.min(2000, parseInt(limitRaw ?? "250", 10) || 250));
 
+            const wantsTrace = req.query.stream === "mqtt";
+
             let filePath = serverLogFilePath;
             if (req.params.printerId !== "server") {
                 const printer = resolvePrinter(req.params.printerId, printers, res);
                 if (!printer) return;
-                filePath = printer.logFilePath;
+                filePath = wantsTrace ? printer.traceFilePath : printer.logFilePath;
+            } else if (wantsTrace) {
+                // There is no server trace: the raw messages belong to a printer
+                return res.status(404).json({ error: "The server has no MQTT trace" });
             }
 
             const [lines, files] = await Promise.all([
@@ -412,19 +417,21 @@ export function registerRoutes(app, printers) {
             // loses the access codes, for the reason diagnostics.js gives.
             const mask = text => (anonymize ? maskText(text, known) : maskCodes(text, known.codes));
 
+            const wantsTrace = req.query.stream === "mqtt";
             let filePath, baseName;
 
             if (printerId === "server") {
+                if (wantsTrace) return res.status(404).json({ error: "The server has no MQTT trace" });
                 filePath = serverLogFilePath;
                 baseName = "server";
             } else {
                 const printer = resolvePrinter(printerId, printers, res);
                 if (!printer) return;
-                filePath = printer.logFilePath;
+                filePath = wantsTrace ? printer.traceFilePath : printer.logFilePath;
                 // The serial is in the file name as well, so it has to be masked
                 // there too. The printer name is kept, see anonymize.js.
                 const serial = anonymize ? maskSerial(printer.id) : printer.id;
-                baseName = `${printer.name.replace(/\s+/g, "_")}_${serial}`;
+                baseName = `${printer.name.replace(/\s+/g, "_")}_${serial}${wantsTrace ? "_mqtt" : ""}`;
             }
 
             const suffixed = anonymize ? baseName : `${baseName}_full`;
@@ -1275,6 +1282,24 @@ export function registerRoutes(app, printers) {
         res.json({ ok: true, printer: publicPrinter(result.printer), reconnected: result.reconnect });
     });
 
+    // Its own route rather than a field of the update above: that one validates
+    // the address and the access code and decides whether to reconnect, and how
+    // much a printer writes to its log has nothing to do with either. An empty
+    // body puts the printer back on the global settings.
+    app.put("/api/printers/:printerId/logdetail", (req, res) => {
+        const printer = resolvePrinter(req.params.printerId, printers, res);
+        if (!printer) return;
+
+        const result = updatePrinterLogDetail(printer.id, req.body);
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+
+        console.log(result.printer.name, result.printer.logFilePath,
+            `[Printer] Log detail changed for ${result.printer.name} (${result.printer.id})`);
+        broadcastSSE({ type: "printers_update" });
+
+        res.json({ ok: true, printer: publicPrinter(result.printer) });
+    });
+
     app.delete("/api/printers/:printerId", async (req, res) => {
         const printer = resolvePrinter(req.params.printerId, printers, res);
         if (!printer) return;
@@ -1400,6 +1425,10 @@ function publicPrinter(printer) {
         hasCode: !!printer.code,
         mqttStatus: printer.mqttStatus,
         monitoringEnabled: printer.monitoringEnabled,
+        // What the log detail dialog shows for this printer. An absent field
+        // means it follows the global setting, which is what the dialog draws
+        // as "inherit" rather than as a value of its own.
+        logDetail: printer.logDetail || {},
     };
 }
 

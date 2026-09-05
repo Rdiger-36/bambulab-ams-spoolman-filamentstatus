@@ -12,7 +12,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | **Tracking** | Operation mode and [legacy mode](legacy-mode.md) |
 | **Synchronisation** | Slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
-| **Logging** | Debug logging, log file size and how many rotated files are kept, for the server and per printer |
+| **Logging** | Log file size and how many rotated files are kept, for the server and per printer, plus **Log detail...**: the [log level, the areas and the raw MQTT capture](troubleshooting.md#how-much-gets-logged) |
 | **Network access** | The Web UI password, the host names this service may be addressed under, and the API keys for callers that have no browser. All three are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
 | **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
@@ -22,6 +22,8 @@ A new printer connects right away, a removed one is disconnected and its assignm
 ![Printer dialog](images/printer-dialog.png)
 
 The access code is stored on the server and never sent back to the browser; leave the field empty while editing to keep the stored one.
+
+**Log** next to a printer opens the same log detail dialog the **Logging** card offers, for that printer alone. It follows the global settings until **Follow the global settings** is switched off, and a star on the button marks a printer that no longer does. That is what lets one machine be turned up to `trace`, with its raw MQTT capture running, while the rest of the service stays quiet.
 
 The **Service** card is what a support question usually asks for first, plus the actions that work on the running service rather than on a stored setting:
 

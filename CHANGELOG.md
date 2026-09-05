@@ -1,4 +1,22 @@
 -----------------------------------------------------------------------------------------------
+Version 1.3.0-dev.13
+   - Breaking:
+      - "Debug logging" is a log level now, not a switch. The Logging card carries "Log detail...", which opens the level, the areas that write and the raw MQTT capture in one dialog
+         - The level is a ladder: errors writes failures only, normal adds the ordinary progress lines and is the default, debug adds the internal steps, trace adds the whole payloads behind them
+         - The payload dumps moved from debug up to trace. They are written on every update interval, and carrying them at debug level was what made a debug log unreadable within minutes. Anybody who turned debug logging on to read the Spoolman list or the processed AMS data has to pick trace now
+         - A stored DEBUG is migrated on the first start: true becomes the debug level, false is dropped rather than stored, so a setting nobody ever saved does not become one the settings file owns. The DEBUG environment variable still seeds an installation that has never saved a level
+   - Features:
+      - Every MQTT report a printer sends can be captured into a file of its own, "Capture raw MQTT messages" in the log detail dialog. It is what the printer really sent rather than what this service made of it, which is what a bug report about behaviour nobody can reproduce on demand needs
+         - It is captured before the message handler, so the reports that are dropped while the previous one is still being processed, and the ones that arrive while Spoolman is down, are in the file too. Those are exactly the ones an analysis afterwards is missing
+         - Written unparsed and one line per report into logs/<serial>.mqtt.log, with its own size and history budget: at the log file's default of 1 MB a trace would evict the whole log within minutes
+         - It stays on until it is switched off. Nothing turns it off by itself, because a fault that shows up once a day is not caught by a capture that ended an hour ago
+         - Readable in the Web UI like any other log, under "Raw MQTT traces" in the picker in the headline, with the same download and the same anonymising question. It is in the diagnostics archive as well
+      - Which areas write their debug and trace lines is a set of switches: mqtt, ams, spoolman, gcode, print and service. Errors and the ordinary progress lines are never filtered, so switching an area off cannot hide a failure
+      - Every printer can have log settings of its own. "Log" next to a printer in the Printers card opens the same dialog for that printer alone, so one machine can run at trace with its capture going while the rest of the service stays quiet
+         - A printer follows the global settings until it is told not to, and that is stored as an absent field rather than as a copy, so a later change to the global settings still reaches it. A star on the button marks a printer that no longer follows them, and the Logging card names them
+         - Nothing is written to printers.json for a printer that decided nothing, so the file of an installation that never opens the dialog is unchanged
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.12
    - Features:
       - A finished print leaves a summary behind. "consumption booked" is a button now, and it opens what the print actually did: the result, when it started and ended, how long it took, how many layers, and one row per filament with the slot it ran from, the grams and the spool they were booked onto

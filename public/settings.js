@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("toggle-monitoring").addEventListener("click", toggleAllMonitoring);
     document.getElementById("printer-dialog-cancel").addEventListener("click", () => closeDialog("printer-dialog"));
     document.getElementById("apikey-dialog-cancel").addEventListener("click", () => closeDialog("apikey-dialog"));
+    document.getElementById("logdetail-dialog-cancel").addEventListener("click", () => closeDialog("logdetail-dialog"));
     document.getElementById("printer-dialog-test").addEventListener("click", testPrinterConnection);
 
     window.addEventListener("beforeunload", event => {
@@ -453,9 +454,13 @@ function renderSettings() {
         const groupFields = fields.filter(field => field.group === group.key);
         if (!groupFields.length) continue;
 
-        const header = groupFields.filter(field => field.header);
-        const main = groupFields.filter(field => !field.advanced && !field.header);
-        const advanced = groupFields.filter(field => field.advanced && !field.header);
+        // A field the schema hands to a dialog is not part of the card's grid.
+        // It still arrives in `fields`, which is what lets the dialog render it
+        // from the schema rather than holding a second copy of it.
+        const carded = groupFields.filter(field => !field.dialog);
+        const header = carded.filter(field => field.header);
+        const main = carded.filter(field => !field.advanced && !field.header);
+        const advanced = carded.filter(field => field.advanced && !field.header);
 
         const card = document.createElement("div");
         card.className = "set-card";
@@ -472,6 +477,7 @@ function renderSettings() {
                     <div class="set-form">${advanced.map(renderField).join("")}</div>
                 </details>` : ""}
             ${group.key === "spoolman" ? renderSpoolmanTest() : ""}
+            ${group.key === "logging" ? renderLogDetailShell() : ""}
             ${group.key === "network" ? renderApiKeyShell() : ""}`;
         container.appendChild(card);
     }
@@ -489,6 +495,9 @@ function renderSettings() {
     });
 
     document.getElementById("test-spoolman")?.addEventListener("click", testSpoolmanConnection);
+    document.getElementById("open-logdetail")?.addEventListener("click", () => openLogDetailDialog(null));
+    // The printer list loads on its own, so this line may already be known
+    renderLogDetailOverrides();
     document.getElementById("add-apikey")?.addEventListener("click", () => openApiKeyDialog());
     // The card was just rebuilt, so the list has to be painted into the new one
     renderApiKeys();
@@ -501,6 +510,215 @@ function renderSpoolmanTest() {
                 <button class="btn btn-small" type="button" id="test-spoolman">Test connection</button>
                 <span class="set-test-result" id="test-spoolman-result"></span>
             </div>`;
+}
+
+/* ---- Log detail ----
+ *
+ * Level, areas and the raw MQTT trace live in a dialog rather than in the card,
+ * because they belong together and because a printer can override them. The
+ * dialog renders from the schema fields the server marks `dialog: "logDetail"`,
+ * so a new one appears here without this file learning about it.
+ */
+
+/** The fields the log detail dialog owns, in schema order. */
+function logDetailFields() {
+    return fields.filter(field => field.dialog === "logDetail");
+}
+
+/** One field of that set, by key. */
+function logDetailField(key) {
+    return logDetailFields().find(field => field.key === key);
+}
+
+/** The button in the Logging card, under a line saying what is set right now. */
+function renderLogDetailShell() {
+    const level = values.LOG_LEVEL;
+    const categories = values.LOG_CATEGORIES ?? [];
+    const all = logDetailField("LOG_CATEGORIES")?.options ?? [];
+    const areas = categories.length === all.length
+        ? "every area"
+        : categories.length
+            ? `${categories.length} of ${all.length} areas`
+            : "no area";
+
+    // The line about printers that decided something of their own is filled by
+    // renderPrinters(): the two cards are loaded independently, and this one is
+    // rebuilt on every settings save while the printer list is not.
+    return `<div class="set-test-row">
+                <button class="btn btn-small" type="button" id="open-logdetail">Log detail...</button>
+                <span class="set-test-reason">${escapeHtml(
+                    // One text node, no inline markup: the row is a flex
+                    // container, so an element inside this span would become a
+                    // flex item and swallow the spaces around it
+                    `Level ${level ?? ""}, ${areas}, raw MQTT trace ${values.MQTT_TRACE ? "on" : "off"}`
+                )}</span>
+            </div>
+            <p class="set-note" id="logdetail-overrides" hidden></p>`;
+}
+
+/**
+ * Names the printers that log by their own rules, in the Logging card.
+ *
+ * Without it the card describes settings that a printer is quietly ignoring,
+ * which is exactly the confusion an override creates.
+ */
+function renderLogDetailOverrides() {
+    const note = document.getElementById("logdetail-overrides");
+    if (!note) return;
+
+    const overriding = printers.filter(printer => Object.keys(printer.logDetail || {}).length);
+    note.hidden = overriding.length === 0;
+    const one = overriding.length === 1;
+    note.textContent = overriding.length
+        ? `${overriding.map(printer => printer.name).join(", ")} ${one ? "has" : "have"} log settings of ${one ? "its" : "their"} own, edited in the Printers card.`
+        : "";
+}
+
+/**
+ * Opens the log detail dialog, globally or for one printer.
+ *
+ * The printer variant carries one switch more: a printer follows the global
+ * settings until it is told not to, and that is stored as an absent field
+ * rather than as a copy of the global value, so a later change to the global
+ * one still reaches it.
+ *
+ * @param {object|null} printer - the printer to edit, or null for the global settings
+ */
+function openLogDetailDialog(printer) {
+    const dialog = document.getElementById("logdetail-dialog");
+    const detail = printer?.logDetail || {};
+    const inherits = !printer ? false : Object.keys(detail).length === 0;
+
+    const levelField = logDetailField("LOG_LEVEL");
+    const categoryField = logDetailField("LOG_CATEGORIES");
+    const traceField = logDetailField("MQTT_TRACE");
+
+    const level = detail.level ?? values.LOG_LEVEL;
+    const categories = detail.categories ?? values.LOG_CATEGORIES ?? [];
+    const trace = detail.mqttTrace ?? values.MQTT_TRACE;
+
+    document.getElementById("logdetail-dialog-title").textContent =
+        printer ? `Log detail for ${printer.name}` : "Log detail";
+    document.getElementById("logdetail-dialog-error").textContent = "";
+
+    const inheritRow = printer
+        ? `<div class="set-field set-field-toggle">
+               <label class="set-field-label" for="ld-inherit"><span>Follow the global settings</span></label>
+               <label class="set-switch" for="ld-inherit">
+                   <input type="checkbox" id="ld-inherit" ${inherits ? "checked" : ""}>
+                   <span class="set-switch-track"></span>
+               </label>
+               <small>On, this printer logs whatever the Logging card says. Off, the values below apply to
+                      this printer only and a later change to the global ones does not reach it.</small>
+           </div>`
+        : "";
+
+    // The rotation budget of the trace file is global: it is disk space, not a
+    // decision about one printer, and every trace file shares the setting.
+    const budget = printer
+        ? ""
+        : ["MQTT_TRACE_MAX_SIZE_MB", "MQTT_TRACE_KEEP"]
+            .map(key => renderField(logDetailField(key)))
+            .join("");
+
+    document.getElementById("logdetail-dialog-body").innerHTML = `
+        <div class="set-form">
+            ${inheritRow}
+            <div class="set-field">
+                <label class="set-field-label" for="ld-level"><span>${escapeHtml(levelField.label)}</span></label>
+                <input type="range" id="ld-level" class="set-slider"
+                       min="0" max="${levelField.options.length - 1}" step="1"
+                       value="${Math.max(0, levelField.options.indexOf(level))}">
+                <div class="set-slider-scale">
+                    ${levelField.options.map(option => `<span>${escapeHtml(option)}</span>`).join("")}
+                </div>
+                <small>${escapeHtml(levelField.description)}</small>
+            </div>
+            <div class="set-field">
+                <label class="set-field-label"><span>${escapeHtml(categoryField.label)}</span></label>
+                <div class="set-checks" id="ld-categories">
+                    ${categoryField.options.map(option => `
+                        <label class="set-check">
+                            <input type="checkbox" value="${escapeHtml(option)}"
+                                   ${categories.includes(option) ? "checked" : ""}>
+                            <span>${escapeHtml(option)}</span>
+                        </label>`).join("")}
+                </div>
+                <small>${escapeHtml(categoryField.description)}</small>
+            </div>
+            <div class="set-field set-field-toggle">
+                <label class="set-field-label" for="ld-trace"><span>${escapeHtml(traceField.label)}</span></label>
+                <label class="set-switch" for="ld-trace">
+                    <input type="checkbox" id="ld-trace" ${trace ? "checked" : ""}>
+                    <span class="set-switch-track"></span>
+                </label>
+                <small>${escapeHtml(traceField.description)}</small>
+            </div>
+            ${budget}
+        </div>`;
+
+    // Everything below the inherit switch is only editable once this printer has
+    // been taken off the global settings, so the dialog shows what applies
+    // rather than an empty form.
+    const applyInherit = () => {
+        const off = document.getElementById("ld-inherit")?.checked;
+        document.querySelectorAll("#logdetail-dialog-body input:not(#ld-inherit)")
+            .forEach(input => { input.disabled = !!off; });
+    };
+    document.getElementById("ld-inherit")?.addEventListener("change", applyInherit);
+    applyInherit();
+
+    // The two budget fields come from renderField(), which builds a "default"
+    // button the card's own handler would normally wire up
+    dialog.querySelectorAll("[data-reset]").forEach(button => {
+        button.onclick = () => resetField(button.dataset.reset);
+    });
+
+    document.getElementById("logdetail-dialog-save").onclick = () => saveLogDetail(printer);
+    dialog.showModal();
+}
+
+/** Reads the dialog back and writes it, to the settings or to the printer. */
+async function saveLogDetail(printer) {
+    const error = document.getElementById("logdetail-dialog-error");
+    const save = document.getElementById("logdetail-dialog-save");
+    const options = logDetailField("LOG_LEVEL").options;
+
+    const level = options[Number(document.getElementById("ld-level").value)];
+    const categories = [...document.querySelectorAll("#ld-categories input:checked")].map(input => input.value);
+    const trace = document.getElementById("ld-trace").checked;
+
+    save.disabled = true;
+    error.textContent = "";
+
+    try {
+        if (printer) {
+            const inherits = document.getElementById("ld-inherit").checked;
+            await sendJson(`./api/printers/${encodeURIComponent(printer.id)}/logdetail`, "PUT",
+                inherits ? {} : { level, categories, mqttTrace: trace });
+            await loadPrinters();
+        } else {
+            const payload = {
+                LOG_LEVEL: level,
+                LOG_CATEGORIES: categories,
+                MQTT_TRACE: trace,
+                MQTT_TRACE_MAX_SIZE_MB: document.getElementById("set-MQTT_TRACE_MAX_SIZE_MB").value,
+                MQTT_TRACE_KEEP: document.getElementById("set-MQTT_TRACE_KEEP").value,
+            };
+            // Sent with the revision, like every other save on this page, so a
+            // second tab cannot be overwritten silently.
+            applyView(await sendJson("./api/settings", "PUT", { revision, values: payload }));
+        }
+
+        closeDialog("logdetail-dialog");
+        showBanner("Saved and applied.", "ok");
+    } catch (err) {
+        error.textContent = err.conflict
+            ? "The settings were changed somewhere else in the meantime. Discard changes to load them, then apply yours again."
+            : `Could not save: ${err.message}`;
+    } finally {
+        save.disabled = false;
+    }
 }
 
 /**
@@ -678,7 +896,9 @@ function resetField(key) {
     else input.value = field.default ?? "";
 
     document.querySelector(`[data-reset="${key}"]`)?.remove();
-    setDirty(true);
+    // A dialog field is not part of the page form, so it must not arm the save
+    // button or the warning about leaving with unsaved changes
+    if (!field.dialog) setDirty(true);
 }
 
 /**
@@ -703,6 +923,11 @@ function collectSettings() {
     const payload = {};
 
     for (const field of fields) {
+        // A dialog field is saved by that dialog. It shares the id scheme, so
+        // an open dialog would otherwise smuggle what is typed in it into a
+        // save of the page behind it.
+        if (field.dialog) continue;
+
         const input = document.getElementById(`set-${field.key}`);
         if (!input) continue;
 
@@ -783,6 +1008,8 @@ async function loadPrinters() {
     try {
         printers = await fetchJson("./api/printers/config");
         renderPrinters();
+        // The Logging card names the printers that log by their own rules
+        renderLogDetailOverrides();
         // The Service card offers the opposite of what is currently the case,
         // so it has to follow every change to the list.
         renderMonitoringButton();
@@ -817,6 +1044,8 @@ function renderPrinters() {
             <td data-label="MQTT">${statusPill(printer.mqttStatus)}</td>
             <td class="set-row-actions" data-label="">
                 <button class="btn btn-small" data-edit="${escapeHtml(printer.id)}">Edit</button>
+                <button class="btn btn-small" data-logdetail="${escapeHtml(printer.id)}">Log${
+                    Object.keys(printer.logDetail || {}).length ? " *" : ""}</button>
                 <button class="btn btn-small btn-danger" data-delete="${escapeHtml(printer.id)}">Delete</button>
             </td>
         </tr>`).join("");
@@ -825,10 +1054,13 @@ function renderPrinters() {
             <thead><tr><th>Name</th><th>Serial number</th><th>Address</th><th>MQTT</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
         </table>
-        <p class="set-note">The access code is stored on the server and never sent back to the browser. Leave it empty while editing to keep the one already stored.</p>`;
+        <p class="set-note">The access code is stored on the server and never sent back to the browser. Leave it empty while editing to keep the one already stored. <strong>Log</strong> sets how much this printer writes; a star marks one that no longer follows the Logging card.</p>`;
 
     container.querySelectorAll("[data-edit]").forEach(button => {
         button.onclick = () => openPrinterDialog(printers.find(p => p.id === button.dataset.edit));
+    });
+    container.querySelectorAll("[data-logdetail]").forEach(button => {
+        button.onclick = () => openLogDetailDialog(printers.find(p => p.id === button.dataset.logdetail));
     });
     container.querySelectorAll("[data-delete]").forEach(button => {
         button.onclick = () => confirmDeletePrinter(printers.find(p => p.id === button.dataset.delete));

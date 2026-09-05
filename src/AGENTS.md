@@ -15,10 +15,10 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | File | Owns |
 |---|---|
 | `config.js` | The on-disk paths (overridable with `DATA_DIR` and `LOG_DIR`), the port, the version, and the raw environment values that seed the two config files. The only module allowed to read `process.env`. |
-| `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()`, the frozen `legacyMode()` and the persistence of `printers/settings.json`, including its schema version and write counter. Must not import `logger.js`, which reads DEBUG from here. |
+| `settings.js` | The runtime configuration: schema, coercion, the resolved `settings` object, `spoolmanUrl()`, the frozen `legacyMode()` and the persistence of `printers/settings.json`, including its schema version and write counter. Owns `LOG_LEVELS` and `LOG_CATEGORIES`. Must not import `logger.js`, which reads the level from here. |
 | `service.js` | The startup sequence, the Spoolman reconnect that the settings API triggers when the endpoint changes, and `restartService()`, which ends the process with the restart exit code. The `tag` extra field is the only bootstrap that gates it; the vendor is resolved at the point of use. |
 | `supervisor.js` | The decision `entrypoint.js` makes when the service ends, and the exit code it looks for. Deliberately free of imports so it can be tested without spawning a process. |
-| `logger.js` | The `console.*` overrides, the serialised per-file write queue, `tailLogLines()` for the log viewer, which reads across the rotated files, and the size based rotation itself. |
+| `logger.js` | The `console.*` overrides, `debug()`/`trace()` with their level and category filter, the per-file override registry `printers.js` fills, `appendTrace()` for the raw MQTT capture, the serialised per-file write queue, `tailLogLines()` for the log viewer, which reads across the rotated files, and the size based rotation itself. |
 | `printers.js` | Loads and writes `printers/printers.json` (or seeds it from the `PRINTER_*` env vars), seeds the mutable per-printer runtime object, and owns add, update and remove. |
 | `mqtt.js` | The engine. Connection lifecycle, message handling, slot processing, print-state tracking, consumption booking, SSE broadcast, monitor loops. |
 | `ams.js` | Pure functions over AMS payloads: normalisation, change detection, spool matching, and `matchConsumption()`, the one decision about which sliced filament comes out of which slot. No I/O. |
@@ -65,6 +65,28 @@ build their Spoolman payload from.
 
 - **`console.log/error/debug` take `(device, logFilePath, ...args)`.** Set up in
   `logger.js`; see the root AGENTS.md. Use `originalConsoleLog` to bypass.
+- **A new debug line goes through `debug(category, ...)`, a payload dump through
+  `trace(category, ...)`.** Both from `logger.js`, both filtered by the level
+  ladder and by the category. `console.debug` is the uncategorised fallback and
+  cannot be switched off per area, so it is not what new code reaches for. The
+  split matters: `trace` carries whole Spoolman and AMS documents written on
+  every update interval, and carrying them at debug level is what used to make a
+  debug log unreadable within minutes.
+- **The level and the categories are read per log file, never globally.**
+  `shouldLog()` looks up the file's override first, which is how one printer can
+  run at trace while the rest of the service stays quiet. `printers.js` pushes
+  the override in through `setLogDetail()`; `logger.js` must not import it back,
+  the cycle would run the console overrides too late.
+- **An area switched off never hides an error or an ordinary progress line.**
+  Only `debug` and `trace` are filtered by category. A switch that could hide a
+  failure is a switch that makes a log lie.
+- **The raw MQTT trace is captured in the `message` handler, before
+  `handleMqttMessage()`.** That function returns immediately while a previous
+  report is still being processed and while Spoolman is down, and those are
+  exactly the reports an analysis afterwards is missing. It is written unparsed,
+  one line per report, into `<serial>.mqtt.log`, which carries its own size and
+  history budget: at the log file's default of 1 MB a trace would evict the
+  whole log within minutes.
 - **Settings are read at the point of use.** `settings.MODE`, never
   `const { MODE } = settings`. The object is mutated in place by the settings
   API, so a destructured copy silently keeps the startup value.
@@ -303,7 +325,8 @@ decides which card it lands in, and the card has to be listed in `GROUPS` in
 `public/settings.js`. `advanced` puts a field into that card's collapsed
 section, `header` puts a switch into the card header with its description behind
 an info icon, for a field that belongs to the whole card rather than to a row of
-its own. Mark it `restartRequired`
+its own, and `dialog` takes it out of the card entirely and hands it to the
+named dialog, which renders it from the schema the same way the card would. Mark it `restartRequired`
 when the running process cannot adopt it, and handle the live application in the
 `PUT /api/settings` handler when it needs more than the new value being read.
 
