@@ -356,6 +356,23 @@ function armPrintResultReset(printer) {
  */
 export function printResultCleared(printer) {
     if (printer.printResultDismissed) return true;
+
+    // A terminal state this process never witnessed is not a result. The
+    // printer repeats its last gcode_state for as long as it sits on it, so a
+    // service started after a print ended is handed a FINISH it knows nothing
+    // else about: no job name, no summary, no booking. The card then put a
+    // green FINISH badge next to "No active print", which is two answers to
+    // the same question. Nothing to show means there is nothing to keep.
+    //
+    // Guarded on the state, because an active print is not a result and must
+    // never be cleared: a job whose name the printer left empty would
+    // otherwise blank the card while it is printing.
+    if (!ACTIVE_STATES.has(printer.currentGcodeState)
+        && !printer.currentJobName
+        && !printer.lastPrintSummary) {
+        return true;
+    }
+
     return printer.printResetAt != null && Date.now() >= printer.printResetAt;
 }
 

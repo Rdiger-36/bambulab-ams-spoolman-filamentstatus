@@ -348,6 +348,39 @@ test("a real failure inside the print is still collected once the old one cleare
 // expected to end, and what the printer is busy with.
 // ---------------------------------------------------------------------------
 
+test("a terminal state nothing is known about reads as idle, not as a result", async () => {
+    const { printResultCleared } = await import("../src/mqtt.js");
+
+    // What a service started after a print ended is handed: the printer repeats
+    // its last gcode_state for as long as it sits on it, and this process has no
+    // job name, no summary and no booking to go with it. The card showed a green
+    // FINISH badge next to "No active print", two answers to the same question.
+    assert.equal(printResultCleared({
+        currentGcodeState: "FINISH",
+        currentJobName: null,
+        lastPrintSummary: null,
+        printResetAt: null,
+    }), true);
+
+    // A result this process really produced is kept, which is the whole point of
+    // PRINT_RESET_MINUTES being 0: it stays until somebody clears it.
+    assert.equal(printResultCleared({
+        currentGcodeState: "FINISH",
+        currentJobName: "Cube",
+        lastPrintSummary: { state: "FINISH" },
+        printResetAt: null,
+    }), false);
+
+    // An active print is not a result and must never be cleared, even when the
+    // printer left the job name empty
+    assert.equal(printResultCleared({
+        currentGcodeState: "RUNNING",
+        currentJobName: null,
+        lastPrintSummary: null,
+        printResetAt: null,
+    }), false);
+});
+
 test("a running print reports its start, its estimate and its stage", async () => {
     printer.currentGcodeState        = "RUNNING";
     printer.consumptionBooked        = false;
