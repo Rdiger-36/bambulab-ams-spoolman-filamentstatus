@@ -288,7 +288,16 @@ build their Spoolman payload from.
   unqueued `rotateNow()` because it is already inside the queue.
 - **Reconnects are driven only by `monitorPrinters()`.** The MQTT `close` and
   `error` handlers must not reschedule themselves. Two independent retry paths
-  used to race.
+  used to race. Because it is the only driver, nothing else may be allowed to
+  stop it: it used to idle while Spoolman was down, and a network drop that took
+  both out then left the printer disconnected for as long as Spoolman stayed
+  unreachable, with the close handler still promising a retry. `servicePrinters()`
+  is one pass of it, split out so a pass can be asserted on; the loop itself
+  never returns.
+- **Spoolman being down stops processing, never connecting.** The guard belongs
+  in `handleMqttMessage()`, which refuses to process a report without Spoolman,
+  and it is already there. Anywhere else it turns an unrelated outage into a
+  second one.
 - **`printer.blockMqttUpdates` serialises message handling.** Messages arriving
   during processing are dropped, not queued.
 
