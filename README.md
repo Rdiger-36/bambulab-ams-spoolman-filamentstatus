@@ -63,6 +63,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 | P series | ✅ |
 | H series | ✅ |
 | X series | ✅ |
+| A2L | ❓ untested, its AMS reports as unit 16 and is not addressed yet, see [issue tracker](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues) |
 
 | AMS | Supported |
 | :---- | :---- |
