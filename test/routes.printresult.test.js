@@ -274,6 +274,75 @@ test("the summary takes an error that arrives after the print has ended", async 
     assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
 });
 
+test("the previous print's complaint does not follow the next one into its summary", async () => {
+    const { handlePrintStateChange } = await import("../src/mqtt.js");
+
+    // The reports a P2S really sent, read out of the raw MQTT capture. It does
+    // not clear fail_reason when the state changes: the report that first said
+    // RUNNING still carried the code of a print that had failed two days
+    // earlier, and only the next report, five seconds later, had it back at 0.
+    const target = {
+        name: "Test Printer",
+        logFilePath: "/dev/null",
+        currentGcodeState: "FAILED",
+        currentJobName: null,
+        currentLayerNum: 0,
+        currentSliceInfo: null,
+        sliceFetchDone: true,
+        consumptionBooked: false,
+        printStartedAt: null,
+        lastPrintSummary: null,
+        lastPrintError: null,
+        staleErrorText: null,
+    };
+
+    // Sitting on the previous print's result, which is where a printer waits
+    await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "50348044", print_error: 0 });
+
+    // The new print starts, and the printer is still repeating the old code
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
+    assert.equal(target.lastPrintError, null, "the old code must not be collected into the new print");
+
+    // The printer catches up
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "0", print_error: 0 });
+    await handlePrintStateChange(target, { gcode_state: "FINISH", fail_reason: "0", print_error: 0 });
+
+    assert.equal(target.lastPrintSummary.state, "FINISH");
+    assert.equal(target.lastPrintSummary.printError, null, "a clean FINISH has no error");
+});
+
+test("a real failure inside the print is still collected once the old one cleared", async () => {
+    const { handlePrintStateChange } = await import("../src/mqtt.js");
+
+    // The hold-back must not swallow a genuine error. It lasts only while the
+    // printer keeps repeating the exact complaint it started with.
+    const target = {
+        name: "Test Printer",
+        logFilePath: "/dev/null",
+        currentGcodeState: "FAILED",
+        currentJobName: null,
+        currentLayerNum: 0,
+        currentSliceInfo: null,
+        sliceFetchDone: true,
+        consumptionBooked: false,
+        printStartedAt: null,
+        lastPrintSummary: null,
+        lastPrintError: null,
+        staleErrorText: null,
+    };
+
+    await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "50348044", print_error: 0 });
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "0", print_error: 0 });
+
+    // Something goes wrong in this print, and it happens to be the same code
+    await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
+    assert.equal(target.lastPrintError, "Fail reason 50348044");
+
+    await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "0", print_error: 0 });
+    assert.equal(target.lastPrintSummary.printError, "Fail reason 50348044");
+});
+
 // ---------------------------------------------------------------------------
 // What the card shows while a print is running: when it started, when it is
 // expected to end, and what the printer is busy with.

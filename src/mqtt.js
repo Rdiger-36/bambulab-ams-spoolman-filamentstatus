@@ -171,6 +171,19 @@ export async function handlePrintStateChange(printer, print) {
         printer.printResultDismissed   = false;
         printer.printResetAt           = null;
         printer.lastPrintError         = null;
+
+        // The printer does not clear its previous complaint when the state
+        // changes. Measured on a P2S through the raw MQTT capture: the report
+        // that first said RUNNING still carried fail_reason 50348044 from a
+        // print that had failed two days earlier, and only the next report,
+        // five seconds later, had it back at 0. Collecting it here blamed this
+        // print for the previous one's failure, and the summary of a clean
+        // FINISH said "Fail reason 50348044".
+        //
+        // This is the mirror image of the late arrival at the end of a print,
+        // which the collection below exists for. Both are the same hardware
+        // habit: the field lags the state by a report.
+        printer.staleErrorText = printErrorText(print);
     }
 
     // Whatever the printer names as an error belongs to the print that was
@@ -181,7 +194,18 @@ export async function handlePrintStateChange(printer, print) {
     // came one report later, and the report after that had it back at 0. A
     // summary built from the terminal report alone said nothing had gone wrong,
     // and a user stop is worth naming too.
-    const errorNow = printErrorText(print);
+    const reported = printErrorText(print);
+
+    // Held back for as long as the printer keeps repeating the complaint it
+    // already carried when this print started. The moment it reports anything
+    // else, including nothing at all, it has moved on and whatever comes after
+    // belongs to this print. An identical error really happening again inside
+    // this print is only missed while the old one has not been cleared once.
+    if (printer.staleErrorText && reported !== printer.staleErrorText) {
+        printer.staleErrorText = null;
+    }
+
+    const errorNow = printer.staleErrorText ? null : reported;
     if (errorNow) {
         printer.lastPrintError = errorNow;
         // The summary may already be built, and it is the record of this very

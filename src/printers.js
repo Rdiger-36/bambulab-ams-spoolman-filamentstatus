@@ -135,6 +135,10 @@ function createRuntimePrinter(entry) {
         // stopped by hand reports the code one report after the state, and
         // clears it the report after that.
         lastPrintError: null,
+        // The complaint the printer was already carrying when this print
+        // started. It lags the state by a report, so it has to be held back
+        // until the printer clears it. See handlePrintStateChange in mqtt.js.
+        staleErrorText: null,
         // What the printer says about the job it is doing right now: the stage
         // it is in (`stg_cur`) and the minutes it thinks are left
         // (`mc_remaining_time`). Display only, refreshed on every report rather
