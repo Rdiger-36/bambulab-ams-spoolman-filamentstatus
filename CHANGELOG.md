@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.13
    - Breaking:
       - "Debug logging" is a log level now, not a switch. The Logging card carries "Log detail...", which opens the level, the areas that write and the raw MQTT capture in one dialog
          - The level is a ladder: errors writes failures only, normal adds the ordinary progress lines and is the default, debug adds the internal steps, trace adds the whole payloads behind them
