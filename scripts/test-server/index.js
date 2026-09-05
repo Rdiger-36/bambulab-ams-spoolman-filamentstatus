@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { createMockSpoolman } from "./mock-spoolman.js";
-import { startMockPrinter } from "./mock-printer.js";
+import { startMockPrinter, loadReport } from "./mock-printer.js";
 import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
 
 /**
@@ -29,9 +29,17 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  *                                     [--interval 3000] [--no-service]
  *                                     [--real-printer <ip> <code> <serial>]
  *                                     [--spoolman <url>] [--mode manual|automatic]
+ *                                     [--report <name>]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
+ *
+ * `--report <name>` makes the mock printer publish a captured report from
+ * test/fixtures/reports instead of the scenario, for example `x1c-multi-ams`
+ * for an X1C with three AMS and an AMS HT, or `a1` for an AMS Lite. Those are
+ * what real printers sent, so this is the way to see the dashboard draw
+ * hardware nobody here owns. The README next to the files says what each one
+ * holds.
  *
  * `--real-printer` skips the mock printer and points the service at a physical
  * one, while Spoolman stays the mock. That is the way to see how a spool nobody
@@ -69,6 +77,7 @@ function readOptions(argv) {
         realPrinter: null,
         spoolman: null,
         mode: "manual",
+        report: null,
     };
 
     for (let i = 0; i < argv.length; i++) {
@@ -101,6 +110,19 @@ function readOptions(argv) {
                 }
                 options.realPrinter = { ip: argv[i + 1], code: argv[i + 2], serial: argv[i + 3] };
                 i += 3;
+                break;
+            case "--report":
+                if (!value) {
+                    console.error("--report takes the name of a file under test/fixtures/reports, without .json");
+                    process.exit(2);
+                }
+                try {
+                    options.report = { name: value, print: loadReport(value) };
+                } catch (error) {
+                    console.error(error.message);
+                    process.exit(2);
+                }
+                i++;
                 break;
             default:
                 console.error(`Unknown option: ${argv[i]}`);
@@ -165,12 +187,22 @@ async function main() {
             port: options.printerPort,
             interval: options.interval,
             log: prefixed("printer"),
+            report: options.report?.print ?? null,
         });
 
-        const scenario = describeScenario();
-        console.log(`[scenario] ${scenario.units} AMS units, ${scenario.slots} slots: ` +
-            `${scenario.multiColour} multi colour, ${scenario.singleColour} single colour, ` +
-            `${scenario.other} empty, being read or 3rd party, plus the external holder`);
+        if (options.report) {
+            const { name, print } = options.report;
+            const units = print.ams?.ams ?? [];
+            const holders = Array.isArray(print.vir_slot) ? print.vir_slot.length : (print.vt_tray ? 1 : 0);
+            console.log(`[scenario] report fixture "${name}": ${units.length} AMS unit(s) ` +
+                `[${units.map(unit => unit.id).join(", ")}], ${holders} external holder(s), ` +
+                `state ${print.gcode_state}, stage ${print.stg_cur ?? "none"}`);
+        } else {
+            const scenario = describeScenario();
+            console.log(`[scenario] ${scenario.units} AMS units, ${scenario.slots} slots: ` +
+                `${scenario.multiColour} multi colour, ${scenario.singleColour} single colour, ` +
+                `${scenario.other} empty, being read or 3rd party, plus the external holder`);
+        }
     }
 
     let service = null;

@@ -1,4 +1,13 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Maintenance:
+      - Twelve real printer reports are carried as test fixtures under test/fixtures/reports, copied from the mock data of ha-bambulab, the Home Assistant integration: A1 with AMS Lite, X1C with three AMS and an AMS HT, H2C, H2D, H2D Pro, H2S and X2D with two external holders, P1P without AMS, A2L, and a P2S next to them. Most of that hardware is not on anybody's desk here, and until now the only report ever seen was the P2S's
+         - Every report runs through the ingest pipeline in test/reports.test.js, with invariants rather than expected values: nothing throws, every slot gets a label the service can address, what print.mapping names is a slot the report carries, the stage is named or none. Three gaps came out of that and are listed there as todo: an A2L reports its AMS as unit 16, which is outside every range the labels know; a dual nozzle printer carries two external holders and both are labelled External; a P1 reports stage 255 outside a print where the others report -1
+         - Two questions from the open list are answered by the files alone: print.mapping is not a P2S thing, an X1C, an H2C, an H2D, an H2S and an X2D all report it, and an AMS Lite reports no humidity_raw and a temperature of "0.0", which is what the environment readout already assumes
+         - The mock printer of scripts/test-server publishes any of them with "--report <name>" instead of its own scenario, so the dashboard can be seen drawing an AMS Lite, an AMS HT or a second holder
+         - THIRD_PARTY_NOTICES.md carries the MIT notices of ha-bambulab and of SpoolmanDB, whose catalogue subset the mock Spoolman has been serving all along without one
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.13
    - Breaking:
       - "Debug logging" is a log level now, not a switch. The Logging card carries "Log detail...", which opens the level, the areas that write and the raw MQTT capture in one dialog

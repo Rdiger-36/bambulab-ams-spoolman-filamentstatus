@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
 
@@ -133,7 +134,15 @@ function topicMatches(filter, topic) {
 }
 
 /** The report the printer publishes, in the shape `handleMqttMessage()` reads. */
-function buildReport() {
+function buildReport(fixture) {
+    // A fixture is sent as it was captured, apart from the sequence id, which
+    // is the one field a printer never repeats. The point of a fixture is to
+    // see what the service makes of a report nobody here can produce, so
+    // nothing else is touched.
+    if (fixture) {
+        return JSON.stringify({ print: { ...fixture, sequence_id: String(Date.now()) } });
+    }
+
     return JSON.stringify({
         print: {
             command: "push_status",
@@ -163,6 +172,34 @@ function buildReport() {
 }
 
 /**
+ * The `print` block of a captured report under test/fixtures/reports.
+ *
+ * Those files are what real printers sent, most of them printers nobody here
+ * owns, so publishing one is the only way to see the dashboard draw an AMS
+ * Lite, an AMS HT or a second external holder. The README in that directory
+ * says what each one holds.
+ *
+ * @param {string} name - file name without the extension, for example "x1c-multi-ams"
+ * @returns {object} the report's `print` block
+ */
+export function loadReport(name) {
+    const file = path.join(REPORTS_DIR, `${name}.json`);
+    if (!fs.existsSync(file)) {
+        const available = fs.readdirSync(REPORTS_DIR)
+            .filter(entry => entry.endsWith(".json"))
+            .map(entry => entry.replace(/\.json$/, ""))
+            .sort();
+        throw new Error(`no report fixture "${name}", available: ${available.join(", ")}`);
+    }
+    return JSON.parse(fs.readFileSync(file, "utf8")).pushall.print;
+}
+
+const REPORTS_DIR = path.join(
+    path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))),
+    "test", "fixtures", "reports",
+);
+
+/**
  * Starts the mock printer.
  *
  * @param {object} options
@@ -170,9 +207,10 @@ function buildReport() {
  * @param {number} options.port - TLS port, 8883 on a real printer
  * @param {number} options.interval - milliseconds between two reports
  * @param {(line: string) => void} options.log - where connection lines go
+ * @param {object} [options.report] - a captured `print` block from `loadReport()`, published instead of the scenario
  * @returns {Promise<{close: () => Promise<void>, reports: () => number}>}
  */
-export function startMockPrinter({ serial, port, interval, log }) {
+export function startMockPrinter({ serial, port, interval, log, report = null }) {
     const topic = `device/${serial}/report`;
     const clients = new Set();
     let reports = 0;
@@ -223,12 +261,12 @@ export function startMockPrinter({ serial, port, interval, log }) {
     server.on("tlsClientError", () => {});
 
     const timer = setInterval(() => {
-        const report = buildReport();
+        const payload = buildReport(report);
         let sent = 0;
 
         for (const client of clients) {
             if (!client.subscriptions.some(filter => topicMatches(filter, topic))) continue;
-            client.socket.write(publishPacket(topic, report));
+            client.socket.write(publishPacket(topic, payload));
             sent++;
         }
 
