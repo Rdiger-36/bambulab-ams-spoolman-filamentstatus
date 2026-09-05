@@ -66,9 +66,9 @@ The areas (`mqtt`, `ams`, `spoolman`, `gcode`, `print`, `service`) filter the `d
 
 **Capture raw MQTT messages** in the same dialog writes every report a printer sends into `logs/<serial>.mqtt.log`, unparsed and one line per message. It is the file to attach to a bug report about behaviour nobody can reproduce on demand: it is what the printer really sent, not what this service made of it, including the reports that were dropped because the previous one was still being processed.
 
-It has its own size and history budget next to the log, because a printer reports every few seconds and every report is a full document. **Trace file size** is what decides how far back a trace reaches; the default of 10 MB with 2 kept files is a starting point, not a measurement of your printer.
+It has its own size and history budget next to the log, because a printer reports far more than it logs. Measured on a P2S: a full report every 1.4 seconds, around 8 KB each once the printer's own indentation is folded away, which is **roughly 21 MB an hour**. **Trace file size** is what decides how far back a trace reaches, and it multiplies with **Kept trace files**: the default of 50 MB with 2 kept files is about six hours of history, and a full day needs around 170 MB per file.
 
-It stays on until it is switched off. Nothing turns it off by itself, on purpose: a fault that shows up once a day is not caught by a capture that ended an hour ago.
+It stays on until it is switched off. Nothing turns it off by itself, on purpose: a fault that shows up twice a day is not caught by a capture that ended an hour ago. Size it for the gap between two occurrences of whatever you are hunting, and turn it off again afterwards.
 
 The trace is readable in the Web UI like any other log, under **Raw MQTT traces** in the picker in the headline of the log page, and it is in the diagnostics archive as `logs/<serial>.mqtt.current.log`. The download asks the same anonymising question every other log download asks, and it matters more here: a raw report carries every field the printer knows about itself.
 

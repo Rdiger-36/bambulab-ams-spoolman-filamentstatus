@@ -146,6 +146,34 @@ test("a trace file keeps every report on one line, timestamped", async () => {
     assert.ok(lines[1].endsWith('{"print": {"ams":null}}'));
 });
 
+test("the printer's own indentation is folded away with the line break", async () => {
+    const file = tmpFile(`PRETTY${TRACE_SUFFIX}`);
+
+    // A P2S pretty-prints. Measured on one: half of every 17 KB report was the
+    // indentation, and dropping only the line break left all of it behind.
+    const report = '{\n    "print": {\n        "gcode_state": "RUNNING",\n        "layer_num": 3\n    }\n}';
+    appendTrace(file, report);
+    await settle(file);
+
+    const body = readLines(file)[0].split(" ").slice(1).join(" ");
+    assert.equal(body, '{ "print": { "gcode_state": "RUNNING", "layer_num": 3 } }');
+    // Folded, not mangled: the document still says what it said
+    assert.deepEqual(JSON.parse(body), JSON.parse(report));
+});
+
+test("two spaces inside a value survive the fold", async () => {
+    const file = tmpFile(`JOBNAME${TRACE_SUFFIX}`);
+
+    // Which is why only the run that follows a line break is folded. A raw line
+    // break cannot appear inside a JSON string, so matching it is what makes the
+    // fold safe without parsing; collapsing runs of spaces on their own would
+    // quietly rewrite a job name.
+    appendTrace(file, '{"print":{"subtask_name":"two  spaces.3mf"}}');
+    await settle(file);
+
+    assert.ok(readLines(file)[0].includes('"two  spaces.3mf"'));
+});
+
 test("the trace is written whatever the log level says", async () => {
     const file = tmpFile(`SILENT${TRACE_SUFFIX}`);
 

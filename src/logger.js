@@ -358,9 +358,15 @@ function keepFor(filePath) {
  * @param {Buffer|string} payload - the report as it arrived
  */
 export function appendTrace(traceFilePath, payload) {
-    // A report is a single JSON document, but nothing guarantees it carries no
-    // newline, and one report per line is what makes the file readable at all
-    const line = String(payload).replace(/[\r\n]+/g, " ");
+    // One report per line is what makes the file readable at all, and a P2S
+    // pretty-prints: measured on real hardware, half of every 17 KB report was
+    // the printer's own indentation. The newline and the indentation that
+    // follows it go together, because dropping only the newline left all of it
+    // behind. Matching the newline is what makes this safe without parsing: a
+    // raw newline cannot appear inside a JSON string, so everything replaced
+    // here is structural. Collapsing runs of spaces on their own would not be:
+    // a job name is a string value and may hold two spaces of its own.
+    const line = String(payload).replace(/\r?\n[ \t]*/g, " ");
     return enqueueAppend(traceFilePath, `${formatDateLog(new Date())} ${line}\n`);
 }
 
