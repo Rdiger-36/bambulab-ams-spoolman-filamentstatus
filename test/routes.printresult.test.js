@@ -458,8 +458,12 @@ test("a named stage reads as its name, an unnamed one as its number", async () =
     // number until the machine said what they are.
     assert.equal(printStageName(51), "Printing calibration lines");
     assert.equal(printStageName(54), "Heating heatbed to target");
+    // The range ha-bambulab has codes for, in this project's wording
+    assert.equal(printStageName(36), "Checking absolute accuracy before calibration");
+    assert.equal(printStageName(52), "Checking material");
+    assert.equal(printStageName(77), "Preparing AMS");
     // Still no guessing for the ones nothing has named.
-    assert.equal(printStageName(52), "Stage 52");
+    assert.equal(printStageName(78), "Stage 78");
     assert.equal(printStageName(99), "Stage 99");
     // Neither end names a stage. -1 is what the printer sends outside a print,
     // and 0 is it laying down filament, which the state badge already says: a
@@ -468,6 +472,14 @@ test("a named stage reads as its name, an unnamed one as its number", async () =
     assert.equal(printStageName(-1), null);
     assert.equal(printStageName(0), null);
     assert.equal(printStageName(null), null);
+    // A P1 says "no stage" as 255, seen in test/fixtures/reports/p1p-no-ams.json
+    assert.equal(printStageName(255), null);
+    assert.equal(isPreparingStage(255), false);
+    // Checks, calibrations and heating are preparation; cooling is not
+    assert.equal(isPreparingStage(47), true);
+    assert.equal(isPreparingStage(77), true);
+    assert.equal(isPreparingStage(50), false);
+    assert.equal(isPreparingStage(69), false);
 
     assert.equal(isPreparingStage(2), true);
     assert.equal(isPreparingStage(13), true);

@@ -227,6 +227,9 @@ test("the slots are ordered by ascending AMS unit id", () => {
     // the external holder 255, so both sit after them and the holder last.
     assert.deepEqual(orderedAmsSlots(["A1", "External", "HT-B", "HT-A"]),
                      ["A1", "A2", "A3", "A4", "HT-A", "HT-B", "External"]);
+    // The second holder of a dual nozzle printer, unit 254, after the first
+    assert.deepEqual(orderedAmsSlots(["External-2", "A1", "External"]),
+                     ["A1", "A2", "A3", "A4", "External", "External-2"]);
     assert.deepEqual(orderedAmsSlots([]), []);
 });
 

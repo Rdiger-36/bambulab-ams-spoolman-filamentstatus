@@ -1,7 +1,7 @@
 import { materialFamily } from "../public/materials.js";
 // Imported rather than only re-exported: `convertAMSandSlot()` below reads them,
 // and a bare re-export does not bring a name into this module's scope.
-import { EXTERNAL_SPOOL_ID, EXTERNAL_SLOT } from "../public/shared.js";
+import { EXTERNAL_SPOOL_ID, EXTERNAL_SLOT, SECOND_EXTERNAL_SPOOL_ID, SECOND_EXTERNAL_SLOT, externalSlotLabel } from "../public/shared.js";
 
 /** Resolves after the given number of milliseconds. */
 export function sleep(ms) {
@@ -51,8 +51,10 @@ export function formatInterval(ms) {
  * The single slot AMS HT units are 128 to 135 and have no slot number of their
  * own, giving `HT-A` to `HT-H`. 255 is the external spool holder, which the
  * printer reports outside the AMS block altogether and which has no slot number
- * either, giving `External`. Anything outside those ranges yields `Z`, which
- * marks a unit this service does not know how to address.
+ * either, giving `External`; 254 is the second holder of a dual nozzle printer,
+ * giving `External-2`, see `public/shared.js` for where that number comes from.
+ * Anything outside those ranges yields `Z`, which marks a unit this service
+ * does not know how to address.
  *
  * The slot number is the printer's, not the payload's: MQTT counts a unit's
  * slots from 0, while the printer's own display, its touchscreen and Bambu
@@ -78,8 +80,7 @@ export function convertAMSandSlot(amsID, slotID) {
 
     if (amsID >= 0 && amsID <= 3) return letters[amsID] + slot;
     if (amsID >= 128 && amsID <= 135) return `HT-${letters[amsID - 128]}`;
-    if (amsID === EXTERNAL_SPOOL_ID) return EXTERNAL_SLOT;
-    return "Z";
+    return externalSlotLabel(amsID) ?? "Z";
 }
 
 /**
@@ -91,7 +92,7 @@ export function convertAMSandSlot(amsID, slotID) {
  * constant of its own. The label is the key an assignment is stored under, so
  * the two drifting apart orphans what is on disk.
  */
-export { EXTERNAL_SPOOL_ID, EXTERNAL_SLOT };
+export { EXTERNAL_SPOOL_ID, EXTERNAL_SLOT, SECOND_EXTERNAL_SPOOL_ID, SECOND_EXTERNAL_SLOT, externalSlotLabel };
 
 /**
  * The colour set of an AMS slot as bare six digit lowercase hex, and the colour

@@ -273,17 +273,35 @@ export function formatMoment(at, withDate) {
 }
 
 /**
- * The unit id the external spool holder is addressed under, and the label it
- * produces. The printer reports the holder as `print.vir_slot`, whose entry
- * carries `id` 255, so the number is the printer's rather than an invention.
+ * The unit ids the external spool holders are addressed under, and the labels
+ * they produce. The printer reports a holder as an entry of `print.vir_slot`
+ * carrying `id` 255, so the number is the printer's rather than an invention.
  *
- * The label is not only shown: it is the key an assignment is stored under in
- * `mappings.json`, and it is what tells the dashboard that this slot belongs to
- * no four slot unit and needs a table of its own. Changing it orphans what is
- * on disk, which is why both sides read the same constant.
+ * A dual nozzle printer (H2C, H2D, X2D) has two holders and reports a second
+ * entry with `id` 254. Read off the H2D and H2C reports in
+ * test/fixtures/reports: `device.extruder.info[1]`, the second extruder, names
+ * its current slot as 0xFEFF, unit 254, while the first extruder's holder is
+ * 255. The one every printer has keeps its label, so nothing on disk moves for
+ * a single nozzle printer; the second is "External-2", numbered rather than
+ * sided because the report says which extruder it feeds and not where it sits.
+ *
+ * The labels are not only shown: they are the keys an assignment is stored
+ * under in `mappings.json`, and they are what tells the dashboard that these
+ * slots belong to no four slot unit and need a table of their own. Changing one
+ * orphans what is on disk, which is why both sides read the same constants.
  */
 export const EXTERNAL_SPOOL_ID = 255;
 export const EXTERNAL_SLOT = "External";
+export const SECOND_EXTERNAL_SPOOL_ID = 254;
+export const SECOND_EXTERNAL_SLOT = "External-2";
+
+/** The label of a holder by its unit id, null for anything that is not one. */
+export function externalSlotLabel(unitId) {
+    const id = Number(unitId);
+    if (id === EXTERNAL_SPOOL_ID) return EXTERNAL_SLOT;
+    if (id === SECOND_EXTERNAL_SPOOL_ID) return SECOND_EXTERNAL_SLOT;
+    return null;
+}
 
 /**
  * The print states in which a job is in flight.
