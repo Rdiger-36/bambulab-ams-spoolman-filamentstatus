@@ -301,28 +301,39 @@ export const ACTIVE_PRINT_STATES = ["PREPARE", "RUNNING", "PAUSE"];
  *
  * `totalLayers` comes out of the sliced file, where parseSliceInfo() takes it
  * from the highest index in `layer_ranges`: a 25 there means the layers 0 to
- * 25, so 26 of them. `layerNum` comes from MQTT and is 0-based while the print
- * runs, which is what makes calcPartialConsumption() line up with those same
- * ranges.
+ * 25, so 26 of them. One is added to it, and that is the only correction here.
  *
- * The one place the two part company is the end of a print. A P2S sets
- * `layer_num` to the layer count when it finishes, and 26 on a plate whose
- * highest index is 25 is one past the last layer. Adding one to it gave
- * "Layer 27 / 26" and 104%, so neither is allowed past the total: a layer after
- * the last one does not exist under either reading of the field.
+ * `layerNum` comes from MQTT and is already a count, so it is shown as it
+ * stands. Measured across a whole print on a P2S through the raw MQTT capture:
+ * on a plate of 15 layers it ran 0, 1, 2 … 15 and stayed at 15 through FINISH.
+ * A 0-based index of the layer being printed could never reach 15 when the
+ * highest index in the sliced file is 14, so the field is not that. It is
+ * either the layers completed or a 1-based current layer, and both are read the
+ * same way off the wire.
  *
- * Lives here rather than in the dashboard because it is the same convention the
- * server's consumption maths rests on, and it was nowhere written down when it
- * broke.
+ * This used to add one to it as well, on the strength of that 0-based reading,
+ * and the dashboard then sat one ahead of the printer's own display and of
+ * Bambu Studio for the whole print: 1 / 15 while both of them said 0 / 15.
+ * The cap hid it at the end, which is why it survived the fix that put the cap
+ * there.
  *
- * @param {number|null|undefined} layerNum - `layer_num` from MQTT, 0-based
+ * Nothing is allowed past the total either way: a layer after the last one does
+ * not exist under any reading of the field.
+ *
+ * Lives here rather than in the dashboard because it was nowhere written down
+ * when it broke. Note that `calcPartialConsumption()` reads the same field as an
+ * inclusive 0-based index into the layer ranges, which is the other reading; it
+ * only runs on a cancelled or failed print and has not been measured against
+ * one.
+ *
+ * @param {number|null|undefined} layerNum - `layer_num` from MQTT, a count
  * @param {number|null|undefined} totalLayers - `totalLayers` from the slice, a
  *   highest index rather than a count
  * @returns {{layer: number, total: number|null, percent: number|null}}
  */
 export function humanLayers(layerNum, totalLayers) {
     const total = totalLayers != null ? totalLayers + 1 : null;
-    const counted = (layerNum ?? 0) + 1;
+    const counted = layerNum ?? 0;
     const layer = total != null ? Math.min(counted, total) : counted;
 
     return { layer, total, percent: total ? Math.round((layer / total) * 100) : null };
