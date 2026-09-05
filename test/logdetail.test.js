@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
+import { promises as fsp } from "fs";
 import os from "os";
 import path from "path";
 
@@ -223,4 +224,29 @@ test("a stored DEBUG of false is carried over as the normal level", () => {
 test("a level already stored wins over the old switch", () => {
     const migrated = migrateStored({ DEBUG: true, LOG_LEVEL: "errors" }, 1);
     assert.equal(migrated.LOG_LEVEL, "errors");
+});
+
+test("every category the dialog offers is one some line actually carries", async () => {
+    // A switch that filters nothing is worse than no switch: it says the area is
+    // covered. gcode and print were offered for a while and no call site used
+    // them, so toggling them did nothing, on exactly the path somebody turns the
+    // logging up for.
+    const dir = new URL("../src/", import.meta.url);
+    const used = new Set();
+
+    for (const name of await fsp.readdir(dir)) {
+        if (!name.endsWith(".js")) continue;
+        const source = await fsp.readFile(new URL(name, dir), "utf8");
+        for (const [, category] of source.matchAll(/\b(?:debug|trace)\("([a-z]+)"/g)) {
+            used.add(category);
+        }
+    }
+
+    const unused = LOG_CATEGORIES.filter(category => !used.has(category));
+    assert.deepEqual(unused, [], `no line carries these categories: ${unused.join(", ")}`);
+
+    // And the other way round: a category on a call site that the schema does
+    // not know is never filtered, so it would quietly ignore the dialog
+    const unknown = [...used].filter(category => !LOG_CATEGORIES.includes(category));
+    assert.deepEqual(unknown, [], `used but not in the schema: ${unknown.join(", ")}`);
 });

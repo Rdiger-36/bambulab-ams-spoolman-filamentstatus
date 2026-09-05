@@ -146,6 +146,14 @@ export async function handlePrintStateChange(printer, print) {
     // A fresh print starts when we transition from a non-active state into an
     // active one. Reset tracking here (even on a reprint of the same file) so
     // consumption gets booked again for the new run.
+    if (newState !== prevState) {
+        // Every transition, not only the two that do something. A print that
+        // booked nothing usually took a path through the states nobody expected,
+        // and the ordinary log only names the two ends of it.
+        debug("print", printer.name, printer.logFilePath,
+            `[Print] State ${prevState} to ${newState}, layer ${layerNum}, job ${jobName ?? "unnamed"}`);
+    }
+
     const freshStart = ACTIVE_STATES.has(newState) && !ACTIVE_STATES.has(prevState);
     if (freshStart) {
         printer.currentJobName    = jobName;
@@ -247,6 +255,13 @@ export async function handlePrintStateChange(printer, print) {
             console.log(printer.name, printer.logFilePath, `[Print] ${newState}, no slice info cached, skipping consumption tracking`);
             return;
         }
+
+        // Which of the two sums ran, and on what. A partial booking that looks
+        // wrong is nearly always the layer this was handed, and the ordinary log
+        // prints the result without ever naming the input.
+        debug("print", printer.name, printer.logFilePath, newState === "FINISH"
+            ? `[Print] FINISH, taking the full consumption of ${printer.currentSliceInfo.totalLayers} layers`
+            : `[Print] ${newState}, taking the consumption up to layer ${layerNum} of ${printer.currentSliceInfo.totalLayers}`);
 
         const consumption = newState === "FINISH"
             ? calcFullConsumption(printer.currentSliceInfo)
@@ -430,11 +445,17 @@ async function bookConsumption(printer, consumption, state) {
     // with the printer and cannot tell when it is not. Without it, the position
     // in the list is all there is.
     const reported = printer.currentMapping;
-    resolveSliceSlots(
-        consumption,
-        reported ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId)),
-        { reportedByPrinter: !!reported },
-    );
+    const slots = reported ?? orderedAmsSlots(printer.spoolData.map(s => s.amsId));
+
+    // Which of the two sources named the slots, and what it named. This is the
+    // decision behind every booking landing where it did: the printer's own
+    // mapping is followed as it stands, the slicer's list order is only an
+    // estimate and has to be confirmed against the slot.
+    debug("print", printer.name, printer.logFilePath, reported
+        ? `[Print] Slots as the printer reported them: ${JSON.stringify(slots)}`
+        : `[Print] The printer named no slots, estimating from the slicer's list order: ${JSON.stringify(slots)}`);
+
+    resolveSliceSlots(consumption, slots, { reportedByPrinter: !!reported });
 
     // Logged from here rather than from the caller, which ran before the slots
     // were named and therefore printed every `amsId` as null, which is the one
@@ -447,6 +468,15 @@ async function bookConsumption(printer, consumption, state) {
         .filter(uiSpool => uiSpool.connectedViaMapping || uiSpool.connectedViaTag)
         .map(consumptionCandidate)
         .filter(candidate => candidate.id);
+
+    // The slots a booking could possibly land on, and why each one qualified.
+    // A filament that goes unbooked is usually a slot that never got into this
+    // list, and the ordinary log says only that nothing matched.
+    debug("print", printer.name, printer.logFilePath,
+        `[Print] ${candidates.length} slot(s) may carry a booking: ${JSON.stringify(
+            candidates.map(c => `${c.amsId} spool ${c.id}${c.mapped ? " (assigned)" : " (tag)"}`))}`);
+    trace("print", printer.name, printer.logFilePath,
+        `[Print] Booking candidates in full: ${JSON.stringify(candidates)}`);
 
     if (!candidates.length) {
         console.log(printer.name, printer.logFilePath, "[Print] No connected or assigned spools, nothing to book");
@@ -473,6 +503,13 @@ async function bookConsumption(printer, consumption, state) {
         }
 
         const matches = matched.get(info) ?? [];
+
+        // What the one matching decision answered, per filament. Reading this
+        // next to the candidate list above is what turns "nothing was booked"
+        // into which stage of matchConsumption() let the filament through.
+        debug("print", printer.name, printer.logFilePath,
+            `[Print] ${idx} ${type} (${color}), ${grams}g from ${info.amsId ?? "no slot"}: ${
+                matches.length ? `matched ${matches.map(m => `spool ${m.id} in ${m.amsId}`).join(", ")}` : "no match"}`);
 
         if (!matches.length) {
             console.log(printer.name, printer.logFilePath, `[Print] No connected or assigned Spoolman spool for ${idx} ${type} (${color}), skipping ${grams}g (assign the spool in the Web UI to track it)`);

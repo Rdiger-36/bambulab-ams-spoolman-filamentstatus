@@ -347,14 +347,18 @@ test("a remaining time of zero is an estimate, a missing one is not", async () =
     assert.equal(missing.body.estimatedEndAt, null);
 });
 
-test("an unknown stage is shown as its number rather than guessed at", async () => {
+test("a named stage reads as its name, an unnamed one as its number", async () => {
     const { printStageName, isPreparingStage } = await import("../src/gcode.js");
 
     assert.equal(printStageName(2), "Heatbed preheating");
     assert.equal(printStageName(14), "Cleaning nozzle tip");
-    // Both seen on a P2S and outside the table the community settled on.
-    assert.equal(printStageName(54), "Stage 54");
-    assert.equal(printStageName(51), "Stage 51");
+    // The two a P2S announces on an ordinary plate. They were shown as their
+    // number until the machine said what they are.
+    assert.equal(printStageName(51), "Printing calibration lines");
+    assert.equal(printStageName(54), "Heating heatbed to target");
+    // Still no guessing for the ones nothing has named.
+    assert.equal(printStageName(52), "Stage 52");
+    assert.equal(printStageName(99), "Stage 99");
     // Neither end names a stage. -1 is what the printer sends outside a print,
     // and 0 is it laying down filament, which the state badge already says: a
     // P2S sits on 0 for the whole body of a print, so naming it would put
@@ -365,7 +369,10 @@ test("an unknown stage is shown as its number rather than guessed at", async () 
 
     assert.equal(isPreparingStage(2), true);
     assert.equal(isPreparingStage(13), true);
+    // Both come before the model: the calibration lines are laid down next to
+    // the plate, and a bed still coming up to temperature has not started.
+    assert.equal(isPreparingStage(51), true);
+    assert.equal(isPreparingStage(54), true);
     // A pause is its own state the printer already reports as PAUSE.
     assert.equal(isPreparingStage(16), false);
-    assert.equal(isPreparingStage(54), false);
 });
