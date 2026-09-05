@@ -1,4 +1,11 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - The external spool holder no longer shows and vanishes on a P1S (issue #131). The printer sends delta reports that carry the AMS block and leave vt_tray out, and each of those was read as an empty holder: the External slot was released and its Spoolman location cleared, and the next full report created it again. Read off the raw MQTT trace of the reporter's P1S: 167 delta reports with the AMS block and no vt_tray against 27 full reports that all carried it, and not one report with the key present but empty
+         - A report that does not mention the holder now means nothing changed, and only a report that carries the key, an empty holder included, replaces what the last one said. The memory starts empty on every connection, so a holder emptied while nobody was listening is corrected by the first full report
+         - Reproducible without a P1S: node scripts/test-server/index.js --delta-reports makes the mock printer send the same alternation, and test/fixtures/reports/p1s.json carries a full report and one of the deltas of the real printer
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.14
    - Fixes:
       - A dual nozzle printer's second external spool holder is a slot of its own, "External-2". An H2C, H2D or X2D reports two holders, and both were labelled "External", so two loaded holders were two slots under one label, one assignment key and one Spoolman location. "External" keeps its meaning and feeds the first extruder, so nothing moves for a printer with one holder
