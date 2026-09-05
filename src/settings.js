@@ -510,9 +510,15 @@ export function parseStoredFile(parsed) {
  *
  * Version 0 is the flat file, whose keys are the same as version 1's. Version 2
  * replaced the `DEBUG` switch with the `LOG_LEVEL` ladder: a stored `true`
- * becomes `debug`, a stored `false` is dropped rather than written as `normal`,
- * because `false` was the default and turning it into a stored value would make
- * the file own a setting the user never saved.
+ * becomes `debug` and a stored `false` becomes `normal`.
+ *
+ * Both are written, including the `false`. A value in this file is one the user
+ * saved, and the file beats the environment variable: an installation whose
+ * `.env` carries `DEBUG=true` and whose file says `false` is one where somebody
+ * turned debug logging off in the Web UI and expects it to stay off. Dropping
+ * the `false` would leave `LOG_LEVEL` unowned, the `DEBUG` variable would seed
+ * it on the next start, and the upgrade would quietly turn debug logging back
+ * on against an explicit decision.
  *
  * @param {object} values - the stored values
  * @param {number} schemaVersion - the version they were written with
@@ -527,9 +533,9 @@ export function migrateStored(values, schemaVersion) {
         const wasOn = migrated.DEBUG === true
             || ["true", "1", "yes", "on"].includes(String(migrated.DEBUG).trim().toLowerCase());
         delete migrated.DEBUG;
-        // Only a stored "on" carries over. LOG_LEVEL already set wins, which is
-        // the case of a file written by a newer version and read back by this one
-        if (wasOn && migrated.LOG_LEVEL === undefined) migrated.LOG_LEVEL = "debug";
+        // A LOG_LEVEL already set wins, which is the case of a file written by a
+        // newer version and read back by this one
+        if (migrated.LOG_LEVEL === undefined) migrated.LOG_LEVEL = wasOn ? "debug" : "normal";
     }
 
     return migrated;

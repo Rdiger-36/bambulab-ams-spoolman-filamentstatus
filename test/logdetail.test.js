@@ -209,12 +209,15 @@ test("a stored DEBUG switch becomes the debug level", () => {
     assert.equal("DEBUG" in migrateStored({ DEBUG: true }, 1), false);
 });
 
-test("a stored DEBUG of false does not make the file own the level", () => {
-    // false was the default, and writing "normal" would turn a setting the user
-    // never saved into one the settings file owns from then on
+test("a stored DEBUG of false is carried over as the normal level", () => {
+    // It has to be written, not dropped. A value in that file is one the user
+    // saved, and the file beats the environment variable: found on a real
+    // installation whose .env said DEBUG=true while the file said false, where
+    // dropping it left LOG_LEVEL unowned, let the variable seed it on the next
+    // start, and turned debug logging back on against an explicit decision.
     const migrated = migrateStored({ DEBUG: false }, 1);
     assert.equal("DEBUG" in migrated, false);
-    assert.equal(migrated.LOG_LEVEL, undefined);
+    assert.equal(migrated.LOG_LEVEL, "normal");
 });
 
 test("a level already stored wins over the old switch", () => {
