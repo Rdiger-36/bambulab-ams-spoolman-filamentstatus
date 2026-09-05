@@ -8,7 +8,7 @@ import { processData, extractComparableTrayData, hasTrayDataChanged, extractAmsE
 import { externalSpoolUnits } from "../src/mqtt.js";
 import { decodePrintMapping, orderedAmsSlots, printStageName, isPreparingStage } from "../src/gcode.js";
 import { slotFingerprint } from "../src/mappings.js";
-import { convertAMSandSlot, EXTERNAL_SLOT } from "../src/utils.js";
+import { convertAMSandSlot } from "../src/utils.js";
 
 /**
  * Every report under test/fixtures/reports through the pure half of the
@@ -41,14 +41,6 @@ const KNOWN_GAPS = {
         "slot labels are unique within the report":
             "same cause: every slot of unit 16 is labelled Z",
     },
-    "h2d-external-active": {
-        "slot labels are unique within the report":
-            "a dual nozzle printer carries two external holders, vir_slot 254 and 255, and both are labelled External",
-    },
-    "p1p-no-ams": {
-        "the stage is named or is no stage at all":
-            "a P1 reports stg_cur 255 outside a print, where an X1 and a P2S report -1",
-    },
 };
 
 const fixtures = fs.readdirSync(REPORTS_DIR)
@@ -69,7 +61,7 @@ const unitsOf = fixture => {
 };
 
 /** The label of one slot, the way the service addresses it. */
-const labelOf = (unit, slot) => unit.id === "255" ? EXTERNAL_SLOT : convertAMSandSlot(unit.id, slot.id);
+const labelOf = (unit, slot) => convertAMSandSlot(unit.id, slot.id);
 
 /** Every slot label the report can be addressed by. */
 const labelsOf = fixture => unitsOf(fixture).flatMap(unit => unit.tray.map(slot => labelOf(unit, slot)));
@@ -121,6 +113,15 @@ forEachFixture("every slot has a label this service can address", fixture => {
 forEachFixture("slot labels are unique within the report", fixture => {
     const labels = labelsOf(fixture);
     assert.deepEqual([...new Set(labels)], labels);
+});
+
+test("h2d-external-active: both holders are slots of their own", () => {
+    const fixture = fixtures.find(entry => entry.name === "h2d-external-active");
+    const labels = labelsOf(fixture);
+    assert.ok(labels.includes("External"), labels.join(", "));
+    assert.ok(labels.includes("External-2"), labels.join(", "));
+    // print.mapping names the first holder as 0xFF00
+    assert.deepEqual(decodePrintMapping(printOf(fixture).mapping), ["External"]);
 });
 
 forEachFixture("what print.mapping names is a slot the report carries", (fixture, print) => {

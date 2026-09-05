@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { convertAMSandSlot, EXTERNAL_SLOT } from "../src/utils.js";
+import { convertAMSandSlot, EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT } from "../src/utils.js";
 
 test("a unit's slots are labelled the way the printer counts them", () => {
     // MQTT counts a unit's slots from 0, the printer's display and Bambu Studio
@@ -22,6 +22,9 @@ test("the single slot units carry no slot number", () => {
     assert.equal(convertAMSandSlot(128, 0), "HT-A");
     assert.equal(convertAMSandSlot(135, 0), "HT-H");
     assert.equal(convertAMSandSlot(255, 0), EXTERNAL_SLOT);
+    // The second holder of a dual nozzle printer, unit 254 in its report
+    assert.equal(convertAMSandSlot(254, 0), SECOND_EXTERNAL_SLOT);
+    assert.equal(convertAMSandSlot("254", "254"), SECOND_EXTERNAL_SLOT);
 });
 
 test("a unit outside the known ranges is marked as unaddressable", () => {

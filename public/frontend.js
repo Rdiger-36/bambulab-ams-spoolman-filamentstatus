@@ -1,6 +1,7 @@
 import {
     ACTIVE_PRINT_STATES,
     EXTERNAL_SLOT,
+    SECOND_EXTERNAL_SLOT,
     SLOT_OPTIONS,
     allToday,
     correctRemainInt,
@@ -2026,12 +2027,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 1000);
     }
 
-    // Slots that stand alone rather than filling a four slot AMS unit. The
+    // Slots that stand alone rather than filling a four slot AMS unit. An
     // external spool holder reports one spool and gets a table of its own, like
     // an AMS HT unit, because it belongs to no four slot unit and would
-    // otherwise break their grouping.
+    // otherwise break their grouping. A dual nozzle printer has two of them.
     function isSingleSlotUnit(amsId) {
-        return amsId === EXTERNAL_SLOT || amsId.startsWith("HT-");
+        return amsId === EXTERNAL_SLOT || amsId === SECOND_EXTERNAL_SLOT || amsId.startsWith("HT-");
     }
 
     function gcodeStateBadge(state) {

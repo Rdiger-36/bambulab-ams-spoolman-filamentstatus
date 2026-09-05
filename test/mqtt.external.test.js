@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { externalSpoolUnits, releaseVanishedSlots } from "../src/mqtt.js";
 import { processData, slotIsOccupied } from "../src/ams.js";
-import { convertAMSandSlot, EXTERNAL_SLOT } from "../src/utils.js";
+import { convertAMSandSlot, EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT } from "../src/utils.js";
 
 // The external spool holder as a P2S reports it, copied from a live report. It
 // is field for field a chipless AMS tray, which is why it is handed to the same
@@ -89,6 +89,30 @@ test("the colour of an empty holder is not evidence of a spool", () => {
     // put an invisible swatch on a row for a spool that was not there.
     assert.deepEqual(emptyVirSlot.cols, ["FFFFFF00"]);
     assert.deepEqual(externalSpoolUnits({ vir_slot: [{ ...emptyVirSlot, cols: ["FFFFFF00"] }] }), []);
+});
+
+test("a dual nozzle printer's two holders are two units with two labels", () => {
+    // As the H2D, H2C and X2D reports in test/fixtures/reports carry them:
+    // vir_slot holds two entries, 254 for the second extruder and 255 for the
+    // first. Both under one unit would have made two slots with one label and
+    // one mappings.json key.
+    const second = { ...virSlot, id: "254", tray_type: "TPU", tray_info_idx: "GFU00" };
+    const units = externalSpoolUnits({ vir_slot: [second, virSlot] });
+
+    assert.deepEqual(units.map(unit => unit.id), ["255", "254"]);
+    assert.deepEqual(units.map(unit => convertAMSandSlot(unit.id, unit.tray[0].id)), [EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT]);
+    assert.equal(units[1].tray[0].tray_type, "TPU");
+});
+
+test("only the loaded holder of the two yields a unit", () => {
+    const units = externalSpoolUnits({ vir_slot: [{ ...emptyVirSlot, id: "254" }, virSlot] });
+    assert.deepEqual(units.map(unit => unit.id), ["255"]);
+});
+
+test("a holder with an id this service has no label for is dropped", () => {
+    // Nothing observed reports one. Labelling it "Z" would have let it be
+    // assigned under a key shared with every other unknown unit.
+    assert.deepEqual(externalSpoolUnits({ vir_slot: [{ ...virSlot, id: "253" }] }), []);
 });
 
 test("a holder is one filament, never part of a four slot unit", () => {

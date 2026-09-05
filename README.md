@@ -73,7 +73,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 
 Up to 12 AMS on one printer: max. 4 AMS Standard / 2 Pro plus 8 AMS HT.
 
-The external spool holder counts as one more slot, named `External`, on a printer that reports it. It carries no RFID chip, so it is assigned to a Spoolman spool by hand like any 3rd party spool, and it is not read in [legacy mode](docs/legacy-mode.md), where the weight comes from the chip.
+The external spool holder counts as one more slot, named `External`, on a printer that reports it, and a dual nozzle printer gets `External-2` for its second holder. It carries no RFID chip, so it is assigned to a Spoolman spool by hand like any 3rd party spool, and it is not read in [legacy mode](docs/legacy-mode.md), where the weight comes from the chip.
 
 x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supported-architectures) says which device falls under which.
 

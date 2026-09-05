@@ -49,9 +49,9 @@ From then on the slot is linked and the consumption of every print is booked ont
 |--------------|----------------------|--------------|---------------------|
 | `A1` – `A4` | first AMS, slot 1 – 4 | `B1` – `B4` | second AMS, slot 1 – 4 |
 | `HT-A` | first AMS HT | `HT-B` | second AMS HT |
-| `External` | external spool holder | | |
+| `External` | external spool holder | `External-2` | second holder of a dual nozzle printer |
 
-Continues up to `D4` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT. The external spool holder is reported outside the AMS block and has no slot number of its own, so it is one slot named `External`.
+Continues up to `D4` for the normal AMS (max. 4 per printer) and up to `HT-H` for all connected AMS HT. The external spool holder is reported outside the AMS block and has no slot number of its own, so it is one slot named `External`. A dual nozzle printer (H2C, H2D, X2D) has two holders: `External` feeds the first extruder and `External-2` the second.
 
 ## Archiving empty spools
 

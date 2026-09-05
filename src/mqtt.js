@@ -5,7 +5,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -403,17 +403,26 @@ export function printResultCleared(printer) {
  * colour put an invisible swatch on a row for a spool that was not there.
  *
  * @param {object} print - `data.print` from an MQTT report
- * @returns {object[]} zero or one unit, shaped like an entry of `print.ams.ams`
+ * @returns {object[]} one unit per loaded holder, shaped like entries of `print.ams.ams`
  */
 export function externalSpoolUnits(print) {
     const reported = Array.isArray(print?.vir_slot)
         ? print.vir_slot
         : (print?.vt_tray ? [print.vt_tray] : []);
 
-    const loaded = reported.filter(tray => tray && (tray.tray_type || tray.tray_info_idx));
-
-    if (!loaded.length) return [];
-    return [{ id: String(EXTERNAL_SPOOL_ID), tray: loaded }];
+    // One unit per holder, not one unit carrying every holder as a tray: a
+    // dual nozzle printer reports two entries, 254 and 255, and they are two
+    // slots with two labels and two assignments. The unit id is the entry's
+    // own, which is what `convertAMSandSlot()` turns into the label, and the
+    // one every printer has comes first so the dashboard lists it first.
+    // An entry with an id this service does not know is dropped rather than
+    // labelled "Z": nothing observed reports one, and a third holder would
+    // need a label of its own before it could be assigned anything.
+    return reported
+        .filter(tray => tray && (tray.tray_type || tray.tray_info_idx))
+        .filter(tray => externalSlotLabel(tray.id) !== null)
+        .sort((a, b) => Number(b.id) - Number(a.id))
+        .map(tray => ({ id: String(tray.id), tray: [tray] }));
 }
 
 /**

@@ -2,7 +2,7 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
-import { EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
+import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
 import { debug, trace } from "./logger.js";
 import { normColor } from "../public/shared.js";
 
@@ -288,7 +288,10 @@ export function orderedAmsSlots(amsIds) {
     const fourSlotUnits = attached.flatMap(unit => [1, 2, 3, 4].map(slot => `${unit}${slot}`));
 
     const highTemperature = ids.filter(id => /^HT-[A-H]$/.test(id)).sort();
-    const external = ids.includes(EXTERNAL_SLOT) ? [EXTERNAL_SLOT] : [];
+    // 255 before 254, which is the order the printer numbers them in and the
+    // order of the extruders they feed. Not measured against a slice file,
+    // like the HT, and covered by the same refusal in slotConfirmsSlice.
+    const external = [EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT].filter(id => ids.includes(id));
 
     return [...fourSlotUnits, ...highTemperature, ...external];
 }
@@ -619,13 +622,22 @@ function describeFtpsError(err) {
  * These names are not published by Bambu Lab in a form this project can carry.
  * The table is the one the community has settled on, and it is treated as a
  * lead rather than a fact: an unknown number is shown as the number, so a
- * firmware that adds a stage says "Stage 54" instead of a wrong name or an
+ * firmware that adds a stage says "Stage 78" instead of a wrong name or an
  * empty field. A P2S was seen announcing stages 51 and 54 for an ordinary
- * plate, so the gaps are real and not hypothetical.
+ * plate before either was in the table, so the gaps are real and not
+ * hypothetical.
+ *
+ * 36 to 77 follow the codes ha-bambulab carries in its const.py, which is the
+ * fullest list around; the wording is this project's. Most of them belong to
+ * one printer family, the laser and cutter stages of the H2 series and the
+ * hotend swap of the X2D, so a P2S never shows them, but a printer that does
+ * report one says what it is doing rather than a number.
  *
  * -1 is what the printer reports when it is in no stage at all, which is every
  * report outside a print and most reports during one: the stage is only set
- * while something other than plain printing is going on.
+ * while something other than plain printing is going on. A P1 says the same
+ * thing as 255, seen in the P1P report of test/fixtures/reports, and 0 is the
+ * printer laying down filament.
  */
 const PRINT_STAGES = {
     1:  "Auto bed levelling",
@@ -663,12 +675,55 @@ const PRINT_STAGES = {
     33: "Paused, cutter error",
     34: "Paused, first layer error",
     35: "Paused, nozzle clog",
-    // The two a P2S announces on an ordinary plate, which is why they were the
-    // ones showing up as a bare number. Named from the machine rather than from
-    // a published table: 36 to 50 stay unnamed and fall back to "Stage <n>".
+    36: "Checking absolute accuracy before calibration",
+    37: "Calibrating absolute accuracy",
+    38: "Checking absolute accuracy after calibration",
+    39: "Calibrating nozzle offset",
+    40: "Levelling bed at high temperature",
+    41: "Checking quick release",
+    42: "Checking door and cover",
+    43: "Calibrating laser",
+    44: "Checking platform",
+    45: "Checking bird's eye camera position",
+    46: "Calibrating bird's eye camera",
+    47: "Levelling bed, phase 1",
+    48: "Levelling bed, phase 2",
+    49: "Heating chamber",
+    50: "Cooling heatbed",
+    // 51 and 54 are the two a P2S announces on an ordinary plate, which is
+    // why they were the ones showing up as a bare number before the rest of
+    // the range was named.
     51: "Printing calibration lines",
+    52: "Checking material",
+    53: "Calibrating live view camera",
     54: "Heating heatbed to target",
+    55: "Checking material position",
+    56: "Calibrating cutter model offset",
+    57: "Measuring surface",
+    58: "Thermal preconditioning",
+    59: "Homing blade holder",
+    60: "Calibrating camera offset",
+    61: "Calibrating blade holder position",
+    62: "Testing hotend pick and place",
+    63: "Waiting for chamber temperature to equalise",
+    64: "Preparing hotend",
+    65: "Calibrating nozzle clump detection",
+    66: "Purifying chamber air",
+    67: "Measuring rotary attachment",
+    68: "Moving toolhead above purge chute",
+    69: "Cooling nozzle",
+    70: "Moving toolhead to centre of heatbed",
+    71: "Fitting active arc",
+    72: "Detecting hotend type",
+    73: "Detecting build plate alignment",
+    74: "Detecting foreign object on heatbed surface",
+    75: "Detecting foreign object under heatbed",
+    76: "Pre-extruding before printing",
+    77: "Preparing AMS",
 };
+
+/** What a P1 reports for no stage at all, where the other printers report -1. */
+const NO_STAGE_P1 = 255;
 
 /**
  * The stage of a running print as text, or null when the printer is in none.
@@ -682,7 +737,7 @@ export function printStageName(code) {
     // print, so naming it would put "RUNNING" and "Printing" side by side for
     // almost the entire job. -1 is the same answer from the other end, no stage
     // at all, which is what it reports outside a print.
-    if (code == null || code <= 0) return null;
+    if (code == null || code <= 0 || code === NO_STAGE_P1) return null;
     return PRINT_STAGES[code] ?? `Stage ${code}`;
 }
 
@@ -702,6 +757,10 @@ export function isPreparingStage(code) {
     // 51 and 54 belong here for the same reason as the rest: the printer is
     // busy with something that comes before the model. The calibration lines
     // are laid down next to the plate, not on it, and a bed still coming up to
-    // temperature has not started either.
-    return [1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 24, 25, 51, 54].includes(Number(code));
+    // temperature has not started either. 36 to 77 are checks, calibrations
+    // and heating of the same kind, except the two that cool something down,
+    // 50 and 69, which sit at the end of a job like 29 does.
+    const number = Number(code);
+    if (number >= 36 && number <= 77) return number !== 50 && number !== 69;
+    return [1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 24, 25].includes(number);
 }
