@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.14 has to be folded in here as well, or regenerate the
+Every dev build after dev.15 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -105,6 +105,7 @@ Version 1.3.0
       - The layer counter no longer runs past the end of the print. A 26 layer plate showed "Layer 27 / 26" and 104% on its last layer, because the sliced file reports the highest layer index while the printer reports the layer count once it has finished, and one was added to both
       - A printer reconnects after a network drop even while Spoolman is still unreachable. The monitor loop is the only thing that reconnects MQTT, and it idled for as long as Spoolman was down, which made a printer connection hostage to an unrelated service. Nothing is written to Spoolman by keeping the connection up: the message handler refuses to process a report while Spoolman is down, and always did
       - The Spoolman health check says why it failed. No route to the host, a refused connection, a timeout and an answer that is not JSON are four different problems with four different answers, and all four used to read as "unreachable"
+      - The external spool holder no longer shows and vanishes on a P1S (issue #131). The printer sends delta reports that carry the AMS block and leave the holder out, and each of those was read as an empty holder. A report that does not mention the holder now means nothing changed, and only a report that carries it replaces what the last one said
       - A P1 outside a print no longer shows "Stage 255". It reports 255 where an X1 and a P2S report -1, and both read as no stage at all
       - Two print stages are named instead of shown as a number: 51 is the calibration lines and 54 is the heatbed coming up to temperature, both amber because neither has started the plate. Everything else nothing has named still falls back to its number
    - Development:

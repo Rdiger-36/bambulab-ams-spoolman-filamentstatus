@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.15
    - Fixes:
       - The external spool holder no longer shows and vanishes on a P1S (issue #131). The printer sends delta reports that carry the AMS block and leave vt_tray out, and each of those was read as an empty holder: the External slot was released and its Spoolman location cleared, and the next full report created it again. Read off the raw MQTT trace of the reporter's P1S: 167 delta reports with the AMS block and no vt_tray against 27 full reports that all carried it, and not one report with the key present but empty
          - A report that does not mention the holder now means nothing changed, and only a report that carries the key, an empty holder included, replaces what the last one said. The memory starts empty on every connection, so a holder emptied while nobody was listening is corrected by the first full report
