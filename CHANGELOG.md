@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.14
    - Fixes:
       - A dual nozzle printer's second external spool holder is a slot of its own, "External-2". An H2C, H2D or X2D reports two holders, and both were labelled "External", so two loaded holders were two slots under one label, one assignment key and one Spoolman location. "External" keeps its meaning and feeds the first extruder, so nothing moves for a printer with one holder
          - Read off the H2D and H2C reports in test/fixtures/reports rather than measured on a machine: the second extruder names its current slot as unit 254, and the printer's own print.mapping names the first holder as unit 255. Which holder sits on which side is not in the report, which is why the label is numbered and not sided

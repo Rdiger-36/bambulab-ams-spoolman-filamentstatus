@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.13 has to be folded in here as well, or regenerate the
+Every dev build after dev.14 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -45,9 +45,10 @@ Version 1.3.0
          - Anonymised replaces the last octet of every IP address, everything after the first five characters of a serial number, everything after the first four characters of the RFID tag of a spool, the Spoolman host name, and it shortens the data and log paths. Enough of a serial or a tag survives to see that two lines are about the same printer or the same spool, and too little to identify either
          - What a slot reports when it has no chip, "N/A" or an all zero uuid, is not a tag and stays as it is: it is the answer to half the questions a report about a 3rd party spool is asking
          - The Web UI password, the API keys and the printer access codes are in no variant of the archive, anonymised or not
+         - The download asks which logs to include, the server log and each printer separately, and the log detail dialog of a printer exports that printer's log and raw MQTT trace on their own. The configuration files are in every archive, and info.json says which logs were asked for. A script gets the same choice through the scope query of /api/diagnostics/download
       - Clicking the filament name of a slot opens a dialog with everything the printer and Spoolman hold about it; remaining weight, lot number and comment can be corrected there
       - A spool that runs empty is archived in Spoolman on its own, off by default, with a threshold in grams
-      - The external spool holder is shown as a slot of its own and can be assigned
+      - The external spool holder is shown as a slot of its own and can be assigned. A dual nozzle printer (H2C, H2D, X2D) gets a second one, "External-2", for the holder that feeds its second extruder
          - It is a slot and not an AMS, so nothing is called an AMS slot any more where the holder can be meant: the two settings that carry the update interval and the location, the dashboard, and the dialogs of a slot. Two log lines change with it, "No new AMS Data or changes in Spoolman found ..." and "Spool successfully created for AMS Slot => ...", both of which now say "slot". A script that greps the log for either has to be adjusted
       - Multi colour filaments are read, drawn and created with all of their colours
       - The Spoolman location of a spool follows the AMS slot it sits in, and is cleared when it leaves
@@ -80,7 +81,8 @@ Version 1.3.0
       - The card returns to idle on its own once a print has been over for "Clear print result after", ten minutes by default, 0 to keep it until it is cleared by hand. Next to the booking label is a Clear button carrying the countdown, which does it now; the summary stays reachable as "Last print" until the next print starts
       - The card says more about a running print: when it started, how long it has been going, when it is expected to end, and a badge naming what the printer is busy with when it is not laying down filament, amber while it is getting ready
          - The printer reports no start time of its own, so it is measured here and left out rather than invented after a restart mid print. The time left is stated at the precision the printer has, "~ 3 min" or "~ 6 Days 4 hours 30 min", and a paused print shows what it still needs instead of an end time that would move for as long as the pause lasts
-         - Stage names are the ones the community has settled on rather than a published table, so a code nobody has a name for is shown as its number
+         - Stage names are the ones the community has settled on rather than a published table, so a code nobody has a name for is shown as its number. Stages 1 to 77 are named, the upper range following the codes ha-bambulab carries: the laser, cutter and camera calibrations of the H2 series, the hotend swap of the X2D, the chamber and heatbed steps and "Preparing AMS"
+      - A print error is named, not only numbered: "Printer error 50348044: The task was canceled." The sentences are Bambu Lab's own, fetched by scripts/fetch-print-errors.js from the lookup Bambu Studio uses and shipped as src/data/print-errors.json, 964 codes, so nothing is fetched at runtime. A code the catalogue does not know stays the bare number
    - Fixes:
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it
@@ -103,6 +105,7 @@ Version 1.3.0
       - The layer counter no longer runs past the end of the print. A 26 layer plate showed "Layer 27 / 26" and 104% on its last layer, because the sliced file reports the highest layer index while the printer reports the layer count once it has finished, and one was added to both
       - A printer reconnects after a network drop even while Spoolman is still unreachable. The monitor loop is the only thing that reconnects MQTT, and it idled for as long as Spoolman was down, which made a printer connection hostage to an unrelated service. Nothing is written to Spoolman by keeping the connection up: the message handler refuses to process a report while Spoolman is down, and always did
       - The Spoolman health check says why it failed. No route to the host, a refused connection, a timeout and an answer that is not JSON are four different problems with four different answers, and all four used to read as "unreachable"
+      - A P1 outside a print no longer shows "Stage 255". It reports 255 where an X1 and a P2S report -1, and both read as no stage at all
       - Two print stages are named instead of shown as a number: 51 is the calibration lines and 54 is the heatbed coming up to temperature, both amber because neither has started the plate. Everything else nothing has named still falls back to its number
    - Development:
       - Node 22, and the README is rebuilt around G-code tracking with new screenshots
@@ -111,7 +114,8 @@ Version 1.3.0
       - src/passwords.js, src/auth.js, src/security.js and src/apikeys.js hold the hashing, the session, the request guard and the keys, each covered by its own test file. No variant of the diagnostics bundle carries the password hash or the key file
       - printers/mappings.json carries a schemaVersion beside its assignments, so a flat file written before the slot renumbering is read as version 0, renumbered once and written back
       - extractAmsEnvironment() in src/ams.js is the one reading of the per-unit environment fields, covered against the four unit shapes that have been observed
-      - New test server under scripts/test-server: a mock printer and a mock Spoolman, started with one command
+      - New test server under scripts/test-server: a mock printer and a mock Spoolman, started with one command. It publishes any of the twelve real printer reports under test/fixtures/reports with "--report <name>"
+      - Twelve real printer reports, copied from the mock data of ha-bambulab under its MIT notice in THIRD_PARTY_NOTICES.md: A1 with AMS Lite, X1C with three AMS and an AMS HT, the dual nozzle H2C, H2D and X2D, P1P without AMS, A2L and P2S. test/reports.test.js runs every one through the ingest pipeline with invariants, and what they found that is not handled yet is listed there as todo: the A2L reports its AMS as unit 16, which no slot label range knows, so the README lists it as untested
       - The test suite runs on node:test and covers public/ for the first time
       - The release notes of every version carry the merged pull requests grouped by the label they were given, configured in .github/release.yml, with the breaking ones first. The release body opens with that list and ends with the changelog section, rather than burying the list under sixty lines of prose
 
