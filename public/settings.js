@@ -313,12 +313,34 @@ async function loadUpdate() {
         ${update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noopener">Release notes</a>` : ""}`;
 }
 
-/** Asks whether the bundle should be anonymised, then downloads it. */
-function downloadDiagnostics() {
+/**
+ * Asks whether the bundle should be anonymised and which logs it carries,
+ * then downloads it.
+ *
+ * The configuration files are in every bundle; the choice is over the logs,
+ * because a raw MQTT trace runs at about 22 MB an hour per printer and an
+ * installation with several printers usually has a question about one.
+ */
+async function downloadDiagnostics() {
+    let list = [];
+    try {
+        list = await fetchJson("./api/printers");
+    } catch {
+        // Without the list the dialog offers the server log alone, and the
+        // bundle still carries every configuration file
+    }
+
     downloadWithExportMode({
         url: "./api/diagnostics/download",
         title: "Download diagnostics",
-        what: "One archive with the logs, the settings, the printer list and the facts about this installation. This is what a bug report needs.",
+        what: "One archive with the settings, the printer list, the assignments and the facts about this installation, plus the logs ticked below, each with its rotated history and its raw MQTT trace where one was captured. This is what a bug report needs.",
+        choices: {
+            heading: "Logs to include",
+            options: [
+                { id: "server", label: "Server log" },
+                ...list.map(printer => ({ id: printer.id, label: `${escapeHtml(printer.name)} (${escapeHtml(printer.id)})` })),
+            ],
+        },
     });
 }
 
@@ -621,6 +643,30 @@ function openLogDetailDialog(printer) {
             .map(key => renderField(logDetailField(key)))
             .join("");
 
+    // The export sits under the settings of the printer whose logs they are,
+    // because "which log do I attach" is asked in the same breath as "how
+    // much does it log". Both files by default; the trace is the one worth
+    // leaving out, at about 22 MB an hour.
+    const exportRow = printer
+        ? `<div class="set-field" id="ld-export">
+               <label class="set-field-label"><span>Export</span></label>
+               <div class="set-checks set-export-row">
+                   <label class="set-check">
+                       <input type="checkbox" value="log" checked>
+                       <span>Printer log</span>
+                   </label>
+                   <label class="set-check">
+                       <input type="checkbox" value="trace" checked>
+                       <span>Raw MQTT trace</span>
+                   </label>
+                   <button class="btn btn-small" type="button" id="ld-export-download">Download...</button>
+               </div>
+               <small>One archive with the ticked logs of this printer, each with its rotated history, plus the
+                      settings, the printer list and the assignments. The trace is only in it where one was
+                      captured. The download asks whether to anonymise.</small>
+           </div>`
+        : "";
+
     document.getElementById("logdetail-dialog-body").innerHTML = `
         <div class="set-form">
             ${inheritRow}
@@ -655,16 +701,33 @@ function openLogDetailDialog(printer) {
                 <small>${escapeHtml(traceField.description)}</small>
             </div>
             ${budget}
+            ${exportRow}
         </div>`;
 
     // Everything below the inherit switch is only editable once this printer has
     // been taken off the global settings, so the dialog shows what applies
-    // rather than an empty form.
+    // rather than an empty form. The export is not a setting and stays live.
     const applyInherit = () => {
         const off = document.getElementById("ld-inherit")?.checked;
-        document.querySelectorAll("#logdetail-dialog-body input:not(#ld-inherit)")
+        document.querySelectorAll("#logdetail-dialog-body input:not(#ld-inherit):not(#ld-export input)")
             .forEach(input => { input.disabled = !!off; });
     };
+
+    const exportButton = document.getElementById("ld-export-download");
+    if (exportButton) {
+        const ticked = () => [...document.querySelectorAll("#ld-export input:checked")].map(input => input.value);
+        const guard = () => { exportButton.disabled = ticked().length === 0; };
+        document.querySelectorAll("#ld-export input").forEach(input => input.addEventListener("change", guard));
+        guard();
+        exportButton.onclick = () => {
+            const scope = ticked().map(file => `${printer.id}/${file}`).join(",");
+            downloadWithExportMode({
+                url: `./api/diagnostics/download?scope=${encodeURIComponent(scope)}`,
+                title: `Export the logs of ${printer.name}`,
+                what: `The ticked logs of ${escapeHtml(printer.name)}, each with its rotated history, plus the settings, the printer list and the assignments.`,
+            });
+        };
+    }
     document.getElementById("ld-inherit")?.addEventListener("change", applyInherit);
     applyInherit();
 

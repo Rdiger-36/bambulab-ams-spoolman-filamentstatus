@@ -1518,6 +1518,14 @@ body.logs-page .log-page { width: 100%; }
 
 .set-check input { accent-color: var(--accent); }
 
+/* The export row of a printer's log detail dialog: the two ticks and the
+   button that acts on them share a line, centred on each other, with the
+   button set apart from the ticks it reads. */
+.set-export-row { align-items: center; }
+/* "dialog button" gives every button in a dialog a top margin, meant for the
+   Save and Cancel row; this one sits on a line with the ticks. */
+.set-export-row .btn { margin: 0 0 0 6px; }
+
 /* One column: the dialog is narrow and every field here carries a description
    long enough that two columns would break the reading order. */
 #logdetail-dialog { min-width: min(520px, 92vw); }

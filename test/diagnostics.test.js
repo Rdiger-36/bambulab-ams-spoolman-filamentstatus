@@ -64,6 +64,73 @@ test("the anonymised bundle carries the logs and the configuration", async () =>
     assert.equal(JSON.parse(files["info.json"]).anonymized, true);
 });
 
+test("the bundle carries every log unless the scope says which", async () => {
+    const files = await bundle();
+    assert.ok(Object.keys(files).some(name => name.startsWith("logs/server.")));
+    assert.ok(Object.keys(files).some(name => name.startsWith("logs/01P00XXXXXXXXXX.")));
+    assert.deepEqual(JSON.parse(files["info.json"]).logs, { server: true, printers: [{ id: "01P00XXXXXXXXXX", log: true, trace: true }] });
+});
+
+test("a scope of the server log alone leaves the printer logs out", async () => {
+    const files = await bundle("?scope=server");
+    assert.ok(Object.keys(files).some(name => name.startsWith("logs/server.")));
+    assert.ok(!Object.keys(files).some(name => name.startsWith("logs/01P00")));
+    // The configuration is in every bundle, the choice is over the logs alone
+    assert.ok(files["settings.json"]);
+    assert.ok(files["printers.json"]);
+    assert.deepEqual(JSON.parse(files["info.json"]).logs, { server: true, printers: [] });
+});
+
+test("a scope of one printer leaves the server log out and keeps the serial masked", async () => {
+    const files = await bundle("?scope=01P00A000000042");
+    assert.ok(!Object.keys(files).some(name => name.startsWith("logs/server.")));
+    assert.ok(Object.keys(files).some(name => name.startsWith("logs/01P00XXXXXXXXXX.")));
+    assert.deepEqual(JSON.parse(files["info.json"]).logs, { server: false, printers: [{ id: "01P00XXXXXXXXXX", log: true, trace: true }] });
+
+    const full = await bundle("?scope=01P00A000000042&anonymize=false");
+    assert.deepEqual(JSON.parse(full["info.json"]).logs, { server: false, printers: [{ id: "01P00A000000042", log: true, trace: true }] });
+});
+
+test("a printer's two logs can be asked for one at a time", async () => {
+    fs.writeFileSync(path.join(process.env.LOG_DIR, "01P00A000000042.mqtt.log"), "{\"print\":{}}\n");
+
+    const both = await bundle("?scope=01P00A000000042");
+    assert.ok(both["logs/01P00XXXXXXXXXX.current.log"]);
+    assert.ok(both["logs/01P00XXXXXXXXXX.mqtt.current.log"]);
+
+    const logOnly = await bundle("?scope=01P00A000000042/log");
+    assert.ok(logOnly["logs/01P00XXXXXXXXXX.current.log"]);
+    assert.ok(!logOnly["logs/01P00XXXXXXXXXX.mqtt.current.log"]);
+    assert.deepEqual(JSON.parse(logOnly["info.json"]).logs.printers, [{ id: "01P00XXXXXXXXXX", log: true, trace: false }]);
+
+    const traceOnly = await bundle("?scope=01P00A000000042/trace");
+    assert.ok(!traceOnly["logs/01P00XXXXXXXXXX.current.log"]);
+    assert.ok(traceOnly["logs/01P00XXXXXXXXXX.mqtt.current.log"]);
+    assert.deepEqual(JSON.parse(traceOnly["info.json"]).logs.printers, [{ id: "01P00XXXXXXXXXX", log: false, trace: true }]);
+});
+
+test("a scope naming nothing or an unknown printer is refused", async () => {
+    for (const query of ["?scope=", "?scope=,", "?scope=server,01P00B000000099", "?scope=01P00A000000042/video"]) {
+        const response = await fetch(`${app.url}/api/diagnostics/download${query}`, { headers: UI_HEADERS });
+        assert.equal(response.status, 400, query);
+    }
+});
+
+test("the scope parser answers in the installation's order", async () => {
+    const { parseDiagnosticsScope } = await import("../src/diagnostics.js");
+    const known = [{ id: "A" }, { id: "B" }];
+
+    const both = id => ({ id, log: true, trace: true });
+    assert.deepEqual(parseDiagnosticsScope(undefined, known), { server: true, printers: [both("A"), both("B")] });
+    assert.deepEqual(parseDiagnosticsScope("B, server ,A", known), { server: true, printers: [both("A"), both("B")] });
+    assert.deepEqual(parseDiagnosticsScope("B", known), { server: false, printers: [both("B")] });
+    assert.deepEqual(parseDiagnosticsScope("B/trace", known), { server: false, printers: [{ id: "B", log: false, trace: true }] });
+    assert.deepEqual(parseDiagnosticsScope("B/trace,B/log", known), { server: false, printers: [both("B")] });
+    assert.equal(typeof parseDiagnosticsScope("", known).error, "string");
+    assert.equal(typeof parseDiagnosticsScope("C", known).error, "string");
+    assert.equal(typeof parseDiagnosticsScope("A/video", known).error, "string");
+});
+
 test("nothing identifying survives the anonymised bundle", async () => {
     const files = await bundle();
     const everything = Object.values(files).join("\n");

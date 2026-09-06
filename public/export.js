@@ -29,6 +29,7 @@ function ensureExportDialog() {
     dialog.innerHTML = `
         <h3 id="export-mode-title"></h3>
         <div id="export-mode-text"></div>
+        <div id="export-mode-choices"></div>
         <div class="button-container">
             <button class="btn" type="button" id="export-mode-cancel">Cancel</button>
             <button class="btn" type="button" id="export-mode-full">Full</button>
@@ -39,14 +40,17 @@ function ensureExportDialog() {
 }
 
 /**
- * Asks whether an export should be anonymised or complete.
+ * Asks whether an export should be anonymised or complete, and which parts it
+ * should carry where there is a choice.
  *
  * @param {object} options
  * @param {string} options.title - headline of the dialog
  * @param {string} options.what - one sentence naming what is about to be downloaded
- * @returns {Promise<"anonymized"|"full"|null>} null when the user cancelled
+ * @param {{heading: string, options: {id: string, label: string}[]}} [options.choices] - parts to
+ *   tick on or off, all ticked to begin with; without it the dialog asks the mode alone
+ * @returns {Promise<{mode: "anonymized"|"full", selected: string[]}|null>} null when the user cancelled
  */
-function askExportMode({ title, what }) {
+function askExportMode({ title, what, choices = null }) {
     const dialog = ensureExportDialog();
 
     document.getElementById("export-mode-title").textContent = title;
@@ -57,17 +61,40 @@ function askExportMode({ title, what }) {
         <p><strong>Full</strong> hands out everything as it is on disk, except the access codes, which are
            never part of an export. Share it only with someone you trust.</p>`;
 
+    const choiceBox = document.getElementById("export-mode-choices");
+    choiceBox.innerHTML = choices ? `
+        <p><strong>${choices.heading}</strong></p>
+        <div class="set-checks">
+            ${choices.options.map(option => `
+                <label class="set-check">
+                    <input type="checkbox" value="${option.id}" checked>
+                    <span>${option.label}</span>
+                </label>`).join("")}
+        </div>` : "";
+
     const anon = document.getElementById("export-mode-anon");
     const full = document.getElementById("export-mode-full");
     const cancel = document.getElementById("export-mode-cancel");
+    const boxes = [...choiceBox.querySelectorAll("input[type=checkbox]")];
+    const selected = () => boxes.filter(box => box.checked).map(box => box.value);
+
+    // Nothing ticked is nothing to download, so the two buttons that would
+    // start one wait until something is
+    const guard = () => {
+        const none = choices && !selected().length;
+        anon.disabled = none;
+        full.disabled = none;
+    };
+    for (const box of boxes) box.addEventListener("change", guard);
+    guard();
 
     return new Promise(resolve => {
-        const finish = result => {
+        const finish = mode => {
             anon.onclick = null;
             full.onclick = null;
             cancel.onclick = null;
             dialog.close();
-            resolve(result);
+            resolve(mode ? { mode, selected: selected() } : null);
         };
 
         anon.onclick = () => finish("anonymized");
@@ -86,13 +113,17 @@ function askExportMode({ title, what }) {
  *
  * @param {object} options - passed to askExportMode, plus the URL
  * @param {string} options.url - the download endpoint, without the query
+ * @param {string} [options.scopeParam] - the query parameter the ticked choices go into, comma separated
  * @returns {Promise<boolean>} whether a download was started
  */
-async function downloadWithExportMode({ url, title, what }) {
-    const mode = await askExportMode({ title, what });
-    if (!mode) return false;
+async function downloadWithExportMode({ url, title, what, choices = null, scopeParam = "scope" }) {
+    const answer = await askExportMode({ title, what, choices });
+    if (!answer) return false;
+
+    const params = new URLSearchParams({ anonymize: String(answer.mode === "anonymized") });
+    if (choices) params.set(scopeParam, answer.selected.join(","));
 
     const separator = url.includes("?") ? "&" : "?";
-    window.location.href = `${url}${separator}anonymize=${mode === "anonymized"}`;
+    window.location.href = `${url}${separator}${params}`;
     return true;
 }
