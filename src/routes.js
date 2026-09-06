@@ -8,7 +8,7 @@ import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
-import { addPrinter, updatePrinter, updatePrinterLogDetail, removePrinter, syncPrinterIntervals } from "./printers.js";
+import { addPrinter, updatePrinter, updatePrinterLogDetail, removePrinter, syncPrinterIntervals, traceEnabled } from "./printers.js";
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { attemptLogin, authEnabled, clearSessionCookie, isAuthenticated, issueSession, setSessionCookie } from "./auth.js";
@@ -363,7 +363,12 @@ export function registerRoutes(app, printers) {
     // Reads across the rotated files, so the requested number of lines is
     // delivered even right after a rotation, when the current file is nearly
     // empty. "files" is what the download button needs to know whether it is
-    // handing out one file or an archive.
+    // handing out one file or an archive; "bytes" is the size of all of them
+    // together, which is what the page says next to it, because a trace grows
+    // by about 22 MB an hour and the number is what tells a reader whether a
+    // download is worth waiting for. "capturing" says whether the trace is
+    // being written at all: a trace that stays empty because the capture is
+    // off reads the same as one that is empty because nothing arrived yet.
     app.get("/api/logs/:printerId", async (req, res) => {
         try {
             const limitRaw = req.query.limit;
@@ -372,10 +377,12 @@ export function registerRoutes(app, printers) {
             const wantsTrace = req.query.stream === "mqtt";
 
             let filePath = serverLogFilePath;
+            let capturing = true;
             if (req.params.printerId !== "server") {
                 const printer = resolvePrinter(req.params.printerId, printers, res);
                 if (!printer) return;
                 filePath = wantsTrace ? printer.traceFilePath : printer.logFilePath;
+                if (wantsTrace) capturing = traceEnabled(printer);
             } else if (wantsTrace) {
                 // There is no server trace: the raw messages belong to a printer
                 return res.status(404).json({ error: "The server has no MQTT trace" });
@@ -385,7 +392,14 @@ export function registerRoutes(app, printers) {
                 tailLogLines(filePath, limit),
                 logFileSet(filePath),
             ]);
-            return res.json({ logs: lines, files: files.length });
+            const sizes = await Promise.all(files.map(file => fsp.stat(file).then(info => info.size, () => 0)));
+            return res.json({
+                logs: lines,
+                files: files.length,
+                bytes: sizes.reduce((sum, size) => sum + size, 0),
+                file: path.basename(filePath),
+                capturing,
+            });
         } catch (err) {
             console.error("Server", serverLogFilePath, `Failed to read log file: ${err.message}`);
             return res.status(500).json({ error: "Failed to read log file" });

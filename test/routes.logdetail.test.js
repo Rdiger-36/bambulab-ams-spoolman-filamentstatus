@@ -97,6 +97,11 @@ test("the trace is read through the log route as a stream of its own", async () 
     assert.match(trace.body.logs[0], /gcode_state/);
     // The two files are separate: the ordinary log never carries the reports
     assert.equal(log.body.logs.some(line => line.includes("gcode_state")), false);
+    // The page says the file name, and whether the capture is writing it: this
+    // printer has no override and the global switch is off in the tests
+    assert.equal(trace.body.file, `${SERIAL}.mqtt.log`);
+    assert.equal(trace.body.capturing, false);
+    assert.equal(log.body.capturing, true);
 });
 
 test("the server has no trace to ask for", async () => {

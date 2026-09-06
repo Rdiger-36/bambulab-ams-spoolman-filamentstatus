@@ -20,15 +20,36 @@
         <div id="menu-root"></div>
     </div>
     <div class="page-width log-page">
-        <!-- The name is a picker over the logs, filled by menu.js -->
-        <h3 class="log-title">Backend Logs for: <span id="headline"></span></h3>
+        <!-- Every choice the page offers is on this one line: which log, which
+             of a printer's two files, and the download. The picker used to be
+             the headline itself, and the trace a group inside its menu, which
+             the first person who needed one did not find. -->
+        <div class="log-toolbar">
+            <div class="log-field">
+                <span class="log-field-label">Source</span>
+                <!-- The picker over the logs, filled by menu.js -->
+                <span id="headline"></span>
+            </div>
+            <!-- Hidden for the server log, which has no trace -->
+            <div class="log-field" id="log-stream-field" hidden>
+                <span class="log-field-label">Show</span>
+                <div class="log-switch" id="log-stream" role="group" aria-label="Which file of the printer">
+                    <button type="button" data-stream="log" aria-pressed="true">Log</button>
+                    <button type="button" data-stream="mqtt" aria-pressed="false">Raw MQTT trace</button>
+                </div>
+            </div>
+            <div class="log-toolbar-end">
+                <span class="log-meta" id="log-meta"></span>
+                <button id="download-logs" class="log-button">Download...</button>
+            </div>
+        </div>
+        <h3 class="log-title">
+            <span id="log-title"></span>
+            <!-- The file on disk, which is what a bug report ends up naming -->
+            <span class="log-file" id="log-file"></span>
+        </h3>
         <div id="log-box">
             <div id="logs"></div>
-        </div>
-        <!-- Under the log it downloads, and always on screen: the box above it
-             takes the height that is left rather than growing past it -->
-        <div class="log-actions">
-            <button id="download-logs" class="log-button">Download this log file...</button>
         </div>
     </div>
     <script src="menu.js"></script>
