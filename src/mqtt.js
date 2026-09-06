@@ -5,7 +5,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -423,17 +423,29 @@ export function externalSpoolUnits(print) {
 
     // One unit per holder, not one unit carrying every holder as a tray: a
     // dual nozzle printer reports two entries, 254 and 255, and they are two
-    // slots with two labels and two assignments. The unit id is the entry's
-    // own, which is what `convertAMSandSlot()` turns into the label, and the
-    // one every printer has comes first so the dashboard lists it first.
-    // An entry with an id this service does not know is dropped rather than
-    // labelled "Z": nothing observed reports one, and a third holder would
-    // need a label of its own before it could be assigned anything.
-    return reported
-        .filter(tray => tray && (tray.tray_type || tray.tray_info_idx))
-        .filter(tray => externalSlotLabel(tray.id) !== null)
-        .sort((a, b) => Number(b.id) - Number(a.id))
-        .map(tray => ({ id: String(tray.id), tray: [tray] }));
+    // slots with two labels and two assignments. An entry with an id this
+    // service does not know is dropped rather than labelled "Z": nothing
+    // observed reports one, and a third holder would need a label of its own
+    // before it could be assigned anything.
+    const holders = reported
+        .filter(tray => tray && externalSlotLabel(tray.id) !== null)
+        .sort((a, b) => Number(b.id) - Number(a.id));
+
+    // The id says which holder only where there are two. A printer with one
+    // holder reports it under either number depending on the model: 255 on a
+    // P2S and an X1C, 254 on an A1, a P1P and a P1S, all in
+    // test/fixtures/reports and in the P1S log of issue 131. So one reported
+    // holder is "External" whatever its id, and only a second reported entry
+    // takes the second label. Reported, not loaded: a dual nozzle printer
+    // lists both entries whether or not a spool sits on them, so an empty
+    // first holder does not move the second one's label.
+    const unitIds = holders.length >= 2
+        ? holders.map(tray => String(tray.id))
+        : holders.map(() => String(EXTERNAL_SPOOL_ID));
+
+    return holders
+        .map((tray, index) => ({ id: unitIds[index], tray: [tray] }))
+        .filter(unit => unit.tray[0].tray_type || unit.tray[0].tray_info_idx);
 }
 
 /**
