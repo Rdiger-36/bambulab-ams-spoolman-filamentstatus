@@ -133,7 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function describe(answer) {
     const parts = [];
-    if (stream === "mqtt" && answer.capturing === false) parts.push("capture is off");
+    if (stream === "mqtt" && answer.capturing === false) parts.push("capture disabled");
     if (stream === "mqtt") parts.push(`last ${limitFor(stream)} reports`);
     parts.push(`refreshes every ${REFRESH_MS / 1000} s`);
 
@@ -147,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
   /** What the box says when there is nothing to show, and why. */
   function emptyMessage(answer) {
     if (stream === "mqtt" && answer.capturing === false) {
-      return "The capture is off for this printer. It is switched on in the log detail dialog, \"Log\" in the Printers card of the Settings page.";
+      return "Raw MQTT capture is disabled for this printer. Enable it under Settings › Printers › Log.";
     }
     if (stream === "mqtt") return "No reports captured yet.";
     return "No log files found.";

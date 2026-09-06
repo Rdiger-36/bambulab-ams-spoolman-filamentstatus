@@ -2,7 +2,7 @@
 Unreleased
    - Features:
       - The Logs page carries its choices as controls, not as a heading. The name in "Backend Logs for: P1S" was the picker over the logs, and a printer's raw MQTT trace was a group inside its menu; the first person who needed a trace did not find it there (issue #131). A toolbar above the log now holds a Source button over the server and the printers, a Log / Raw MQTT trace switch for a printer, and the download
-         - Next to the download the page says what it shows and what the download would carry: "refreshes every 5 s · 2 files, 1.3 MB" for a log, "last 50 reports · refreshes every 5 s · 3 files, 41 MB" for a trace, and "capture is off" in front when the trace of that printer is not being written. The box then says where the capture is switched on rather than showing an empty file
+         - Next to the download the page says what it shows and what the download would carry: "refreshes every 5 s · 2 files, 1.3 MB" for a log, "last 50 reports · refreshes every 5 s · 3 files, 41 MB" for a trace, and "capture disabled" in front when the trace of that printer is not being written. The box then says where to enable it rather than showing an empty file
          - The switch changes the file in place and writes it into the address, so a link to a trace still opens the trace, and picking another printer while reading traces opens that printer's trace. The title under the toolbar names the file on disk, which is what a bug report ends up naming
          - The log endpoint answers the size of the file set, the file name and whether the capture is on, next to the line count it already answered
 
