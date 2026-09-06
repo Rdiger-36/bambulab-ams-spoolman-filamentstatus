@@ -108,6 +108,13 @@ export const SETTINGS_SCHEMA = {
         label: "Legacy mode",
         description: "Derives the spool weight from the AMS RFID remain percentage instead of tracking consumption from the sliced G-code. Disables 3rd party spool support and manual assignments.",
     },
+    AUTO_ASSIGN_THIRD_PARTY: {
+        type: "boolean",
+        default: false,
+        group: "tracking",
+        label: "Assign 3rd party spools automatically",
+        description: "Links a spool without an RFID tag to the one Spoolman spool of the same material and colour, when there is exactly one that carries no tag and sits in no other slot. With two or more the slot waits for a choice in the Web UI. Nothing is created in Spoolman.",
+    },
     PRINT_RESET_MINUTES: {
         type: "integer",
         default: 10,

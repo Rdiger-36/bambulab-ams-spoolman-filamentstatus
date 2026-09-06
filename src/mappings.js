@@ -252,11 +252,38 @@ export function getMapping(printerId, amsId, slot = null) {
 }
 
 /**
+ * The ids of every spool assigned to a slot other than the one given, across
+ * all printers.
+ *
+ * What the automatic assignment has to leave alone: a spool that already sits
+ * in another slot by assignment is not the one in this slot, however well its
+ * colour fits.
+ *
+ * @param {string} printerId - printer serial of the slot being asked about
+ * @param {string} amsId - its slot label
+ * @returns {Set<number>}
+ */
+export function spoolIdsAssignedElsewhere(printerId, amsId) {
+    const taken = new Set();
+    for (const [printer, slots] of Object.entries(load())) {
+        for (const [slot, entry] of Object.entries(slots || {})) {
+            if (printer === printerId && slot === amsId) continue;
+            if (Number.isInteger(entry?.spoolId)) taken.add(entry.spoolId);
+        }
+    }
+    return taken;
+}
+
+/**
  * Assigns a Spoolman spool to an AMS slot and persists it immediately.
  *
  * The slot is stored as a fingerprint alongside the id, so a later lookup can
  * tell whether the same physical spool is still in place. Passing no slot
  * stores an assignment that is never invalidated by a filament change.
+ *
+ * An assignment the service made on its own is marked as such, so the
+ * dashboard can say it was not the user's choice and the user can tell a
+ * spool they picked from one the colour match picked.
  *
  * @param {string} printerId - printer serial
  * @param {string} amsId - slot label, e.g. "A1"
@@ -264,12 +291,13 @@ export function getMapping(printerId, amsId, slot = null) {
  * @param {object|null} slot - the AMS slot the assignment was made from
  * @returns {object} the stored entry
  */
-export function setMapping(printerId, amsId, spoolId, slot = null) {
+export function setMapping(printerId, amsId, spoolId, slot = null, { automatic = false } = {}) {
     const all = load();
     (all[printerId] ||= {})[amsId] = {
         spoolId: Number(spoolId),
         fingerprint: slot ? slotFingerprint(slot) : null,
         updatedAt: new Date().toISOString(),
+        ...(automatic ? { automatic: true } : {}),
     };
     persist();
     return all[printerId][amsId];

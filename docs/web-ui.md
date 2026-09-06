@@ -16,9 +16,10 @@ Under each spool stands whether its consumption can be booked:
 | :---- | :---- |
 | **tag-linked** | An original Bambu Lab spool, linked through the `tag` extra field. Booked automatically |
 | **assigned** | Linked by hand to a Spoolman spool. Booked onto that spool |
+| **auto-assigned** | Linked by the service to the only spool in Spoolman of that material and colour without a tag, see below. Booked onto that spool. **Unassign** and pick another if it is the wrong one |
 | **not tracked** | Nothing links this slot to Spoolman yet. The print runs, but nothing is booked. Use **Assign Spool** |
 
-**Assign Spool** offers both ways of linking a slot the printer cannot identify. Picking a spool that already exists in Spoolman, which opens on the ones that fit the slot, same material and closest colour first, and searches the rest by name, vendor, material or location:
+**Assign Spool** offers both ways of linking a slot the printer cannot identify. Picking a spool that already exists in Spoolman, which opens on the ones that fit the slot, same material and closest colour first, and searches the rest by name, vendor, material or location. When exactly one spool without a tag has the slot's material and colours, it is picked in advance, so the usual case is one click:
 
 ![Assign an existing spool](images/assign-dialog.png)
 
@@ -27,6 +28,8 @@ A spool of another material can still be chosen, and says so: the material a slo
 Or creating filament and spool right there, filled in from the SpoolmanDB catalogue: manufacturer, then material, then the filament itself. Picking one fills in the colours, the density, the diameter, the temperatures and both weights, none of which a chipless spool reports. A filament that already exists in your Spoolman is used instead of created a second time, and multi colour spools are entered as what they are, one row per colour plus the direction they run in:
 
 ![Create a spool for a slot](images/assign-dialog-create.png)
+
+A spool without an RFID tag reports nothing that identifies it: only the material and the colours set for its slot, and the preset somebody chose for it on the printer or in the slicer. Two spools of the same material and colour cannot be told apart by anything the printer sends, so the service never guesses between them. **Assign 3rd party spools automatically** in the settings, off by default, makes it act where there is nothing to guess: exactly one spool in Spoolman of that material and those colours, without a tag, and assigned to no other slot. That spool is assigned as soon as the slot is read, marked **auto-assigned**, and the assignment is dropped like a manual one when a different filament shows up in the slot. With two such spools the slot stays **not tracked** until one is picked. Nothing is ever created in Spoolman by this.
 
 Clicking the filament name of a slot opens what Spoolman and the printer each hold about it. Remaining weight, lot number and comment are corrected in place, each behind a pencil in its row. The remaining weight stays read only while something else is about to write it, in legacy mode and while a print is running, and it cannot be set above what the spool can hold:
 

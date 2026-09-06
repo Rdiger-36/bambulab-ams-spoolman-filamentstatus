@@ -16,6 +16,7 @@ import {
     spoolWeightLimit,
 } from "./shared.js";
 import { bambuProfile, materialsAgree, slotMaterial, slotPreset } from "./materials.js";
+import { colorSetDistance, uniqueSpoolForSlot } from "./match.js";
 import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 
 let autoButton = null;
@@ -606,30 +607,6 @@ document.addEventListener("DOMContentLoaded", () => {
             .sort((a, b) => a.rank - b.rank || a.distance - b.distance || a.sp.id - b.sp.id);
     }
 
-    // How far two colour sets sit apart, 0 for the same colours and Infinity when
-    // one of them has no colour at all.
-    //
-    // Every colour is measured against the closest one on the other side, in both
-    // directions: taken one way only, a two colour spool would count as identical
-    // to a single colour one as soon as one of its colours matched.
-    function colorSetDistance(a, b) {
-        if (!a.length || !b.length) return Infinity;
-
-        const rgb = (color) => {
-            const hex = normColor(color).padEnd(6, "0");
-            return [0, 2, 4].map(at => parseInt(hex.slice(at, at + 2), 16) || 0);
-        };
-
-        const nearest = (color, set) => Math.min(...set.map(other => {
-            const [r1, g1, b1] = rgb(color);
-            const [r2, g2, b2] = rgb(other);
-            return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
-        }));
-
-        const distances = [...a.map(c => nearest(c, b)), ...b.map(c => nearest(c, a))];
-        return distances.reduce((total, one) => total + one, 0) / distances.length;
-    }
-
     // The name of a spool as the picker writes it, and what is known about it
     // besides the name. Two pieces rather than one string, so the second can
     // drop onto its own line when the row runs out of width, aligned under the
@@ -712,6 +689,14 @@ document.addEventListener("DOMContentLoaded", () => {
             .map(sp => sp.id));
 
         const ranked = rankSpoolsForSlot(spools, amsSpool.slot || {});
+        // The one spool that is this slot as far as the printer can tell: same
+        // material, the same colours, no tag, and not assigned to another slot
+        // on this printer. Picked in advance so the common case is one click;
+        // with two such spools the choice is left open.
+        const assignedElsewhere = new Set([...renderedSpools.values()]
+            .filter(other => other.amsId !== amsSpool.amsId && other.connectedViaMapping && other.existingSpool?.id)
+            .map(other => other.existingSpool.id));
+        const preselected = uniqueSpoolForSlot(amsSpool.slot || {}, spools, assignedElsewhere);
         // Only a spool of the right material is ever suggested. Suggesting the
         // closest colour out of an inventory that holds nothing fitting would put
         // an ABS spool at the top of a PLA slot.
@@ -761,7 +746,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Rerendered on every keystroke, so the selection has to be carried over
         // rather than read off the DOM that is about to be replaced.
-        let selectedId = null;
+        let selectedId = preselected?.id ?? null;
+        if (preselected) {
+            warning.className = "sp-note gc-muted";
+            warning.textContent = `Spool #${preselected.id} is preselected: it is the only spool in Spoolman of this material and colour without a tag.`;
+        }
 
         const render = () => {
             const term = search.value.trim().toLowerCase();
@@ -803,6 +792,7 @@ document.addEventListener("DOMContentLoaded", () => {
             actionButton.disabled = false;
 
             const spool = spools.find(sp => sp.id === selectedId);
+            warning.className = "sp-note gc-warn";
             warning.textContent = spool && mismatched.has(spool.id)
                 ? `The printer reports ${reported} in this slot, spool #${spool.id} is ${spool.filament?.material ?? "of another material"}. It can still be assigned, and this slot's consumption is then booked onto that spool.`
                 : "";
@@ -1654,7 +1644,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const swatch = isEmpty ? "" : bigSwatchHtml(colors, direction);
 
         const linkState = amsSpool.connectedViaMapping
-            ? `<span class="gc-ok">assigned by hand</span>`
+            ? `<span class="gc-ok">${amsSpool.assignedAutomatically ? "assigned automatically" : "assigned by hand"}</span>`
             : amsSpool.connectedViaTag
                 ? `<span class="gc-ok">linked by RFID tag</span>`
                 : `<span class="gc-warn">not linked</span>`;
@@ -1959,7 +1949,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Tag/booking status is G-code-consumption semantics, so only shown there.
         let booking = "";
         if (!isEmpty && ctx?.showBooking) {
-            if (amsSpool.connectedViaMapping) {
+            if (amsSpool.connectedViaMapping && amsSpool.assignedAutomatically) {
+                booking = ` · <span class="gc-ok" title="Assigned automatically: the only spool in Spoolman of this material and colour without a tag. Consumption is booked onto it. Unassign and pick another if it is the wrong one">● auto-assigned</span>`;
+            } else if (amsSpool.connectedViaMapping) {
                 booking = ` · <span class="gc-ok" title="Manually assigned to a Spoolman spool, consumption is booked onto it">● assigned</span>`;
             } else if (amsSpool.connectedViaTag) {
                 booking = ` · <span class="gc-ok" title="Physically connected via Spoolman extra.tag, consumption is booked automatically">● tag-linked</span>`;
