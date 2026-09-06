@@ -21,6 +21,7 @@ import {
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
+import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
     processData,
@@ -306,11 +307,14 @@ export async function handlePrintStateChange(printer, print) {
  * "0" rather than empty when nothing failed, which is why it is compared
  * against both.
  *
- * The numbers are not translated into Bambu's error catalogue here. That
- * catalogue is large, versioned per firmware and not published in a form this
- * project can carry, so the code is shown as the printer gave it and the user
- * can look it up. Saying "error 131074" is honest; inventing a description for
- * it is not.
+ * The number is kept and the catalogue's sentence is put behind it, see
+ * `printerrors.js`: "Printer error 50348044: The task was canceled." A code
+ * the catalogue does not know stays the bare number, which is honest where a
+ * guessed description would not be, and the number is what a bug report and
+ * Bambu's own lookup go by either way.
+ *
+ * `fail_reason` carries the same code as `print_error` when both are set,
+ * measured on a P2S, so the two are said once rather than twice.
  *
  * @param {object} print - the `print` object from the MQTT report
  * @returns {string|null} the error text, or null when there is none
@@ -320,10 +324,17 @@ export function printErrorText(print) {
     const reason = print?.fail_reason;
     const failed = reason && reason !== "0" && reason !== 0;
 
+    const describe = (label, value) => {
+        const sentence = describePrintError(value);
+        return sentence ? `${label} ${value}: ${sentence}` : `${label} ${value}`;
+    };
+
     if (!code && !failed) return null;
-    if (code && failed)   return `Printer error ${code}, fail reason ${reason}`;
-    if (code)             return `Printer error ${code}`;
-    return `Fail reason ${reason}`;
+    if (code && failed && String(reason) !== String(code)) {
+        return `${describe("Printer error", code)}, ${describe("fail reason", reason)}`;
+    }
+    if (code) return describe("Printer error", code);
+    return describe("Fail reason", reason);
 }
 
 /**
