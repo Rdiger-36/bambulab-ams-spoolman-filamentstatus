@@ -313,12 +313,34 @@ async function loadUpdate() {
         ${update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noopener">Release notes</a>` : ""}`;
 }
 
-/** Asks whether the bundle should be anonymised, then downloads it. */
-function downloadDiagnostics() {
+/**
+ * Asks whether the bundle should be anonymised and which logs it carries,
+ * then downloads it.
+ *
+ * The configuration files are in every bundle; the choice is over the logs,
+ * because a raw MQTT trace runs at about 22 MB an hour per printer and an
+ * installation with several printers usually has a question about one.
+ */
+async function downloadDiagnostics() {
+    let list = [];
+    try {
+        list = await fetchJson("./api/printers");
+    } catch {
+        // Without the list the dialog offers the server log alone, and the
+        // bundle still carries every configuration file
+    }
+
     downloadWithExportMode({
         url: "./api/diagnostics/download",
         title: "Download diagnostics",
-        what: "One archive with the logs, the settings, the printer list and the facts about this installation. This is what a bug report needs.",
+        what: "One archive with the settings, the printer list, the assignments and the facts about this installation, plus the logs ticked below, each with its rotated history and its raw MQTT trace where one was captured. This is what a bug report needs.",
+        choices: {
+            heading: "Logs to include",
+            options: [
+                { id: "server", label: "Server log" },
+                ...list.map(printer => ({ id: printer.id, label: `${escapeHtml(printer.name)} (${escapeHtml(printer.id)})` })),
+            ],
+        },
     });
 }
 

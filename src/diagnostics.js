@@ -103,6 +103,38 @@ export function knownValues() {
     };
 }
 
+/** The scope name of the server log in a `scope` query. */
+export const SERVER_SCOPE = "server";
+
+/**
+ * Which logs a bundle is asked to carry.
+ *
+ * The bundle carried every log of the installation, and with the raw MQTT
+ * trace at 22 MB an hour per printer that stopped being the right default for
+ * an installation with several printers where one of them is the question.
+ * The configuration files are small and are what a bug report needs first, so
+ * they are in every bundle; the choice is over the logs alone.
+ *
+ * @param {string|undefined} raw - the `scope` query: `server` and serial numbers, comma separated; absent means everything
+ * @param {object[]} known - the printers of this installation
+ * @returns {{server: boolean, printers: string[]}|{error: string}} what to include, or why the query is refused
+ */
+export function parseDiagnosticsScope(raw, known) {
+    if (raw === undefined) return { server: true, printers: known.map(printer => printer.id) };
+
+    const wanted = String(raw).split(",").map(part => part.trim()).filter(Boolean);
+    if (!wanted.length) return { error: "The scope names nothing to include" };
+
+    const unknown = wanted.filter(part => part !== SERVER_SCOPE && !known.some(printer => printer.id === part));
+    if (unknown.length) return { error: `Unknown printer in scope: ${unknown.join(", ")}` };
+
+    return {
+        server: wanted.includes(SERVER_SCOPE),
+        // In the installation's order, whatever order the query had
+        printers: known.map(printer => printer.id).filter(id => wanted.includes(id)),
+    };
+}
+
 /**
  * Builds the support bundle.
  *
@@ -111,9 +143,11 @@ export function knownValues() {
  *
  * @param {object} [options]
  * @param {boolean} [options.anonymize] - mask addresses, serials and paths
+ * @param {{server: boolean, printers: string[]}} [options.scope] - which logs to carry, from `parseDiagnosticsScope()`; everything when absent
  * @returns {Promise<{buffer: Buffer, filename: string}>}
  */
-export async function buildDiagnosticsBundle({ anonymize = true } = {}) {
+export async function buildDiagnosticsBundle({ anonymize = true, scope = null } = {}) {
+    const included = scope ?? parseDiagnosticsScope(undefined, printers);
     const zip = new AdmZip();
     const known = knownValues();
     // Even the full bundle loses the access codes. The service does not write
@@ -124,6 +158,13 @@ export async function buildDiagnosticsBundle({ anonymize = true } = {}) {
     const info = {
         generated: new Date().toISOString(),
         anonymized: anonymize,
+        // Which logs this bundle was asked to carry, so an archive without a
+        // printer's log reads as a choice rather than as a printer that
+        // never logged. The serials are masked like the file names are.
+        logs: {
+            server: included.server,
+            printers: included.printers.map(id => (anonymize ? maskSerial(id) : id)),
+        },
         ...systemInfo(anonymize),
     };
     zip.addFile("info.json", Buffer.from(JSON.stringify(info, null, 4)));
@@ -155,9 +196,9 @@ export async function buildDiagnosticsBundle({ anonymize = true } = {}) {
         zip.addFile("mappings.json", Buffer.from(JSON.stringify({ schemaVersion, printers: exported }, null, 4)));
     }
 
-    await addLogFiles(zip, "logs/server", serverLogFilePath, mask);
+    if (included.server) await addLogFiles(zip, "logs/server", serverLogFilePath, mask);
 
-    for (const printer of printers) {
+    for (const printer of printers.filter(entry => included.printers.includes(entry.id))) {
         const base = `logs/${anonymize ? maskSerial(printer.id) : printer.id}`;
         await addLogFiles(zip, base, printer.logFilePath, mask);
         // The raw MQTT trace, when one was captured. Masked like every other

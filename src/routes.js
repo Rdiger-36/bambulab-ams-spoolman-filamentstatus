@@ -5,7 +5,7 @@ import path from "path";
 import { serverLogFilePath, version } from "./config.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
 import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
-import { buildDiagnosticsBundle, knownValues, systemInfo } from "./diagnostics.js";
+import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
 import { addPrinter, updatePrinter, updatePrinterLogDetail, removePrinter, syncPrinterIntervals } from "./printers.js";
@@ -1170,11 +1170,16 @@ export function registerRoutes(app, printers) {
     // questions to collect. Anonymised unless the caller says otherwise, and the
     // access code is replaced in both variants; see anonymize.js.
     app.get("/api/diagnostics/download", async (req, res) => {
+        const scope = parseDiagnosticsScope(req.query.scope, printers);
+        if (scope.error) return res.status(400).json({ ok: false, error: scope.error });
+
         try {
             const anonymize = req.query.anonymize !== "false";
-            const { buffer, filename } = await buildDiagnosticsBundle({ anonymize });
+            const { buffer, filename } = await buildDiagnosticsBundle({ anonymize, scope });
 
-            console.log("Server", serverLogFilePath, `[Service] Diagnostics bundle created (${anonymize ? "anonymised" : "full"}, ${Math.round(buffer.length / 1024)} KB)`);
+            const carried = [scope.server ? "server log" : null, scope.printers.length ? `${scope.printers.length} printer log(s)` : null]
+                .filter(Boolean).join(" and ") || "no logs";
+            console.log("Server", serverLogFilePath, `[Service] Diagnostics bundle created (${anonymize ? "anonymised" : "full"}, ${Math.round(buffer.length / 1024)} KB, ${carried})`);
 
             res.setHeader("Content-Type", "application/zip");
             res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
