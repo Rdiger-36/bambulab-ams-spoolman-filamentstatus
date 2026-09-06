@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.15 has to be folded in here as well, or regenerate the
+Every dev build after dev.16 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -58,6 +58,7 @@ Version 1.3.0
          - Errors and the ordinary progress lines are never filtered by area, so switching one off cannot hide a failure
       - Every MQTT message a printer sends can be captured into logs/<serial>.mqtt.log, one line per message, with its own size and history budget. It is what the printer really sent rather than what this service made of it, and it is every kind of message, not only the status reports this service reads: a P2S print produced seven, of which one is looked at anywhere. Measured on a P2S it runs at about 22 MB an hour, idle and under a print alike. Readable and downloadable like any other log and part of the diagnostics archive
       - Every printer can have log settings of its own, "Log" next to it in the Printers card, so one machine can run at trace with its capture going while the rest of the service stays quiet
+      - The Logs page carries its choices as controls: a Source button over the server and the printers, a Log / Raw MQTT trace switch for a printer, and the download next to a line saying what the page shows and what the download would carry, "last 50 reports · refreshes every 5 s · 3 files, 41 MB" for a trace and "capture disabled" in front when that printer's trace is not being written. The title names the file on disk, which is what a bug report ends up naming
       - The print path says what it is doing at debug level, which it never did before: the FTPS fetch names the paths it looks for and which one answered, and the booking names every state change, which consumption sum ran and on what layer, where the slots came from, and what the matcher answered per filament
       - A clean print does not inherit the failure of the one before it. A P2S keeps repeating its previous complaint for a report or two after a new print has started, so the summary of a FINISH could say the print had failed
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
