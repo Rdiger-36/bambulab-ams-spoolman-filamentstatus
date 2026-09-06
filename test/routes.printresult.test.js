@@ -237,9 +237,15 @@ test("an error the printer names late still reaches the summary", async () => {
     assert.equal(printErrorText({}), null);
 
     // The code a hand stopped print reported, measured on a P2S.
-    assert.equal(printErrorText({ print_error: 50348044 }), "Printer error 50348044");
+    // A code the catalogue knows carries its sentence, one it does not stays
+    // the bare number
+    assert.equal(printErrorText({ print_error: 50348044 }), "Printer error 50348044: The task was canceled.");
     assert.equal(printErrorText({ print_error: 0, fail_reason: "3" }), "Fail reason 3");
     assert.equal(printErrorText({ print_error: 7, fail_reason: "3" }), "Printer error 7, fail reason 3");
+    // Both fields carrying the same code, which is how a P2S reports a stop,
+    // are said once
+    assert.equal(printErrorText({ print_error: 50348044, fail_reason: "50348044" }), "Printer error 50348044: The task was canceled.");
+    assert.equal(printErrorText({ print_error: 0, fail_reason: "50348044" }), "Fail reason 50348044: The task was canceled.");
 
 });
 
@@ -267,11 +273,11 @@ test("the summary takes an error that arrives after the print has ended", async 
     assert.equal(target.lastPrintSummary.printError, null);
 
     await handlePrintStateChange(target, { gcode_state: "FAILED", print_error: 50348044 });
-    assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
+    assert.equal(target.lastPrintSummary.printError, "Printer error 50348044: The task was canceled.");
 
     // And the report after that, which has it back at 0, must not erase it.
     await handlePrintStateChange(target, { gcode_state: "FAILED", print_error: 0, fail_reason: "0" });
-    assert.equal(target.lastPrintSummary.printError, "Printer error 50348044");
+    assert.equal(target.lastPrintSummary.printError, "Printer error 50348044: The task was canceled.");
 });
 
 test("the previous print's complaint does not follow the next one into its summary", async () => {
@@ -337,10 +343,10 @@ test("a real failure inside the print is still collected once the old one cleare
 
     // Something goes wrong in this print, and it happens to be the same code
     await handlePrintStateChange(target, { gcode_state: "RUNNING", fail_reason: "50348044", print_error: 0 });
-    assert.equal(target.lastPrintError, "Fail reason 50348044");
+    assert.equal(target.lastPrintError, "Fail reason 50348044: The task was canceled.");
 
     await handlePrintStateChange(target, { gcode_state: "FAILED", fail_reason: "0", print_error: 0 });
-    assert.equal(target.lastPrintSummary.printError, "Fail reason 50348044");
+    assert.equal(target.lastPrintSummary.printError, "Fail reason 50348044: The task was canceled.");
 });
 
 // ---------------------------------------------------------------------------
