@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { processData, extractComparableTrayData, hasTrayDataChanged, extractAmsEnvironment, slotIsOccupied } from "../src/ams.js";
-import { externalSpoolUnits } from "../src/mqtt.js";
+import { externalSpoolUnits, rememberedExternalSpoolUnits } from "../src/mqtt.js";
 import { decodePrintMapping, orderedAmsSlots, printStageName, isPreparingStage } from "../src/gcode.js";
 import { slotFingerprint } from "../src/mappings.js";
 import { convertAMSandSlot } from "../src/utils.js";
@@ -123,6 +123,21 @@ test("a single holder is External on every printer that reports one", () => {
         assert.ok(labels.includes("External"), `${name}: ${labels.join(", ")}`);
         assert.ok(!labels.includes("External-2"), `${name}: ${labels.join(", ")}`);
     }
+});
+
+test("p1s: the holder survives the delta reports the printer really sends", () => {
+    // The full report and one of the deltas of issue 131, in the order the
+    // printer sends them: the delta carries the AMS block and no vt_tray.
+    const fixture = fixtures.find(entry => entry.name === "p1s");
+    const [delta] = fixture.report.deltas;
+    assert.ok("ams" in delta && !("vt_tray" in delta) && !("vir_slot" in delta));
+
+    const printer = { lastExternalUnits: null };
+    const full = rememberedExternalSpoolUnits(printer, printOf(fixture));
+    assert.deepEqual(full.map(unit => convertAMSandSlot(unit.id, unit.tray[0].id)), ["External"]);
+    assert.deepEqual(rememberedExternalSpoolUnits(printer, delta), full);
+    // Read on its own, the delta is what emptied the slot before the fix
+    assert.deepEqual(externalSpoolUnits(delta), []);
 });
 
 test("h2d-external-active: both holders are slots of their own", () => {

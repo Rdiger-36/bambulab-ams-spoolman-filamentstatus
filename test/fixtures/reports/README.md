@@ -12,7 +12,13 @@ of 2026-09-01. Serial numbers were already redacted there. ha-bambulab is
 published under the MIT License, Copyright (c) 2023 ha-bambulab contributors;
 the full text is in [THIRD_PARTY_NOTICES.md](../../../THIRD_PARTY_NOTICES.md).
 
-Nothing in them is edited. The value of a fixture is that it is what the
+`p1s.json` is the exception: it is not from ha-bambulab but from the raw MQTT
+trace a user attached to issue #131, captured with 1.3.0-dev.13 on 2026-09-06.
+Serial numbers, RFID tags and the job name are masked in it, and next to the
+`pushall` it carries a `deltas` list with one of the delta reports the printer
+sends between two full ones, which is what that issue was about.
+
+Nothing else in them is edited. The value of a fixture is that it is what the
 printer really sent, and most of these printers are not on anybody's desk
 here: they answer questions the P2S this project is developed against cannot.
 
@@ -27,6 +33,7 @@ here: they answer questions the P2S this project is developed against cannot.
 | `h2s.json` | H2S | One AMS, one holder, `print.mapping` `[0]` |
 | `misc.json` | unknown | An AMS HT as the only unit, the holder as `vt_tray` 254 with a `GFL99` spool |
 | `p1p-no-ams.json` | P1P without AMS | Empty AMS block, `stg_cur` 255 on a FINISH, the holder as `vt_tray` 254 with a Sunlu preset (`GFSNL08`) |
+| `p1s.json` | P1S with a first generation AMS, from issue #131 | The holder as `vt_tray` with id 254 in the full report, and in `deltas` a report with the AMS block and no `vt_tray` at all, which read as an empty holder before the fix |
 | `p2s.json` | P2S | The reference printer of this project, one AMS, `print.mapping` `[3]` |
 | `x1c-multi-ams.json` | X1C | Three AMS plus one AMS HT, `ams_exist_bits` `"17"`, both `vt_tray` and `vir_slot`, `print.mapping` `[258]` |
 | `x2d.json` | X2D | One AMS, two holders, `print.mapping` `[65535, 1]` |
