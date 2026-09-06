@@ -323,13 +323,16 @@ function panelHeading(text) {
 }
 
 /**
- * The picker that lives in the headline of the page.
+ * The picker over the printers, in the headline of the dashboard and in the
+ * toolbar of the log viewer.
  *
- * The dashboard headline reads "Loaded Spools on Bambu P2S" and the
- * log viewer "Backend Logs for: Bambu P2S". Those names are the control: the
- * name a page already writes is the one thing that changes when you pick, so
- * the pick belongs there rather than in the navigation, where it would say the
- * same thing a second time.
+ * The dashboard headline reads "Loaded Spools on Bambu P2S", and that name is
+ * the control: the name the page already writes is the one thing that changes
+ * when you pick, so the pick belongs there rather than in the navigation,
+ * where it would say the same thing a second time. The log viewer sets the
+ * same control as a plain button in its toolbar, next to the switch between a
+ * printer's log and its trace, because there it is one of several choices and
+ * has to look like one.
  *
  * Both pages give it a mount point of their own, `#printer-name` and
  * `#headline`, and this fills whichever one is on the page.
@@ -362,16 +365,6 @@ function renderTitlePicker() {
 
     host.appendChild(button);
 
-    // The serial says which physical machine this is, which is what a log gets
-    // attached to a bug report for. Next to the name rather than inside the
-    // control, so the thing you click is the name alone.
-    if (onLogs && current.note) {
-        const note = document.createElement("span");
-        note.className = "title-note";
-        note.textContent = current.note;
-        host.appendChild(note);
-    }
-
     if (!openable) return;
 
     const panel = document.createElement("div");
@@ -389,7 +382,10 @@ function renderTitlePicker() {
             heading = entry.heading;
             panel.appendChild(panelHeading(heading));
         }
-        panel.appendChild(panelEntry(entry.label, entry.action, { current: entry.current }));
+        // The serial says which physical machine an entry is, which is what a
+        // log gets attached to a bug report for, and it tells two printers of
+        // the same name apart
+        panel.appendChild(panelEntry(entry.label, entry.action, { current: entry.current, note: entry.note ?? "" }));
     }
 
     host.appendChild(panel);
@@ -408,12 +404,13 @@ function printerChoices() {
 }
 
 /**
- * What the log viewer's picker offers: the server log, every printer log, and
- * the raw MQTT trace of every printer.
+ * What the log viewer's picker offers: the server log and every printer.
  *
- * The traces are a group of their own rather than a switch on the page. They
- * are a different file with a different content, and a picker that already
- * names every log is where a reader looks for one more.
+ * A printer's raw MQTT trace is not an entry here. It used to be, as a group
+ * under the printers, and the one person who needed a trace did not find it
+ * there. It is the switch next to this picker now, on the page, where a second
+ * file of the same printer reads as what it is. Picking another printer keeps
+ * the stream: whoever is reading traces wants the next printer's trace.
  */
 function logChoices() {
     const params = new URLSearchParams(window.location.search);
@@ -431,21 +428,8 @@ function logChoices() {
             label: printer.name,
             heading: "Printers",
             note: printer.id,
-            current: printer.id === openSerial && !openTrace,
-            action: () => openPrinterLog(printer),
-        });
-    }
-
-    for (const printer of menuPrinters) {
-        choices.push({
-            // Named apart from the log above it: once picked, this label is what
-            // the headline carries, and two entries reading the same would leave
-            // the page unable to say which of the two files it is showing
-            label: `${printer.name} (raw MQTT)`,
-            heading: "Raw MQTT traces",
-            note: printer.id,
-            current: printer.id === openSerial && openTrace,
-            action: () => openPrinterLog(printer, true),
+            current: printer.id === openSerial,
+            action: () => openPrinterLog(printer, openTrace),
         });
     }
 

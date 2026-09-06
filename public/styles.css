@@ -882,22 +882,134 @@ button {
   font-size: 14px;
 }
 
-.log-title {
-  text-align: center;
-  margin-bottom: 10px;
+/* ---- Log page toolbar ----
+   One line with every choice the page offers: the source, the switch between a
+   printer's log and its raw MQTT trace, and the download with a line that says
+   what it would carry. The picker used to be the headline and the trace an
+   entry inside its menu, and the first person who needed a trace did not find
+   it: a choice has to look like a control, not like a heading. */
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px 22px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
 }
 
-/* The download acts on the log and sits under it, in the middle, rather than in
-   the menu bar where it was a page action among navigation. */
-.log-actions {
+.log-field {
   display: flex;
-  justify-content: center;
-  margin-top: 12px;
+  align-items: center;
+  gap: 8px;
+}
+
+.log-field-label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+/* The size line and the download, on the right whatever wraps to the left. On
+   a phone the whole group takes a line of its own and the line pushes the
+   button to the edge, so the two stay apart. */
+.log-toolbar-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-left: auto;
+  flex: 1 1 auto;
+}
+
+.log-meta {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* In the toolbar the picker is one control among others, so it gets the frame
+   and the surface every other button here has instead of the dotted line the
+   dashboard headline uses, and its menu opens under its left edge. */
+.log-toolbar .title-pick {
+  background: var(--control-bg);
+  border-color: var(--border-control);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.88em;
+  font-weight: 400;
+  min-width: 150px;
+  justify-content: space-between;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.log-toolbar .title-pick > span { text-decoration-line: none; }
+.log-toolbar .title-pick.menu-caret::after { font-size: 1em; }
+.log-toolbar .title-pick-plain { padding: 5px 12px; cursor: default; }
+.log-toolbar .title-pick-plain:hover { background: var(--control-bg); }
+
+.log-toolbar .title-panel {
+  left: 0;
+  transform: none;
+}
+
+/* Two buttons welded into one control, the pressed one filled. Two states of
+   one thing rather than two actions, which is why it is not two buttons with
+   a gap between them. */
+.log-switch {
+  display: inline-flex;
+  border: 1px solid var(--border-control);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.log-switch button {
+  background: var(--control-bg);
+  color: var(--text);
+  border: none;
+  border-right: 1px solid var(--border-control);
+  padding: 6px 14px;
+  font-size: 0.88em;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.log-switch button:last-child { border-right: none; }
+.log-switch button:hover { background: var(--control-hover-bg); }
+
+.log-switch button[aria-pressed="true"] {
+  background: var(--accent-bg);
+  color: #fff;
+  cursor: default;
+}
+
+.log-switch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The name of what the box shows and the file it comes from. Left, under the
+   toolbar, because the toolbar is where the eye already is. */
+.log-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 0 0;
+}
+
+.log-file {
+  font-family: monospace;
+  font-size: 0.78em;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 /* The log page is a column the height of the window: the box takes what is left
-   after the bar, the headline and the button, so the button is on screen
-   whatever the log contains and however long the headline wraps. A fixed
+   after the bar, the toolbar and the title, so the whole box is on screen
+   whatever the log contains and however far the toolbar wraps. A fixed
    max-height had to guess all three. */
 body.logs-page {
   display: flex;
@@ -1208,15 +1320,6 @@ body.logs-page .log-page { width: 100%; }
 .title-pick-plain > span { text-decoration-line: none; }
 .title-pick-plain:hover { background: none; }
 
-/* The serial of the printer whose log this is. Next to the name rather than
-   inside it, so what you click is the name alone. */
-.title-note {
-  font-size: 0.72em;
-  font-weight: 400;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
 /* Centred under the headline it belongs to, rather than under its left edge. */
 .title-panel {
   left: 50%;
@@ -1336,6 +1439,15 @@ body.logs-page .log-page { width: 100%; }
 }
 
 .log-button:hover { background: var(--control-hover-bg); }
+
+/* Nothing to hand out yet: the button stays where it is, so the toolbar does
+   not jump, and says so by fading rather than by disappearing. */
+.log-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.log-button:disabled:hover { background: var(--control-bg); }
 
 
 

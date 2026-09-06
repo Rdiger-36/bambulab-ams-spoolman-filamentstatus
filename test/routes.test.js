@@ -169,6 +169,10 @@ test("the log endpoint reads across the rotated files", async () => {
     assert.equal(status, 200);
     assert.deepEqual(body.logs, ["older line", "current line"]);
     assert.equal(body.files, 2);
+    // The size covers the rotated file too, because the download does
+    assert.equal(body.bytes, "older line\n".length + "current line\n".length);
+    assert.equal(body.file, "server.log");
+    assert.equal(body.capturing, true);
 });
 
 test("the download is a zip once there is a history, and a log file before that", async () => {
