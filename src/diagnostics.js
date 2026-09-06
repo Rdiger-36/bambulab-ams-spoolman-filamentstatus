@@ -115,23 +115,45 @@ export const SERVER_SCOPE = "server";
  * The configuration files are small and are what a bug report needs first, so
  * they are in every bundle; the choice is over the logs alone.
  *
- * @param {string|undefined} raw - the `scope` query: `server` and serial numbers, comma separated; absent means everything
+ * A printer has two logs, its own and the raw MQTT trace, and the scope can
+ * name either: `<serial>/log`, `<serial>/trace`, or the bare `<serial>` for
+ * both. That is what the export at the bottom of a printer's log detail
+ * dialog uses, where the trace is the one file worth leaving out.
+ *
+ * @param {string|undefined} raw - the `scope` query, comma separated: `server`, serial numbers,
+ *   `<serial>/log` and `<serial>/trace`; absent means everything
  * @param {object[]} known - the printers of this installation
- * @returns {{server: boolean, printers: string[]}|{error: string}} what to include, or why the query is refused
+ * @returns {{server: boolean, printers: {id: string, log: boolean, trace: boolean}[]}|{error: string}}
+ *   what to include, or why the query is refused
  */
 export function parseDiagnosticsScope(raw, known) {
-    if (raw === undefined) return { server: true, printers: known.map(printer => printer.id) };
+    if (raw === undefined) {
+        return { server: true, printers: known.map(printer => ({ id: printer.id, log: true, trace: true })) };
+    }
 
     const wanted = String(raw).split(",").map(part => part.trim()).filter(Boolean);
     if (!wanted.length) return { error: "The scope names nothing to include" };
 
-    const unknown = wanted.filter(part => part !== SERVER_SCOPE && !known.some(printer => printer.id === part));
-    if (unknown.length) return { error: `Unknown printer in scope: ${unknown.join(", ")}` };
+    const byPrinter = new Map();
+    const unknown = [];
+    for (const part of wanted) {
+        if (part === SERVER_SCOPE) continue;
+        const [id, file] = part.split("/");
+        if (!known.some(printer => printer.id === id) || (file !== undefined && file !== "log" && file !== "trace")) {
+            unknown.push(part);
+            continue;
+        }
+        const entry = byPrinter.get(id) ?? { id, log: false, trace: false };
+        if (file === undefined || file === "log") entry.log = true;
+        if (file === undefined || file === "trace") entry.trace = true;
+        byPrinter.set(id, entry);
+    }
+    if (unknown.length) return { error: `Unknown printer or log in scope: ${unknown.join(", ")}` };
 
     return {
         server: wanted.includes(SERVER_SCOPE),
         // In the installation's order, whatever order the query had
-        printers: known.map(printer => printer.id).filter(id => wanted.includes(id)),
+        printers: known.filter(printer => byPrinter.has(printer.id)).map(printer => byPrinter.get(printer.id)),
     };
 }
 
@@ -163,7 +185,7 @@ export async function buildDiagnosticsBundle({ anonymize = true, scope = null } 
         // never logged. The serials are masked like the file names are.
         logs: {
             server: included.server,
-            printers: included.printers.map(id => (anonymize ? maskSerial(id) : id)),
+            printers: included.printers.map(entry => ({ ...entry, id: anonymize ? maskSerial(entry.id) : entry.id })),
         },
         ...systemInfo(anonymize),
     };
@@ -198,12 +220,14 @@ export async function buildDiagnosticsBundle({ anonymize = true, scope = null } 
 
     if (included.server) await addLogFiles(zip, "logs/server", serverLogFilePath, mask);
 
-    for (const printer of printers.filter(entry => included.printers.includes(entry.id))) {
+    for (const wanted of included.printers) {
+        const printer = printers.find(entry => entry.id === wanted.id);
+        if (!printer) continue;
         const base = `logs/${anonymize ? maskSerial(printer.id) : printer.id}`;
-        await addLogFiles(zip, base, printer.logFilePath, mask);
+        if (wanted.log) await addLogFiles(zip, base, printer.logFilePath, mask);
         // The raw MQTT trace, when one was captured. Masked like every other
         // file, and simply absent for a printer the trace was never on for.
-        await addLogFiles(zip, `${base}.mqtt`, printer.traceFilePath, mask);
+        if (wanted.trace) await addLogFiles(zip, `${base}.mqtt`, printer.traceFilePath, mask);
     }
 
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "_");

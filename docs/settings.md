@@ -12,7 +12,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | **Tracking** | Operation mode and [legacy mode](legacy-mode.md) |
 | **Synchronisation** | Slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
-| **Logging** | Log file size and how many rotated files are kept, for the server and per printer, plus **Log detail...**: the [log level, the areas and the raw MQTT capture](troubleshooting.md#how-much-gets-logged) |
+| **Logging** | Log file size and how many rotated files are kept, for the server and per printer, plus **Log detail...**: the [log level, the areas and the raw MQTT capture](troubleshooting.md#how-much-gets-logged). The same dialog per printer, **Log** in the Printers card, also [exports that printer's logs](troubleshooting.md#diagnostics-and-privacy) |
 | **Network access** | The Web UI password, the host names this service may be addressed under, and the API keys for callers that have no browser. All three are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
 | **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
 | **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |

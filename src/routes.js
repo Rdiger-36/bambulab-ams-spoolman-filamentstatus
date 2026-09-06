@@ -1177,8 +1177,10 @@ export function registerRoutes(app, printers) {
             const anonymize = req.query.anonymize !== "false";
             const { buffer, filename } = await buildDiagnosticsBundle({ anonymize, scope });
 
-            const carried = [scope.server ? "server log" : null, scope.printers.length ? `${scope.printers.length} printer log(s)` : null]
-                .filter(Boolean).join(" and ") || "no logs";
+            const carried = [
+                scope.server ? "server log" : null,
+                ...scope.printers.map(entry => `${entry.id}${entry.log && entry.trace ? "" : entry.log ? " log only" : " trace only"}`),
+            ].filter(Boolean).join(", ") || "no logs";
             console.log("Server", serverLogFilePath, `[Service] Diagnostics bundle created (${anonymize ? "anonymised" : "full"}, ${Math.round(buffer.length / 1024)} KB, ${carried})`);
 
             res.setHeader("Content-Type", "application/zip");

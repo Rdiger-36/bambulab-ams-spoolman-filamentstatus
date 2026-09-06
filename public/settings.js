@@ -643,6 +643,30 @@ function openLogDetailDialog(printer) {
             .map(key => renderField(logDetailField(key)))
             .join("");
 
+    // The export sits under the settings of the printer whose logs they are,
+    // because "which log do I attach" is asked in the same breath as "how
+    // much does it log". Both files by default; the trace is the one worth
+    // leaving out, at about 22 MB an hour.
+    const exportRow = printer
+        ? `<div class="set-field" id="ld-export">
+               <label class="set-field-label"><span>Export</span></label>
+               <div class="set-checks">
+                   <label class="set-check">
+                       <input type="checkbox" value="log" checked>
+                       <span>Printer log</span>
+                   </label>
+                   <label class="set-check">
+                       <input type="checkbox" value="trace" checked>
+                       <span>Raw MQTT trace</span>
+                   </label>
+                   <button class="btn btn-small" type="button" id="ld-export-download">Download...</button>
+               </div>
+               <small>One archive with the ticked logs of this printer, each with its rotated history, plus the
+                      settings, the printer list and the assignments. The trace is only in it where one was
+                      captured. The download asks whether to anonymise.</small>
+           </div>`
+        : "";
+
     document.getElementById("logdetail-dialog-body").innerHTML = `
         <div class="set-form">
             ${inheritRow}
@@ -677,16 +701,33 @@ function openLogDetailDialog(printer) {
                 <small>${escapeHtml(traceField.description)}</small>
             </div>
             ${budget}
+            ${exportRow}
         </div>`;
 
     // Everything below the inherit switch is only editable once this printer has
     // been taken off the global settings, so the dialog shows what applies
-    // rather than an empty form.
+    // rather than an empty form. The export is not a setting and stays live.
     const applyInherit = () => {
         const off = document.getElementById("ld-inherit")?.checked;
-        document.querySelectorAll("#logdetail-dialog-body input:not(#ld-inherit)")
+        document.querySelectorAll("#logdetail-dialog-body input:not(#ld-inherit):not(#ld-export input)")
             .forEach(input => { input.disabled = !!off; });
     };
+
+    const exportButton = document.getElementById("ld-export-download");
+    if (exportButton) {
+        const ticked = () => [...document.querySelectorAll("#ld-export input:checked")].map(input => input.value);
+        const guard = () => { exportButton.disabled = ticked().length === 0; };
+        document.querySelectorAll("#ld-export input").forEach(input => input.addEventListener("change", guard));
+        guard();
+        exportButton.onclick = () => {
+            const scope = ticked().map(file => `${printer.id}/${file}`).join(",");
+            downloadWithExportMode({
+                url: `./api/diagnostics/download?scope=${encodeURIComponent(scope)}`,
+                title: `Export the logs of ${printer.name}`,
+                what: `The ticked logs of ${escapeHtml(printer.name)}, each with its rotated history, plus the settings, the printer list and the assignments.`,
+            });
+        };
+    }
     document.getElementById("ld-inherit")?.addEventListener("change", applyInherit);
     applyInherit();
 
