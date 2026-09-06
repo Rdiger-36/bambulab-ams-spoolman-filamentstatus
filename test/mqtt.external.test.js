@@ -104,6 +104,23 @@ test("a dual nozzle printer's two holders are two units with two labels", () => 
     assert.equal(units[1].tray[0].tray_type, "TPU");
 });
 
+test("a single holder is External whatever id the printer gives it", () => {
+    // A P2S and an X1C report their one holder as 255, an A1, a P1P and a P1S
+    // as 254. The P1S of issue 131 lost its holder to the second label between
+    // dev.13 and this test.
+    const asP1S = externalSpoolUnits({ vt_tray: { ...virSlot, id: "254" } });
+    assert.deepEqual(asP1S.map(unit => convertAMSandSlot(unit.id, unit.tray[0].id)), [EXTERNAL_SLOT]);
+    const asVirSlot = externalSpoolUnits({ vir_slot: [{ ...virSlot, id: "254" }] });
+    assert.deepEqual(asVirSlot.map(unit => convertAMSandSlot(unit.id, unit.tray[0].id)), [EXTERNAL_SLOT]);
+});
+
+test("the second label needs a second reported holder, loaded or not", () => {
+    // A dual nozzle printer lists both entries whether or not a spool sits on
+    // them, so an empty first holder must not move the second one to External.
+    const units = externalSpoolUnits({ vir_slot: [{ ...virSlot, id: "254" }, { ...emptyVirSlot, id: "255" }] });
+    assert.deepEqual(units.map(unit => convertAMSandSlot(unit.id, unit.tray[0].id)), [SECOND_EXTERNAL_SLOT]);
+});
+
 test("only the loaded holder of the two yields a unit", () => {
     const units = externalSpoolUnits({ vir_slot: [{ ...emptyVirSlot, id: "254" }, virSlot] });
     assert.deepEqual(units.map(unit => unit.id), ["255"]);

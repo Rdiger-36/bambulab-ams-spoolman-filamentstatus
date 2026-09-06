@@ -274,16 +274,22 @@ export function formatMoment(at, withDate) {
 
 /**
  * The unit ids the external spool holders are addressed under, and the labels
- * they produce. The printer reports a holder as an entry of `print.vir_slot`
- * carrying `id` 255, so the number is the printer's rather than an invention.
+ * they produce. The printer reports a holder as `print.vt_tray` or as an entry
+ * of `print.vir_slot` carrying `id` 255 or 254, so the numbers are the
+ * printer's rather than an invention.
  *
- * A dual nozzle printer (H2C, H2D, X2D) has two holders and reports a second
- * entry with `id` 254. Read off the H2D and H2C reports in
- * test/fixtures/reports: `device.extruder.info[1]`, the second extruder, names
- * its current slot as 0xFEFF, unit 254, while the first extruder's holder is
- * 255. The one every printer has keeps its label, so nothing on disk moves for
- * a single nozzle printer; the second is "External-2", numbered rather than
- * sided because the report says which extruder it feeds and not where it sits.
+ * A dual nozzle printer (H2C, H2D, X2D) has two holders and reports both, 255
+ * and 254. Read off the H2D and H2C reports in test/fixtures/reports:
+ * `device.extruder.info[1]`, the second extruder, names its current slot as
+ * 0xFEFF, unit 254, while the first extruder's holder is 255. The one every
+ * printer has keeps its label, so nothing on disk moves for a single nozzle
+ * printer; the second is "External-2", numbered rather than sided because the
+ * report says which extruder it feeds and not where it sits.
+ *
+ * A single nozzle printer reports its one holder under either id, 255 on a
+ * P2S and an X1C, 254 on an A1, a P1P and a P1S, which is why
+ * `externalSpoolUnits()` in src/mqtt.js labels by how many holders are
+ * reported and not by the id alone.
  *
  * The labels are not only shown: they are the keys an assignment is stored
  * under in `mappings.json`, and they are what tells the dashboard that these

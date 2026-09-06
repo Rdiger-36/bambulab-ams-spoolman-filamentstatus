@@ -115,6 +115,16 @@ forEachFixture("slot labels are unique within the report", fixture => {
     assert.deepEqual([...new Set(labels)], labels);
 });
 
+test("a single holder is External on every printer that reports one", () => {
+    // 254 on the A1, P1P and the AMS HT only report, 255 on the X1C
+    for (const name of ["a1", "p1p-no-ams", "misc"]) {
+        const fixture = fixtures.find(entry => entry.name === name);
+        const labels = labelsOf(fixture);
+        assert.ok(labels.includes("External"), `${name}: ${labels.join(", ")}`);
+        assert.ok(!labels.includes("External-2"), `${name}: ${labels.join(", ")}`);
+    }
+});
+
 test("h2d-external-active: both holders are slots of their own", () => {
     const fixture = fixtures.find(entry => entry.name === "h2d-external-active");
     const labels = labelsOf(fixture);
