@@ -650,7 +650,7 @@ function openLogDetailDialog(printer) {
     const exportRow = printer
         ? `<div class="set-field" id="ld-export">
                <label class="set-field-label"><span>Export</span></label>
-               <div class="set-checks">
+               <div class="set-checks set-export-row">
                    <label class="set-check">
                        <input type="checkbox" value="log" checked>
                        <span>Printer log</span>
