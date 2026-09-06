@@ -5,7 +5,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -21,6 +21,7 @@ import {
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping } from "./mappings.js";
+import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
     processData,
@@ -306,11 +307,14 @@ export async function handlePrintStateChange(printer, print) {
  * "0" rather than empty when nothing failed, which is why it is compared
  * against both.
  *
- * The numbers are not translated into Bambu's error catalogue here. That
- * catalogue is large, versioned per firmware and not published in a form this
- * project can carry, so the code is shown as the printer gave it and the user
- * can look it up. Saying "error 131074" is honest; inventing a description for
- * it is not.
+ * The number is kept and the catalogue's sentence is put behind it, see
+ * `printerrors.js`: "Printer error 50348044: The task was canceled." A code
+ * the catalogue does not know stays the bare number, which is honest where a
+ * guessed description would not be, and the number is what a bug report and
+ * Bambu's own lookup go by either way.
+ *
+ * `fail_reason` carries the same code as `print_error` when both are set,
+ * measured on a P2S, so the two are said once rather than twice.
  *
  * @param {object} print - the `print` object from the MQTT report
  * @returns {string|null} the error text, or null when there is none
@@ -320,10 +324,17 @@ export function printErrorText(print) {
     const reason = print?.fail_reason;
     const failed = reason && reason !== "0" && reason !== 0;
 
+    const describe = (label, value) => {
+        const sentence = describePrintError(value);
+        return sentence ? `${label} ${value}: ${sentence}` : `${label} ${value}`;
+    };
+
     if (!code && !failed) return null;
-    if (code && failed)   return `Printer error ${code}, fail reason ${reason}`;
-    if (code)             return `Printer error ${code}`;
-    return `Fail reason ${reason}`;
+    if (code && failed && String(reason) !== String(code)) {
+        return `${describe("Printer error", code)}, ${describe("fail reason", reason)}`;
+    }
+    if (code) return describe("Printer error", code);
+    return describe("Fail reason", reason);
 }
 
 /**
@@ -412,17 +423,29 @@ export function externalSpoolUnits(print) {
 
     // One unit per holder, not one unit carrying every holder as a tray: a
     // dual nozzle printer reports two entries, 254 and 255, and they are two
-    // slots with two labels and two assignments. The unit id is the entry's
-    // own, which is what `convertAMSandSlot()` turns into the label, and the
-    // one every printer has comes first so the dashboard lists it first.
-    // An entry with an id this service does not know is dropped rather than
-    // labelled "Z": nothing observed reports one, and a third holder would
-    // need a label of its own before it could be assigned anything.
-    return reported
-        .filter(tray => tray && (tray.tray_type || tray.tray_info_idx))
-        .filter(tray => externalSlotLabel(tray.id) !== null)
-        .sort((a, b) => Number(b.id) - Number(a.id))
-        .map(tray => ({ id: String(tray.id), tray: [tray] }));
+    // slots with two labels and two assignments. An entry with an id this
+    // service does not know is dropped rather than labelled "Z": nothing
+    // observed reports one, and a third holder would need a label of its own
+    // before it could be assigned anything.
+    const holders = reported
+        .filter(tray => tray && externalSlotLabel(tray.id) !== null)
+        .sort((a, b) => Number(b.id) - Number(a.id));
+
+    // The id says which holder only where there are two. A printer with one
+    // holder reports it under either number depending on the model: 255 on a
+    // P2S and an X1C, 254 on an A1, a P1P and a P1S, all in
+    // test/fixtures/reports and in the P1S log of issue 131. So one reported
+    // holder is "External" whatever its id, and only a second reported entry
+    // takes the second label. Reported, not loaded: a dual nozzle printer
+    // lists both entries whether or not a spool sits on them, so an empty
+    // first holder does not move the second one's label.
+    const unitIds = holders.length >= 2
+        ? holders.map(tray => String(tray.id))
+        : holders.map(() => String(EXTERNAL_SPOOL_ID));
+
+    return holders
+        .map((tray, index) => ({ id: unitIds[index], tray: [tray] }))
+        .filter(unit => unit.tray[0].tray_type || unit.tray[0].tray_info_idx);
 }
 
 /**
