@@ -10,6 +10,7 @@ import {
     materialFamily,
     materialsAgree,
     slotMaterial,
+    slotPreset,
 } from "../public/materials.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -101,6 +102,26 @@ test("a slot without a known profile falls back to what the printer calls it", (
 });
 
 /* ---- one implementation, not two ---- */
+
+/* ---- slotPreset ---- */
+
+test("a shipped id is named and sorted into Bambu, Generic or a vendor", () => {
+    assert.deepEqual(slotPreset({ tray_info_idx: "GFA00" }), { id: "GFA00", name: "Bambu PLA Basic", kind: "bambu" });
+    assert.deepEqual(slotPreset({ tray_info_idx: "GFL99" }), { id: "GFL99", name: "Generic PLA", kind: "generic" });
+    assert.deepEqual(slotPreset({ tray_info_idx: "GFSNL08" }), { id: "GFSNL08", name: "SUNLU PETG", kind: "vendor" });
+});
+
+test("a slicer hash is a custom preset without a name, as a P2S reported a library vendor", () => {
+    assert.deepEqual(slotPreset({ tray_info_idx: "Pdd34802" }), { id: "Pdd34802", name: null, kind: "custom" });
+    assert.deepEqual(slotPreset({ tray_info_idx: "P8d19ba6" }), { id: "P8d19ba6", name: null, kind: "custom" });
+});
+
+test("an id the table does not know keeps its id, and no id is no preset", () => {
+    assert.deepEqual(slotPreset({ tray_info_idx: "GFZ42" }), { id: "GFZ42", name: null, kind: "unknown" });
+    assert.equal(slotPreset({ tray_info_idx: "" }), null);
+    assert.equal(slotPreset({}), null);
+    assert.equal(slotPreset(null), null);
+});
 
 test("the dashboard imports the table rather than keeping its own", () => {
     const frontend = fs.readFileSync(path.join(root, "public", "frontend.js"), "utf8");

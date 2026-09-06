@@ -15,7 +15,7 @@ import {
     slotColors,
     spoolWeightLimit,
 } from "./shared.js";
-import { bambuProfile, materialsAgree, slotMaterial } from "./materials.js";
+import { bambuProfile, materialsAgree, slotMaterial, slotPreset } from "./materials.js";
 import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 
 let autoButton = null;
@@ -36,7 +36,7 @@ let printerGcodeState = "IDLE";
 // Why a slot without an RFID tag is not a fault. Shown in both views: on the
 // identity line of the row and on the warning triangle in the State column,
 // which names no reason by itself.
-const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot identify it. Assign a Spoolman spool to track it.";
+const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot identify it. The profile shown is the preset chosen for the slot, not read from the spool. Assign a Spoolman spool to track it.";
 const ARCHIVED_HINT = "This spool is archived in Spoolman because it ran empty. Take it out of the slot, or restore it in the spool details.";
 
 // Humidity, temperature and drying state per AMS unit, keyed by the unit part
@@ -1424,6 +1424,14 @@ document.addEventListener("DOMContentLoaded", () => {
             return amsSpool.option === SLOT_OPTIONS.WAITING ? "Reading spool" : "Empty slot";
         }
 
+        // A spool without a tag reports no name of its own, only the preset
+        // chosen for its slot, so that is what it is called until a Spoolman
+        // spool is assigned. The word "preset" stays in the name on purpose: a
+        // chipless spool set to Bambu PLA Basic is not one.
+        if (amsSpool.slotState === "Loaded (3rd party)" && !fil) {
+            return presetReadableName(slot);
+        }
+
         const parts = [
             fil?.vendor?.name ?? amsSpool.matchingExternalFilament?.manufacturer,
             fil?.material     ?? slot.tray_type,
@@ -1432,10 +1440,42 @@ document.addEventListener("DOMContentLoaded", () => {
         return parts.length ? parts.join(" · ") : "Unknown filament";
     }
 
+    /**
+     * The name of a chipless slot: "Generic PLA preset", "SUNLU PETG preset",
+     * "PLA · custom preset" for a hash the slicer knows and the printer does
+     * not, and the bare material where the slot names no preset.
+     */
+    function presetReadableName(slot) {
+        const preset = slotPreset(slot);
+        if (preset?.name) return `${preset.name} preset`;
+        const material = slot.tray_type || null;
+        if (preset?.kind === "custom") return material ? `${material} · custom preset` : "Custom preset";
+        return material ?? "Unknown filament";
+    }
+
     // The em dash is this UI's "no value", so an absent field reads the same here
     // as it does in the tables.
     function detailText(value) {
         return value == null || value === "" ? "—" : escapeHtml(value);
+    }
+
+    /**
+     * The profile row of the detail dialog: the name and the id where the id is
+     * a shipped one, the id and where its name lives where it is a slicer hash,
+     * and what a chipless slot's preset is not.
+     */
+    function presetDetail(preset, chipless) {
+        if (!preset) return "—";
+        const id = `<span class="gc-muted">(${escapeHtml(preset.id)})</span>`;
+        // The value cell lays its children out as a row, so the label and the
+        // note under it travel as one block.
+        const withNote = (label, note) => `<span>${label}<br><span class="gc-muted">${note}</span></span>`;
+        if (preset.kind === "custom") {
+            return withNote(`Custom preset ${id}`, "A vendor or user preset from the slicer. Its name is not in what the printer reports.");
+        }
+        const label = preset.name ? `${escapeHtml(preset.name)} ${id}` : escapeHtml(preset.id);
+        if (!chipless) return label;
+        return withNote(label, "Chosen for the slot on the printer or in the slicer, not read from the spool.");
     }
 
     function detailGrams(value) {
@@ -1619,6 +1659,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 : `<span class="gc-warn">not linked</span>`;
 
         const profile = bambuProfile(slot.tray_info_idx);
+        const preset = slotPreset(slot);
+        const chipless = amsSpool.slotState === "Loaded (3rd party)";
 
         // The two sides disagreeing about the material is what a spool assigned to
         // the wrong slot looks like, so it is marked where both are shown.
@@ -1631,10 +1673,10 @@ document.addEventListener("DOMContentLoaded", () => {
             ["State", detailText(amsSpool.slotState)],
             // The id alone says nothing to read, so the filament Bambu Studio would
             // print it as leads and the id follows it. An id no profile is known
-            // for stands on its own.
-            ["Tray profile", profile
-                ? `${escapeHtml(profile.name)} <span class="gc-muted">(${escapeHtml(slot.tray_info_idx)})</span>`
-                : detailText(slot.tray_info_idx)],
+            // for stands on its own. On a spool without a tag the row is the
+            // preset chosen for the slot, and says so, because the printer then
+            // reports a Bambu id for a spool that is not one.
+            [chipless ? "Slot preset" : "Tray profile", presetDetail(preset, chipless)],
             ["Material (printer)", `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
             ["Colour (printer)", detailColors(slotColors(slot), direction)],
             ["Serialnumber", detailText(slot.tray_uuid)],

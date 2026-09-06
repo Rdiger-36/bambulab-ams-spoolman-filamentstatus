@@ -192,6 +192,49 @@ export function bambuProfile(trayInfoIdx) {
 }
 
 /**
+ * What the `tray_info_idx` of a slot stands for when nothing was read off a tag.
+ *
+ * On a spool without an RFID tag the id is not a property of the spool at all.
+ * It is the filament preset somebody chose for that slot, on the printer's
+ * screen or in the slicer, and it comes in three shapes, all seen on a P2S on
+ * 2026-09-06 while switching the preset of one chipless spool:
+ *
+ *   - a Bambu Studio id from the table above, "GFL99" for Generic PLA, and
+ *     "GFA00" when Bambu PLA Basic is chosen for a spool that is not one. The
+ *     printer then reports the same id as for a real Bambu spool next to it,
+ *     with the tag and serial all zeros
+ *   - "P" and seven hex digits for a preset Bambu Studio does not ship: a
+ *     vendor added from its filament library, or a preset of the user's own.
+ *     The name behind the hash lives in the slicer and nowhere the printer
+ *     reports, so the hash stays a hash here
+ *   - an empty id after the slot was reset on the screen
+ *
+ * `kind` is what a label can say about it: "bambu" and "generic" are the two
+ * halves of the shipped table, "vendor" the third party profiles in it,
+ * "custom" the hash, and "unknown" an id the table has not caught up with.
+ *
+ * @param {object} slot - an AMS slot as the client payload carries it
+ * @returns {{id: string, name: string|null, kind: string}|null} null when the
+ *   slot names no preset at all
+ */
+export function slotPreset(slot) {
+    const id = String(slot?.tray_info_idx ?? "").trim();
+    if (!id) return null;
+
+    const profile = bambuProfile(id);
+    if (profile) {
+        const kind = profile.name.startsWith("Bambu ") ? "bambu"
+            : profile.name.startsWith("Generic ") ? "generic"
+            : "vendor";
+        return { id, name: profile.name, kind };
+    }
+
+    if (/^P[0-9A-F]{7}$/i.test(id)) return { id, name: null, kind: "custom" };
+
+    return { id, name: null, kind: "unknown" };
+}
+
+/**
  * The material of a slot: the profile's where the id is a known one, and the
  * coarse `tray_type` the AMS reports next to it otherwise.
  *
