@@ -6,7 +6,7 @@ import path from "path";
 
 // The module reads its path from config.js at import time, so DATA_DIR has to
 // point at a throwaway directory before the first import.
-let dir, mappingsPath, getMapping, setMapping, slotFingerprint, migrateStored, parseStoredFile;
+let dir, mappingsPath, getMapping, setMapping, slotFingerprint, migrateStored, parseStoredFile, spoolIdsAssignedElsewhere;
 
 before(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "ams-map-"));
@@ -16,7 +16,7 @@ before(async () => {
     fs.ensureDirSync(process.env.LOG_DIR);
 
     ({ mappingsPath } = await import("../src/config.js"));
-    ({ getMapping, setMapping, slotFingerprint, migrateStored, parseStoredFile } = await import("../src/mappings.js"));
+    ({ getMapping, setMapping, slotFingerprint, migrateStored, parseStoredFile, spoolIdsAssignedElsewhere } = await import("../src/mappings.js"));
 });
 after(() => fs.removeSync(dir));
 
@@ -136,6 +136,30 @@ test("a fingerprint from before the colour set still matches, and is rewritten",
 });
 
 /* ---- The slot labels of the file ---- */
+
+test("an automatic assignment is marked, a hand made one is not", () => {
+    const slot = { tray_info_idx: "GFL99", tray_type: "PLA", tray_color: "0EE2A0FF" };
+    const auto = setMapping("P", "A3", 7, slot, { automatic: true });
+    assert.equal(auto.automatic, true);
+    assert.equal(getMapping("P", "A3", slot)?.automatic, true);
+
+    const manual = setMapping("P", "A3", 8, slot);
+    assert.equal("automatic" in manual, false);
+    assert.equal(getMapping("P", "A3", slot)?.automatic, undefined);
+});
+
+test("the ids assigned to other slots leave out the slot asked about", () => {
+    const slot = { tray_info_idx: "GFL99", tray_type: "PLA", tray_color: "0EE2A0FF" };
+    // Ids of their own, so what earlier tests left on disk stays out of the
+    // comparison; the answer spans every printer in the file.
+    setMapping("P-elsewhere", "A3", 907, slot);
+    setMapping("P-elsewhere", "B1", 909, slot);
+    setMapping("Q-elsewhere", "External", 911, slot);
+
+    const ours = (printerId, amsId) => [...spoolIdsAssignedElsewhere(printerId, amsId)].filter(id => id >= 900).sort((a, b) => a - b);
+    assert.deepEqual(ours("P-elsewhere", "A3"), [909, 911]);
+    assert.deepEqual(ours("P-elsewhere", "C4"), [907, 909, 911]);
+});
 
 test("a file written before the slots counted from 1 is renumbered", () => {
     const zeroBased = {

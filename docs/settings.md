@@ -9,7 +9,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | Card | Holds |
 | :---- | :---- |
 | **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
-| **Tracking** | Operation mode and [legacy mode](legacy-mode.md) |
+| **Tracking** | Operation mode, whether a [3rd party spool is assigned automatically](web-ui.md), and [legacy mode](legacy-mode.md) |
 | **Synchronisation** | Slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Log file size and how many rotated files are kept, for the server and per printer, plus **Log detail...**: the [log level, the areas and the raw MQTT capture](troubleshooting.md#how-much-gets-logged). The same dialog per printer, **Log** in the Printers card, also [exports that printer's logs](troubleshooting.md#diagnostics-and-privacy) |

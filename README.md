@@ -52,7 +52,7 @@ An original Bambu Lab spool is recognised by its RFID tag and linked on its own;
 
 Works with Bambu Lab printers with a connected AMS of the A, P, H and X series.
 
-Automatic creating and merging of spools and filaments in Spoolman relies on the RFID tag of original Bambu Lab spools. A 3rd party spool is linked to a Spoolman spool manually in the Web UI instead; its consumption is then tracked like any other.
+Automatic creating and merging of spools and filaments in Spoolman relies on the RFID tag of original Bambu Lab spools. A 3rd party spool is linked to a Spoolman spool in the Web UI instead, by hand or, when switched on, automatically where exactly one spool of its material and colour exists; its consumption is then tracked like any other.
 
 ### Supported hardware
 

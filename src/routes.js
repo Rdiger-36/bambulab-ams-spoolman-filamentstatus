@@ -8,7 +8,7 @@ import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
-import { addPrinter, updatePrinter, updatePrinterLogDetail, removePrinter, syncPrinterIntervals, traceEnabled } from "./printers.js";
+import { addPrinter, updatePrinter, updatePrinterLogDetail, removePrinter, syncPrinterIntervals, reprocessSlotsOnNextReport, traceEnabled } from "./printers.js";
 import { restartSpoolmanConnection, restartService } from "./service.js";
 import { state } from "./state.js";
 import { attemptLogin, authEnabled, clearSessionCookie, isAuthenticated, issueSession, setSessionCookie } from "./auth.js";
@@ -1121,6 +1121,9 @@ export function registerRoutes(app, printers) {
         // The interval is copied onto every printer object, so a change has to
         // be pushed into the running ones.
         if (result.changed.includes("UPDATE_INTERVAL")) syncPrinterIntervals();
+        // Switching the automatic assignment on has to reach the slots that are
+        // already loaded, not only the next spool that moves.
+        if (result.changed.includes("AUTO_ASSIGN_THIRD_PARTY")) reprocessSlotsOnNextReport();
         if (spoolmanUrl() !== previousUrl) restartSpoolmanConnection();
 
         const view = getSettingsView();
@@ -1552,6 +1555,9 @@ function refreshCachedSpool(printers, spool) {
 function applyMappingToUiSpool(printer, uiSpool, spool) {
     uiSpool.existingSpool        = spool;
     uiSpool.connectedViaMapping  = !!spool;
+    // Set or cleared by hand either way, so what the colour match once chose
+    // is no longer what the dashboard says.
+    uiSpool.assignedAutomatically = false;
     uiSpool.option               = spool ? SLOT_OPTIONS.UNASSIGN : SLOT_OPTIONS.ASSIGN;
     uiSpool.enableButton         = "true";
     // correctedWeight came from the assigned spool, so it has to go with it.

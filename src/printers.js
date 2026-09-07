@@ -458,4 +458,18 @@ export function syncPrinterIntervals() {
     }
 }
 
+/**
+ * Makes every printer read its slots again on the next report, whether or not
+ * anything in them changed.
+ *
+ * The AMS update only runs when a slot or a Spoolman spool changed, so a
+ * setting that changes what a slot means, such as switching the automatic
+ * assignment on, would otherwise wait for the next spool to move.
+ */
+export function reprocessSlotsOnNextReport() {
+    for (const printer of printers) {
+        printer.lastAmsData = null;
+    }
+}
+
 export const printers = loadPrintersConfig();

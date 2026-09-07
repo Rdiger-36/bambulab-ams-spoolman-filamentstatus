@@ -20,7 +20,8 @@ import {
     logSpoolmanFailure,
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
-import { getMapping, clearMapping } from "./mappings.js";
+import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
+import { uniqueSpoolForSlot } from "../public/match.js";
 import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
@@ -1211,7 +1212,10 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         // Legacy mode has no use for one: it takes the weight from the RFID
         // percentage, which a chipless spool does not report, so the slot stays
         // read-only exactly as it was before assignments existed.
-        const mappedSpool = legacyMode() ? null : resolveMappedSpool(printer, amsId, slot, spools, archivedSpools);
+        const mappedSpool = legacyMode()
+            ? null
+            : resolveMappedSpool(printer, amsId, slot, spools, archivedSpools)
+                ?? autoAssignThirdPartySpool(printer, amsId, slot, spools);
         const newUiSpool = buildThirdPartySpool(printer, amsId, slot, mappedSpool);
         // The assignment is the only link a chipless spool has, so it is also
         // the only thing that can give it a location. Nothing did before, which
@@ -1540,6 +1544,9 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // assignment below, not from an RFID tag.
         connectedViaTag: false,
         connectedViaMapping: !!mappedSpool,
+        // The colour match chose the spool rather than the user, which the
+        // dashboard says next to the assignment.
+        assignedAutomatically: !!mappedSpool && !!getMapping(printer.id, amsId)?.automatic,
         archived: !!mappedSpool?.archived,
         correctedWeight,
         // Legacy mode offers nothing here. Its weight comes from the RFID
@@ -1552,6 +1559,34 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         slotState: "Loaded (3rd party)",
         error: false,
     };
+}
+
+/**
+ * Assigns a chipless slot the one Spoolman spool that fits it, when the user
+ * has opted in and there is exactly one. Returns the spool, or null when the
+ * slot stays unassigned.
+ *
+ * The printer cannot tell two spools of the same material and colour apart, so
+ * this only ever acts where there is nothing to tell apart: one spool without a
+ * tag, of that material and those colours, assigned to no other slot. The
+ * assignment is the same record a hand made one is, and is dropped the same
+ * way when the slot's filament changes.
+ *
+ * @param {object} printer - the printer the slot belongs to
+ * @param {string} amsId - slot label
+ * @param {object} slot - the AMS slot record
+ * @param {object[]} spools - the Spoolman spools
+ * @returns {object|null} the assigned spool
+ */
+function autoAssignThirdPartySpool(printer, amsId, slot, spools) {
+    if (!settings.AUTO_ASSIGN_THIRD_PARTY) return null;
+
+    const spool = uniqueSpoolForSlot(slot, spools, spoolIdsAssignedElsewhere(printer.id, amsId));
+    if (!spool) return null;
+
+    setMapping(printer.id, amsId, spool.id, slot, { automatic: true });
+    console.log(printer.name, printer.logFilePath, `[Mapping] ${amsId} assigned automatically to Spoolman spool ${spool.id} (${spool.filament?.name ?? "?"}): the only spool of that material and colour`);
+    return spool;
 }
 
 /**

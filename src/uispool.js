@@ -122,6 +122,7 @@ export function toClientSpool(uiSpool) {
         matchingExternalFilament,
         connectedViaTag: uiSpool.connectedViaTag ?? false,
         connectedViaMapping: uiSpool.connectedViaMapping ?? false,
+        assignedAutomatically: uiSpool.assignedAutomatically ?? false,
         // The slot holds a spool Spoolman has archived. The dashboard says so
         // rather than offering an action, and `hasSpoolUiChanged()` compares
         // this projection, so archiving one reaches the UI as a change.
