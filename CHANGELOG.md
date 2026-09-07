@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.16
    - Features:
       - A 3rd party spool can be assigned without asking, where there is nothing to ask (issue #47). "Assign 3rd party spools automatically" in the Tracking settings, off by default, links a spool without an RFID tag to the one Spoolman spool of the same material and colours that carries no tag and sits in no other slot. The slot then reads "auto-assigned", consumption is booked onto that spool, and the assignment is dropped like a manual one when a different filament shows up in the slot
          - Two spools of the same material and colour cannot be told apart by anything the printer sends, which is why the proposal in the issue, keying on the profile id and the colour, was not built as an automatic creation: a P2S reports the generic GFL99 for every chipless spool, and the preset test of 2026-09-06 showed the id is whatever preset was chosen for the slot, a Bambu id included. So with two candidates the slot waits for a choice, and nothing is ever created in Spoolman
