@@ -617,11 +617,18 @@ export function registerRoutes(app, printers) {
         const layerNum  = cleared ? 0 : (printer.currentLayerNum || 0);
 
         // Fetch fresh slice info if a job is known (or explicitly requested),
-        // otherwise fall back to the cached version
+        // otherwise fall back to the cached version.
+        //
+        // Not again for a job the print handler already looked for and did not
+        // find: the dashboard asks every few seconds, and a job whose file is
+        // not there would otherwise cost one FTPS login per request for the
+        // whole print. Measured on a P1S: 303 logins in fifteen minutes. The
+        // manual ?job= test is the exception, it asks for exactly that.
         let sliceInfo = req.query.job || cleared ? null : (printer.currentSliceInfo || null);
-        if (jobName && !sliceInfo) {
+        const alreadyLookedFor = !req.query.job && printer.lastSliceFetch?.jobName === jobName;
+        if (jobName && !sliceInfo && !alreadyLookedFor) {
             try {
-                sliceInfo = await fetchSliceInfo(printer, jobName);
+                sliceInfo = await fetchSliceInfo(printer, jobName, req.query.job ? null : printer.currentGcodeFile);
             } catch (err) {
                 // non-fatal, surface the error in the response
                 return res.json({

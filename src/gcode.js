@@ -21,22 +21,32 @@ export function bambuTlsOptions() {
 }
 
 /**
- * Downloads the .gcode.3mf for the active print via FTPS and extracts only
+ * Downloads the sliced 3MF of the active print via FTPS and extracts only
  * Metadata/slice_info.config (~2-3 KB). The rest of the archive is discarded
  * immediately after extraction.
  *
  * BambuLab printers run vsftpd with implicit TLS on port 990, login bblp /
- * <access code>. The actual sliced files live in /cache/<job>.gcode.3mf. The
- * MQTT `gcode_file` field (e.g. /data/Metadata/plate_1.gcode) is an internal
- * path that is NOT exposed over FTP, so we resolve via the job name instead.
+ * <access code>. The sliced file lives in /cache, under the name the job was
+ * sent with; see `resolveRemotePaths()` for the two spellings of that name.
+ *
+ * What was tried and what came of it is written to `printer.lastSliceFetch`,
+ * because the two ways this returns null are two different problems for the
+ * person reading the log: no file under any of the names, or a file that is
+ * not a sliced one. The callers log from that record, and `/api/print` reads
+ * it to not try the same names again every few seconds for the whole print.
  *
  * @param {object} printer  - printer object with .ip and .code
- * @param {string} jobName  - subtask_name / gcode_file from MQTT
+ * @param {string} jobName  - subtask_name from MQTT
+ * @param {string|null} [gcodeFile] - gcode_file from MQTT, when the report carries one
  * @returns {object|null} parsed slice info or null if not found
  */
-export async function fetchSliceInfo(printer, jobName) {
+export async function fetchSliceInfo(printer, jobName, gcodeFile = null) {
     const client = new ftp.Client(20000); // 20 s timeout
     client.ftp.verbose = false;
+
+    const candidates = resolveRemotePaths(jobName, gcodeFile);
+    const record = { jobName, tried: candidates, path: null, sliceInfo: false, at: Date.now() };
+    printer.lastSliceFetch = record;
 
     try {
         await client.access({
@@ -48,7 +58,6 @@ export async function fetchSliceInfo(printer, jobName) {
             secureOptions: bambuTlsOptions(),
         });
 
-        const candidates = resolveRemotePaths(jobName);
         debug("gcode", printer.name, printer.logFilePath,
             `[Print] Looking for the sliced file as ${candidates.join(" or ")}`);
 
@@ -61,6 +70,7 @@ export async function fetchSliceInfo(printer, jobName) {
                 });
                 await client.downloadTo(writable, path);
                 buf = Buffer.concat(chunks);
+                record.path = path;
                 debug("gcode", printer.name, printer.logFilePath,
                     `[Print] Downloaded ${path}, ${buf.length} bytes`);
                 break;
@@ -109,6 +119,7 @@ export async function fetchSliceInfo(printer, jobName) {
             entry.getData().toString("utf8"),
             settings ? settings.getData().toString("utf8") : null,
         );
+        record.sliceInfo = true;
 
         trace("gcode", printer.name, printer.logFilePath,
             `[Print] Parsed slice info: ${JSON.stringify(parsed)}`);
@@ -405,26 +416,42 @@ export function calcPartialConsumption(sliceInfo, upToLayer) {
 // ---------------------------------------------------------------------------
 
 /**
- * Builds candidate FTPS paths for the sliced 3MF from a MQTT job name.
+ * The FTPS paths the sliced 3MF of a job may sit under, most likely first.
  *
- * gcode_file from MQTT can be:
- *   /data/Metadata/plate_1.gcode  (internal path, strip to base name)
- *   My Print.gcode.3mf
- *   My Print
- * The real file is /cache/<name>.gcode.3mf, sometimes also in the FTP root.
+ * The file is named after the job, but the extension depends on how the job
+ * reached the printer, and the printer says which in `gcode_file`:
+ *
+ *   - sent from the slicer over the LAN, it is `<job>.gcode.3mf`, which is the
+ *     name "Export sliced file" gives it. Read off a P2S, a P1S and an X1E
+ *   - sent through the Bambu cloud, from Bambu Studio or the Handy app, it is
+ *     `<job>.3mf`. Read off a P1S whose seven cloud prints of September 2026
+ *     all reported `gcode_file` "<job>.3mf" and answered 550 for the
+ *     `.gcode.3mf` spelling, so not one of them was ever booked (issue #146)
+ *   - `gcode_file` can also be the printer's internal `/data/Metadata/plate_1.gcode`,
+ *     seen on the X1E, which names no file at all and is ignored
+ *
+ * So the name the printer reports comes first when it names a 3MF, then both
+ * spellings under /cache, then both in the FTP root, where older firmware was
+ * seen to keep the file.
+ *
+ * @param {string} jobName - `subtask_name` from MQTT
+ * @param {string|null} [gcodeFile] - `gcode_file` from MQTT
+ * @returns {string[]} candidate paths, without duplicates
  */
-function resolveRemotePaths(jobName) {
-    if (!jobName) return [];
+export function resolveRemotePaths(jobName, gcodeFile = null) {
+    const candidates = [];
 
-    // Internal /data/Metadata/plate_1.gcode path carries no job name → useless;
-    // caller should pass subtask_name in that case. Strip directory anyway.
-    let name = jobName.split("/").pop();
+    const reported = typeof gcodeFile === "string" ? gcodeFile.split("/").pop() : "";
+    if (/\.3mf$/i.test(reported)) candidates.push(`/cache/${reported}`);
 
-    // Normalise to the bare job name without extensions
-    name = name.replace(/\.gcode\.3mf$/i, "").replace(/\.3mf$/i, "").replace(/\.gcode$/i, "");
+    if (jobName) {
+        // Normalise to the bare job name without extensions, whichever it came with
+        const name = jobName.split("/").pop()
+            .replace(/\.gcode\.3mf$/i, "").replace(/\.3mf$/i, "").replace(/\.gcode$/i, "");
+        candidates.push(`/cache/${name}.gcode.3mf`, `/cache/${name}.3mf`, `/${name}.gcode.3mf`, `/${name}.3mf`);
+    }
 
-    const file = `${name}.gcode.3mf`;
-    return [`/cache/${file}`, `/${file}`];
+    return [...new Set(candidates)];
 }
 
 /**
