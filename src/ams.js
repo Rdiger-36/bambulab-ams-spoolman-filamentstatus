@@ -648,10 +648,14 @@ function amsNumber(value) {
  *     `humidity` as a level, `humidity_raw` as percent relative humidity,
  *     `temp` in °C, `dry_time` as the minutes of drying left and `dry_setting`
  *     as what was set for it.
- *   - The original AMS reports `humidity` and nothing else usable: no
- *     `humidity_raw`, no drying fields, and `temp` is the literal "0.0",
- *     which is the absence of a sensor rather than a freezing AMS. A
- *     temperature of zero or below is therefore dropped.
+ *   - The original AMS on older firmware reports `humidity` and nothing else
+ *     usable: no `humidity_raw`, no drying fields, and `temp` is the literal
+ *     "0.0", which is the absence of a sensor rather than a freezing AMS. A
+ *     temperature of zero or below is therefore dropped. On current firmware
+ *     the same unit reports a percentage, a temperature and `dry_time` 0, read
+ *     off a P1S and an X1E on 2026-09-07, so the fields no longer say which
+ *     unit sent them. What does is the printer's `get_version` answer, see
+ *     `amsModelsFromVersion()`, and the model rides along in `model`.
  *   - The AMS Lite reports the same two fields as the original AMS, a level and
  *     a "0.0" temperature, although it has no sensor at all: the level observed
  *     on one (issue #4) is a constant 5. There is nothing in the payload that
@@ -670,9 +674,10 @@ function amsNumber(value) {
  * out with the units that have no sensor.
  *
  * @param {object[]} amsArray - `print.ams.ams`, or the processed unit list
+ * @param {object} [models] - what `amsModelsFromVersion()` read, by unit label
  * @returns {object[]} one entry per unit that reports anything, in input order
  */
-export function extractAmsEnvironment(amsArray) {
+export function extractAmsEnvironment(amsArray, models = {}) {
     if (!Array.isArray(amsArray)) return [];
 
     return amsArray.map(unit => {
@@ -690,8 +695,10 @@ export function extractAmsEnvironment(amsArray) {
         const settingTemp = amsNumber(setting?.dry_temperature);
         const settingDuration = amsNumber(setting?.dry_duration);
 
+        const amsId = convertAMSandSlot(unit?.id, null);
         return {
-            amsId: convertAMSandSlot(unit?.id, null),
+            amsId,
+            model: models?.[amsId]?.model ?? null,
             humidity: level !== null && level >= 1 && level <= 5 ? level : null,
             humidityPercent: percent !== null && percent > 0 && percent <= 100 ? percent : null,
             temperature: temperature !== null && temperature > 0 ? temperature : null,
@@ -711,4 +718,61 @@ export function extractAmsEnvironment(amsArray) {
         entry.temperature !== null ||
         entry.drying !== null
     );
+}
+
+/**
+ * The AMS units as the printer names them, read off its `get_version` answer.
+ *
+ * Nothing in a status report says which AMS a unit is: an original AMS on
+ * current firmware sends the same humidity, temperature and drying fields as
+ * an AMS 2 Pro, so the dashboard used to call every unit with a `dry_time` a
+ * 2 Pro, which is what an X1E and a P1S with an original AMS showed. The
+ * printer does know, and says so when asked with
+ * `{"info":{"command":"get_version"}}`: the answer lists every module with a
+ * name whose prefix is the unit's family and whose number is the unit id.
+ *
+ * The prefixes are the ones ha-bambulab keys on (`pybambu/models.py`,
+ * `AMSList.info_update`), two of them confirmed here on real answers:
+ *
+ *   - `ams/`     the original AMS, `hw_ver` "AMS08", `product_name` "AMS (1)"
+ *                on a P1S and an X1E
+ *   - `ams_f1/`  the AMS Lite, `hw_ver` "AMS_F102" in ha-bambulab's sample
+ *   - `n3f/`     the AMS 2 Pro
+ *   - `n3s/`     the AMS HT, with the unit id 128 and up
+ *
+ * A module with another prefix (`ota`, `mc`, `th`, `esp32` and so on) is the
+ * printer itself and is left out. A unit id the labels cannot name is left out
+ * too, rather than filed under "Z".
+ *
+ * @param {object[]} modules - `info.module` of the answer
+ * @returns {object} by unit label: `{ model, hardware, firmware }`
+ */
+export function amsModelsFromVersion(modules) {
+    const FAMILIES = [
+        ["ams_f1/", "AMS Lite"],
+        ["ams/", "AMS"],
+        ["n3f/", "AMS 2 Pro"],
+        ["n3s/", "AMS HT"],
+    ];
+    const models = {};
+    if (!Array.isArray(modules)) return models;
+
+    for (const module of modules) {
+        const name = typeof module?.name === "string" ? module.name : "";
+        const family = FAMILIES.find(([prefix]) => name.startsWith(prefix));
+        if (!family) continue;
+
+        const id = Number(name.slice(family[0].length));
+        if (!Number.isInteger(id)) continue;
+        const amsId = convertAMSandSlot(id, null);
+        if (amsId === "Z") continue;
+
+        models[amsId] = {
+            model: family[1],
+            hardware: typeof module.hw_ver === "string" && module.hw_ver ? module.hw_ver : null,
+            firmware: typeof module.sw_ver === "string" && module.sw_ver ? module.sw_ver : null,
+        };
+    }
+
+    return models;
 }

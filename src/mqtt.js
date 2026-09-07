@@ -26,6 +26,7 @@ import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
     processData,
     extractAmsEnvironment,
+    amsModelsFromVersion,
     extractComparableTrayData,
     correctRemainInt,
     slotIsOccupied,
@@ -89,7 +90,7 @@ const AMS_ENV_BROADCAST_INTERVAL = 30_000;
  * @param {Date} now - the time the report was processed
  */
 function broadcastAmsEnvironment(printer, amsUnits, now) {
-    const amsEnv = extractAmsEnvironment(amsUnits);
+    const amsEnv = extractAmsEnvironment(amsUnits, printer.amsModels);
     const serialised = JSON.stringify(amsEnv);
     printer.amsEnv = amsEnv;
 
@@ -117,6 +118,71 @@ export function sliceFetchFailure(record) {
         return `No sliced file on the printer under ${record.tried.join(", ")}`;
     }
     return `${record.path} carries no Metadata/slice_info.config`;
+}
+
+/**
+ * Asks the printer which modules it is made of, the AMS units among them.
+ *
+ * Sent once per connection, right after the subscription, on the request
+ * topic. The answer comes back on the report topic as an `info` message and is
+ * read by `noteVersionInfo()`. A printer that does not answer costs nothing:
+ * the units keep the plain "AMS" label until it does.
+ *
+ * @param {object} client - the connected MQTT client
+ * @param {object} printer - the printer runtime object
+ */
+function requestVersion(client, printer) {
+    const request = JSON.stringify({ info: { command: "get_version", sequence_id: "0" } });
+    try {
+        client.publish(`device/${printer.id}/request`, request);
+        debug("mqtt", printer.name, printer.logFilePath, "Asked the printer for its module list (get_version)");
+    } catch (err) {
+        debug("mqtt", printer.name, printer.logFilePath, `Could not ask for the module list: ${err?.message}`);
+    }
+}
+
+/**
+ * Reads the printer's `get_version` answer for the AMS units it names.
+ *
+ * Called ahead of `handleMqttMessage()` and outside it on purpose: that handler
+ * returns without reading while a previous report is still being processed and
+ * while Spoolman is down, and the answer arrives exactly once per connection.
+ * Anything that is not a `get_version` answer is ignored.
+ *
+ * The readings on the dashboard carry the model, so they are re-sent with it
+ * right away rather than at the next throttled broadcast.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {Buffer|string} message - the raw MQTT message
+ * @returns {boolean} whether the message was a `get_version` answer
+ */
+export function noteVersionInfo(printer, message) {
+    let data;
+    try {
+        data = JSON.parse(message);
+    } catch {
+        return false;
+    }
+    if (data?.info?.command !== "get_version" || !Array.isArray(data.info.module)) return false;
+
+    const models = amsModelsFromVersion(data.info.module);
+    const changed = JSON.stringify(models) !== JSON.stringify(printer.amsModels || {});
+    printer.amsModels = models;
+
+    if (changed) {
+        const named = Object.entries(models)
+            .map(([amsId, unit]) => `${amsId} ${unit.model}${unit.hardware ? ` (${unit.hardware})` : ""}`);
+        console.log(printer.name, printer.logFilePath,
+            `[AMS] Units as the printer names them: ${named.length ? named.join(", ") : "none"}`);
+    }
+
+    if (Array.isArray(printer.amsEnv) && printer.amsEnv.length) {
+        printer.amsEnv = printer.amsEnv.map(entry => ({ ...entry, model: models[entry.amsId]?.model ?? null }));
+        printer.lastAmsEnvBroadcast = JSON.stringify(printer.amsEnv);
+        broadcastSSE({ type: "ams_env", printer: printer.id, amsEnv: printer.amsEnv });
+    }
+
+    return true;
 }
 
 // Print states that signal the end of a print job
@@ -1658,6 +1724,7 @@ export async function setupMqtt(printer) {
 
         console.log(printer.name, printer.logFilePath, `MQTT client connected for Printer: ${printer.id}`);
         await client.subscribeAsync(`device/${printer.id}/report`);
+        requestVersion(client, printer);
 
         client.on("message", (topic, message) => {
             // Ahead of the handler, and deliberately outside it: handleMqttMessage
@@ -1666,6 +1733,12 @@ export async function setupMqtt(printer) {
             // reports an analysis afterwards is missing. Writing is queued and
             // not awaited, so it costs the handler nothing.
             if (traceEnabled(printer)) appendTrace(printer.traceFilePath, message);
+
+            // The get_version answer, and only that, is read here for the same
+            // reason: the handler below may not be reading when it arrives. The
+            // string check keeps the parse off the reports that come every
+            // second or two.
+            if (message.includes("get_version") && noteVersionInfo(printer, message)) return;
 
             handleMqttMessage(printer, topic, message);
         });

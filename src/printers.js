@@ -167,6 +167,11 @@ function createRuntimePrinter(entry) {
         // of each unit's table. Display only: it never reaches Spoolman, and it
         // is refreshed on every report rather than on the slot update interval.
         amsEnv: [],
+        // Which AMS each unit is, by unit label, from the printer's get_version
+        // answer. Requested once per connection, see requestVersion() in
+        // mqtt.js; kept across reconnects because the hardware does not change
+        // between two of them.
+        amsModels: {},
         // How many AMS updates a slot has been waiting for its remain reading,
         // keyed by slot label. See waitedLongEnoughForRemain() in mqtt.js.
         remainWaits: {},
