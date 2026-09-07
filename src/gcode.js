@@ -260,27 +260,42 @@ export function decodePrintMapping(mapping) {
 }
 
 /**
- * The printer's slots in the order Bambu Studio lists them, which is by
- * ascending AMS unit id and then by slot within the unit.
+ * The printer's slots in the order Bambu Studio lists them: the four slot units
+ * by ascending unit id and then by slot, then the external holder, then an
+ * AMS HT.
  *
- * That order is read off a printer rather than assumed. A P2S with two AMS
- * units and a spool on the external holder produced a nine entry filament list
- * whose colours matched, position for position, the slots the printer reported:
- * unit 0 as positions 0 to 3, unit 1 as 4 to 7, and the holder, which the
- * printer numbers 255, as position 8. Sorting by unit id reproduces exactly
- * that, so an AMS HT, numbered 128 to 135, falls between the four slot units
- * and the holder.
+ * Only a slot that holds something takes a position. Bambu Studio builds its
+ * filament list by synchronising with the AMS, and an empty slot contributes no
+ * filament to synchronise, so the list is as long as the number of loaded slots
+ * and every position after a gap moves up by one. The callers therefore pass
+ * the loaded slots and not every slot the printer has.
  *
- * The four slot units contribute all four of their positions whether or not a
- * slot reported a spool, because the slicer lists an empty slot too and
- * counting only the occupied ones would shift every position after one onto the
- * wrong spool. An AMS HT and the holder are one position each.
+ * Every part of that order is measured:
  *
- * Where an AMS HT really sits is inference, not measurement: no observed file
- * has one in it. It costs nothing to be wrong about, because `slotConfirmsSlice`
- * refuses a position whose slot does not hold the expected profile and colours,
- * and the stages below it then decide exactly as they did before positions were
- * used at all.
+ *   - a P2S with two full AMS units and a spool on the external holder produced
+ *     a nine entry list whose colours matched the reported slots position for
+ *     position, the holder last
+ *   - the same P2S with A3 and B2 emptied produced a seven entry list, and its
+ *     seven colours were A1, A2, A4, B1, B3, B4 and the holder in that order.
+ *     Both gaps are simply absent
+ *   - an X1E with one original AMS, loaded at A1, A2 and A4, produced a three
+ *     entry list, and the printer's own `print.mapping` for that print read
+ *     [0, 1, 3]: the third filament ran from A4, the empty A3 took no position.
+ *     The only measurement where the printer confirmed the estimate itself
+ *   - a P1S with two AMS units, an AMS HT and a spool on the holder produced a
+ *     nine entry list reading A1 to A4, B1 to B3, the holder, then the AMS HT.
+ *     B4 was empty and absent, and the holder comes before the HT although the
+ *     printer numbers the holder 254 and the HT 128, so this is not a sort by
+ *     unit id
+ *
+ * The result stays a suggestion, and a dual nozzle printer does not follow it
+ * at all: an H2C with two AMS units, an AMS HT and a spool on the holder listed
+ * its four filaments as HT-A, the holder, B2 and A3, because Bambu Studio
+ * groups the list by extruder there (`filament_maps` in that file says
+ * "1 2 2 2"). Being wrong costs nothing, because `slotConfirmsSlice` refuses a
+ * position whose slot does not hold the expected profile and colours, and the
+ * stages below it then decide exactly as they did before positions were used at
+ * all. See `test/gcode.dualnozzle.test.js`.
  *
  * This is the fallback for a printer that does not report `print.mapping`,
  * which answers the same question and is right where this is only sometimes:
@@ -288,15 +303,16 @@ export function decodePrintMapping(mapping) {
  * the printer and none of them for a project holding fewer filaments than the
  * printer has slots.
  *
- * @param {string[]} amsIds - slot labels as `convertAMSandSlot` produces them
+ * @param {string[]} amsIds - labels of the loaded slots, as `convertAMSandSlot`
+ *   produces them. An empty slot must not be passed, it takes no position
  * @returns {string[]} the positions, ordered
  */
 export function orderedAmsSlots(amsIds) {
     const ids = (amsIds || []).filter(id => typeof id === "string");
-    const units = ["A", "B", "C", "D"];
 
-    const attached = units.filter(unit => ids.some(id => id[0] === unit && /^[1-4]$/.test(id[1])));
-    const fourSlotUnits = attached.flatMap(unit => [1, 2, 3, 4].map(slot => `${unit}${slot}`));
+    // One letter and one digit, so lexicographic order is by unit id and then
+    // by slot within the unit.
+    const fourSlotUnits = ids.filter(id => /^[A-D][1-4]$/.test(id)).sort();
 
     const highTemperature = ids.filter(id => /^HT-[A-H]$/.test(id)).sort();
     // 255 before 254, which is the order the printer numbers them in and the
@@ -304,7 +320,7 @@ export function orderedAmsSlots(amsIds) {
     // like the HT, and covered by the same refusal in slotConfirmsSlice.
     const external = [EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT].filter(id => ids.includes(id));
 
-    return [...fourSlotUnits, ...highTemperature, ...external];
+    return [...fourSlotUnits, ...external, ...highTemperature];
 }
 
 /**

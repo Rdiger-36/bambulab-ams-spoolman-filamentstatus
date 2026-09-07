@@ -18,16 +18,15 @@ theory or in tests. Ordered by how likely a user is to hit it.
   the P2S, seven cancelled prints against a throwaway Spoolman. `useSpoolWeight()`
   reached it six times and the partial maths was exact: at layer 3 of a
   sequential print, 8.13 g scaled over the first object's 85 layers gave the
-  0.38 g that was booked. A finished print, as opposed to a cancelled one, has
-  still not been observed, and neither has a booking onto the external spool
-  holder, which needs a run past layer 170.
-- [ ] **An AMS HT.** Nobody involved has one, so where its slots sit in Bambu
-  Studio's filament list is unknown and `orderedAmsSlots()` leaves them out. It
-  only matters for a printer that does not report `print.mapping`, which answers
-  the same question. A single sliced file from a printer with one settles it:
-  compare `filament_colour` in `Metadata/project_settings.config` against the
-  slots the printer reports, position for position, the way the external holder
-  was settled.
+  0.38 g that was booked. Both of the gaps this used to name are closed as of
+  2026-09-04, see "Two prints on 2026-09-04" below: a print that actually
+  finishes, and a booking onto the external spool holder with a real amount on
+  it.
+- [x] **An AMS HT.** Settled on 2026-09-04 from a sliced file off a P1S with two
+  AMS units, an AMS HT and a spool on the external holder, read against the
+  slots the printer reported over MQTT: the HT is the last position of the list,
+  after the external holder, although the printer numbers the holder 254 and the
+  HT 128. One printer, so one measurement. See `test/gcode.htexternal.test.js`.
 - [ ] **AMS Lite.** Everything was tested on a P2S with two AMS units. The AMS
   Lite was never in scope for G-code tracking; the README only documents its
   legacy mode limitation.
@@ -36,6 +35,58 @@ theory or in tests. Ordered by how likely a user is to hit it.
 - [ ] **The update check with a newer release.** Only the prerelease path was
   observed, where the running version is ahead of the latest release. The
   "version X is available" path has never been rendered against a real answer.
+- [ ] **What P2S stages 51 and 54 are.** Both are reported as `stg_cur` during
+  an ordinary plate and neither is in the community table this project carries,
+  so the dashboard shows them as "Stage 51" and "Stage 54". They run between
+  stage 3, sweeping XY mech mode, and the first layer, so they are most likely
+  calibration or a check of some kind. Two lines in `PRINT_STAGES` in
+  `src/gcode.js` once somebody knows. The announced sequence of that plate was
+  `[29,2,13,11,4,8,14,3,54,1,51]`, and 2, 8 and 1 never appeared in a report, so
+  the list is what a job may go through rather than what it does.
+- [ ] **Low priority, waiting on other people's hardware: slice files from more
+  printer families.** The ordering in `orderedAmsSlots()` rests on four
+  printers. The empty slot rule is measured on two of them, P2S and X1E, the
+  holder before HT rule on one. Users with the
+  hardware below have been asked; the branch `fix/slice-slot-order` is where
+  this continues. Two things are needed per device, and the second is what makes
+  the first readable:
+
+    1. a sliced `.gcode.3mf` of a plate using several filaments, sliced after
+       synchronising the project with the printer in Bambu Studio
+    2. the slots the printer reports, from
+       `node scripts/capture-trays.js <ip> <code> <serial>`, taken without
+       moving a spool in between
+
+  `Metadata/project_settings.config` carries `filament_ids` and
+  `filament_colour` for the whole project, and reading those against the
+  reported slots gives the position of every slot, which is the measurement.
+  What each of them would settle:
+
+  - [x] **X1E with one AMS** (the X1, X1C and P1S family). Settled on
+    2026-09-07: an X1E with one original AMS, loaded at A1, A2 and A4, produced
+    a three entry list, and its own `print.mapping` read [0, 1, 3] for the
+    whole print. The empty slot rule holds on the X1 family and the printer
+    confirmed it itself. See `test/gcode.x1eemptyslot.test.js`.
+  - **A1 mini with an AMS Lite.** The Lite was never in scope for G-code
+    tracking, and it is the one unit whose four slots might not be listed the
+    way the others are. It also carries an external spool, so the position of
+    the holder is measurable on it a second time.
+  - **X2D with an AMS 2 Pro and an AMS HT** (the H2D and H2C family, and with
+    the P2S one variant of the H2S). The second dual nozzle sample. It would say
+    whether the extruder grouping the H2C showed is how that whole family lists
+    its filaments, and whether the holder still comes before the HT when the
+    list is grouped rather than ordered by unit.
+
+  Two questions ride along with these:
+
+  - **Does anything but a P2S report `print.mapping`?** Unknown for the P1, X1
+    and H2 families. It needs a print that is actually running, so a slice file
+    alone does not answer it. Where it is reported, the ordering above is not
+    used at all.
+  - **What `group_id` in `slice_info.config` means.** In the H2C file the four
+    filaments carried 0, 3, 2, 1, and ordering the right extruder's filaments by
+    it reproduced their AMS order exactly. One file, so it is a lead and not a
+    finding; a second dual nozzle file either kills it or makes it worth using.
 
 ## Log detail and the raw MQTT capture
 
@@ -163,6 +214,42 @@ Also seen: both 3rd party spools report `tray_info_idx` `GFL99`, the generic
 profile, which is exactly the collision described under the automatic creation
 gap below. They differ only in colour. And they report `remain` as `-1`, which
 `processData()` clamps to 0.
+
+
+On 2026-09-04 two prints were run on the P2S from the local build, against the
+throwaway Spoolman, and they settled more than they were started for.
+
+**A print that finishes.** "Cube", 2 filaments, 25 layers. `FINISH` reached the
+booking for the first time: 2.11 g onto spool 16 (A1, by tag) and 2.21 g onto
+spool 8 (External, manually assigned). Spoolman moved by exactly those amounts
+and both carried the same `last_used` second, so nothing else wrote them. That
+is the finished print and the external holder booking the entry above used to
+be waiting for, in one run.
+
+**A print stopped by hand**, same plate, stopped at `layer_num` 18 of 26. It
+answered three things:
+
+- **`layer_num` is 0-based while a print runs.** The first layer reports 0, the
+  next 1, and the counter is set to the layer count when the print ends, which
+  is one past the highest index the sliced file carries. That last part is what
+  made the dashboard show "Layer 27 / 26" and 104%, fixed in #128.
+- **`calcPartialConsumption()` is correct**, and reading `layer_num` as 0-based
+  is what makes it so. The plate prints pink over layers 0-11 and black over
+  12-25. At layer 18 it booked 2.25 g of pink, its full amount, and 0.93 g of
+  black, exactly half: 12 of 12 layers and 7 of 14. A global progress fraction
+  would have given both 19/26 and been wrong in both directions. Read 1-based,
+  the black share would have been 6/14 and 0.79 g rather than the 0.93 g that
+  was booked, so the arithmetic settles the convention on its own.
+- **A print stopped by hand reports `FAILED`, not `CANCEL`.** Both are terminal
+  and the booking fires either way. `print_error` is 50348044 for it, and it
+  arrives one report *after* the state does and is back at 0 the report after
+  that, which is why the summary collects it across reports rather than reading
+  the terminal one (#128).
+
+Also seen: `print.mapping` was reported for both prints, `["A1",null,"External"]`
+and `["A1",null,"A4"]`, so the sparse positions counted through correctly again.
+A pause leaves `stg_cur` at 0 and shows up only in `gcode_state`, so the thirteen
+"Paused, ..." entries of the stage table may never be reached on a P2S.
 
 ## Verified in a container
 
