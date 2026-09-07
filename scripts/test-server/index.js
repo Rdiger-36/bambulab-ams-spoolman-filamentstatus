@@ -30,7 +30,7 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  *                                     [--delta-reports]
  *                                     [--real-printer <ip> <code> <serial>]
  *                                     [--spoolman <url>] [--mode manual|automatic]
- *                                     [--report <name>]
+ *                                     [--report <name>] [--ams-model n3f|ams|ams_f1]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
@@ -41,6 +41,12 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  * what real printers sent, so this is the way to see the dashboard draw
  * hardware nobody here owns. The README next to the files says what each one
  * holds.
+ *
+ * `--ams-model` is what the mock's four slot units answer as when the service
+ * asks `get_version` on connect: `n3f` for an AMS 2 Pro, which the scenario's
+ * P2S carries and is the default, `ams` for an original AMS, `ams_f1` for an
+ * AMS Lite. An HT always answers as one. The dashboard names the units from
+ * that answer, so `--report p1s --ams-model ams` is a P1S with its original AMS.
  *
  * `--delta-reports` makes the mock printer leave the external spool holder out
  * of every second report, with `msg` 1, the way a P1S sends delta reports
@@ -86,6 +92,7 @@ function readOptions(argv) {
         spoolman: null,
         mode: "manual",
         report: null,
+        amsModel: "n3f",
     };
 
     for (let i = 0; i < argv.length; i++) {
@@ -119,6 +126,14 @@ function readOptions(argv) {
                 }
                 options.realPrinter = { ip: argv[i + 1], code: argv[i + 2], serial: argv[i + 3] };
                 i += 3;
+                break;
+            case "--ams-model":
+                if (!["n3f", "ams", "ams_f1"].includes(value)) {
+                    console.error("--ams-model takes n3f (AMS 2 Pro), ams (original AMS) or ams_f1 (AMS Lite)");
+                    process.exit(2);
+                }
+                options.amsModel = value;
+                i++;
                 break;
             case "--report":
                 if (!value) {
@@ -198,6 +213,7 @@ async function main() {
             log: prefixed("printer"),
             report: options.report?.print ?? null,
             deltaReports: options.deltaReports,
+            amsModel: options.amsModel,
         });
 
         if (options.report) {

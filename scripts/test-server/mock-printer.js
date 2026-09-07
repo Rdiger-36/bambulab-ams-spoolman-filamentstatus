@@ -99,6 +99,59 @@ function publishPacket(topic, payload) {
     return Buffer.concat([Buffer.from([0x30]), encodeRemainingLength(body.length), body]);
 }
 
+/**
+ * The topic and the payload of a PUBLISH the service sent, which is a command.
+ *
+ * @param {Buffer} payload - the packet body after the fixed header
+ * @param {number} flags - the low nibble of the first byte, where the QoS sits
+ */
+function parsePublish(payload, flags) {
+    const topicLength = payload.readUInt16BE(0);
+    const topic = payload.toString("utf8", 2, 2 + topicLength);
+    // A packet id follows the topic for QoS 1 and 2 only.
+    const qos = (flags >> 1) & 3;
+    const body = payload.subarray(2 + topicLength + (qos ? 2 : 0));
+    return { topic, body: body.toString("utf8") };
+}
+
+/**
+ * What a printer answers to `{"info":{"command":"get_version"}}`: one entry
+ * per module, the AMS units named by family prefix and unit id, the way
+ * `amsModelsFromVersion()` in src/ams.js reads them. Copied in shape from the
+ * answers of a P1S and an X1E of 2026-09-07, serials left out.
+ *
+ * @param {string} serial - the printer's serial number
+ * @param {object[]} units - the AMS units of the report, for their ids
+ * @param {string} family - the prefix for the four slot units: `ams` for the
+ *   original AMS, `ams_f1` for an AMS Lite, `n3f` for an AMS 2 Pro. An HT is
+ *   always `n3s`, nothing else sits at unit id 128 and up
+ */
+function versionAnswer(serial, units, family) {
+    const HARDWARE = { ams: "AMS08", ams_f1: "AMS_F102", n3f: "N3F01", n3s: "N3S01" };
+    const NAMES = { ams: "AMS (1)", ams_f1: "AMS Lite", n3f: "AMS 2 Pro", n3s: "AMS HT" };
+    const modules = [
+        { name: "ota", sw_ver: "01.10.00.00", hw_ver: "OTA", loader_ver: "00.00.00.00", sn: serial, product_name: "Mock printer", visible: true, flag: 0 },
+    ];
+
+    for (const unit of units) {
+        const id = Number(unit.id);
+        if (!Number.isInteger(id)) continue;
+        const prefix = id >= 128 ? "n3s" : family;
+        modules.push({
+            name: `${prefix}/${id}`,
+            sw_ver: "01.00.06.00",
+            hw_ver: HARDWARE[prefix],
+            loader_ver: "00.00.00.00",
+            sn: `00600MOCK${String(id).padStart(6, "0")}`,
+            product_name: NAMES[prefix],
+            visible: true,
+            flag: 0,
+        });
+    }
+
+    return JSON.stringify({ info: { command: "get_version", sequence_id: "0", module: modules, result: "success", reason: "" } });
+}
+
 /** The topic filters of a SUBSCRIBE, with the packet id in front of them. */
 function parseSubscribe(payload) {
     const packetId = payload.readUInt16BE(0);
@@ -222,10 +275,15 @@ const REPORTS_DIR = path.join(
  * @param {boolean} [options.deltaReports] - make every second report a delta
  *   that leaves the external spool holder out, the way a P1S does. See
  *   `buildReport()`
+ * @param {string} [options.amsModel] - what the four slot units answer as in
+ *   `get_version`: `n3f` (AMS 2 Pro, the default, which is what the scenario's
+ *   P2S carries), `ams` (original AMS) or `ams_f1` (AMS Lite). See
+ *   `versionAnswer()`
  * @returns {Promise<{close: () => Promise<void>, reports: () => number}>}
  */
-export function startMockPrinter({ serial, port, interval, log, report = null, deltaReports = false }) {
+export function startMockPrinter({ serial, port, interval, log, report = null, deltaReports = false, amsModel = "n3f" }) {
     const topic = `device/${serial}/report`;
+    const units = report?.ams?.ams ?? AMS_UNITS;
     const clients = new Set();
     let reports = 0;
     let built = 0;
@@ -257,10 +315,11 @@ export function startMockPrinter({ serial, port, interval, log, report = null, d
                 if (buffer.length < total) return;
 
                 const type = buffer[0] >> 4;
+                const flags = buffer[0] & 0x0F;
                 const payload = buffer.subarray(1 + header.bytes, total);
                 buffer = buffer.subarray(total);
 
-                handlePacket(client, type, payload, log);
+                handlePacket(client, type, flags, payload, log, answerCommand);
             }
         });
 
@@ -274,6 +333,25 @@ export function startMockPrinter({ serial, port, interval, log, report = null, d
     // The service checks whether the printer answers on the port at all before
     // it connects, with a bare TCP socket that never completes a handshake.
     server.on("tlsClientError", () => {});
+
+    /**
+     * Answers the one command the service sends, `get_version`, on the report
+     * topic the way a printer does. Everything else a real printer would act
+     * on and this one has no state for.
+     */
+    function answerCommand(client, command) {
+        let parsed;
+        try {
+            parsed = JSON.parse(command.body);
+        } catch {
+            return;
+        }
+        if (parsed?.info?.command !== "get_version") return;
+        if (!client.subscriptions.some(filter => topicMatches(filter, topic))) return;
+
+        client.socket.write(publishPacket(topic, versionAnswer(serial, units, amsModel)));
+        log(`answered get_version with ${units.length} AMS unit(s) as ${amsModel}`);
+    }
 
     const timer = setInterval(() => {
         // Full, delta, full, delta: the first report a client sees is the one
@@ -309,7 +387,7 @@ export function startMockPrinter({ serial, port, interval, log, report = null, d
 }
 
 /** Answers the packets a subscribing client sends, and ignores the rest. */
-function handlePacket(client, type, payload, log) {
+function handlePacket(client, type, flags, payload, log, answerCommand) {
     switch (type) {
         case CONNECT:
             // Accepted unconditionally: the access code a real printer checks is
@@ -350,8 +428,9 @@ function handlePacket(client, type, payload, log) {
             break;
 
         case PUBLISH:
-            // The service only ever subscribes, so anything arriving here is a
-            // command a real printer would act on and this one has no state for.
+            // A command. The service sends exactly one, get_version, right
+            // after it subscribes; see answerCommand() in startMockPrinter().
+            answerCommand(client, parsePublish(payload, flags));
             break;
 
         default:

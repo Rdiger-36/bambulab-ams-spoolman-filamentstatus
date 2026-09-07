@@ -376,28 +376,29 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<span class="ams-env-unit"${unit.title ? ` title="${escapeHtml(unit.title)}"` : ""}>${escapeHtml(unit.label)}</span>${parts.join("")}`;
     }
 
-    // Names the unit as far as its own report allows.
+    // Names the unit as the printer names it.
     //
-    // Nothing in the payload states the model, so it is read off what the unit
-    // can do. A single slot unit sits at AMS id 128 and up, which is the HT and
-    // nothing else. A dryer, which is `dry_time` and `dry_setting`, only exists
-    // on the 2 Pro and the HT. What is left, a unit that reports the five step
-    // level and nothing more, is either an original AMS or an AMS Lite: the two
-    // send byte for byte the same fields, so anything more precise than "AMS"
-    // there would be a guess. See extractAmsEnvironment() in src/ams.js and
-    // test/ams.env.test.js, which carries the four shapes seen on real hardware.
+    // The model comes from the printer's get_version answer, which the server
+    // asks for on every connection and folds into the readings as `model`. See
+    // amsModelsFromVersion() in src/ams.js. The status report itself cannot
+    // tell the units apart: an original AMS on current firmware sends the same
+    // humidity, temperature and drying fields as an AMS 2 Pro, which is how
+    // every unit with a dryer field used to be labelled a 2 Pro. Until the
+    // answer arrives, or from a printer that never gives one, a single slot
+    // unit is still an HT, because only the HT sits at unit id 128 and up, and
+    // everything else is plainly "AMS".
     function amsUnitLabel(unitKey, env) {
-        if (unitKey.startsWith("HT-")) {
-            return { label: `AMS HT ${unitKey.slice(3)}`, title: "Single slot unit with a dryer" };
+        if (env?.model) {
+            return { label: `${env.model} ${unitKey.startsWith("HT-") ? unitKey.slice(3) : unitKey}`, title: "As the printer names this unit" };
         }
 
-        if (env?.drying) {
-            return { label: `AMS 2 Pro ${unitKey}`, title: "Reports a humidity percentage, a temperature and a dryer" };
+        if (unitKey.startsWith("HT-")) {
+            return { label: `AMS HT ${unitKey.slice(3)}`, title: "Single slot unit, which only the AMS HT is" };
         }
 
         return {
             label: `AMS ${unitKey}`,
-            title: "An original AMS or an AMS Lite: both report the humidity level and nothing else, so the report cannot tell them apart",
+            title: "The printer has not said yet which AMS this is",
         };
     }
 

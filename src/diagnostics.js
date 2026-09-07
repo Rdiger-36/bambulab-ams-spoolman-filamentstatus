@@ -59,6 +59,16 @@ export function systemInfo(anonymize = false) {
         // stripped from the settings; the count is what a support question about
         // "something is writing to Spoolman" actually needs.
         apiKeys: apiKeyCount(),
+        // The AMS units as each printer named them in its get_version answer,
+        // which is the one place the family is stated. A unit missing here is
+        // a printer that has not answered yet, or a family this service does
+        // not know; an original AMS shown as a 2 Pro was the report that made
+        // this line worth carrying.
+        amsUnits: printers.map(printer => ({
+            printer: printer.name,
+            units: Object.entries(printer.amsModels || {}).map(([unit, model]) =>
+                `${unit}: ${model.model}${model.hardware ? ` (${model.hardware})` : ""}`),
+        })),
         spoolman: state.spoolmanStatus,
         dataDir: anonymize ? maskPath(dataDir) : dataDir,
         logsDir: anonymize ? maskPath(logsDir) : logsDir,
