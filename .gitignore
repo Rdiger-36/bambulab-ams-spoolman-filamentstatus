@@ -5,3 +5,4 @@
 logs
 node_modules
 printers
+.claude/launch.json
