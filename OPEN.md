@@ -44,8 +44,9 @@ theory or in tests. Ordered by how likely a user is to hit it.
   `[29,2,13,11,4,8,14,3,54,1,51]`, and 2, 8 and 1 never appeared in a report, so
   the list is what a job may go through rather than what it does.
 - [ ] **Low priority, waiting on other people's hardware: slice files from more
-  printer families.** The ordering in `orderedAmsSlots()` rests on three
-  printers, and two of its three rules on one printer each. Users with the
+  printer families.** The ordering in `orderedAmsSlots()` rests on four
+  printers. The empty slot rule is measured on two of them, P2S and X1E, the
+  holder before HT rule on one. Users with the
   hardware below have been asked; the branch `fix/slice-slot-order` is where
   this continues. Two things are needed per device, and the second is what makes
   the first readable:
@@ -61,9 +62,11 @@ theory or in tests. Ordered by how likely a user is to hit it.
   reported slots gives the position of every slot, which is the measurement.
   What each of them would settle:
 
-  - **X1E with one AMS** (the X1, X1C and P1S family). Whether the order holds
-    on the X1 family at all, and what an original AMS does to it: every file so
-    far came from an AMS 2 Pro or the AMS of a P2S.
+  - [x] **X1E with one AMS** (the X1, X1C and P1S family). Settled on
+    2026-09-07: an X1E with one original AMS, loaded at A1, A2 and A4, produced
+    a three entry list, and its own `print.mapping` read [0, 1, 3] for the
+    whole print. The empty slot rule holds on the X1 family and the printer
+    confirmed it itself. See `test/gcode.x1eemptyslot.test.js`.
   - **A1 mini with an AMS Lite.** The Lite was never in scope for G-code
     tracking, and it is the one unit whose four slots might not be listed the
     way the others are. It also carries an external spool, so the position of

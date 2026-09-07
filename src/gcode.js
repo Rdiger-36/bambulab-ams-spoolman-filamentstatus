@@ -275,12 +275,16 @@ export function decodePrintMapping(mapping) {
  *   - a P2S with two full AMS units and a spool on the external holder produced
  *     a nine entry list whose colours matched the reported slots position for
  *     position, the holder last
- *   - the same P2S with A2 and B1 emptied produced a seven entry list, and its
- *     seven colours were A0, A1, A3, B0, B2, B3 and the holder in that order.
+ *   - the same P2S with A3 and B2 emptied produced a seven entry list, and its
+ *     seven colours were A1, A2, A4, B1, B3, B4 and the holder in that order.
  *     Both gaps are simply absent
+ *   - an X1E with one original AMS, loaded at A1, A2 and A4, produced a three
+ *     entry list, and the printer's own `print.mapping` for that print read
+ *     [0, 1, 3]: the third filament ran from A4, the empty A3 took no position.
+ *     The only measurement where the printer confirmed the estimate itself
  *   - a P1S with two AMS units, an AMS HT and a spool on the holder produced a
- *     nine entry list reading A0 to A3, B0 to B2, the holder, then the AMS HT.
- *     B3 was empty and absent, and the holder comes before the HT although the
+ *     nine entry list reading A1 to A4, B1 to B3, the holder, then the AMS HT.
+ *     B4 was empty and absent, and the holder comes before the HT although the
  *     printer numbers the holder 254 and the HT 128, so this is not a sort by
  *     unit id
  *

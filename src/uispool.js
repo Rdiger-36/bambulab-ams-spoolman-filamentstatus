@@ -151,8 +151,9 @@ export function toClientSpool(uiSpool) {
  *
  * Bambu Studio's filament list skips an empty slot, so passing every slot the
  * printer has would put a position where the slicer has none and shift every
- * filament after it onto the wrong slot. Measured on a P2S with A2 and B1
- * emptied: seven loaded slots, seven filaments, both gaps absent.
+ * filament after it onto the wrong slot. Measured on a P2S with A3 and B2
+ * emptied: seven loaded slots, seven filaments, both gaps absent, and confirmed
+ * by an X1E whose own `print.mapping` skipped its empty A3.
  *
  * Takes runtime UI spools or their client projection, because the booking reads
  * one and `/api/print` the other and both ask this same question.

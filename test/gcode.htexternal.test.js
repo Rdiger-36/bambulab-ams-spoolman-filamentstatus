@@ -25,7 +25,7 @@ import { loadedSlotIds } from "../src/uispool.js";
 // settles two things `orderedAmsSlots()` could only assume, and both are what
 // it now does:
 //
-//   - the empty B3 takes no position. The list runs A0 to A3, then B0 to B2,
+//   - the empty B4 takes no position. The list runs A1 to A4, then B1 to B3,
 //     and the next entry is already the external holder
 //   - the external holder comes before the AMS HT, although the printer numbers
 //     the holder 254 and the HT 128, so the order is not a sort by unit id
@@ -51,16 +51,16 @@ const slot = (amsId, idx, type, color, { id = null, tag = true } = {}) => ({
     slot: { tray_type: type, tray_info_idx: idx, tray_color: color, cols: [color], tray_weight: "1000", remain: 50 },
 });
 
-/** What the printer reports, slot for slot. B3 holds nothing. */
+/** What the printer reports, slot for slot. B4 holds nothing. */
 const printerSlots = () => [
-    slot("A0", "GFA00", "PLA", "FF6A13FF", { id: 1 }),
-    slot("A1", "GFA00", "PLA", "000000FF", { id: 2 }),
-    slot("A2", "GFA01", "PLA", "FFFFFFFF", { id: 3 }),
-    slot("A3", "GFG02", "PETG", "0086D6FF", { id: 4 }),
-    slot("B0", "GFA05", "PLA", "D4AF37FF", { id: 5 }),
-    slot("B1", "GFU01", "TPU", "1F1F1FFF", { id: 6 }),
-    slot("B2", "GFA00", "PLA", "00AE42FF", { id: 7 }),
-    { amsId: "B3", slotState: "Empty", connectedViaTag: false, connectedViaMapping: false, existingSpool: null, slot: {} },
+    slot("A1", "GFA00", "PLA", "FF6A13FF", { id: 1 }),
+    slot("A2", "GFA00", "PLA", "000000FF", { id: 2 }),
+    slot("A3", "GFA01", "PLA", "FFFFFFFF", { id: 3 }),
+    slot("A4", "GFG02", "PETG", "0086D6FF", { id: 4 }),
+    slot("B1", "GFA05", "PLA", "D4AF37FF", { id: 5 }),
+    slot("B2", "GFU01", "TPU", "1F1F1FFF", { id: 6 }),
+    slot("B3", "GFA00", "PLA", "00AE42FF", { id: 7 }),
+    { amsId: "B4", slotState: "Empty", connectedViaTag: false, connectedViaMapping: false, existingSpool: null, slot: {} },
     slot("HT-A", "GFB00", "ABS", "E4E4E4FF", { id: 8 }),
     slot("External", "GFG00", "PETG", "0000FFFF", { id: 9 }),
 ];
@@ -88,34 +88,34 @@ test("the four printed filaments are read off a nine filament project", () => {
 });
 
 test("the print books onto the slots the printer really holds them in", () => {
-    // The orange PLA sits in A0, the green one in B2, the blue PETG on the
+    // The orange PLA sits in A1, the green one in B3, the blue PETG on the
     // external holder and the ABS in the AMS HT. Nothing else in the printer
     // shares both a profile and a colour with any of them.
     const spools = printerSlots();
     assert.deepEqual(
         matchedSlots(calcFullConsumption(p1s), estimatedPositions(spools), false, spools),
-        ["A0", "B2", "External", "HT-A"],
+        ["A1", "B3", "External", "HT-A"],
     );
 });
 
 test("the answer does not depend on where the spools sit", () => {
     // The same nine spools, shuffled across the same slots. Position 0 now
-    // names A0 for the orange PLA and A0 holds the white PLA Matte, so it is
+    // names A1 for the orange PLA and A1 holds the white PLA Matte, so it is
     // refused rather than booked on.
     const shuffled = [
-        slot("A0", "GFA01", "PLA", "FFFFFFFF", { id: 3 }),
-        slot("A1", "GFA00", "PLA", "FF6A13FF", { id: 1 }),
-        slot("A2", "GFU01", "TPU", "1F1F1FFF", { id: 6 }),
-        slot("A3", "GFA00", "PLA", "00AE42FF", { id: 7 }),
-        slot("B0", "GFG02", "PETG", "0086D6FF", { id: 4 }),
-        slot("B1", "GFA00", "PLA", "000000FF", { id: 2 }),
-        slot("B2", "GFA05", "PLA", "D4AF37FF", { id: 5 }),
+        slot("A1", "GFA01", "PLA", "FFFFFFFF", { id: 3 }),
+        slot("A2", "GFA00", "PLA", "FF6A13FF", { id: 1 }),
+        slot("A3", "GFU01", "TPU", "1F1F1FFF", { id: 6 }),
+        slot("A4", "GFA00", "PLA", "00AE42FF", { id: 7 }),
+        slot("B1", "GFG02", "PETG", "0086D6FF", { id: 4 }),
+        slot("B2", "GFA00", "PLA", "000000FF", { id: 2 }),
+        slot("B3", "GFA05", "PLA", "D4AF37FF", { id: 5 }),
         slot("HT-A", "GFG00", "PETG", "0000FFFF", { id: 9 }),
         slot("External", "GFB00", "ABS", "E4E4E4FF", { id: 8 }),
     ];
     assert.deepEqual(
         matchedSlots(calcFullConsumption(p1s), estimatedPositions(shuffled), false, shuffled),
-        ["A1", "A3", "HT-A", "External"],
+        ["A2", "A4", "HT-A", "External"],
     );
 });
 
@@ -124,24 +124,24 @@ test("what the printer reports carries the unused filaments as gaps", () => {
     // the plate does not print. Decoding those as a slot would name the
     // external holder, which is unit 255 slot 0.
     const slots = decodePrintMapping([0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x0102, 0xFF00, 0x8000]);
-    assert.deepEqual(slots, ["A0", null, null, null, null, null, "B2", "External", "HT-A"]);
+    assert.deepEqual(slots, ["A1", null, null, null, null, null, "B3", "External", "HT-A"]);
 
     const spools = printerSlots();
-    assert.deepEqual(matchedSlots(calcFullConsumption(p1s), slots, true, spools), ["A0", "B2", "External", "HT-A"]);
+    assert.deepEqual(matchedSlots(calcFullConsumption(p1s), slots, true, spools), ["A1", "B3", "External", "HT-A"]);
 });
 
 test("the estimated positions are the ones the slicer used", () => {
     // Read off the printer: the nine filaments of the project are its nine
-    // loaded slots, in this order. The empty B3 has no position, and the holder
+    // loaded slots, in this order. The empty B4 has no position, and the holder
     // comes before the AMS HT although the printer numbers it 254 against the
     // HT's 128.
-    const measured = ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "External", "HT-A"];
+    const measured = ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "External", "HT-A"];
     assert.deepEqual(estimatedPositions(printerSlots()), measured);
 
     // So the position alone names every slot this print runs from, and each of
     // the four is confirmed by what the slot holds.
     const entries = Object.values(resolveSliceSlots(calcFullConsumption(p1s), measured, { reportedByPrinter: false }));
-    assert.deepEqual(entries.map(e => e.amsId), ["A0", "B2", "External", "HT-A"]);
+    assert.deepEqual(entries.map(e => e.amsId), ["A1", "B3", "External", "HT-A"]);
 });
 
 test("a print by object gives every filament a range of its own", () => {
@@ -175,6 +175,6 @@ test("a cancelled sequential print still lands on the right slots", () => {
     const spools = printerSlots();
     assert.deepEqual(
         matchedSlots(calcPartialConsumption(p1s, 319), estimatedPositions(spools), false, spools),
-        ["A0", "B2", "External", "HT-A"],
+        ["A1", "B3", "External", "HT-A"],
     );
 });

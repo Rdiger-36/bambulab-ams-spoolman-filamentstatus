@@ -262,11 +262,15 @@ build their Spoolman payload from.
   `loadedSlotIds()` from `uispool.js` rather than every slot. Bambu Studio builds
   its filament list by synchronising with the AMS and an empty slot has nothing
   to contribute, so a gap shifts everything after it one to the left. Measured on
-  a P2S emptied at A2 and B1: seven loaded slots, seven filaments, both gaps
-  absent. The order past the units is measured too, on a P1S carrying an AMS HT
-  and a spool on the holder: the holder comes first and the HT last, which is not
-  the order of the ids the printer gives them (254 against 128 to 135).
-  `test/gcode.emptyslots.test.js` and `test/gcode.htexternal.test.js` hold both.
+  a P2S emptied at A3 and B2: seven loaded slots, seven filaments, both gaps
+  absent. Confirmed by an X1E emptied at A4's neighbour A3, whose own
+  `print.mapping` for that print read [0, 1, 3]: the printer put the third
+  filament on A4, exactly where the estimate puts it. The order past the units
+  is measured too, on a P1S carrying an AMS HT and a spool on the holder: the
+  holder comes first and the HT last, which is not the order of the ids the
+  printer gives them (254 against 128 to 135). `test/gcode.emptyslots.test.js`,
+  `test/gcode.x1eemptyslot.test.js` and `test/gcode.htexternal.test.js` hold
+  all three.
 - **The order is a suggestion and a dual nozzle printer ignores it.** An H2C
   groups its filament list by extruder, so the position names the wrong slot for
   most of the print. It costs nothing, because the confirmation below rejects a

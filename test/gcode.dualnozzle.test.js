@@ -43,17 +43,17 @@ const slot = (amsId, idx, type, color, { id = null, tag = false } = {}) => ({
 
 // What the printer of this print reports: ten slots, six of which have nothing
 // to do with the job. Two 3rd party spools without a usable profile, a PETG in
-// A2, and three PLA Basic spools in the B unit that share the GFA00 profile
+// A3, and three PLA Basic spools in the B unit that share the GFA00 profile
 // with two of the sliced filaments and differ from them only in colour.
 const loadedSlots = () => [
-    slot("A0", "GFL99", "PLA", "C8B48CFF"),
-    slot("A1", "GFL99", "PLA", "FFFFFFFF"),
-    slot("A2", "GFG01", "PETG", "FFFFFFFF", { id: 9, tag: true }),
-    slot("A3", "GFA00", "PLA", "C12E1FFF", { id: 6, tag: true }),
-    slot("B0", "GFA00", "PLA", "9D432CFF", { id: 5, tag: true }),
-    slot("B1", "GFA00", "PLA", "8E9089FF", { id: 14, tag: true }),
-    slot("B2", "GFA00", "PLA", "000000FF", { id: 1, tag: true }),
-    slot("B3", "GFG99", "PETG", "FFFFFFFF"),
+    slot("A1", "GFL99", "PLA", "C8B48CFF"),
+    slot("A2", "GFL99", "PLA", "FFFFFFFF"),
+    slot("A3", "GFG01", "PETG", "FFFFFFFF", { id: 9, tag: true }),
+    slot("A4", "GFA00", "PLA", "C12E1FFF", { id: 6, tag: true }),
+    slot("B1", "GFA00", "PLA", "9D432CFF", { id: 5, tag: true }),
+    slot("B2", "GFA00", "PLA", "8E9089FF", { id: 14, tag: true }),
+    slot("B3", "GFA00", "PLA", "000000FF", { id: 1, tag: true }),
+    slot("B4", "GFG99", "PETG", "FFFFFFFF"),
     slot("HT-A", "GFA01", "PLA", "9B9EA0FF", { id: 15, tag: true }),
     slot("External", "GFU99", "TPU", "898989FF"),
 ];
@@ -74,31 +74,31 @@ test("the four filaments of the H2C print are read with their grams", () => {
 });
 
 test("on two extruders the list order is not the slot order", () => {
-    // The estimate for a ten slot printer starts at A0, and the print takes
-    // nothing from A0, A1 or A2 at all. Position 3 lands on A3 by coincidence.
-    // The slicer listed these four as HT-A, the holder, B2 and A3.
+    // The estimate for a ten slot printer starts at A1, and the print takes
+    // nothing from A1, A2 or A3 at all. Position 3 lands on A4 by coincidence.
+    // The slicer listed these four as HT-A, the holder, B3 and A4.
     assert.deepEqual(
         orderedAmsSlots(loadedSlots().map(s => s.amsId)),
-        ["A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "External", "HT-A"],
+        ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "External", "HT-A"],
     );
 });
 
 test("the print is matched to its real slots without print.mapping", () => {
     // The reproduction of the dashboard: 22.09 g on the AMS HT, 20.56 g on the
-    // holder, 20.93 g on B2 and 20.85 g on A3. Three of the four positions the
+    // holder, 20.93 g on B3 and 20.85 g on A4. Three of the four positions the
     // list order estimated are refused, and profile plus colour place them.
     const slots = orderedAmsSlots(loadedSlots().map(s => s.amsId));
     assert.deepEqual(
         matchedSlots(calcFullConsumption(h2c), slots, false),
-        ["HT-A", "External", "B2", "A3"],
+        ["HT-A", "External", "B3", "A4"],
     );
 });
 
 test("the same answer when the printer reports the slots itself", () => {
-    // 0x8000 is HT-A, 0xFF00 the external holder, 0x0102 is B2 and 0x0003 A3.
+    // 0x8000 is HT-A, 0xFF00 the external holder, 0x0102 is B3 and 0x0003 A4.
     const slots = decodePrintMapping([0x8000, 0xFF00, 0x0102, 0x0003]);
-    assert.deepEqual(slots, ["HT-A", "External", "B2", "A3"]);
-    assert.deepEqual(matchedSlots(calcFullConsumption(h2c), slots, true), ["HT-A", "External", "B2", "A3"]);
+    assert.deepEqual(slots, ["HT-A", "External", "B3", "A4"]);
+    assert.deepEqual(matchedSlots(calcFullConsumption(h2c), slots, true), ["HT-A", "External", "B3", "A4"]);
 });
 
 test("the external holder takes an amount even though nothing is linked to it", () => {
@@ -122,20 +122,20 @@ test("a cancelled print splits the same way", () => {
     const partial = calcPartialConsumption(h2c, 81);
 
     assert.deepEqual(Object.values(partial).map(e => e.grams), [10.98, 10.22, 10.4, 10.36]);
-    assert.deepEqual(matchedSlots(partial, slots, false), ["HT-A", "External", "B2", "A3"]);
+    assert.deepEqual(matchedSlots(partial, slots, false), ["HT-A", "External", "B3", "A4"]);
 });
 
 test("two identical spools are told apart only by what the printer reports", () => {
     // The limit of the estimate on this printer. With a second Matte Ash Gray
-    // spool in A0 the position the list order named for filament 0 does hold
-    // the sliced profile and colour, so it confirms, and the amount goes to A0
+    // spool in A1 the position the list order named for filament 0 does hold
+    // the sliced profile and colour, so it confirms, and the amount goes to A1
     // rather than to the AMS HT the print really runs from. Nothing in the
     // sliced file can separate the two.
-    const duplicate = [...loadedSlots(), slot("A0", "GFA01", "PLA", "9B9EA0FF", { id: 77, tag: true })]
+    const duplicate = [...loadedSlots(), slot("A1", "GFA01", "PLA", "9B9EA0FF", { id: 77, tag: true })]
         .filter((s, i, all) => all.findLastIndex(o => o.amsId === s.amsId) === i);
 
     const slots = orderedAmsSlots(duplicate.map(s => s.amsId));
-    assert.deepEqual(matchedSlots(calcFullConsumption(h2c), slots, false, duplicate)[0], "A0");
+    assert.deepEqual(matchedSlots(calcFullConsumption(h2c), slots, false, duplicate)[0], "A1");
 
     // `print.mapping` is the answer to that, and the printer is trusted where
     // it speaks.
