@@ -101,6 +101,24 @@ function broadcastAmsEnvironment(printer, amsUnits, now) {
     broadcastSSE({ type: "ams_env", printer: printer.id, amsEnv });
 }
 
+/**
+ * Why the last slice info fetch came back empty, for the log.
+ *
+ * Two different problems used to share one sentence, "slice_info.config not
+ * found in 3MF", and the one that was actually happening, no file under that
+ * name at all, was the one the sentence did not say.
+ *
+ * @param {object|null} record - `printer.lastSliceFetch`
+ * @returns {string} one clause, without a full stop
+ */
+export function sliceFetchFailure(record) {
+    if (!record) return "No sliced file was fetched";
+    if (!record.path) {
+        return `No sliced file on the printer under ${record.tried.join(", ")}`;
+    }
+    return `${record.path} carries no Metadata/slice_info.config`;
+}
+
 // Print states that signal the end of a print job
 const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
 // Print states that indicate an active or paused job. Built from the list in
@@ -158,7 +176,9 @@ export async function handlePrintStateChange(printer, print) {
     const freshStart = ACTIVE_STATES.has(newState) && !ACTIVE_STATES.has(prevState);
     if (freshStart) {
         printer.currentJobName    = jobName;
+        printer.currentGcodeFile  = print.gcode_file || null;
         printer.currentSliceInfo  = null;
+        printer.lastSliceFetch    = null;
         printer.currentMapping    = null;
         printer.consumptionBooked = false;
         printer.sliceFetchDone    = false;
@@ -216,7 +236,12 @@ export async function handlePrintStateChange(printer, print) {
         }
     }
 
-    // Fetch slice info once we reach RUNNING (the .gcode.3mf is reliably present
+    // The file name the printer reports for the job, which says whether the
+    // sliced file is a .3mf (cloud) or a .gcode.3mf (LAN). Read on every report
+    // like the job name: it can arrive a report or two after the state does.
+    if (print.gcode_file) printer.currentGcodeFile = print.gcode_file;
+
+    // Fetch slice info once we reach RUNNING (the sliced file is reliably present
     // in /cache by then). Guarded so we only attempt it once per print.
     if (newState === "RUNNING" && jobName && !printer.sliceFetchDone) {
         printer.sliceFetchDone = true;
@@ -224,11 +249,11 @@ export async function handlePrintStateChange(printer, print) {
 
         console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
         try {
-            printer.currentSliceInfo = await fetchSliceInfo(printer, jobName);
+            printer.currentSliceInfo = await fetchSliceInfo(printer, jobName, printer.currentGcodeFile);
             if (printer.currentSliceInfo) {
                 console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
             } else {
-                console.log(printer.name, printer.logFilePath, "[Print] slice_info.config not found in 3MF, consumption tracking unavailable for this print");
+                console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, consumption tracking unavailable for this print`);
             }
         } catch (err) {
             console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);

@@ -7,6 +7,10 @@ Unreleased
          - Next to the download the page says what it shows and what the download would carry: "refreshes every 5 s · 2 files, 1.3 MB" for a log, "last 50 reports · refreshes every 5 s · 3 files, 41 MB" for a trace, and "capture disabled" in front when the trace of that printer is not being written. The box then says where to enable it rather than showing an empty file
          - The switch changes the file in place and writes it into the address, so a link to a trace still opens the trace, and picking another printer while reading traces opens that printer's trace. The title under the toolbar names the file on disk, which is what a bug report ends up naming
          - The log endpoint answers the size of the file set, the file name and whether the capture is on, next to the line count it already answered
+   - Fixes:
+      - A print sent through the Bambu cloud, from Bambu Studio or the Handy app, is booked. The printer keeps such a file as "<job>.3mf" and says so in its report, while this service only ever asked for "<job>.gcode.3mf", the name a file sent over the LAN gets, so every cloud print ended with "slice_info.config not found" and nothing booked. Read off a P1S whose seven cloud prints since 6 September 2026 all went that way (issue #146). The name the printer reports is now tried first, then both spellings
+         - A file that is not found is not looked for again every few seconds: the dashboard asks for the print's figures on every refresh, and each ask was one FTPS login to the printer for the whole print, 303 of them in fifteen minutes on that P1S. One search per print now, the manual ?job= test aside
+         - The log says which of the two it was: no file on the printer under the names tried, or a file that carries no slice_info.config. Both used to read the same
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.15

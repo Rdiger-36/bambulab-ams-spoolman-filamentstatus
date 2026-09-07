@@ -172,3 +172,22 @@ test("an unassigned 3rd party slot still shows what the print needs from it", as
     assert.equal(matched.length, 1);
     assert.equal(matched[0].color.replace("#", "").toUpperCase(), f1.color.toUpperCase());
 });
+
+test("a file the print handler did not find is not looked for again on every refresh", async () => {
+    // What the MQTT handler leaves behind after a fetch that found nothing.
+    // Without the guard the route would open an FTPS connection to 127.0.0.1
+    // on every call, which is one login per dashboard refresh for the whole
+    // print; with it the answer is the same empty one, at once.
+    printer.currentSliceInfo = null;
+    printer.lastSliceFetch = { jobName: "four colours", tried: ["/cache/four colours.3mf"], path: null, sliceInfo: false, at: Date.now() };
+
+    const started = Date.now();
+    const { status, body } = await call(`${app.url}/api/print/${SERIAL}`);
+    assert.equal(status, 200);
+    assert.equal(body.sliceInfo, null);
+    assert.equal(body.error, undefined);
+    assert.ok(Date.now() - started < 2000, "answered without an FTPS attempt");
+
+    printer.currentSliceInfo = sliceInfo;
+    printer.lastSliceFetch = null;
+});
