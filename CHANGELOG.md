@@ -16,6 +16,7 @@ Unreleased
          - Nothing was booked onto the wrong spool by this so far, because a slot that does not hold what was sliced refuses the position and the filament is then placed by its profile and colour. That fallback cannot tell two identical spools apart, though, and the position now can
       - An AMS unit is named on the dashboard as the printer names it, so an original AMS no longer reads "AMS 2 Pro". The label was read off the status report, where only a 2 Pro and an HT were thought to send a humidity percentage, a temperature and the drying fields; an original AMS on current firmware sends all three as well, seen on a P1S and an X1E on 2026-09-07, and both showed a 2 Pro they do not have
          - The service now asks the printer for its module list ("get_version") on every connection, which names each unit by family: the original AMS, the AMS Lite, the AMS 2 Pro and the AMS HT. Until the answer arrives, or from a printer that never gives one, a unit reads "AMS", and a single slot unit "AMS HT", which is the only unit that sits at that id
+         - The diagnostics bundle lists the units as the printer named them, per printer, which is the line a "wrong AMS shown" report needs
          - The mock printer of scripts/test-server answers the request too, and --ams-model says which family its four slot units claim to be
 
 -----------------------------------------------------------------------------------------------
