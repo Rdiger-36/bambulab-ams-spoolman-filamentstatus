@@ -19,7 +19,7 @@ import {
     setSpoolArchived,
     logSpoolmanFailure,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
@@ -211,6 +211,45 @@ export function noteVersionInfo(printer, message) {
     return true;
 }
 
+/**
+ * Keeps the slots Bambu Studio sent a job to, from the `project_file` command
+ * the printer echoes on its report topic.
+ *
+ * Read ahead of `handleMqttMessage()` like the `get_version` answer, and for
+ * the same reason: the echo arrives once, two seconds before the state changes
+ * to PREPARE, and the handler may not be reading at that moment. It is kept on
+ * the printer until the print starts, where `handlePrintStateChange()` takes it
+ * as the mapping for a job of that name; a printer that reports `print.mapping`
+ * itself overrides it, so a P2S loses nothing.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {Buffer|string} message - the raw MQTT message
+ * @returns {boolean} whether the message was a `project_file` echo
+ */
+export function notePrintCommand(printer, message) {
+    let data;
+    try {
+        data = JSON.parse(message);
+    } catch {
+        return false;
+    }
+    const command = data?.print;
+    if (command?.command !== "project_file") return false;
+
+    const slots = decodeStudioMapping(command);
+    const jobName = typeof command.subtask_name === "string" ? command.subtask_name : "";
+    printer.pendingMapping = slots ? { jobName, slots, at: Date.now() } : null;
+
+    if (slots) {
+        console.log(printer.name, printer.logFilePath,
+            `[Print] Bambu Studio sent "${jobName || "the job"}" to the slots ${JSON.stringify(slots)}`);
+    } else {
+        debug("print", printer.name, printer.logFilePath,
+            `[Print] Bambu Studio sent "${jobName || "the job"}" without a slot mapping`);
+    }
+    return true;
+}
+
 // Print states that signal the end of a print job
 const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
 // Print states that indicate an active or paused job. Built from the list in
@@ -274,6 +313,22 @@ export async function handlePrintStateChange(printer, print) {
         printer.currentMapping    = null;
         printer.consumptionBooked = false;
         printer.sliceFetchDone    = false;
+
+        // The slots Bambu Studio sent this job to, echoed by the printer just
+        // before the state changed. Taken for a job of that name only: an echo
+        // left over from a job that never started, or a reprint started on the
+        // printer's screen, must not name the slots of a different plate. A
+        // printer that reports print.mapping replaces it below on every report.
+        const pending = printer.pendingMapping;
+        printer.pendingMapping = null;
+        if (pending && (!pending.jobName || !jobName || pending.jobName === jobName)) {
+            printer.currentMapping = pending.slots;
+            console.log(printer.name, printer.logFilePath,
+                `[Print] Slots as Bambu Studio sent the job: ${JSON.stringify(pending.slots)}`);
+        } else if (pending) {
+            debug("print", printer.name, printer.logFilePath,
+                `[Print] The slots Bambu Studio sent were for "${pending.jobName}", not for "${jobName}", so they are not used`);
+        }
 
         // The result of the previous print goes here, not on the terminal
         // state: it stays readable for as long as nothing new is printing,
@@ -1799,6 +1854,9 @@ export async function setupMqtt(printer) {
             // string check keeps the parse off the reports that come every
             // second or two.
             if (message.includes("get_version") && noteVersionInfo(printer, message)) return;
+            // The project_file echo the same way. It carries no state and no AMS
+            // block, so the handler has nothing to read off it afterwards.
+            if (message.includes("project_file") && notePrintCommand(printer, message)) return;
 
             handleMqttMessage(printer, topic, message);
         });
