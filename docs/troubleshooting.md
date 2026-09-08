@@ -99,7 +99,7 @@ a reverse proxy:
 
 ```
 Host "ams.example.com" is not allowed. Reach this service under its IP address,
-or add the name to "Allowed host names" on the settings page.
+or add the name to "Allowed host names" on the settings page. The IP address always works, so the settings page is reachable that way; a fresh installation that will only ever be reached under a name can carry `ALLOWED_HOSTS=that.name` in its compose file, which seeds the setting before the first start.
 ```
 
 The server log carries the same line once per refused name. Open the Web UI
