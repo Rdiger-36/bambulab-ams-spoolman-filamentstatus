@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.17 has to be folded in here as well, or regenerate the
+Every dev build after dev.18 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -87,6 +87,7 @@ Version 1.3.0
       - A 3rd party spool is called by the preset chosen for its slot: "Generic PLA preset", "SUNLU PETG preset" or "PLA · custom preset", and the dialog row is "Slot preset". A spool without a tag reports nothing of its own, only the filament preset somebody picked for the slot on the printer's screen or in the slicer, so the old "Tray profile" wording was wrong for it
       - The Logs page carries its choices as controls: a Source button over the server and the printers, a Log / Raw MQTT trace switch for a printer, and the download next to a line saying what the page shows and what the download would carry, "capture disabled" in front when that printer's trace is not being written. The switch writes into the address, so a link to a trace still opens the trace
       - The create dialog of a chipless slot proposes the filament from the slot's preset. A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal with a line saying how near. A filament sold on a spool heavier than 1 kg cannot sit in an AMS and ranks behind every fitting one; the external holder takes any size. Nothing is created by itself, and a Bambu, a generic or a custom preset names no manufacturer, so the dialog then starts as before (issue #47)
+      - The name behind a custom preset is learned from the first print with it. A preset from Bambu Studio's cloud library, or one of the user's own, reaches the slot as a hash such as "Pdd34802", and the printer never sends the name; the sliced file does, next to the id and the vendor, and the service downloads that file for every print it books. The slot then reads "fibrelogy PLA Basic preset" instead of "PLA · custom preset", and the create dialog knows the manufacturer. Kept in printers/presets.json and in the diagnostics bundle (issue #47)
    - Fixes:
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it
@@ -114,6 +115,8 @@ Version 1.3.0
       - Two print stages are named instead of shown as a number: 51 is the calibration lines and 54 is the heatbed coming up to temperature, both amber because neither has started the plate. Everything else nothing has named still falls back to its number
       - A print sent through the Bambu cloud, from Bambu Studio or the Handy app, is booked. The printer keeps such a file as "<job>.3mf" and says so in its report, while the service only ever asked for "<job>.gcode.3mf", the name a file sent over the LAN gets, so every cloud print ended with "slice_info.config not found" and nothing booked. A file that is not found is not looked for again on every dashboard refresh, which was one FTPS login every few seconds for the whole print, and the log says whether no file was there or the file had no slice info (issue #146)
       - A print is matched to the right slot when a slot in the middle of an AMS is empty, on a printer that does not report where the print runs from (P1 and A1 series). Bambu Studio leaves an empty slot out of the filament list, so every filament after a gap moves up one position; the service counted all four slots of every unit. Confirmed on an X1E emptied at A3, whose own report named A4 for the third filament. The external spool holder also comes before an AMS HT in that list (issue #146)
+      - The print card no longer says "consumption booked" over a print that booked nothing. The label counts the report's rows now: "nothing booked", "1 of 3 booked", or "consumption booked" only when every used filament was
+      - A print on a P1 or an A1 is booked onto the slots Bambu Studio sent it to, not onto an estimate. Those printers never report where a print runs from, and a reused project is remapped by colour when the job is sent; the printer echoes that command on its report topic, and the service reads it. A printer that reports its slots itself keeps that report; an SD card print or one repeated on the printer's screen keeps the estimate (issue #146)
    - Development:
       - Node 22, and the README is rebuilt around G-code tracking with new screenshots
       - One projection for what a client sees of a slot, one consumption match, and the rules both sides apply live in public/shared.js instead of in two implementations

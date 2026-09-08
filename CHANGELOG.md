@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.18
    - Features:
       - The name behind a custom preset is learned from the first print with it. A preset from Bambu Studio's cloud library, or one of the user's own, reaches the slot as a hash such as "Pdd34802", and the printer never sends the name; the sliced file does, next to the id and the vendor. The service downloads that file for every print it books, so a slot reads "fibrelogy PLA Basic preset" from then on instead of "PLA · custom preset", the detail dialog says where the name came from, and the create dialog knows the manufacturer and proposes from the catalogue as it does for a shipped vendor profile
          - Kept in printers/presets.json next to the assignments, one entry per hash, and in the diagnostics bundle. A preset renamed in the slicer replaces its old name on the next print. Read off a P2S on 2026-09-08: a Fiberlogy PLA from the cloud library was Pdd34802 on the slot and "fibrelogy PLA Basic @Bambu Lab P2S 0.6 nozzle" by "fibrelogy" in the file
