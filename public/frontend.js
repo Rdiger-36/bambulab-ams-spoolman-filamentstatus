@@ -1250,12 +1250,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Typing a manufacturer that does not exist yet creates it on save
         const vendorNames = new Set((lookups.vendors || []).map(v => v.name.toLowerCase()));
-        $("sp-vendor").addEventListener("input", () => {
+        const noteNewVendor = () => {
             const value = $("sp-vendor").value.trim();
             $("sp-vendor-hint").textContent = value && !vendorNames.has(value.toLowerCase())
                 ? "New manufacturer, will be created"
                 : "";
-        });
+        };
+        $("sp-vendor").addEventListener("input", noteNewVendor);
+        // The field can start filled in from the slot's preset, and a
+        // manufacturer this Spoolman has not seen deserves the note then too.
+        noteNewVendor();
 
         // A filament can carry more than one colour, and both the AMS and the
         // catalogue report all of them. Spoolman keeps them as a list plus the
