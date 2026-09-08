@@ -98,3 +98,27 @@ test("only the first report after a start may take an old start over", async () 
     assert.ok(Date.now() - p.printStartedAt < 5_000);
     forgetPrintStart("SERIAL");
 });
+
+test("the report that starts a job still carries the previous job's last layer, and a job starts at 0", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Old", layer_num: 11 });
+    // Measured on a P2S: FINISH to RUNNING with layer_num 11, then 0 five seconds later
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 11 });
+    assert.equal(p.currentLayerNum, 0);
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 0 });
+    assert.equal(p.currentLayerNum, 0);
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 4 });
+    // A stale lower value in the next report does not pull it back
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 3 });
+    assert.equal(p.currentLayerNum, 4);
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Cube", layer_num: 11 });
+    assert.equal(p.currentLayerNum, 11);
+    forgetPrintStart("SERIAL");
+});
+
+test("the first report after the service came up takes the running print's layer", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 7 });
+    assert.equal(p.currentLayerNum, 7);
+    forgetPrintStart("SERIAL");
+});
