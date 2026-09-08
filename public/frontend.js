@@ -2538,7 +2538,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const fullCons = printData.fullConsumption || {};
         const partCons = printData.consumption || {};
 
-        const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true };
+        // Once the booking has run, "On spool" already carries the print, and
+        // subtracting "Needed" from it a second time showed every spool lighter
+        // than it is. Seen on a P2S after a finished two colour print.
+        const booked = !!printData.consumptionBooked && !printData.printResultCleared;
+        const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true, booked };
 
         const columns = [
             ["Spool", "left"],
@@ -2568,7 +2572,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function createGcodeSpoolRow(amsSpool, ctx) {
-        const { fullCons, partCons, keyCount } = ctx;
+        const { fullCons, partCons, keyCount, booked } = ctx;
         const tr = document.createElement("tr");
         tr.setAttribute("data-amsid", amsSpool.amsId);
         renderedSpools.set(amsSpool.amsId, amsSpool);
@@ -2600,7 +2604,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let neededCell     = "—";
         let afterPrintCell = "—";
-        if (needed > 0) {
+        if (needed > 0 && booked) {
+            // The print is over and booked: what it used is the figure, and the
+            // spool's weight above already has it taken off.
+            neededCell = `${needed}g<br><span class="gc-muted" style="font-size:0.8em">booked: ${used || needed}g</span>`;
+            if (onSpool != null) {
+                afterPrintCell = `<span class="gc-muted" title="Already booked, this is the spool's weight now">${onSpool}g</span>`;
+            }
+        } else if (needed > 0) {
             neededCell = `${needed}g${used ? `<br><span class="gc-muted" style="font-size:0.8em">printed: ${used}g</span>` : ""}`;
             if (onSpool != null) {
                 const afterPrint = Math.round((onSpool - needed) * 100) / 100;
