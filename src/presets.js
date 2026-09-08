@@ -1,5 +1,5 @@
-import fs from "fs-extra";
-import { presetsPath, serverLogFilePath } from "./config.js";
+import { presetsPath } from "./config.js";
+import { readJsonFile, writeJsonFile } from "./jsonfile.js";
 
 /**
  * The slicer presets this service has learned the names of.
@@ -33,27 +33,13 @@ let presets = null;
 
 function load() {
     if (presets) return presets;
-    try {
-        const parsed = JSON.parse(fs.readFileSync(presetsPath, "utf-8"));
-        presets = parsed && typeof parsed.presets === "object" && parsed.presets !== null ? parsed.presets : {};
-    } catch (err) {
-        if (err.code !== "ENOENT") {
-            console.error("Server", serverLogFilePath, "Could not read presets.json, starting empty:", err.message);
-        }
-        presets = {};
-    }
+    const parsed = readJsonFile(presetsPath);
+    presets = parsed && typeof parsed.presets === "object" && parsed.presets !== null ? parsed.presets : {};
     return presets;
 }
 
 function persist() {
-    const tmp = `${presetsPath}.tmp`;
-    try {
-        fs.outputFileSync(tmp, JSON.stringify({ schemaVersion: PRESETS_SCHEMA_VERSION, presets }, null, 2));
-        fs.renameSync(tmp, presetsPath);
-    } catch (err) {
-        console.error("Server", serverLogFilePath, "Failed to save presets.json:", err.message);
-        try { fs.removeSync(tmp); } catch {}
-    }
+    writeJsonFile(presetsPath, { schemaVersion: PRESETS_SCHEMA_VERSION, presets });
 }
 
 /** Whether an id is a preset hash whose name can only come from a sliced file. */

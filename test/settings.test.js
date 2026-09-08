@@ -145,3 +145,15 @@ test("a file written before the notices existed reads as none dismissed", () => 
     assert.deepEqual(parseStoredFile({ MAX_RETRIES: 3 }).notices, {});
     assert.deepEqual(parseStoredFile({ schemaVersion: 1, values: {}, notices: "yes" }).notices, {});
 });
+
+test("every setting of the schema can be seeded from the environment", async () => {
+    const { SETTINGS_SCHEMA } = await import("../src/settings.js");
+    const { envSeed } = await import("../src/config.js");
+    // Five settings added after the environment was deprecated were missing
+    // here, so ARCHIVE_EMPTY_SPOOLS=true in a compose file did nothing at all,
+    // without a word in the log.
+    const missing = Object.keys(SETTINGS_SCHEMA).filter(key => !(key in envSeed));
+    assert.deepEqual(missing, []);
+    const extra = Object.keys(envSeed).filter(key => !(key in SETTINGS_SCHEMA));
+    assert.deepEqual(extra, []);
+});

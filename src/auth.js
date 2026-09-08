@@ -32,7 +32,7 @@ import { state } from "./state.js";
  */
 
 /** Name of the session cookie. */
-export const SESSION_COOKIE = "ams_session";
+const SESSION_COOKIE = "ams_session";
 
 /** How long a session stays valid, in milliseconds. */
 const SESSION_LIFETIME = 30 * 24 * 60 * 60 * 1000;
@@ -246,7 +246,7 @@ export function isAuthenticated(req) {
  *
  * @param {object} req - Express request
  */
-export function authenticatedByApiKey(req) {
+function authenticatedByApiKey(req) {
     return !!verifyApiKey(apiKeyFromRequest(req));
 }
 

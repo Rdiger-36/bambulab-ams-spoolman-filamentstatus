@@ -301,3 +301,28 @@ export function offlineBackoff(failures, base, limit) {
     if (steps > 30) return max;
     return Math.min(start * 2 ** steps, max);
 }
+
+/**
+ * A short sentence for a failed connection, from the error Node hands back.
+ *
+ * The same four causes are told apart wherever this service opens a socket,
+ * MQTT on 8883, FTPS on 990 and Spoolman over HTTP, and each place used to
+ * carry its own copy of the table. The port and the hint are the caller's,
+ * the mapping is shared.
+ *
+ * @param {Error|string} err - the error, or its message
+ * @param {object} [options]
+ * @param {number|string} [options.port] - named in the refused and timeout sentences
+ * @param {string} [options.timeoutHint] - appended to the timeout sentence
+ * @param {string} [options.refusedHint] - appended to the refused sentence
+ * @returns {string|null} the sentence, or null when the cause is not one of the four
+ */
+export function describeConnectionError(err, { port = null, timeoutHint = "", refusedHint = "" } = {}) {
+    const message = err?.message || String(err ?? "");
+    const where = port ? `Port ${port}` : "The connection";
+    if (/ECONNREFUSED/.test(message)) return `${where} refused the connection${refusedHint ? `. ${refusedHint}` : ""}`;
+    if (/ETIMEDOUT|timeout/i.test(message)) return `No answer${port ? ` on port ${port}` : ""} within the timeout${timeoutHint ? `. ${timeoutHint}` : ""}`;
+    if (/EHOSTUNREACH|ENETUNREACH/.test(message)) return "The address cannot be reached";
+    if (/ENOTFOUND|EAI_AGAIN/.test(message)) return "The host name cannot be resolved";
+    return null;
+}

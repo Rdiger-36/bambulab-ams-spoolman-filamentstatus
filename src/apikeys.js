@@ -1,8 +1,7 @@
 import crypto from "crypto";
-import fs from "fs-extra";
-import path from "path";
 
 import { apiKeysPath, serverLogFilePath } from "./config.js";
+import { readJsonFile, writeJsonFile } from "./jsonfile.js";
 
 /**
  * API keys for callers that are not a browser.
@@ -58,26 +57,14 @@ let keys = null;
  */
 function load() {
     if (keys) return keys;
-
-    try {
-        const parsed = JSON.parse(fs.readFileSync(apiKeysPath, "utf-8"));
-        keys = Array.isArray(parsed) ? parsed.filter(entry => entry && typeof entry.hash === "string") : [];
-    } catch (err) {
-        if (err.code !== "ENOENT") {
-            console.error("Server", serverLogFilePath, `[API keys] Could not read apikeys.json, starting with none: ${err.message}`);
-        }
-        keys = [];
-    }
-
+    const parsed = readJsonFile(apiKeysPath, "apikeys.json");
+    keys = Array.isArray(parsed) ? parsed.filter(entry => entry && typeof entry.hash === "string") : [];
     return keys;
 }
 
 /** Writes the file atomically, so a crash mid write cannot truncate it. */
 function persist() {
-    const tmp = `${apiKeysPath}.tmp`;
-    fs.ensureDirSync(path.dirname(apiKeysPath));
-    fs.writeFileSync(tmp, JSON.stringify(load(), null, 4));
-    fs.renameSync(tmp, apiKeysPath);
+    writeJsonFile(apiKeysPath, load(), { indent: 4, throwOnError: true });
 }
 
 /**
@@ -106,7 +93,7 @@ export function hashApiKey(plain) {
  *
  * @returns {string} the key in clear text
  */
-export function generateApiKey() {
+function generateApiKey() {
     return `${PREFIX}${crypto.randomBytes(KEY_BYTES).toString("base64url")}`;
 }
 

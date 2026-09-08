@@ -4,6 +4,7 @@ import { spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { debug, trace } from "./logger.js";
 import { correctRemainInt } from "./ams.js";
+import { describeConnectionError } from "./utils.js";
 
 /**
  * Derives the used weight a newly created Spoolman spool should start at.
@@ -94,7 +95,7 @@ export async function getSpoolmanSpools() {
         state.spoolmanStatus = "Connected";
         return JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching spools from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching spools from Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         return [];
     }
@@ -119,7 +120,7 @@ export async function getArchivedSpoolmanSpools() {
         });
         return JSON.parse(response.body).filter(spool => spool.archived);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching archived spools from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching archived spools from Spoolman:", error.message);
         return [];
     }
 }
@@ -130,7 +131,7 @@ export async function getSpoolmanInternalFilaments() {
         const response = await got(`${spoolmanUrl()}/api/v1/filament`);
         return JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         return [];
     }
@@ -165,7 +166,7 @@ export async function getSpoolmanExternalFilaments() {
         const response = await got(`${spoolmanUrl()}/api/v1/external/filament`);
         return JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching external filaments from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching external filaments from Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         return [];
     }
@@ -289,7 +290,7 @@ export async function ensureVendor() {
         const response = await got(`${spoolmanUrl()}/api/v1/vendor`);
         vendors = JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         throw error;
     }
@@ -348,7 +349,7 @@ export async function checkAndSetExtraField() {
             return true;
         }
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching extra tag from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching extra tag from Spoolman:", error.message);
         throw error;
     }
 }
@@ -653,10 +654,7 @@ export async function checkSpoolmanHealth(url, timeout = 5000) {
         return { ok: false, error: `Spoolman reports status "${health.status}"` };
     } catch (err) {
         const message = err?.message || String(err);
-        if (/ECONNREFUSED/.test(message)) return { ok: false, error: "The connection was refused" };
-        if (/ETIMEDOUT|timeout/i.test(message)) return { ok: false, error: "No answer within the timeout" };
-        if (/ENOTFOUND|EAI_AGAIN/.test(message)) return { ok: false, error: "The host name cannot be resolved" };
         if (/404/.test(message)) return { ok: false, error: "Reachable, but there is no Spoolman API at this address" };
-        return { ok: false, error: message };
+        return { ok: false, error: describeConnectionError(err) ?? message };
     }
 }

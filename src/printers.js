@@ -73,7 +73,7 @@ export function traceEnabled(printer) {
  *
  * @param {object} printer - the runtime printer object
  */
-export function applyLogDetail(printer) {
+function applyLogDetail(printer) {
     const { level, categories } = printer.logDetail || {};
     setLogDetail(printer.logFilePath, level || categories ? { level, categories } : null);
 }
@@ -103,8 +103,28 @@ function createRuntimePrinter(entry) {
         // Every field is optional; a missing one inherits the global setting.
         logDetail: normalizeLogDetail(entry.logDetail),
         mqttStatus: "Disconnected",
-        spoolmanStatus: "Disconnected",
         mqttRunning: false,
+        // The live MQTT client, and the bookkeeping around connecting to it:
+        // whether a connect is in flight, when the last attempt was, how many
+        // failed in a row, and why a close was asked for. See setupMqtt().
+        mqttClient: null,
+        isReconnecting: false,
+        lastReconnectAttempt: 0,
+        reconnectAttempts: 0,
+        closingReason: null,
+        // Set while a report is being processed, so the next one is dropped
+        // rather than queued behind it. See handleMqttMessage().
+        blockMqttUpdates: false,
+        // When the last report arrived, when the last one with AMS data was
+        // processed, and when the reception timestamp was last broadcast.
+        lastMqttUpdate: null,
+        lastMqttAmsUpdate: null,
+        lastMqttBroadcast: 0,
+        // The slots as the last processed report described them, which the
+        // next report is compared against, and what the dashboard was built
+        // from. Null forces the next report to be processed in full.
+        lastAmsData: null,
+        spoolData: [],
         update_interval: settings.UPDATE_INTERVAL,
         lastUpdateTime: new Date(),
         first_run: true,
@@ -121,7 +141,12 @@ function createRuntimePrinter(entry) {
         // print consumption tracking
         currentGcodeState: "IDLE",
         currentJobName: null,
+        // gcode_file as the printer reports it, which says whether the sliced
+        // file is a .3mf (cloud) or a .gcode.3mf (LAN). See resolveRemotePaths().
+        currentGcodeFile: null,
         currentSliceInfo: null,
+        // What the last slice info fetch tried and found. See fetchSliceInfo().
+        lastSliceFetch: null,
         // The slots the printer says the running print is taking its filaments
         // from, decoded from print.mapping. Null until a print reports them.
         currentMapping: null,
@@ -177,6 +202,8 @@ function createRuntimePrinter(entry) {
         // of each unit's table. Display only: it never reaches Spoolman, and it
         // is refreshed on every report rather than on the slot update interval.
         amsEnv: [],
+        lastAmsEnvBroadcast: null,
+        lastAmsEnvBroadcastTime: 0,
         // Which AMS each unit is, by unit label, from the printer's get_version
         // answer. Requested once per connection, see requestVersion() in
         // mqtt.js; kept across reconnects because the hardware does not change
@@ -254,7 +281,7 @@ export function normalizePrinterEntry(entry) {
  *
  * @returns {object[]} the runtime printer list, possibly empty
  */
-export function loadPrintersConfig() {
+function loadPrintersConfig() {
     let entries = null;
 
     try {
@@ -314,7 +341,7 @@ export function printerListSeededFromEnv() {
  *
  * @param {object[]} list - the runtime printer list to persist
  */
-export function savePrinters(list = printers) {
+function savePrinters(list = printers) {
     const entries = list.map(printer => {
         const entry = {
             id: printer.id,

@@ -45,6 +45,8 @@ Changing or removing the password ends every session that exists, on every devic
 
 Forgotten it? Stop the container, remove the `AUTH_PASSWORD` line from `printers/settings.json`, start it again. The Web UI is then open until a new one is set.
 
+Both the password and the host names can also be set from the environment before the first start, `AUTH_PASSWORD` and `ALLOWED_HOSTS` in the compose file, which is the way for a template or an add-on to ship an installation that asks for a password from its first page and answers under its domain name right away. The password is hashed as it is read in and never stored in clear. The environment only seeds a setting that `printers/settings.json` does not own yet: once the value has been saved there, the file wins and a changed variable is ignored, so a forgotten password is not undone by a new variable but by removing the line as above, and a host name that stopped working is added on the settings page or, if only the name reaches the service, under the IP address, which is always accepted.
+
 > [!IMPORTANT]
 > The Web UI asks for a password only once you set one under **Network access**. Without one it is open to everyone on the network and can change the printer list and the Spoolman endpoint, so do not expose the port to the internet either way. The access code of a printer is stored in plain text in `printers/printers.json` and is never sent back to the browser.
 >

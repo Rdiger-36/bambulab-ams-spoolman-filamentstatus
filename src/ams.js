@@ -483,7 +483,7 @@ export function hasSpoolUiChanged(next, prev) {
  * Third party spools report the generic profile or none at all, so the material
  * and the colour are all there is to compare them by.
  */
-export function materialKey(type, color) {
+function materialKey(type, color) {
     return `${type || "?"}|${normColor(color)}`;
 }
 

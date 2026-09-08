@@ -5,7 +5,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -1998,12 +1998,8 @@ export async function setupMqtt(printer) {
 
         console.error(printer.name, printer.logFilePath, `Error in setupMqtt for Printer: ${printer.id} - ${error.message}`);
 
-        if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
-            console.log(printer.name, printer.logFilePath, `Max retries (${settings.MAX_RETRIES}) reached -> disabling monitoring!`);
-            printer.monitoringEnabled = false;
-            broadcastSSE({ type: "monitoring_update", printer: printer.id, enabled: false });
-            printer.mqttRunning = false;
-            printer.mqttStatus = "Disabled";
+        if (retryLimitReached(printer)) {
+            disableAfterRetries(printer, `Max retries (${settings.MAX_RETRIES}) reached -> disabling monitoring!`);
             return;
         }
 
@@ -2086,13 +2082,8 @@ function waitForFirstMessage(client, timeout) {
  */
 function describeMqttError(err) {
     const message = err?.message || String(err);
-
     if (/Not authorized|Bad username or password|code: [45]/.test(message)) return "The printer rejected the access code";
-    if (/ECONNREFUSED/.test(message)) return "Port 8883 refused the connection";
-    if (/ETIMEDOUT|timeout|Timeout/.test(message)) return "No answer on port 8883 within the timeout. Is LAN mode enabled?";
-    if (/EHOSTUNREACH|ENETUNREACH|ENOTFOUND|EAI_AGAIN/.test(message)) return "The address cannot be reached";
-
-    return message;
+    return describeConnectionError(err, { port: 8883, timeoutHint: "Is LAN mode enabled?" }) ?? message;
 }
 
 /**
@@ -2106,6 +2097,27 @@ function describeMqttError(err) {
  *
  * @param {object} printer - the runtime printer
  */
+/**
+ * Whether the printer has failed to connect as often as MAX_RETRIES allows.
+ * 0 retries forever, which is the default.
+ */
+function retryLimitReached(printer) {
+    return settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES;
+}
+
+/**
+ * Switches a printer's monitoring off after the retry limit, and tells the
+ * dashboard. Three places used to do this with three slightly different
+ * sets of fields.
+ */
+function disableAfterRetries(printer, why) {
+    printer.monitoringEnabled = false;
+    printer.mqttRunning = false;
+    printer.mqttStatus = "Disabled";
+    console.log(printer.name, printer.logFilePath, why);
+    broadcastSSE({ type: "monitoring_update", printer: printer.id, enabled: false });
+}
+
 export function resetOfflineBackoff(printer) {
     printer.offlineChecks = 0;
     printer.nextCheckAt = 0;
@@ -2223,22 +2235,16 @@ export async function servicePrinters(printers) {
                 }
 
                 if (!printer.mqttRunning && !printer.isReconnecting) {
-                    if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
-                        printer.monitoringEnabled = false;
-                        printer.mqttRunning = false;
-                        printer.mqttStatus = "Disabled";
-                        console.log(printer.name, printer.logFilePath, "Monitoring disabled (max retries reached).");
+                    if (retryLimitReached(printer)) {
+                        disableAfterRetries(printer, "Monitoring disabled (max retries reached).");
                         continue;
                     }
                     console.log(printer.name, printer.logFilePath, `MQTT not running for Printer: ${printer.id}, attempting to reconnect...`);
                     setupMqtt(printer);
                 }
             } else {
-                if (settings.MAX_RETRIES > 0 && printer.reconnectAttempts >= settings.MAX_RETRIES) {
-                    printer.monitoringEnabled = false;
-                    printer.mqttRunning = false;
-                    printer.mqttStatus = "Disabled";
-                    console.log(printer.name, printer.logFilePath, "Printer is unreachable and the retry limit is exceeded, monitoring disabled.");
+                if (retryLimitReached(printer)) {
+                    disableAfterRetries(printer, "Printer is unreachable and the retry limit is exceeded, monitoring disabled.");
                     continue;
                 }
                 printerStillOffline(printer, now);
@@ -2273,68 +2279,46 @@ export function describeRequestError(err) {
 }
 
 /**
- * Blocks until Spoolman reports healthy, polling every 30 seconds.
+ * Checks Spoolman's health and keeps `state.spoolmanStatus` in step with it.
  *
- * Called once during startup: without Spoolman there is nothing to sync to, so
- * the service waits here rather than starting up half working.
+ * Two callers with one difference: the bootstrap waits until Spoolman answers
+ * once and then goes on (`untilConnected`), while the background monitor runs
+ * for the life of the process and marks Spoolman disconnected the moment a
+ * check fails, which is what stops every AMS update from trying to write.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.untilConnected] - return after the first healthy answer
+ * @param {number} [options.intervalMs] - pause between two checks
  */
-export async function monitorSpoolman() {
+export async function monitorSpoolman({ untilConnected = false, intervalMs = untilConnected ? 30000 : 60000 } = {}) {
     while (true) {
         try {
-            const spoolmanHealthApi = await got(`${spoolmanUrl()}/api/v1/health`);
-            const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
-
-            if (spoolmanHealth.status === "healthy") {
+            const response = await got(`${spoolmanUrl()}/api/v1/health`);
+            const health = JSON.parse(response.body);
+            if (health.status === "healthy") {
                 if (state.spoolmanStatus !== "Connected") {
-                    console.log("Server", serverLogFilePath, "Spoolman connected successfully!");
+                    console.log("Server", serverLogFilePath, untilConnected ? "Spoolman connected successfully!" : "Spoolman reconnected successfully!");
                 }
                 state.spoolmanStatus = "Connected";
-                return;
+                if (untilConnected) return;
             } else {
-                console.error("Server", serverLogFilePath, "Spoolman reported an unhealthy status, retrying...");
+                console.error("Server", serverLogFilePath, untilConnected
+                    ? "Spoolman reported an unhealthy status, retrying..."
+                    : "Spoolman reported an unhealthy status!");
+                if (!untilConnected) state.spoolmanStatus = "Disconnected";
             }
         } catch (err) {
             console.error("Server", serverLogFilePath,
-                `Spoolman is unreachable (${describeRequestError(err)}). Retrying in 30 seconds...`);
+                `Spoolman is unreachable (${describeRequestError(err)}). Retrying in ${Math.round(intervalMs / 1000)} seconds...`);
+            if (!untilConnected) state.spoolmanStatus = "Disconnected";
         }
-        await sleep(30000);
+        await sleep(intervalMs);
     }
 }
 
-/**
- * Runs forever, keeping the Spoolman connection status current.
- *
- * Unlike monitorSpoolman this never blocks anything; it only flips the shared
- * status, which the MQTT handler checks before processing AMS data.
- */
-export async function monitorSpoolmanBackground() {
-    while (true) {
-        try {
-            const spoolmanHealthApi = await got(`${spoolmanUrl()}/api/v1/health`);
-            const spoolmanHealth = JSON.parse(spoolmanHealthApi.body);
-
-            if (spoolmanHealth.status === "healthy") {
-                if (state.spoolmanStatus !== "Connected") {
-                    console.log("Server", serverLogFilePath, "Spoolman reconnected successfully!");
-                }
-                state.spoolmanStatus = "Connected";
-            } else {
-                console.error("Server", serverLogFilePath, "Spoolman reported an unhealthy status!");
-                state.spoolmanStatus = "Disconnected";
-            }
-        } catch (err) {
-            // The reason, not just the fact. This used to swallow the error, and
-            // an outage on 2026-09-05 then produced five identical lines saying
-            // nothing: whether the address was still unroutable, whether the
-            // request timed out, or whether the endpoint answered something
-            // unparseable are three different problems with three different
-            // answers, and the log could not tell them apart.
-            console.error("Server", serverLogFilePath,
-                `Spoolman is unreachable (${describeRequestError(err)}). Retrying in 60 seconds...`);
-            state.spoolmanStatus = "Disconnected";
-        }
-        await sleep(60000);
-    }
+/** The background health check, for the life of the process. */
+export function monitorSpoolmanBackground() {
+    return monitorSpoolman({ untilConnected: false });
 }
 
 /**

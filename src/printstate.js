@@ -1,5 +1,5 @@
-import fs from "fs-extra";
-import { printStatePath, serverLogFilePath } from "./config.js";
+import { printStatePath } from "./config.js";
+import { readJsonFile, writeJsonFile } from "./jsonfile.js";
 
 /**
  * When the print each printer is running started, kept on disk.
@@ -26,27 +26,13 @@ let state = null;
 
 function load() {
     if (state) return state;
-    try {
-        const parsed = JSON.parse(fs.readFileSync(printStatePath, "utf-8"));
-        state = parsed && typeof parsed.printers === "object" && parsed.printers !== null ? parsed.printers : {};
-    } catch (err) {
-        if (err.code !== "ENOENT") {
-            console.error("Server", serverLogFilePath, "Could not read printstate.json, starting empty:", err.message);
-        }
-        state = {};
-    }
+    const parsed = readJsonFile(printStatePath);
+    state = parsed && typeof parsed.printers === "object" && parsed.printers !== null ? parsed.printers : {};
     return state;
 }
 
 function persist() {
-    const tmp = `${printStatePath}.tmp`;
-    try {
-        fs.outputFileSync(tmp, JSON.stringify({ schemaVersion: SCHEMA_VERSION, printers: state }, null, 2));
-        fs.renameSync(tmp, printStatePath);
-    } catch (err) {
-        console.error("Server", serverLogFilePath, "Failed to save printstate.json:", err.message);
-        try { fs.removeSync(tmp); } catch {}
-    }
+    writeJsonFile(printStatePath, { schemaVersion: SCHEMA_VERSION, printers: state });
 }
 
 /**

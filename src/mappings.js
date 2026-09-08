@@ -1,5 +1,5 @@
-import fs from "fs-extra";
 import { mappingsPath, serverLogFilePath } from "./config.js";
+import { readJsonFile, writeJsonFile } from "./jsonfile.js";
 import { normColor } from "./gcode.js";
 import { slotColors } from "./utils.js";
 import { trace } from "./logger.js";
@@ -31,7 +31,7 @@ let mappings = null;
  * under the labels `A0` to `D3`. Bump this whenever the meaning of what is
  * stored changes and handle the old value in `migrateStored()`.
  */
-export const MAPPINGS_SCHEMA_VERSION = 1;
+const MAPPINGS_SCHEMA_VERSION = 1;
 
 /**
  * Describes a slot's filament as precisely as the AMS allows for a chipless
@@ -177,21 +177,14 @@ function load() {
 
     let migrated = false;
 
-    try {
-        const parsed = JSON.parse(fs.readFileSync(mappingsPath, "utf-8"));
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-            throw new Error("mappings.json must contain an object");
-        }
-
+    const parsed = readJsonFile(mappingsPath);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
         const file = parseStoredFile(parsed);
         migrated = file.schemaVersion < MAPPINGS_SCHEMA_VERSION;
         mappings = migrateStored(file.printers, file.schemaVersion);
         trace("service", "Server", serverLogFilePath, "Spool mappings loaded:", JSON.stringify(mappings));
-    } catch (err) {
-        // Missing file is the normal first-run case; anything else is worth a log
-        if (err.code !== "ENOENT") {
-            console.error("Server", serverLogFilePath, "Could not read mappings.json, starting empty:", err.message);
-        }
+    } else {
+        if (parsed !== null) console.error("Server", serverLogFilePath, "mappings.json must contain an object, starting empty");
         mappings = {};
     }
 
@@ -205,17 +198,7 @@ function load() {
 
 /** Writes the in-memory mappings back to disk atomically. */
 function persist() {
-    // Write to a temp file and rename, so a crash mid-write cannot leave a
-    // truncated mappings.json behind.
-    const tmp = `${mappingsPath}.tmp`;
-    const payload = { schemaVersion: MAPPINGS_SCHEMA_VERSION, printers: mappings };
-    try {
-        fs.outputFileSync(tmp, JSON.stringify(payload, null, 2));
-        fs.renameSync(tmp, mappingsPath);
-    } catch (err) {
-        console.error("Server", serverLogFilePath, "Failed to save mappings.json:", err.message);
-        try { fs.removeSync(tmp); } catch {}
-    }
+    writeJsonFile(mappingsPath, { schemaVersion: MAPPINGS_SCHEMA_VERSION, printers: mappings });
 }
 
 /** Returns all slot assignments for a printer, or an empty object. */
