@@ -13,13 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initMenubar();
 
   // Query parameters
-  function getQueryParam(param) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(param);
-  }
-
-  const printerSerial = getQueryParam("serial");
-  const name = getQueryParam("name");
+  const query = new URLSearchParams(window.location.search);
+  const printerSerial = query.get("serial");
+  const name = query.get("name");
   const isServer = name === "server";
 
   if (!isServer && !printerSerial) {
@@ -31,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // is the same page against a different stream rather than a page of its own.
   // The switch changes it in place and writes it into the address, so a link
   // to a trace still opens the trace.
-  let stream = !isServer && getQueryParam("stream") === "mqtt" ? "mqtt" : "log";
+  let stream = !isServer && query.get("stream") === "mqtt" ? "mqtt" : "log";
 
   // A trace line is a whole printer report rather than a sentence, several
   // kilobytes of it, and the page reloads every five seconds. Asking for the
