@@ -351,10 +351,10 @@ function panelHeading(text) {
  * `#headline`, and this fills whichever one is on the page.
  */
 function renderTitlePicker() {
-    const host = document.getElementById(currentPage() === "logs" ? "headline" : "printer-name");
+    const onLogs = currentPage() === "logs";
+    const host = document.getElementById(onLogs ? "headline" : "printer-name");
     if (!host) return;
 
-    const onLogs = currentPage() === "logs";
     const entries = onLogs ? logChoices() : printerChoices();
     const current = entries.find(entry => entry.current) ?? entries[0];
     if (!current) return;
@@ -492,8 +492,9 @@ function renderLogEntries() {
     if (!panel) return;
 
     const params = new URLSearchParams(window.location.search);
-    const openSerial = currentPage() === "logs" ? params.get("serial") : null;
-    const serverOpen = currentPage() === "logs" && !openSerial;
+    const onLogs = currentPage() === "logs";
+    const openSerial = onLogs ? params.get("serial") : null;
+    const serverOpen = onLogs && !openSerial;
 
     panel.innerHTML = "";
     panel.appendChild(panelEntry("Server", () => {

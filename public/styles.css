@@ -271,6 +271,23 @@ h1 {
 .gc-required { color: var(--bad); }
 .gc-error { margin: 10px 0 0; }
 
+/* The toast after an action, bottom right, fades out on its own */
+.action-note {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  z-index: 9999;
+  background: #27ae60;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.action-note-error { background: #c0392b; }
+.action-note-shown { opacity: 1; }
+
 
 /* ---- G-code print card ---- */
 .gc-card {

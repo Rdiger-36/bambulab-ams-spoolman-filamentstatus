@@ -20,6 +20,7 @@ Unreleased
       - The printer runtime object in src/printers.js declares every field the code assigns to it, with a line each on what it is for; fifteen were set on the fly. spoolmanStatus is gone from it, state.spoolmanStatus is the one that is read
       - One reader for a spool's tag, one sentence table for a refused, timed out or unreachable connection (describeConnectionError in src/utils.js, used by the MQTT test, the FTPS test and the Spoolman health check), one FTPS login (ftpsAccess in src/gcode.js), one retry limit check and one Spoolman monitor in src/mqtt.js, and one JSON file store (src/jsonfile.js) behind the assignments, the learned presets, the print starts and the API keys. Each of those was two to five copies
       - Thirteen exports nobody imported are plain functions again, spoolman.js logs error messages rather than whole error objects, and starting.js is indented like the other files
+      - Web UI: the toast after an action is styled by a class rather than by inline styles set from the script, the event handler in frontend.js is indented like the rest of the file and reads the printer's serial once, the logs page parses its query once, and the menu asks which page it is on once per render
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.18

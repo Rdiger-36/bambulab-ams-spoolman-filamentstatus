@@ -53,7 +53,7 @@ const renderedSpools = new Map();
 
 // Initialize the document once it has fully loaded
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     document.getElementById("monitoring-toggle").addEventListener("change", toggleMonitoring);
 
     // Clicking a filament name opens the spool detail dialog. Delegated, because
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Parse the event data
         const data = JSON.parse(event.data);
         const printerId = document.getElementById('printer-serial').textContent;
-            
+
         if (data.type === 'slot_update' && data.printer === printerId && !isDialogOpen()) {
             if (legacyMode) upsertSpoolRow(data.spool);
             else scheduleGcodeRefresh();
@@ -114,22 +114,17 @@ document.addEventListener("DOMContentLoaded", () => {
             // Somebody cleared the finished print, here or in another tab
             if (!legacyMode) scheduleGcodeRefresh();
         } else if (data.type === 'refresh' && data.printer === printerId) {
-          refreshMenubarPrinters();
+            refreshMenubarPrinters();
         } else if (data.type === "monitoring_update") {
-            const current = document.getElementById("printer-serial").textContent;
-
-            if (data.printer === current) {
-                setMonitoringSwitch(data.enabled);
-            }
-      } else if (data.type === "printers_update") {
+            if (data.printer === printerId) setMonitoringSwitch(data.enabled);
+        } else if (data.type === "printers_update") {
             // A printer was added, renamed or removed on the settings page
             refreshMenubarPrinters();
-      } else if (data.type === "settings_update") {
+        } else if (data.type === "settings_update") {
             // The status card shows the operation mode and the tracking mode,
             // so it has to be refetched when they change
             if (currentPrinterId) loadPrinterData(currentPrinterId);
-      }
-
+        }
     };
 
     // Handle errors in SSE connection
@@ -208,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return ["info-dialog", "spool-detail-dialog", "print-summary-dialog"]
             .some(id => document.getElementById(id)?.open);
     }
-    
+
     // Opens a printer whenever the menu bar has loaded or reloaded the list
     function showPrinters(printers) {
         if (!printers.length) {
@@ -259,7 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error(`Error loading data for printer ${printerId}:`, error);
         }
     }
-    
+
     // One table per AMS unit: the four slot units in tables of four, the single
     // slot ones (AMS HT and the external spool holder) in a table of their own.
     //
@@ -458,7 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Every column to its widest cell, so the tables of the units line up.
         synchronizeSelectedColumns(SYNCED_COLUMNS);
     }
-    
+
     function synchronizeSelectedColumns(indices) {
         const tables = Array.from(document.querySelectorAll('.spool-table'));
         if (tables.length === 0) return;
@@ -503,7 +498,7 @@ document.addEventListener("DOMContentLoaded", () => {
             table.style.tableLayout = '';
         });
     }
-    
+
     // The CSS background showing a whole colour set in one box.
     //
     // `direction` is Spoolman's multi_color_direction. A "longitudinal"
@@ -2038,7 +2033,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tr = document.createElement("tr");
         tr.setAttribute("data-amsid", amsSpool.amsId);
         renderedSpools.set(amsSpool.amsId, amsSpool);
-    
+
         let amsSpoolRemainingWeight = amsSpool.correctedWeight ?? (amsSpool.slot.remain == null
             ? null
             : (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
@@ -2071,15 +2066,15 @@ document.addEventListener("DOMContentLoaded", () => {
         tdBtn.setAttribute("data-label", "Action");
         tdBtn.appendChild(button);
         tr.appendChild(tdBtn);
-    
+
         return tr;
     }
-    
+
     function upsertSpoolRow(amsSpool) {
         const selector = `[data-amsid="${amsSpool.amsId}"]`;
         const existingRow = document.querySelector(selector);
         const newRow = createSpoolRow(amsSpool, lastLegacyCtx);
-    
+
         if (existingRow && existingRow.parentElement) {
             existingRow.parentElement.replaceChild(newRow, existingRow);
         } else {
@@ -2095,7 +2090,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     }
-    
+
     // =======================================================================
     // G-code mode main view
     //
@@ -2789,7 +2784,7 @@ document.addEventListener("DOMContentLoaded", () => {
             actionButton.onclick = () => {
                 actionCallback();
                 dialog.close();
-                
+
                 window.open(`${spoolmanBase()}/spool/create`, "_blank");
             };
         } else {
@@ -2798,7 +2793,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 dialog.close();
             };
         }
-        
+
         closeDialog.onclick = () => dialog.close();
         dialog.showModal();
         // The harmless choice takes the focus, not the one that writes to Spoolman
@@ -2850,20 +2845,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!note) {
             note = document.createElement("div");
             note.id = "action-notification";
-            note.style.cssText = "position:fixed;bottom:1.5rem;right:1.5rem;padding:0.75rem 1.25rem;border-radius:6px;font-size:0.9rem;z-index:9999;transition:opacity 0.4s";
+            note.className = "action-note";
             document.body.appendChild(note);
         }
         note.textContent = message;
-        note.style.background = type === "error" ? "#c0392b" : "#27ae60";
-        note.style.color = "#fff";
-        note.style.opacity = "1";
+        note.classList.toggle("action-note-error", type === "error");
+        note.classList.add("action-note-shown");
         clearTimeout(note._timeout);
-        note._timeout = setTimeout(() => { note.style.opacity = "0"; }, 3500);
+        note._timeout = setTimeout(() => note.classList.remove("action-note-shown"), 3500);
     }
 
     // Update various status elements in the UI
     function updateStatus(data) {
-                
+
         data.lastMqttUpdate = data.lastMqttUpdate
             ? formatDate(new Date(data.lastMqttUpdate))
             : "No update yet";
@@ -2871,7 +2865,7 @@ document.addEventListener("DOMContentLoaded", () => {
         data.lastMqttAmsUpdate = data.lastMqttAmsUpdate
             ? formatDate(new Date(data.lastMqttAmsUpdate))
             : "No update yet";
-        
+
         setAmsEnv(data.amsEnv);
 
         if (typeof data.LEGACY_MODE === "boolean") legacyMode = data.LEGACY_MODE;
@@ -2905,7 +2899,7 @@ document.addEventListener("DOMContentLoaded", () => {
         syncMenuPrinter(data.PRINTER_ID);
         updateElementText("mode", data.MODE);
         updateElementText("printer-serial", data.PRINTER_ID);
-        
+
         const footer = document.getElementById("dynamic-footer");
 
         if (footer) {
@@ -2913,9 +2907,9 @@ document.addEventListener("DOMContentLoaded", () => {
             footer.innerHTML = `
                 <div class="container">
                     <div class="content">
-                        ${new Date().getFullYear()} - v.${escapeHtml(data.VERSION)} | 
-                        <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">GitHub Repository</a> - 
-                        Created by 
+                        ${new Date().getFullYear()} - v.${escapeHtml(data.VERSION)} |
+                        <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">GitHub Repository</a> -
+                        Created by
                         <a href="https://github.com/Rdiger-36" target="_blank">Rdiger-36</a> |
                         <a id="spoolmanLink" href="${URL}" target="_blank">Link to Spoolman</a>
                     </div>
@@ -2923,7 +2917,7 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
         }
     }
-    
+
     // Set status icon for element
     function updateStatusWithIcon(elementId, status) {
         const el = getElementSafe(elementId);
@@ -2931,7 +2925,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const ok = status === "Connected";
         el.innerHTML = `<span class="pill ${ok ? "pill-ok" : "pill-bad"}">● ${status}</span>`;
     }
-    
+
     // Set status icon for spool behavior
     function setIcon(status, slotState) {
         if (slotState === "Loaded (Bambu Lab)") return status ? "❗️" : "✅";
