@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.19
    - Fixes:
       - A spool whose tag was edited by hand into something that is not JSON no longer stops every AMS update. The tag was read in three different ways, and the one in the slot loop threw on such a tag, inside the update, so every report after that ended in "Error processing message" and nothing was processed any more. One reader now, which takes the stored form and a bare UUID alike
       - The log no longer rewrites itself for every "nothing changed" line. Collapsing that line into the previous one read and wrote the whole file, once per update interval, up to a megabyte at a time, and made every tail on the file start over; only the last line is replaced now

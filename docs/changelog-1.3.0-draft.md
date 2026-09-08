@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.18 has to be folded in here as well, or regenerate the
+Every dev build after dev.19 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -117,6 +117,16 @@ Version 1.3.0
       - A print is matched to the right slot when a slot in the middle of an AMS is empty, on a printer that does not report where the print runs from (P1 and A1 series). Bambu Studio leaves an empty slot out of the filament list, so every filament after a gap moves up one position; the service counted all four slots of every unit. Confirmed on an X1E emptied at A3, whose own report named A4 for the third filament. The external spool holder also comes before an AMS HT in that list (issue #146)
       - The print card no longer says "consumption booked" over a print that booked nothing. The label counts the report's rows now: "nothing booked", "1 of 3 booked", or "consumption booked" only when every used filament was
       - A print on a P1 or an A1 is booked onto the slots Bambu Studio sent it to, not onto an estimate. Those printers never report where a print runs from, and a reused project is remapped by colour when the job is sent; the printer echoes that command on its report topic, and the service reads it. A printer that reports its slots itself keeps that report; an SD card print or one repeated on the printer's screen keeps the estimate (issue #146)
+      - A cancelled print books the layers that were finished, not two more. The printer's layer_num is the layer being printed, counted from 1, and within a job the counter only goes up; measured on a P2S through the raw trace
+      - "After print" no longer subtracts a booked print a second time, and "On spool" and "After print" show the hundredth of a gram Spoolman holds, "267.45g" rather than "267g"
+      - A restart of the service during a print keeps the print's start time, written to printers/printstate.json when the print begins. The restart guard says what a restart really costs: the job is booked when it ends, on a P1 or an A1 the slots Bambu Studio sent it to are lost
+      - The sliced file of a print is downloaded once, not twice, when the dashboard asks for the print's figures before the print handler does
+      - A spool whose tag was edited by hand into something that is not JSON no longer stops every AMS update
+      - The log no longer rewrites itself for every "nothing changed" line; only the last line is replaced
+      - The slot update interval counts from every pass that ran, so a change in G-code mode does not trigger a Spoolman fetch on the very next report
+      - Five settings added after the environment was deprecated can be seeded from it like every other: AUTO_ASSIGN_THIRD_PARTY, PRINT_RESET_MINUTES, ARCHIVE_EMPTY_SPOOLS, EMPTY_SPOOL_THRESHOLD and OFFLINE_MAX_INTERVAL; a test holds the seed list against the schema
+      - An original AMS is not offered a dryer. An original AMS on current firmware sends the dryer fields, an X1E's AMS08 did in every report of a trace, so the model from the printer's module list decides now and the report only until that answer is in
+      - Web UI: "Go to Spoolman" opens the create page when Spoolman lives under a path; spool, filament and slot names, log lines and the printer name in the export dialog are shown as text rather than markup; the merge dialog and the spool dialog round to two decimals; the footer says the current year; the two theme icons are drawn in the page rather than fetched from icons8.com
    - Development:
       - Node 22, and the README is rebuilt around G-code tracking with new screenshots
       - One projection for what a client sees of a slot, one consumption match, and the rules both sides apply live in public/shared.js instead of in two implementations
@@ -128,5 +138,8 @@ Version 1.3.0
       - Twelve real printer reports, copied from the mock data of ha-bambulab under its MIT notice in THIRD_PARTY_NOTICES.md: A1 with AMS Lite, X1C with three AMS and an AMS HT, the dual nozzle H2C, H2D and X2D, P1P without AMS, A2L and P2S. test/reports.test.js runs every one through the ingest pipeline with invariants, and what they found that is not handled yet is listed there as todo: the A2L reports its AMS as unit 16, which no slot label range knows, so the README lists it as untested
       - The test suite runs on node:test and covers public/ for the first time
       - The release notes of every version carry the merged pull requests grouped by the label they were given, configured in .github/release.yml, with the breaking ones first. The release body opens with that list and ends with the changelog section, rather than burying the list under sixty lines of prose
+      - The printer runtime object in src/printers.js declares every field the code assigns to it. One reader for a spool's tag, one sentence table for a refused, timed out or unreachable connection, one FTPS login, one retry limit check, one Spoolman monitor and one JSON file store behind the assignments, the learned presets, the print starts and the API keys; each was two to five copies. Thirteen exports nobody imported are plain functions again
+      - The weight a slot carries to the dashboard has one meaning: amsWeight is what the AMS reads off the RFID tag, and the dashboard reads Spoolman's weight off the linked spool itself
+      - Web UI: the toast after an action is styled by a class, the event handler in frontend.js is indented like the rest of the file, and the logs page and the menu parse their inputs once
 
 -----------------------------------------------------------------------------------------------
