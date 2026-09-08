@@ -32,7 +32,7 @@ export const apiKeysPath = path.join(dataDir, "apikeys.json");
 // brings the service back on its own or depends on the container policy.
 export const supervised = process.env.SUPERVISED === "1";
 
-export const version = "1.3.0-dev.16";
+export const version = "1.3.0-dev.17";
 export const PORT = 4000;
 
 /** The spellings a boolean environment variable is accepted in. */
