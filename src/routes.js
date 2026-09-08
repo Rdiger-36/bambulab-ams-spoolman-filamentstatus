@@ -36,7 +36,7 @@ import {
 } from "./spoolman.js";
 import { calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
-import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo, ensureSliceInfo } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 import {
     claimSlotLocation,
@@ -624,11 +624,17 @@ export function registerRoutes(app, printers) {
         // not there would otherwise cost one FTPS login per request for the
         // whole print. Measured on a P1S: 303 logins in fifteen minutes. The
         // manual ?job= test is the exception, it asks for exactly that.
+        //
+        // A fetch for the printer's own job is shared with the print handler
+        // through ensureSliceInfo(), so a request that lands while the job is
+        // preparing fetches the file once for both rather than once each.
         let sliceInfo = req.query.job || cleared ? null : (printer.currentSliceInfo || null);
         const alreadyLookedFor = !req.query.job && printer.lastSliceFetch?.jobName === jobName;
         if (jobName && !sliceInfo && !alreadyLookedFor) {
             try {
-                sliceInfo = await loadSliceInfo(printer, jobName, req.query.job ? null : printer.currentGcodeFile);
+                sliceInfo = req.query.job
+                    ? await loadSliceInfo(printer, jobName, null)
+                    : await ensureSliceInfo(printer, jobName, printer.currentGcodeFile);
             } catch (err) {
                 // non-fatal, surface the error in the response
                 return res.json({

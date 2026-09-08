@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - The sliced file of a print is downloaded once, not twice. The dashboard asks for the print's figures as soon as the job has a name, while the printer is still preparing, and that request fetched the file for itself; the print handler fetched it again three seconds later when the print reached RUNNING, and logged "Learned the preset" a second time. Both now share one download, and the handler says "slice info already loaded" when the dashboard got there first. Seen on a P2S on 2026-09-08
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.18
    - Features:
       - The name behind a custom preset is learned from the first print with it. A preset from Bambu Studio's cloud library, or one of the user's own, reaches the slot as a hash such as "Pdd34802", and the printer never sends the name; the sliced file does, next to the id and the vendor. The service downloads that file for every print it books, so a slot reads "fibrelogy PLA Basic preset" from then on instead of "PLA · custom preset", the detail dialog says where the name came from, and the create dialog knows the manufacturer and proposes from the catalogue as it does for a shipped vendor profile

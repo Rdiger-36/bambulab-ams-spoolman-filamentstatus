@@ -129,6 +129,41 @@ export async function loadSliceInfo(printer, jobName, gcodeFile = null) {
 }
 
 /**
+ * The slice info of the printer's current job, fetched at most once.
+ *
+ * Two callers want it: the print handler when the state reaches RUNNING, and
+ * `/api/print`, which the dashboard asks every few seconds and which starts
+ * asking as soon as the job has a name, in PREPARE. Each used to download the
+ * file for itself, so every print cost two FTPS downloads three seconds apart,
+ * and the second one also logged "Learned the preset" a second time. Now the
+ * first caller's result is kept on the printer and a fetch still in flight is
+ * shared rather than started again.
+ *
+ * `freshStart` in `handlePrintStateChange()` clears both, so a cached file
+ * never outlives the job it belongs to.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {string} jobName - `subtask_name` of the job
+ * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
+ * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
+ */
+export function ensureSliceInfo(printer, jobName, gcodeFile = null) {
+    if (printer.currentSliceInfo) return Promise.resolve(printer.currentSliceInfo);
+    if (printer.sliceFetchInFlight?.jobName === jobName) return printer.sliceFetchInFlight.promise;
+
+    const promise = loadSliceInfo(printer, jobName, gcodeFile)
+        .then(sliceInfo => {
+            if (sliceInfo) printer.currentSliceInfo = sliceInfo;
+            return sliceInfo;
+        })
+        .finally(() => {
+            if (printer.sliceFetchInFlight?.promise === promise) printer.sliceFetchInFlight = null;
+        });
+    printer.sliceFetchInFlight = { jobName, promise };
+    return promise;
+}
+
+/**
  * Why the last slice info fetch came back empty, for the log.
  *
  * Two different problems used to share one sentence, "slice_info.config not
@@ -310,6 +345,7 @@ export async function handlePrintStateChange(printer, print) {
         printer.currentGcodeFile  = print.gcode_file || null;
         printer.currentSliceInfo  = null;
         printer.lastSliceFetch    = null;
+        printer.sliceFetchInFlight = null;
         printer.currentMapping    = null;
         printer.consumptionBooked = false;
         printer.sliceFetchDone    = false;
@@ -394,16 +430,22 @@ export async function handlePrintStateChange(printer, print) {
         printer.sliceFetchDone = true;
         printer.currentJobName = jobName;
 
-        console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
-        try {
-            printer.currentSliceInfo = await loadSliceInfo(printer, jobName, printer.currentGcodeFile);
-            if (printer.currentSliceInfo) {
-                console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
-            } else {
-                console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, consumption tracking unavailable for this print`);
+        if (printer.currentSliceInfo) {
+            // The dashboard asked /api/print while the job was preparing, and
+            // that request already fetched the file. See ensureSliceInfo().
+            console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", slice info already loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
+        } else {
+            console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
+            try {
+                const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile);
+                if (sliceInfo) {
+                    console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${sliceInfo.filaments.length} filament(s), ${sliceInfo.totalLayers} layers`);
+                } else {
+                    console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, consumption tracking unavailable for this print`);
+                }
+            } catch (err) {
+                console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);
             }
-        } catch (err) {
-            console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);
         }
     }
 
