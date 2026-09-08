@@ -1449,7 +1449,7 @@ function respondPrintInFlight(res, printer, what) {
     res.status(409).json({
         ok: false,
         printInFlight: true,
-        error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}. The job is booked when it ends if the service is back by then; its start time is lost either way, and on a P1 or an A1 the slots Bambu Studio sent it to.`,
+        error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}. The job is booked when it ends if the service is back by then, with its start time; on a P1 or an A1 the slots Bambu Studio sent it to are lost.`,
     });
 }
 

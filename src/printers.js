@@ -141,6 +141,9 @@ function createRuntimePrinter(entry) {
         // report fields. A restart mid print therefore loses it, and the
         // summary says the duration is unknown rather than inventing one.
         printStartedAt: null,
+        // Whether a report with a state has been read since the process started;
+        // the first one may find a print already running. See handlePrintStateChange().
+        stateSeenSinceStart: false,
         // The last error the printer named during this print. Collected across
         // reports rather than read from the one that ends the job: a P2S
         // stopped by hand reports the code one report after the state, and

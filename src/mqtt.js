@@ -22,6 +22,7 @@ import {
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
+import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
 import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
@@ -317,6 +318,10 @@ export async function handlePrintStateChange(printer, print) {
     const jobName     = print.subtask_name || printer.currentJobName || null;
     const layerNum    = print.layer_num   ?? printer.currentLayerNum   ?? 0;
     const prevState   = printer.currentGcodeState || "IDLE";
+    // The first report after the service started is the one that may find a
+    // print already running, whose start was measured by the process before.
+    const firstSinceStart = !printer.stateSeenSinceStart;
+    printer.stateSeenSinceStart = true;
 
     // Always keep layer_num up to date for partial-print calculation. Within
     // one job it only goes up: the P2S was seen reporting 4, 3, 4 and 9, 8, 9
@@ -378,7 +383,18 @@ export async function handlePrintStateChange(printer, print) {
         // state: it stays readable for as long as nothing new is printing,
         // which is what makes the summary worth keeping after the card itself
         // has returned to idle.
-        printer.printStartedAt         = Date.now();
+        // Measured here, because no printer reports it. A restart of the
+        // service mid print finds the job running on its first report and
+        // takes the start it wrote before, so "Running for" and the report's
+        // duration count from the print, not from the restart.
+        const recalled = firstSinceStart ? recallPrintStart(printer.id, jobName) : null;
+        printer.printStartedAt = recalled ?? Date.now();
+        if (recalled) {
+            console.log(printer.name, printer.logFilePath,
+                `[Print] Found "${jobName ?? "the job"}" already running, started ${new Date(recalled).toISOString()}`);
+        } else {
+            rememberPrintStart(printer.id, jobName, printer.printStartedAt);
+        }
         printer.lastPrintSummary       = null;
         printer.printResultDismissed   = false;
         printer.printResetAt           = null;
@@ -478,6 +494,7 @@ export async function handlePrintStateChange(printer, print) {
     // Book consumption on transition into a terminal state
     if (TERMINAL_STATES.has(newState) && ACTIVE_STATES.has(prevState) && !printer.consumptionBooked) {
         printer.consumptionBooked = true;
+        forgetPrintStart(printer.id);
 
         // Built before the booking so that the run is summarised even when
         // there is nothing to book. A print whose slice info never arrived is
