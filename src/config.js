@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 config();
 
 const __filename = fileURLToPath(import.meta.url);
-export const __rootDir = path.dirname(path.dirname(__filename));
+const __rootDir = path.dirname(path.dirname(__filename));
 
 // Where the persistent files and the logs live. The container mounts both, so
 // they are overridable separately. Tests point them at a temporary directory,

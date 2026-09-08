@@ -106,7 +106,7 @@ export function hashApiKey(plain) {
  *
  * @returns {string} the key in clear text
  */
-export function generateApiKey() {
+function generateApiKey() {
     return `${PREFIX}${crypto.randomBytes(KEY_BYTES).toString("base64url")}`;
 }
 

@@ -94,7 +94,7 @@ export async function getSpoolmanSpools() {
         state.spoolmanStatus = "Connected";
         return JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching spools from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching spools from Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         return [];
     }
@@ -119,7 +119,7 @@ export async function getArchivedSpoolmanSpools() {
         });
         return JSON.parse(response.body).filter(spool => spool.archived);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching archived spools from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching archived spools from Spoolman:", error.message);
         return [];
     }
 }
@@ -130,7 +130,7 @@ export async function getSpoolmanInternalFilaments() {
         const response = await got(`${spoolmanUrl()}/api/v1/filament`);
         return JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching filaments from Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         return [];
     }
@@ -165,7 +165,7 @@ export async function getSpoolmanExternalFilaments() {
         const response = await got(`${spoolmanUrl()}/api/v1/external/filament`);
         return JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching external filaments from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching external filaments from Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         return [];
     }
@@ -289,7 +289,7 @@ export async function ensureVendor() {
         const response = await got(`${spoolmanUrl()}/api/v1/vendor`);
         vendors = JSON.parse(response.body);
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching and setting vendor for Spoolman:", error.message);
         state.spoolmanStatus = "Disconnected";
         throw error;
     }
@@ -348,7 +348,7 @@ export async function checkAndSetExtraField() {
             return true;
         }
     } catch (error) {
-        console.error("Server", serverLogFilePath, "Error fetching extra tag from Spoolman:", error);
+        console.error("Server", serverLogFilePath, "Error fetching extra tag from Spoolman:", error.message);
         throw error;
     }
 }

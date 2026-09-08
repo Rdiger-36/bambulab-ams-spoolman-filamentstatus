@@ -115,7 +115,7 @@ export function knownValues() {
 }
 
 /** The scope name of the server log in a `scope` query. */
-export const SERVER_SCOPE = "server";
+const SERVER_SCOPE = "server";
 
 /**
  * Which logs a bundle is asked to carry.

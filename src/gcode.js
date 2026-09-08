@@ -642,7 +642,7 @@ export function parseSliceInfo(xml, projectSettings = null) {
  * @returns {{id: string, name: string|null, vendor: string|null}[]} empty when
  *   the file is missing or names no ids
  */
-export function parsePresets(json) {
+function parsePresets(json) {
     if (!json) return [];
     let parsed;
     try {

@@ -286,7 +286,7 @@ console.debug = (device, logFilePath, ...args) => {
  * @param {number} [chunkSize=65536] - read size per backwards step, in bytes
  * @returns {Promise<string[]>} the last lines, oldest first
  */
-export async function tailFileLines(filePath, maxLines = 250, chunkSize = 64 * 1024) {
+async function tailFileLines(filePath, maxLines = 250, chunkSize = 64 * 1024) {
     const fh = await fsp.open(filePath, "r");
     try {
         const stat = await fh.stat();

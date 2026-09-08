@@ -119,6 +119,6 @@ export async function checkForUpdate({ force = false } = {}) {
 }
 
 /** Drops the cached answer. Exists for the tests. */
-export function resetUpdateCache() {
+function resetUpdateCache() {
     cached = null;
 }

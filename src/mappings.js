@@ -31,7 +31,7 @@ let mappings = null;
  * under the labels `A0` to `D3`. Bump this whenever the meaning of what is
  * stored changes and handle the old value in `migrateStored()`.
  */
-export const MAPPINGS_SCHEMA_VERSION = 1;
+const MAPPINGS_SCHEMA_VERSION = 1;
 
 /**
  * Describes a slot's filament as precisely as the AMS allows for a chipless
