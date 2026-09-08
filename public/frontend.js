@@ -1504,7 +1504,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // note under it travel as one block.
         const withNote = (label, note) => `<span>${label}<br><span class="gc-muted">${note}</span></span>`;
         if (preset.kind === "custom") {
-            return withNote(`Custom preset ${id}`, "A vendor or user preset from the slicer. Its name is not in what the printer reports.");
+            if (preset.name) {
+                return withNote(`${escapeHtml(preset.name)} ${id}`, "A vendor or user preset from the slicer. Its name was learned from the sliced file of a print with it.");
+            }
+            return withNote(`Custom preset ${id}`, "A vendor or user preset from the slicer. Its name is not in what the printer reports; it is learned from the sliced file the first time a plate is printed with it.");
         }
         const label = preset.name ? `${escapeHtml(preset.name)} ${id}` : escapeHtml(preset.id);
         if (!chipless) return label;

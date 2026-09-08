@@ -8,6 +8,7 @@ import { deprecatedConfig } from "./deprecation.js";
 import { logFileSet } from "./logger.js";
 import { printers } from "./printers.js";
 import { parseStoredFile } from "./mappings.js";
+import { allLearnedPresets } from "./presets.js";
 import { apiKeyCount } from "./apikeys.js";
 import { getSettingsView, legacyMode } from "./settings.js";
 import { state } from "./state.js";
@@ -226,6 +227,13 @@ export async function buildDiagnosticsBundle({ anonymize = true, scope = null } 
             ? Object.fromEntries(Object.entries(assignments).map(([serial, value]) => [maskSerial(serial), value]))
             : assignments;
         zip.addFile("mappings.json", Buffer.from(JSON.stringify({ schemaVersion, printers: exported }, null, 4)));
+    }
+    // Preset names carry no serial and no address, so they go in as they are:
+    // which hash a slot shows and what it was learned as is exactly what a
+    // "wrong preset name" report needs.
+    const learned = allLearnedPresets();
+    if (Object.keys(learned).length) {
+        zip.addFile("presets.json", Buffer.from(JSON.stringify({ schemaVersion: 1, presets: learned }, null, 4)));
     }
 
     if (included.server) await addLogFiles(zip, "logs/server", serverLogFilePath, mask);

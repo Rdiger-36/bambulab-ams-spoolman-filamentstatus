@@ -1,4 +1,11 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Features:
+      - The name behind a custom preset is learned from the first print with it. A preset from Bambu Studio's cloud library, or one of the user's own, reaches the slot as a hash such as "Pdd34802", and the printer never sends the name; the sliced file does, next to the id and the vendor. The service downloads that file for every print it books, so a slot reads "fibrelogy PLA Basic preset" from then on instead of "PLA · custom preset", the detail dialog says where the name came from, and the create dialog knows the manufacturer and proposes from the catalogue as it does for a shipped vendor profile
+         - Kept in printers/presets.json next to the assignments, one entry per hash, and in the diagnostics bundle. A preset renamed in the slicer replaces its old name on the next print. Read off a P2S on 2026-09-08: a Fiberlogy PLA from the cloud library was Pdd34802 on the slot and "fibrelogy PLA Basic @Bambu Lab P2S 0.6 nozzle" by "fibrelogy" in the file
+         - The vendor is spelled the way the preset spells it, which is the user's own spelling; the catalogue is matched without regard to case, and a spelling the catalogue does not know leaves the manufacturer field filled in and the proposal out
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.17
    - Features:
       - The create dialog of a chipless slot proposes the filament from the slot's preset (issue #47). A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal, with a line saying how near: "High Speed Matte PETG - Black, the nearest colour in the catalogue (151616 for the slot's 161616)". Nothing is created by itself; the proposal is what the form starts with
