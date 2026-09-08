@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.16 has to be folded in here as well, or regenerate the
+Every dev build after dev.17 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -86,6 +86,7 @@ Version 1.3.0
       - A 3rd party spool can be assigned without asking, where there is nothing to ask. "Assign 3rd party spools automatically" in the Tracking settings, off by default, links a spool without an RFID tag to the one Spoolman spool of the same material and colours that carries no tag and sits in no other slot. With two candidates the slot waits for a choice, and nothing is ever created in Spoolman. The assignment picker preselects the same spool, so the usual case with the setting off is one click (issue #47)
       - A 3rd party spool is called by the preset chosen for its slot: "Generic PLA preset", "SUNLU PETG preset" or "PLA · custom preset", and the dialog row is "Slot preset". A spool without a tag reports nothing of its own, only the filament preset somebody picked for the slot on the printer's screen or in the slicer, so the old "Tray profile" wording was wrong for it
       - The Logs page carries its choices as controls: a Source button over the server and the printers, a Log / Raw MQTT trace switch for a printer, and the download next to a line saying what the page shows and what the download would carry, "capture disabled" in front when that printer's trace is not being written. The switch writes into the address, so a link to a trace still opens the trace
+      - The create dialog of a chipless slot proposes the filament from the slot's preset. A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal with a line saying how near. A filament sold on a spool heavier than 1 kg cannot sit in an AMS and ranks behind every fitting one; the external holder takes any size. Nothing is created by itself, and a Bambu, a generic or a custom preset names no manufacturer, so the dialog then starts as before (issue #47)
    - Fixes:
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it

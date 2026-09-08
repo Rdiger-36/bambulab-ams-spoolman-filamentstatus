@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.17
    - Features:
       - The create dialog of a chipless slot proposes the filament from the slot's preset (issue #47). A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal, with a line saying how near: "High Speed Matte PETG - Black, the nearest colour in the catalogue (151616 for the slot's 161616)". Nothing is created by itself; the proposal is what the form starts with
          - The colour the slot reports is what somebody picked on the printer's screen, from a fixed palette, or typed in Bambu Studio, so it rarely equals the catalogue's value and the nearest one is proposed rather than an exact one demanded. An AMS takes a spool of up to 1 kg, so for a slot inside one a filament sold on a heavier spool is ranked behind every fitting one; the external holder takes any size
