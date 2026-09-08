@@ -70,6 +70,22 @@ test("the readings carry the model once it is known, and null before", () => {
 
     const [after] = extractAmsEnvironment([X1E_ORIGINAL_AMS], amsModelsFromVersion(X1E_MODULES));
     assert.equal(after.model, "AMS");
+    // An original AMS has no dryer, whatever its firmware puts in the report
+    assert.equal(after.drying, null);
+});
+
+test("the model settles the dryer: 2 Pro and HT have one, AMS and Lite do not, unknown asks the report", () => {
+    const withDryer = { ...X1E_ORIGINAL_AMS, dry_time: 30 };
+    const models = model => ({ A: { model, hardware: null, firmware: null } });
+
+    assert.equal(extractAmsEnvironment([withDryer], models("AMS"))[0].drying, null);
+    assert.equal(extractAmsEnvironment([withDryer], models("AMS Lite"))[0].drying, null);
+    assert.equal(extractAmsEnvironment([withDryer], models("AMS 2 Pro"))[0].drying.active, true);
+    assert.equal(extractAmsEnvironment([withDryer], models("AMS HT"))[0].drying.active, true);
+    // A 2 Pro without the fields, which no report so far has shown, still gets its section
+    assert.deepEqual(extractAmsEnvironment([{ id: "0", humidity: "2", humidity_raw: "35", temp: "29.2" }], models("AMS 2 Pro"))[0].drying,
+        { active: false, remainingMinutes: null, targetTemp: null, durationHours: null, filament: null });
+    assert.equal(extractAmsEnvironment([withDryer])[0].drying.active, true);
 });
 
 test("a get_version answer is read off the wire and folded into the readings", () => {
@@ -87,6 +103,8 @@ test("a get_version answer is read off the wire and folded into the readings", (
     assert.deepEqual(printer.amsModels, { A: { model: "AMS", hardware: "AMS08", firmware: "00.00.06.XXX" } });
     assert.equal(printer.amsEnv[0].model, "AMS");
     assert.equal(printer.amsEnv[0].humidityPercent, 35);
+    // The readings were taken before the answer and offered a dryer; the answer takes it back
+    assert.equal(printer.amsEnv[0].drying, null);
 });
 
 test("anything that is not a get_version answer is left to the report handler", () => {

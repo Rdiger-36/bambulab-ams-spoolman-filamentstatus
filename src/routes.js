@@ -1541,10 +1541,9 @@ function refreshCachedSpool(printers, spool) {
         for (const uiSpool of printer.spoolData || []) {
             if (uiSpool.existingSpool?.id !== spool.id) continue;
 
+            // The dashboard reads the weight off the spool itself, so following
+            // it is all there is to do.
             uiSpool.existingSpool = spool;
-            // Legacy mode owns this field from the AMS reading, and the edit is
-            // refused there, so following the spool is right in both modes.
-            if (uiSpool.correctedWeight != null) uiSpool.correctedWeight = spool.remaining_weight ?? null;
             // Archiving or restoring by hand changes what the slot says about
             // itself, and the next AMS update is up to two minutes away.
             uiSpool.archived = !!spool.archived;
@@ -1566,9 +1565,6 @@ function applyMappingToUiSpool(printer, uiSpool, spool) {
     uiSpool.assignedAutomatically = false;
     uiSpool.option               = spool ? SLOT_OPTIONS.UNASSIGN : SLOT_OPTIONS.ASSIGN;
     uiSpool.enableButton         = "true";
-    // correctedWeight came from the assigned spool, so it has to go with it.
-    // 3rd-party slots report tray_weight 0 and have no weight of their own.
-    uiSpool.correctedWeight      = spool?.remaining_weight ?? null;
 
     broadcastSlotUpdate(printer.id, uiSpool);
 }

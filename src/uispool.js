@@ -135,7 +135,7 @@ export function toClientSpool(uiSpool) {
         // this projection, so archiving one reaches the UI as a change.
         archived: uiSpool.archived ?? false,
         correctedRemain: uiSpool.correctedRemain ?? null,
-        correctedWeight: uiSpool.correctedWeight ?? null,
+        amsWeight: uiSpool.amsWeight ?? null,
         option: uiSpool.option ?? SLOT_OPTIONS.NONE,
         enableButton: uiSpool.enableButton ?? "false",
         error: uiSpool.error ?? false,

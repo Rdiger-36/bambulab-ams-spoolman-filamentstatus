@@ -1519,6 +1519,16 @@ document.addEventListener("DOMContentLoaded", () => {
         return value == null ? "—" : `${Number(value).toFixed(decimals)} g`;
     }
 
+    // Whether the weight on the spool is Spoolman's to say: only when the slot
+    // is linked to that spool, by tag, by assignment or as the archived spool
+    // still sitting there. A mere candidate in existingSpool, the one a Merge
+    // would use, is not this slot's spool and must not lend it its weight.
+    function spoolmanSaysWeight(amsSpool) {
+        const sp = amsSpool.existingSpool;
+        const linked = amsSpool.connectedViaTag || amsSpool.connectedViaMapping || amsSpool.archived;
+        return !!linked && !!sp && sp.remaining_weight != null;
+    }
+
     /** A weight to the hundredth of a gram, always with both decimals: "30.00g". */
     function grams2(value) {
         return `${Number(value).toFixed(2)}g`;
@@ -2034,16 +2044,16 @@ document.addEventListener("DOMContentLoaded", () => {
         tr.setAttribute("data-amsid", amsSpool.amsId);
         renderedSpools.set(amsSpool.amsId, amsSpool);
 
-        let amsSpoolRemainingWeight = amsSpool.correctedWeight ?? (amsSpool.slot.remain == null
+        let amsSpoolRemainingWeight = amsSpool.amsWeight ?? (amsSpool.slot.remain == null
             ? null
             : (amsSpool.slot.tray_weight / 100) * amsSpool.slot.remain);
         let correctedRemain = amsSpool.correctedRemain ?? amsSpool.slot.remain;
         let totalWeight = amsSpool.slot.tray_weight;
 
         // In G-code mode the AMS RFID remain % is not tracked, so show the actual
-        // Spoolman remaining weight/percentage of the tag-connected spool instead.
+        // Spoolman remaining weight/percentage of the linked spool instead.
         const sp = amsSpool.existingSpool;
-        if (!legacyMode && (amsSpool.connectedViaTag || amsSpool.connectedViaMapping) && sp && sp.remaining_weight != null) {
+        if (!legacyMode && spoolmanSaysWeight(amsSpool)) {
             const full = sp.filament?.weight;
             amsSpoolRemainingWeight = Math.round(sp.remaining_weight);
             if (sp.remaining_percentage != null) {
@@ -2585,24 +2595,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const used   = isEmpty ? 0 : consumedGrams(partCons, amsSpool.amsId);
 
         // On spool: Spoolman remaining/initial weight whenever we know which spool
-        // this is (tag link or manual assignment), else the AMS-reported
-        // remaining/total weight (g/g, like the legacy MQTT table but without the
-        // percentage).
+        // this is (tag link, manual assignment, or the archived spool still in
+        // the slot), else the AMS-reported remaining/total weight (g/g, like the
+        // legacy MQTT table but without the percentage).
         const sp = amsSpool.existingSpool;
-        let onSpool = amsSpool.correctedWeight ?? null;
+        let onSpool = amsSpool.amsWeight ?? null;
         // tray_weight arrives from MQTT as a string, so a weightless 3rd party
         // spool reports "0", which is truthy. Left as-is it passed the guard
         // below, divided by zero in the remain% fallback and rendered "NaNg".
         let totalSpool = Number(slot.tray_weight) || null;
-        if ((amsSpool.connectedViaTag || amsSpool.connectedViaMapping) && sp && sp.remaining_weight != null) {
+        if (spoolmanSaysWeight(amsSpool)) {
             // To the hundredth of a gram, which is what the booking writes and
             // what "After print" is computed from: rounded to whole grams first,
             // 62.13 g minus 5.87 g read 56.13 g instead of 56.26 g.
             onSpool = Math.round(sp.remaining_weight * 100) / 100;
             if (sp.initial_weight != null) totalSpool = Math.round(sp.initial_weight);
         } else if (onSpool == null && !isEmpty && slot.remain != null && totalSpool) {
-            // Fallback if correctedWeight wasn't provided by the backend: derive
-            // it client-side from the AMS remain%, same as the legacy table does.
+            // Fallback if the backend had no AMS weight yet: derive it here from
+            // the AMS remain%, same as the legacy table does.
             const pct = correctRemainInt(slot.remain, totalSpool, slot.tray_type);
             onSpool = Math.round((pct / 100) * totalSpool);
         }

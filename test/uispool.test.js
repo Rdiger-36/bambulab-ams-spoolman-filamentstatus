@@ -48,7 +48,7 @@ function uiSpool(overrides = {}) {
         connectedViaTag: true,
         connectedViaMapping: false,
         correctedRemain: 63,
-        correctedWeight: 630,
+        amsWeight: 630,
         option: "No actions available",
         enableButton: "false",
         slotState: "Loaded (Bambu Lab)",
@@ -73,7 +73,7 @@ test("the projection keeps the server's own fields and the firmware noise out", 
     assert.equal(client.slot.tray_weight, "1000");
     assert.equal(client.existingSpool.remaining_weight, 640);
     assert.equal(client.existingSpool.filament.vendor.name, "Bambu Lab");
-    assert.equal(client.correctedWeight, 630);
+    assert.equal(client.amsWeight, 630);
     assert.equal(client.option, "No actions available");
 });
 
@@ -102,7 +102,7 @@ test("a missing assignment reads as false rather than absent", () => {
 
     assert.equal(client.connectedViaTag, false);
     assert.equal(client.connectedViaMapping, false);
-    assert.equal(client.correctedWeight, null);
+    assert.equal(client.amsWeight, null);
     assert.equal(client.enableButton, "false");
 });
 
