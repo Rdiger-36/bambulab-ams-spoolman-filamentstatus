@@ -15,8 +15,8 @@ import {
     slotColors,
     spoolWeightLimit,
 } from "./shared.js";
-import { bambuProfile, materialsAgree, slotMaterial, slotPreset } from "./materials.js";
-import { colorSetDistance, uniqueSpoolForSlot } from "./match.js";
+import { bambuProfile, materialsAgree, presetVendor, slotMaterial, slotPreset } from "./materials.js";
+import { catalogueColors, colorSetDistance, rankCatalogueEntries, uniqueSpoolForSlot } from "./match.js";
 import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 
 let autoButton = null;
@@ -836,12 +836,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
     }
 
-    /** The colours a catalogue entry carries, in the shape the swatches use. */
-    function catalogueColors(entry) {
-        if (entry.color_hexes?.length) return entry.color_hexes.map(c => normColor(c).toLowerCase());
-        return entry.color_hex ? [normColor(entry.color_hex).toLowerCase()] : [];
-    }
-
     // What each catalogue entry is called in the picker.
     //
     // The name alone, because the two steps above it already said which
@@ -890,12 +884,19 @@ document.addEventListener("DOMContentLoaded", () => {
     //
     // The AMS reports every colour of a multi colour spool, so all of them are
     // offered: taking only `tray_color` created a plain black spool for a
-    // filament that is black and red.
+    // filament that is black and red. The material is the preset's where the
+    // preset is a known one, "PLA-CF" rather than the "PLA" the AMS reports
+    // next to it, and a vendor preset names the manufacturer as well.
     function slotDefaults(slot) {
         const colors = slotColors(slot).map(c => normColor(c));
+        const preset = slotPreset(slot);
+        const vendor = presetVendor(preset);
         return {
-            material: slot.tray_type || "",
+            material: slotMaterial(slot) || "",
             colors: colors.length ? colors : [normColor(slot.tray_color) || "000000"],
+            vendor: vendor?.vendor ?? "",
+            line: vendor?.line ?? null,
+            presetName: preset?.name ?? null,
         };
     }
 
@@ -923,6 +924,13 @@ document.addEventListener("DOMContentLoaded", () => {
             .map(f => `<option value="${f.id}">#${f.id} ${escapeHtml([f.vendor?.name, f.material, f.name].filter(Boolean).join(" · "))}</option>`)
             .join("");
 
+        // The manufacturer the preset names, spelled the way this Spoolman or
+        // the catalogue already spells it, so the vendor step narrows the
+        // catalogue and the vendor field does not create "Sunlu" next to "SUNLU".
+        const vendorSpelling = defaults.vendor
+            ? (vendors.find(v => sameText(v, defaults.vendor)) ?? defaults.vendor)
+            : "";
+
         pane.innerHTML = `
             <div class="sp-scroll">
                 <div class="sp-section">Filament</div>
@@ -940,7 +948,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         <div class="sp-catalogue-steps">
                             <label class="sp-field">
                                 <span>1. Manufacturer</span>
-                                <input id="sp-cat-vendor" list="sp-cat-vendors" autocomplete="off" placeholder="all manufacturers">
+                                <input id="sp-cat-vendor" list="sp-cat-vendors" autocomplete="off" placeholder="all manufacturers"
+                                    value="${escapeHtml(vendorSpelling)}">
                                 <datalist id="sp-cat-vendors">${(lookups.externalVendors || []).map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
                             </label>
                             <label class="sp-field">
@@ -961,7 +970,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="sp-subsection">Filament data</div>
                     <label class="sp-field">
                         <span>Manufacturer</span>
-                        <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu">
+                        <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu" value="${escapeHtml(vendorSpelling)}">
                         <datalist id="sp-vendors">${vendors.map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
                         <small class="gc-muted" id="sp-vendor-hint"></small>
                     </label>
@@ -1112,6 +1121,39 @@ document.addEventListener("DOMContentLoaded", () => {
             $("sp-catalogue-hint").textContent = ordered.length
                 ? `${ordered.length}${ordered.length === 500 ? "+" : ""} entries, by name`
                 : "Nothing in the catalogue matches this manufacturer and material";
+
+            suggestFromPreset();
+        };
+
+        // The first list for a slot whose preset names the manufacturer is
+        // narrowed to that maker and this material already, so the entry nearest
+        // the slot's colour is most likely the spool, and it is filled in as a
+        // proposal. Once only, when the dialog opens: after that the steps are
+        // the user's. A generic preset or a custom one names no maker, and the
+        // nearest colour among every maker's filaments would be a guess.
+        let suggested = !defaults.vendor;
+        const suggestFromPreset = () => {
+            if (suggested || !catalogue.size) return;
+            suggested = true;
+
+            const ranked = rankCatalogueEntries([...catalogue.values()], slot, {
+                external: amsSpool.amsId === EXTERNAL_SLOT || amsSpool.amsId === SECOND_EXTERNAL_SLOT,
+                line: defaults.line,
+            });
+            const best = ranked[0];
+            if (!best || best.tooHeavy || !Number.isFinite(best.distance)) return;
+
+            const label = [...catalogue.entries()].find(([, entry]) => entry === best.entry)?.[0];
+            if (!label) return;
+
+            $("sp-cat-filament").value = label;
+            applyCatalogueEntry();
+
+            const slotColours = defaults.colors.join(", ");
+            const catalogueColours = catalogueColors(best.entry).join(", ");
+            $("sp-catalogue-hint").textContent = best.distance === 0
+                ? `Proposed from the slot's preset "${defaults.presetName}": ${best.entry.name}, the same colour. Pick another filament above if it is not this one`
+                : `Proposed from the slot's preset "${defaults.presetName}": ${best.entry.name}, the nearest colour in the catalogue (${catalogueColours} for the slot's ${slotColours}). Pick another filament above if it is not this one`;
         };
 
         // What the catalogue knows about the manufacturer of the picked entry.

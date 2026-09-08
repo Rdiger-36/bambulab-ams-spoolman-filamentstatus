@@ -61,7 +61,7 @@ const busyTray = id => ({ id: String(id), state: 17 });
  * defaults and from what the user set on the printer, so it carries a material
  * and a colour but an all zero uuid.
  */
-function thirdPartyTray(id, color) {
+function thirdPartyTray(id, color, idx = "GFL99", type = "PLA") {
     return {
         id: String(id),
         state: 11,
@@ -77,9 +77,9 @@ function thirdPartyTray(id, color) {
         tray_color: color,
         tray_diameter: "1.75",
         tray_id_name: "",
-        tray_info_idx: "GFL99",
+        tray_info_idx: idx,
         tray_sub_brands: "",
-        tray_type: "PLA",
+        tray_type: type,
         tray_uuid: "00000000000000000000000000000000",
         tray_weight: "0",
         xcam_info: "000000000000000000000000",
@@ -181,7 +181,9 @@ export const AMS_UNITS = [
     htUnit(132, [bambuTray(0, { ...SILK, colors: ["EC984CFF", "6CD4BCFF", "A66EB9FF", "D87694FF"], uuid: "AF15D6820C934E7BA05F31C86D2E9074", tagUid: "BAA8227400000144", remain: 100 })]),
     htUnit(133, [emptyTray(0)]),
     htUnit(134, [busyTray(0)]),
-    htUnit(135, [thirdPartyTray(0, "0ACC38FF")]),
+    // A vendor preset picked in Bambu Studio, SUNLU PETG in black, the way an
+    // X1E reported it on 2026-09-08: what the create dialog proposes from
+    htUnit(135, [thirdPartyTray(0, "161616FF", "GFSNL08", "PETG")]),
 ];
 
 /**

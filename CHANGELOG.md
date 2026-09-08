@@ -1,4 +1,13 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Features:
+      - The create dialog of a chipless slot proposes the filament from the slot's preset (issue #47). A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal, with a line saying how near: "High Speed Matte PETG - Black, the nearest colour in the catalogue (151616 for the slot's 161616)". Nothing is created by itself; the proposal is what the form starts with
+         - The colour the slot reports is what somebody picked on the printer's screen, from a fixed palette, or typed in Bambu Studio, so it rarely equals the catalogue's value and the nearest one is proposed rather than an exact one demanded. An AMS takes a spool of up to 1 kg, so for a slot inside one a filament sold on a heavier spool is ranked behind every fitting one; the external holder takes any size
+         - The manufacturer is spelled the way this Spoolman or the catalogue already spells it, so "SUNLU" from the preset does not create a second vendor next to "Sunlu". A Bambu, a generic or a custom preset names no manufacturer, and the dialog then starts as before, with the material and the colours
+         - The material field starts with the preset's material where the preset is known, "PLA-CF" rather than the "PLA" the AMS reports next to it
+         - Read off an X1E on 2026-09-08 whose holder carried SUNLU PETG and PolyLite PETG chosen in Bambu Studio, arriving as GFSNL08 and GFG60
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.16
    - Features:
       - A 3rd party spool can be assigned without asking, where there is nothing to ask (issue #47). "Assign 3rd party spools automatically" in the Tracking settings, off by default, links a spool without an RFID tag to the one Spoolman spool of the same material and colours that carries no tag and sits in no other slot. The slot then reads "auto-assigned", consumption is booked onto that spool, and the assignment is dropped like a manual one when a different filament shows up in the slot
