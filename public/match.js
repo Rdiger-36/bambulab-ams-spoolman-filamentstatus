@@ -98,3 +98,61 @@ export function uniqueSpoolForSlot(slot, spools, taken = new Set()) {
         spoolIsChipless(spool) && !taken.has(spool.id) && spoolFitsSlot(slot, spool));
     return fitting.length === 1 ? fitting[0] : null;
 }
+
+/**
+ * The colours a SpoolmanDB catalogue entry carries, lower case, without "#".
+ *
+ * @param {object} entry - a catalogue entry as Spoolman serves it
+ * @returns {string[]} every colour, a multi colour filament's whole set
+ */
+export function catalogueColors(entry) {
+    if (entry?.color_hexes?.length) return entry.color_hexes.map(c => normColor(c).toLowerCase());
+    return entry?.color_hex ? [normColor(entry.color_hex).toLowerCase()] : [];
+}
+
+/** What an AMS slot can take: a spool of this weight or less, in grams. */
+export const AMS_SPOOL_LIMIT = 1000;
+
+/**
+ * The catalogue entries that could be the spool in a chipless slot, best first.
+ *
+ * The slot names the manufacturer and the material through its preset, so the
+ * entries are already narrowed to those; what is left is which of a maker's
+ * colours it is. The colour the slot reports is what somebody picked on the
+ * printer's screen, from a fixed palette, or typed in Bambu Studio, so it is
+ * rarely the catalogue's exact value and the nearest one is the answer, with
+ * the distance kept so the dialog can say how near it was.
+ *
+ * Two facts decide before the colour does:
+ *
+ *   - an AMS takes a spool of up to 1 kg, so for a slot inside one an entry
+ *     sold on a heavier spool cannot be the one. The external holder takes any
+ *     size, which is where every 2 kg and 3 kg spool is printed from
+ *   - a preset that names a product line, "PolyLite PETG", is the line, so an
+ *     entry of the same maker and material from another line, "PolyMax PETG",
+ *     ranks behind every entry that carries the word
+ *
+ * @param {object[]} entries - catalogue entries, already narrowed by manufacturer and material
+ * @param {object} slot - the slot as the client payload carries it
+ * @param {object} [options]
+ * @param {boolean} [options.external] - whether the slot is an external holder
+ * @param {string|null} [options.line] - the product line word of the preset
+ * @returns {{entry: object, distance: number, tooHeavy: boolean, offLine: boolean}[]} best first
+ */
+export function rankCatalogueEntries(entries, slot, { external = false, line = null } = {}) {
+    const colors = slotColors(slot).map(c => normColor(c).toLowerCase());
+    const word = line ? line.toLowerCase() : null;
+
+    return (entries || [])
+        .map(entry => ({
+            entry,
+            distance: colorSetDistance(colors, catalogueColors(entry)),
+            tooHeavy: !external && entry.weight != null && Number(entry.weight) > AMS_SPOOL_LIMIT,
+            offLine: !!word && !String(entry.name ?? "").toLowerCase().includes(word),
+        }))
+        .sort((a, b) =>
+            Number(a.tooHeavy) - Number(b.tooHeavy) ||
+            Number(a.offLine) - Number(b.offLine) ||
+            a.distance - b.distance ||
+            String(a.entry.name ?? "").localeCompare(String(b.entry.name ?? "")));
+}

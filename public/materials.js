@@ -235,6 +235,43 @@ export function slotPreset(slot) {
 }
 
 /**
+ * The manufacturers behind the vendor profiles Bambu Studio ships, keyed by the
+ * word their profile names start with. A product line word names the line as
+ * well, because the catalogue calls the filament by it: SpoolmanDB lists
+ * "PolyLite™ PETG Black" under Polymaker, not under PolyLite.
+ *
+ * The manufacturer names are spelled the way SpoolmanDB spells them, which is
+ * what the create dialog matches them against. The two spellings of Sunlu are
+ * the reason this is a table rather than the first word of the profile name.
+ */
+const PRESET_VENDORS = {
+    SUNLU: { vendor: "Sunlu", line: null },
+    POLYLITE: { vendor: "Polymaker", line: "PolyLite" },
+    POLYTERRA: { vendor: "Polymaker", line: "PolyTerra" },
+    FIBERON: { vendor: "Polymaker", line: "Fiberon" },
+    ESUN: { vendor: "eSUN", line: null },
+    OVERTURE: { vendor: "Overture", line: null },
+};
+
+/**
+ * The manufacturer a slot preset points at, for prefilling the create dialog.
+ *
+ * Only a vendor profile names one: a Bambu profile is Bambu's own filament, a
+ * generic profile and a custom preset (`P` plus seven hex digits) say nothing
+ * about who made the spool. Read off an X1E on 2026-09-08, where SUNLU PETG and
+ * PolyLite PETG chosen in Bambu Studio arrived as GFSNL08 and GFG60.
+ *
+ * @param {object|null} preset - what `slotPreset()` returned
+ * @returns {{vendor: string, line: string|null}|null} the manufacturer as
+ *   SpoolmanDB spells it, and the product line word when the name carries one
+ */
+export function presetVendor(preset) {
+    if (preset?.kind !== "vendor" || !preset.name) return null;
+    const first = preset.name.split(/\s+/)[0].toUpperCase();
+    return PRESET_VENDORS[first] ?? null;
+}
+
+/**
  * The material of a slot: the profile's where the id is a known one, and the
  * coarse `tray_type` the AMS reports next to it otherwise.
  *

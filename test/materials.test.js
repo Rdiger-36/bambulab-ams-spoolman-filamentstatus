@@ -9,6 +9,7 @@ import {
     bambuProfile,
     materialFamily,
     materialsAgree,
+    presetVendor,
     slotMaterial,
     slotPreset,
 } from "../public/materials.js";
@@ -126,4 +127,23 @@ test("an id the table does not know keeps its id, and no id is no preset", () =>
 test("the dashboard imports the table rather than keeping its own", () => {
     const frontend = fs.readFileSync(path.join(root, "public", "frontend.js"), "utf8");
     assert.match(frontend, /import\s*\{[^}]*materialsAgree[^}]*\}\s*from\s*"\.\/materials\.js"/);
+});
+
+/* ---- presetVendor ---- */
+
+test("a vendor preset names its manufacturer as SpoolmanDB spells it", () => {
+    // SUNLU PETG and PolyLite PETG chosen in Bambu Studio, read off an X1E's
+    // external holder on 2026-09-08 as GFSNL08 and GFG60
+    assert.deepEqual(presetVendor(slotPreset({ tray_info_idx: "GFSNL08" })), { vendor: "Sunlu", line: null });
+    assert.deepEqual(presetVendor(slotPreset({ tray_info_idx: "GFG60" })), { vendor: "Polymaker", line: "PolyLite" });
+    assert.deepEqual(presetVendor(slotPreset({ tray_info_idx: "GFL01" })), { vendor: "Polymaker", line: "PolyTerra" });
+    assert.deepEqual(presetVendor(slotPreset({ tray_info_idx: "GFL03" })), { vendor: "eSUN", line: null });
+});
+
+test("a Bambu, a generic or a custom preset names no manufacturer", () => {
+    assert.equal(presetVendor(slotPreset({ tray_info_idx: "GFA00" })), null);
+    assert.equal(presetVendor(slotPreset({ tray_info_idx: "GFL99" })), null);
+    assert.equal(presetVendor(slotPreset({ tray_info_idx: "Pdd34802" })), null);
+    assert.equal(presetVendor(slotPreset({ tray_info_idx: "" })), null);
+    assert.equal(presetVendor(null), null);
 });
