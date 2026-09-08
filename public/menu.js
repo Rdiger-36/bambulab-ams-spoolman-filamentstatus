@@ -16,8 +16,20 @@
 // entry opened the log of whichever printer had been picked last, which is a
 // rule nothing on the screen ever stated.
 
-const LIGHT_MODE_ICON = "https://img.icons8.com/ios-glyphs/30/moon-symbol.png";
-const DARK_MODE_ICON = "https://img.icons8.com/color/48/sun--v1.png";
+// The moon and the sun, drawn here for the same reasons as the logout icon
+// below: an installation without internet access used to show two broken
+// images in the bar, and every page load asked an icon host for them.
+const LIGHT_MODE_ICON = `
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+        <path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z"
+              fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>`;
+const DARK_MODE_ICON = `
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"
+              fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>`;
 
 /**
  * The door with the arrow out of it, drawn here rather than fetched.
@@ -95,8 +107,8 @@ function renderMenubar() {
             </div>
 
             <div class="menu-end">
-                <button id="dark-mode-toggle" type="button" title="Light and dark mode">
-                    <img id="dark-mode-icon" src="${LIGHT_MODE_ICON}" alt="Toggle dark mode">
+                <button id="dark-mode-toggle" type="button" title="Light and dark mode" aria-label="Toggle dark mode">
+                    <span id="dark-mode-icon">${LIGHT_MODE_ICON}</span>
                 </button>
                 <a class="menu-item menu-logout" href="#" id="menu-logout" hidden>${LOGOUT_ICON}Log out</a>
             </div>
@@ -529,14 +541,14 @@ function setupDarkMode() {
     const icon = document.getElementById("dark-mode-icon");
     if (!toggleButton || !icon) return;
 
-    if (root.classList.contains("dark-mode")) icon.src = DARK_MODE_ICON;
+    if (root.classList.contains("dark-mode")) icon.innerHTML = DARK_MODE_ICON;
 
     // Added late so the theme does not animate in on every page load.
     setTimeout(() => root.classList.add("transition-enabled"), 100);
 
     toggleButton.addEventListener("click", () => {
         const enabled = root.classList.toggle("dark-mode");
-        icon.src = enabled ? DARK_MODE_ICON : LIGHT_MODE_ICON;
+        icon.innerHTML = enabled ? DARK_MODE_ICON : LIGHT_MODE_ICON;
         localStorage.setItem("dark-mode", enabled);
     });
 }

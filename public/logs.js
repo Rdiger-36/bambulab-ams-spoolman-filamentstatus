@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function apiUrl() {
     if (isServer) return `./api/logs/server?limit=${limitFor(stream)}`;
-    return `./api/logs/${printerSerial}?limit=${limitFor(stream)}${stream === "mqtt" ? "&stream=mqtt" : ""}`;
+    return `./api/logs/${encodeURIComponent(printerSerial)}?limit=${limitFor(stream)}${stream === "mqtt" ? "&stream=mqtt" : ""}`;
   }
 
   function streamLabel() {
@@ -81,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadBtn.addEventListener("click", () => {
       const downloadUrl = isServer
         ? `./api/logs/server/download`
-        : `./api/logs/${printerSerial}/download${stream === "mqtt" ? "?stream=mqtt" : ""}`;
+        : `./api/logs/${encodeURIComponent(printerSerial)}/download${stream === "mqtt" ? "?stream=mqtt" : ""}`;
 
       // A log carries every address and serial the service has seen, and these
       // files end up attached to bug reports, so the choice is asked rather
@@ -183,9 +183,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const isAtBottom = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 5;
 
       // Update logs without forcing scrolling
-      logContainer.innerHTML = logData.logs
-        .map((line) => `<p>${line}</p>`)
-        .join("");
+      // A line is text: spool and printer names in it may contain markup
+      logContainer.replaceChildren(...logData.logs.map(line => {
+        const p = document.createElement("p");
+        p.textContent = line;
+        return p;
+      }));
 
       // If the user has not manually scrolled or is already at the bottom, auto-scroll down
       if (!userScrolling || isAtBottom) {

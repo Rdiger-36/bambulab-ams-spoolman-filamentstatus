@@ -269,6 +269,7 @@ h1 {
 .gc-warn     { color: var(--warn); }
 .gc-muted    { opacity: 0.6; }
 .gc-required { color: var(--bad); }
+.gc-error { margin: 10px 0 0; }
 
 
 /* ---- G-code print card ---- */
@@ -1107,9 +1108,16 @@ body.logs-page .log-page { width: 100%; }
 }
 
 #dark-mode-icon {
+  display: inline-block;
   width: 22px;
   height: 22px;
-  transition: transform 0.3s ease;
+  color: inherit;
+}
+
+#dark-mode-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
 }
 
 /* ---- Menu bar ----

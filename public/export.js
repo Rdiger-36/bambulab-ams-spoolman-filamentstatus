@@ -54,12 +54,15 @@ function askExportMode({ title, what, choices = null }) {
     const dialog = ensureExportDialog();
 
     document.getElementById("export-mode-title").textContent = title;
-    document.getElementById("export-mode-text").innerHTML = `
-        <p>${what}</p>
+    // "what" names printers, so it is text and never markup
+    const text = document.getElementById("export-mode-text");
+    text.innerHTML = `
+        <p class="export-what"></p>
         <p><strong>Anonymised</strong> is safe to attach to a bug report:</p>
         ${ANONYMIZED_NOTE}
         <p><strong>Full</strong> hands out everything as it is on disk, except the access codes, which are
            never part of an export. Share it only with someone you trust.</p>`;
+    text.querySelector(".export-what").textContent = what;
 
     const choiceBox = document.getElementById("export-mode-choices");
     choiceBox.innerHTML = choices ? `
