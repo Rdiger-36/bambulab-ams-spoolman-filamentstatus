@@ -18,17 +18,18 @@
 
 // The moon and the sun, drawn here for the same reasons as the logout icon
 // below: an installation without internet access used to show two broken
-// images in the bar, and every page load asked an icon host for them.
+// images in the bar, and every page load asked an icon host for them. The
+// colours are the ones the fetched icons had, a solid moon in the text colour
+// and a yellow sun with orange rays, so the bar looks as it did.
 const LIGHT_MODE_ICON = `
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-        <path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z"
-              fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z" fill="currentColor"/>
     </svg>`;
 const DARK_MODE_ICON = `
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-        <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"
-              fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M12 1.8v3.2M12 19v3.2M1.8 12H5M19 12h3.2M4.8 4.8l2.2 2.2M17 17l2.2 2.2M4.8 19.2 7 17M17 7l2.2-2.2"
+              fill="none" stroke="#f0932b" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="5.2" fill="#f9ca24" stroke="#f0932b" stroke-width="1.2"/>
     </svg>`;
 
 /**
