@@ -48,6 +48,11 @@ function isTruthy(raw) {
 // Raw environment values. They seed settings.json and printers.json on the
 // first run only; afterwards those files own the values. This is the only
 // module that reads process.env, everything else reads settings.js.
+// Every setting of the schema, seeded from the environment while settings.json
+// does not own it yet. Kept complete on purpose: a variable that is missing here
+// is silently ignored, which is what happened to five settings added after the
+// environment was deprecated. test/settings.test.js compares this against the
+// schema.
 export const envSeed = {
     SPOOLMAN_ENDPOINT: process.env.SPOOLMAN_ENDPOINT,
     SPOOLMAN_IP: process.env.SPOOLMAN_IP,
@@ -56,11 +61,16 @@ export const envSeed = {
     SPOOLMAN_FQDN: process.env.SPOOLMAN_FQDN,
     MODE: process.env.MODE,
     LEGACY_MODE: process.env.LEGACY_MODE,
+    AUTO_ASSIGN_THIRD_PARTY: process.env.AUTO_ASSIGN_THIRD_PARTY,
+    PRINT_RESET_MINUTES: process.env.PRINT_RESET_MINUTES,
     UPDATE_INTERVAL: process.env.UPDATE_INTERVAL,
     OFFLINE_CHECK_INTERVAL: process.env.OFFLINE_CHECK_INTERVAL,
+    OFFLINE_MAX_INTERVAL: process.env.OFFLINE_MAX_INTERVAL,
     MAX_RETRIES: process.env.MAX_RETRIES,
     NEVER_MERGE_IF_TAG: process.env.NEVER_MERGE_IF_TAG,
     SET_LOCATION: process.env.SET_LOCATION,
+    ARCHIVE_EMPTY_SPOOLS: process.env.ARCHIVE_EMPTY_SPOOLS,
+    EMPTY_SPOOL_THRESHOLD: process.env.EMPTY_SPOOL_THRESHOLD,
     // DEBUG was the switch before the level ladder existed. It still seeds an
     // installation that has never saved a level, so a container definition
     // carrying DEBUG=true keeps writing debug lines after the upgrade. An
