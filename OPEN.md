@@ -10,8 +10,8 @@ rediscovering. Anything finished comes out of this file.
 
 ## Verify against hardware
 
-None of this was exercised on a real printer during the rebuild. It works in
-theory or in tests. Ordered by how likely a user is to hit it.
+Most of this has been run against the P2S by now, and the ticks say which.
+Ordered by how likely a user is to hit it.
 
 
 - [x] **Booking a print as it actually finishes.** Done on 2026-09-01 against
@@ -30,26 +30,27 @@ theory or in tests. Ordered by how likely a user is to hit it.
 - [ ] **AMS Lite.** Everything was tested on a P2S with two AMS units. The AMS
   Lite was never in scope for G-code tracking; the README only documents its
   legacy mode limitation.
-- [ ] **A second printer.** Multiple AMS units on one printer work (A0 to A3 and
-  B0 to B3 were addressed correctly). Two printers at once was never run.
+- [x] **A second printer.** Run by a tester since 2026-09-06: a P2S and a P1S on
+  one installation through the dev builds of issue #146, each with its own log
+  and trace, both booking. On 2026-09-08 a second, unreachable printer was added
+  and removed next to the real P2S over the Web UI: immediate connect attempt,
+  backoff, its own log file, "Disconnected / No update yet" on the dashboard,
+  and the dashboard back on the P2S without a reload once it was deleted.
 - [ ] **The update check with a newer release.** Only the prerelease path was
   observed, where the running version is ahead of the latest release. The
   "version X is available" path has never been rendered against a real answer.
-- [ ] **What P2S stages 51 and 54 are.** Both are reported as `stg_cur` during
-  an ordinary plate and neither is in the community table this project carries,
-  so the dashboard shows them as "Stage 51" and "Stage 54". They run between
-  stage 3, sweeping XY mech mode, and the first layer, so they are most likely
-  calibration or a check of some kind. Two lines in `PRINT_STAGES` in
-  `src/gcode.js` once somebody knows. The announced sequence of that plate was
-  `[29,2,13,11,4,8,14,3,54,1,51]`, and 2, 8 and 1 never appeared in a report, so
-  the list is what a job may go through rather than what it does.
+- [x] **What P2S stages 51 and 54 are.** Named in 1.3.0-dev.13: 51 is the
+  calibration lines and 54 the heatbed coming up to temperature, both counted
+  as preparing. Stages 36 to 77 followed in dev.14 from ha-bambulab's table.
 - [ ] **Low priority, waiting on other people's hardware: slice files from more
   printer families.** The ordering in `orderedAmsSlots()` rests on four
-  printers. The empty slot rule is measured on two of them, P2S and X1E, the
-  holder before HT rule on one. Users with the
-  hardware below have been asked; the branch `fix/slice-slot-order` is where
-  this continues. Two things are needed per device, and the second is what makes
-  the first readable:
+  printers. The empty slot rule is measured on two of them, P2S and X1E, and
+  merged as #148; the holder before HT rule rests on one P1S. It matters less
+  than it did: a P2S and an X1 report `print.mapping`, and a P1 or an A1 echoes
+  the `project_file` command Bambu Studio sends, which #156 reads, so the list
+  order is only the fallback for a print started from the SD card or repeated
+  on the printer's screen. Two things are needed per device, and the second is
+  what makes the first readable:
 
     1. a sliced `.gcode.3mf` of a plate using several filaments, sliced after
        synchronising the project with the printer in Bambu Studio
@@ -79,10 +80,13 @@ theory or in tests. Ordered by how likely a user is to hit it.
 
   Two questions ride along with these:
 
-  - **Does anything but a P2S report `print.mapping`?** Unknown for the P1, X1
-    and H2 families. It needs a print that is actually running, so a slice file
-    alone does not answer it. Where it is reported, the ordering above is not
-    used at all.
+  - [x] **Does anything but a P2S report `print.mapping`?** An X1E does
+    (issue #146, 2026-09-07). A P1S does not, in 964 messages of a print
+    (issue #131), and neither does an A1 by the fixtures. Both echo the
+    `project_file` command with `ams_mapping` and `ams_mapping2` on their report
+    topic, seen on three P1S prints and the X1E, and the P2S sends that echo as
+    well; #156 reads it, so those printers no longer depend on the list order.
+    Not seen yet: how the external holder is encoded in that echo.
   - **What `group_id` in `slice_info.config` means.** In the H2C file the four
     filaments carried 0, 3, 2, 1, and ordering the right extruder's filaments by
     it reproduced their AMS order exactly. One file, so it is a lead and not a
@@ -96,29 +100,31 @@ raw MQTT capture. Most of it was exercised against the P2S on 2026-09-05,
 including two whole prints, the rotation of a capture file and its download.
 What was not:
 
-- [ ] **Two or more printers.** The per-printer override was only ever run
-  against one. Three things are unseen because of it: the star that marks a
-  printer no longer following the Logging card once more than one carries it,
-  the plural in the line that names them, and two overrides in force at the same
-  time, which is the case the per-file registry in `logger.js` exists for. It
-  needs the same second printer as the entry above.
-- [ ] **Legacy mode.** Everything was measured in G-code mode. Nothing in the
-  logging is supposed to care, which is exactly why nobody has looked.
-- [ ] **The log detail dialog on a phone.** It is the first dialog in this
-  project with a slider and a wrapping row of checkboxes, and the responsive
-  block in `styles.css` was never checked against it. The other dialogs were.
+- [x] **Two or more printers.** Seen on 2026-09-08 with a second printer next
+  to the P2S: the Printers card read "Log *" on the P2S, which carried an
+  override, and "Log" on the other. Two overrides in force at the same time is
+  the one part not exercised; the registry in `logger.js` is covered by
+  `test/logdetail.test.js` for it.
+- [x] **Legacy mode.** Switched on with a restart on 2026-09-08: the badge read
+  "Legacy · MQTT remain", the classic table drew, the remain percentages were
+  written to Spoolman, and the per-printer log override survived the restart
+  in both directions. One thing worth knowing: legacy mode writes the remain
+  percentages whatever `MODE` says, manual only stops creating and merging.
+- [x] **The log detail dialog on a phone.** At 375 px on 2026-09-08 the dialog
+  was 355 px wide, nothing reached past the edge and nothing scrolled sideways.
 - [ ] **The `errors` level with a real failure.** That an area switched off
   cannot hide an error is proven on the running service; that an error still
   reaches the file at the quietest level is covered only by
   `test/logdetail.test.js`. It needs a failure provoked on purpose, for instance
   by pointing the Spoolman endpoint at a dead port for a minute.
-- [ ] **`calcPartialConsumption()` reads `layer_num` as an inclusive 0-based
-  index**, which is the other reading of the field. Measured on the P2S through
-  the capture, `layer_num` runs 0 to the layer count and stays there through
-  FINISH, so `humanLayers()` was corrected to show it as it stands. The booking
-  maths was deliberately left alone: it only runs on a cancelled or failed
-  print, and no cancelled print has been captured to settle which reading it
-  needs. A deliberate cancel with the capture running answers it.
+- [x] **`calcPartialConsumption()` and `layer_num`.** Settled on 2026-09-08
+  through the capture and two deliberate cancels: `layer_num` is the layer
+  being printed, counted from 1, it went to 1 in the second `stg_cur` went to
+  0, and a ten layer plate ended at 11. `completedLayerIndex()` in
+  `src/gcode.js` converts it (#159); a cancel at layer 9 booked 8/11 of the
+  plate. The report that starts a job still carries the previous job's last
+  layer, and within a job the P2S reports a stale value next to the current
+  one, so the counter starts a job at 0 and only goes up.
 
 ## Verified against the printer
 
@@ -281,12 +287,15 @@ None of this involved real hardware, so it says nothing about the items above.
 ## Before the next official release
 
 The version deliberately stays on a `-dev` prerelease for now, currently
-`1.3.0-dev.11`.
+`1.3.0-dev.18`. Every dev build is one `chore/version-1.3.0-dev.N` pull request
+that moves `package.json`, `package-lock.json` and `src/config.js` together,
+renames the changelog's `Unreleased` block and folds it into the draft below,
+followed by an annotated tag on the merge commit.
 
 - [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
   The publish workflow compares the tag against `package.json` and aborts on a
   mismatch, so a bump in only one of them fails the build. Not to be done ahead
-  of time: the bump happens when the release is actually wanted, and Niklas says
+  of time: the bump happens when the release is actually wanted, and the maintainer says
   when that is.
 - [ ] Replace the `1.3.0-dev.*` blocks in `CHANGELOG.md` with the consolidated
   release block drafted in `docs/changelog-1.3.0-draft.md`. The dev blocks stay
@@ -294,9 +303,7 @@ The version deliberately stays on a `-dev` prerelease for now, currently
   images read to see what changed between two builds. This has to happen before
   the tag is pushed: the release body is the `CHANGELOG.md` section for exactly
   that version, so without a `Version 1.3.0` section the release says it has no
-  notes. The draft covers up to `dev.11` and carries two open questions of its
-  own, on the deprecation of the environment variables and on a test count that
-  goes stale.
+  notes. The draft is folded forward at every bump and covers up to `dev.18`.
 - [ ] Delete the `v1.3.0-dev.*` releases once `v1.3.0` is out, and keep their
   tags. A pre-release carries the generated pull request list of one dev step
   and that step's changelog section, and neither is lost with it: the pull
@@ -312,7 +319,7 @@ Tag behaviour, after the hardening in `c053561`:
 | Tag | Images | `:latest` | GitHub release |
 |---|---|---|---|
 | `v1.3.0` | `:1.3.0` and `:latest` | moved | release, marked Latest |
-| `v1.3.0-dev`, `v1.3.0-dev.2`, `v1.3.0-dev.3`, `v1.3.0-dev.4`, `v1.3.0-dev.5`, `v1.3.0-dev.6`, `v1.3.0-dev.7`, `v1.3.0-dev.8`, `v1.3.0-dev.9`, `v1.3.0-dev.10`, `v1.3.0-dev.11` | `:<version>` and `:dev` | untouched | pre-release |
+| `v1.3.0-dev` and `v1.3.0-dev.2` to `v1.3.0-dev.18` | `:<version>` and `:dev` | untouched | pre-release |
 | `v1.3.0-rc1` and other suffixes | `:<version>` only | untouched | pre-release |
 
 One `case` decides all four columns, so the image tags and the release cannot
@@ -402,16 +409,19 @@ diff to know what is in it.
   the routes on a bare Express app and points `DATA_DIR` and `LOG_DIR` at a
   temporary directory.
 
-### Still to verify on hardware
+### Verified on hardware
 
-The Web UI was exercised against the real P2S only as a connection test and a
-container run. Still unverified:
+Both open points here were run against the P2S on 2026-09-08:
 
-- [ ] **Adding and removing a printer with real hardware**, including what the
-  dashboard does while the MQTT connection of a new printer comes up.
-- [ ] **A restart through the Web UI during a running print.** The guard asks
-  first and the booking of that job is lost when it is forced, which is what the
-  dialog says, but it was never observed on a real print.
+- [x] **Adding and removing a printer with real hardware.** See "A second
+  printer" above.
+- [x] **A restart through the Web UI during a running print.** The guard
+  answers 409 without `force`. Forced, the supervisor had the service back in
+  two seconds, the first report found the print running, the slice info was
+  fetched again and the job was booked at FINISH. So the booking is not lost,
+  which the guard and the dialog now say; the start time survives too, kept in
+  `printers/printstate.json` (#159). What a P1 or an A1 loses is the slots
+  Bambu Studio sent the job to, because that echo comes once.
 
 ### Decisions taken along the way
 
@@ -571,34 +581,41 @@ the server now decides per filament, and one filament resolves to one slot. It
 was the browser asking per slot which filament it might be that could answer
 twice.
 
-**Two spools identical in material and colour** cannot be told apart. The
-booking goes to the first match and logs a warning; assigning them manually is
-the workaround. This is the one case the slot mapping below would solve.
+**Two spools identical in material and colour** are told apart by the slot the
+print really runs from, where the printer names it: `print.mapping` on a P2S or
+an X1, the echoed `project_file` command on a P1 or an A1 (#156). Only a print
+started from the SD card or repeated on the printer's screen, on a P1 or an A1,
+falls back to the list order below, and there the booking goes to the first
+match and logs a warning.
 
-**Slot mapping from `plate_*.json`** is deliberately unused. The AMS slot is
-derivable: the position of a filament in the project list equals the Nth loaded
-slot, empty slots skipped. Confirmed across three prints (`[0,1,2,3]` to A0-A3,
-`[0,5]` to A0 and B3, `[2,3]` to A2 and A3). It is not used because the project
-list is a snapshot from slice time while the loaded slots are live: pulling a
-spool after slicing, or remapping in the print dialog, would shift every position
-and book onto the wrong spool silently. If revisited, only as a guarded
-tiebreaker that requires the filament count to match the loaded slot count and
-material plus colour to agree at that position, falling back to the current match
-otherwise.
+**The slicer's list order is the fallback, not the source.** The position of a
+filament in the project list equals the Nth loaded slot, empty slots skipped
+(#148, measured on a P2S and confirmed by an X1E's own mapping). It is used
+only where the printer names nothing, and only through `slotConfirmsSlice()`,
+which refuses a position whose slot does not hold the sliced profile and
+colours: the project list is a snapshot from slice time while the loaded slots
+are live, and a reused project is remapped by colour when the job is sent, so
+the list order can be wrong for two of three filaments, which the P1S case in
+`test/gcode.studiomapping.test.js` shows.
 
 **No automatic creation for third party spools**, which is what issue #47
-actually asks for. Keying on `tray_info_idx` plus colour is unsafe in general: a
-P2S reports the generic `GFL99` for every third party spool, so two different
-spools would merge into one. A safe version would be opt-in and would skip the
-generic Bambu profiles. It needs more real payloads from other printers before
-that line can be drawn.
+asked for and what was closed on 2026-09-08 without it. `tray_info_idx` is the
+preset chosen for the slot, not a property of the spool: a P2S reports the
+generic `GFL99` for every chipless spool set from its screen, and a Bambu id
+for a chipless spool set to a Bambu profile. What shipped instead: automatic
+assignment, opt in, to the one Spoolman spool of the same material and colours
+(#150); the preset named on the slot (#145) and learned from the sliced file
+for a cloud preset's hash (#154); and a create dialog that proposes the
+manufacturer, the material and the nearest catalogue filament from a vendor
+preset (#152). Anyone still wanting creation opens a new issue.
 
 **Third party spools report no weight**, so full and remaining weight are typed
 in once per spool. Nothing to be done about it, but it surprises people.
 
-**The Web UI has no access protection**, decided on 2026-08-31 after the
-settings page landed. It can change the printer list and the Spoolman endpoint,
-so the service belongs in a trusted local network and its port must not be
-exposed. Both alternatives were weighed and rejected for now: a `CONFIG_UI=false`
-switch that hides the page and blocks the mutating routes, and an `ADMIN_TOKEN`
-with a login in front of them. The README carries the warning instead.
+**Access protection is a password and API keys, not a hidden page.** Decided
+on 2026-08-31 to ship none, revised in September: the request guard (#110)
+refuses hosts that are not named, the Web UI takes an optional password (#111),
+and callers without a browser use named API keys (#112); the API answers only
+the Web UI and a key holder since then. The `CONFIG_UI=false` switch and the
+`ADMIN_TOKEN` that were weighed at first are not coming back. The service still
+belongs in a trusted network; the README says so.
