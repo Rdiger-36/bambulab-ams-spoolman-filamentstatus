@@ -415,12 +415,16 @@ async function toggleAllMonitoring() {
 
 /* ---- Restarting the service ---- */
 
+// The same promise the backend makes when it refuses a change during a print
+const RESTART_PRINT_NOTE = "A running print keeps printing and is booked when it ends, with its start time; "
+    + "on a P1 or an A1 the slots Bambu Studio sent it to are lost.";
+
 async function confirmRestart() {
     const warning = supervised
-        ? `<p class="set-note">A running print keeps printing, but the consumption of that job is not booked.</p>`
+        ? `<p class="set-note">${RESTART_PRINT_NOTE}</p>`
         : `<p class="set-note">When the container is not set to restart, for example with
               <code>restart: unless-stopped</code>, it stays down and has to be started by hand.
-              A running print keeps printing, but the consumption of that job is not booked.</p>`;
+              ${RESTART_PRINT_NOTE}</p>`;
 
     const confirmed = await confirmAction({
         title: "Restart the service?",
@@ -724,7 +728,7 @@ function openLogDetailDialog(printer) {
             downloadWithExportMode({
                 url: `./api/diagnostics/download?scope=${encodeURIComponent(scope)}`,
                 title: `Export the logs of ${printer.name}`,
-                what: `The ticked logs of ${escapeHtml(printer.name)}, each with its rotated history, plus the settings, the printer list and the assignments.`,
+                what: `The ticked logs of ${printer.name}, each with its rotated history, plus the settings, the printer list and the assignments.`,
             });
         };
     }

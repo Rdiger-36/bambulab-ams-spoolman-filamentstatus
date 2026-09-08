@@ -615,7 +615,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const fil   = sp.filament || {};
         const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
         const swatch = swatchHtml(filamentColors(fil), fil.multi_color_direction);
-        return `${swatch}#${sp.id} ${parts.join(" · ") || "Unknown filament"}`;
+        return `${swatch}#${sp.id} ${escapeHtml(parts.join(" · ") || "Unknown filament")}`;
     }
 
     function spoolPickerWeight(sp) {
@@ -1518,8 +1518,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return withNote(label, "Chosen for the slot on the printer or in the slicer, not read from the spool.");
     }
 
-    function detailGrams(value) {
-        return value == null ? "—" : `${Math.round(value)} g`;
+    // Nominal weights are whole grams; what a print books off a spool is not,
+    // and the table shows those to the hundredth, so the dialog does the same.
+    function detailGrams(value, decimals = 0) {
+        return value == null ? "—" : `${Number(value).toFixed(decimals)} g`;
     }
 
     /** A weight to the hundredth of a gram, always with both decimals: "30.00g". */
@@ -1763,8 +1765,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="sd-section">Spool</div>
                 ${blocked ? `<p class="sd-note gc-warn">${escapeHtml(blocked.reason)}</p>` : ""}
                 ${detailRows([
-                    ["Remaining", `${detailGrams(spool.remaining_weight)}${spool.remaining_percentage == null ? "" : ` (${Math.round(spool.remaining_percentage)}%)`}`, weightField],
-                    ["Used", detailGrams(spool.used_weight)],
+                    ["Remaining", `${detailGrams(spool.remaining_weight, 2)}${spool.remaining_percentage == null ? "" : ` (${Math.round(spool.remaining_percentage)}%)`}`, weightField],
+                    ["Used", detailGrams(spool.used_weight, 2)],
                     ["Initial weight", detailGrams(spool.initial_weight)],
                     ["Empty spool", detailGrams(spool.spool_weight)],
                     ["Material (Spoolman)", detailText(spool.filament?.material)],
@@ -2213,7 +2215,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // download failed); without this the table would just show a placeholder with no
         // explanation.
         if (printData.error) {
-            html += `<p class="gc-required" style="margin:10px 0 0">${printData.error}</p>`;
+            html += `<p class="gc-required gc-error">${escapeHtml(printData.error)}</p>`;
         }
         card.innerHTML = html;
 
@@ -2711,7 +2713,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function amsSpoolRow(amsSpool) {
         return `<tr>
                         <th>AMS Spool:</th>
-                        <td>${amsSpool.slot.tray_sub_brands} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.slot.tray_uuid}</td>
+                        <td>${escapeHtml(amsSpool.slot.tray_sub_brands)} - ${escapeHtml(amsSpool.matchingExternalFilament.name)} - ${escapeHtml(amsSpool.slot.tray_uuid)}</td>
                     </tr>`;
     }
 
@@ -2724,7 +2726,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${amsSpoolRow(amsSpool)}
                     <tr>
                         <th>Spoolman Filament:</th>
-                        <td>Bambu Lab - ${amsSpool.matchingInternalFilament.material} - ${amsSpool.matchingInternalFilament.name}</td>
+                        <td>Bambu Lab - ${escapeHtml(amsSpool.matchingInternalFilament.material)} - ${escapeHtml(amsSpool.matchingInternalFilament.name)}</td>
                     </tr>
                 </table>
             `;
@@ -2739,7 +2741,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${amsSpoolRow(amsSpool)}
                     <tr>
                         <th>Spoolman Spool:</th>
-                        <td>Spool-ID ${amsSpool.mergeableSpool.id} - Bambu Lab - ${amsSpool.mergeableSpool.filament.material} - ${amsSpool.mergeableSpool.filament.name} - ${remain == null ? "unknown" : `${remain} g`} left on spool</td>
+                        <td>Spool-ID ${amsSpool.mergeableSpool.id} - Bambu Lab - ${escapeHtml(amsSpool.mergeableSpool.filament.material)} - ${escapeHtml(amsSpool.mergeableSpool.filament.name)} - ${remain == null ? "unknown" : grams2(remain)} left on spool</td>
                     </tr>
                 </table>
             `;
@@ -2750,14 +2752,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${amsSpoolRow(amsSpool)}
                     <tr>
                         <th>New Spool & Filament:</th>
-                        <td>${amsSpool.matchingExternalFilament.manufacturer} - ${amsSpool.matchingExternalFilament.material} - ${amsSpool.matchingExternalFilament.name} - ${amsSpool.matchingExternalFilament.density} g/cm³ - ${amsSpool.matchingExternalFilament.diameter} mm</td>
+                        <td>${escapeHtml(amsSpool.matchingExternalFilament.manufacturer)} - ${escapeHtml(amsSpool.matchingExternalFilament.material)} - ${escapeHtml(amsSpool.matchingExternalFilament.name)} - ${amsSpool.matchingExternalFilament.density} g/cm³ - ${amsSpool.matchingExternalFilament.diameter} mm</td>
                     </tr>
                 </table>
             `;
         } else {
             return `
-                <p>No machting Filament found in Database, please check manually!</p>
-                <p>This error shows up when the official data from BambuLab does not matches with the collected data from the spool!</p>
+                <p>No matching filament found in the database, please check manually!</p>
+                <p>This shows up when the official data from Bambu Lab does not match the data collected from the spool.</p>
                 <p>To solve this issue, please follow this guide:</p>
                 <p>&emsp;1. Click on "Go to Spoolman". This will open Spoolman in the Spool creation menu.</p>
                 <p>&emsp;2. Type in the Name of your BambuLab Filament and select it, the necessary data will be filled in automatically.</p>
@@ -2788,10 +2790,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 actionCallback();
                 dialog.close();
                 
-                const spoolmanLink = document.getElementById("spoolmanLink");
-                let linkUrl = spoolmanLink.href;
-                linkUrl += "spool/create";
-                window.open(linkUrl, "_blank");
+                window.open(`${spoolmanBase()}/spool/create`, "_blank");
             };
         } else {
             actionButton.onclick = () => {
@@ -2914,7 +2913,7 @@ document.addEventListener("DOMContentLoaded", () => {
             footer.innerHTML = `
                 <div class="container">
                     <div class="content">
-                        2026 - v.${data.VERSION} | 
+                        ${new Date().getFullYear()} - v.${escapeHtml(data.VERSION)} | 
                         <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">GitHub Repository</a> - 
                         Created by 
                         <a href="https://github.com/Rdiger-36" target="_blank">Rdiger-36</a> |
