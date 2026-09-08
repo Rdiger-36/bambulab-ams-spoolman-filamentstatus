@@ -168,3 +168,37 @@ test("an echo for another job is not used, and a report is not mistaken for an e
     assert.equal(notePrintCommand(printer, Buffer.from('{"print":{"command":"project_file","subtask_name":"x"}}')), true);
     assert.equal(printer.pendingMapping, null);
 });
+
+// One download per print: the dashboard's request and the print handler share
+// it, and a file the dashboard already fetched is not fetched again at RUNNING.
+test("a file the dashboard already fetched is not fetched again when the print runs", async () => {
+    const { handlePrintStateChange } = await import("../src/mqtt.js");
+    const printer = { ...freshPrinter(), currentGcodeState: "PREPARE", currentJobName: "Würfel", sliceFetchDone: false };
+    printer.currentSliceInfo = { filaments: [{ index: 0 }], totalLayers: 3, rangesByFilamentIdx: {}, presets: [] };
+
+    await handlePrintStateChange(printer, { gcode_state: "RUNNING", subtask_name: "Würfel", layer_num: 0 });
+    assert.equal(printer.sliceFetchDone, true);
+    // fetchSliceInfo() records every attempt on lastSliceFetch before it
+    // connects, so an untouched record means no download was started
+    assert.equal(printer.lastSliceFetch, undefined);
+    assert.equal(printer.currentSliceInfo.totalLayers, 3);
+});
+
+test("two callers asking at once share one download", async () => {
+    const { ensureSliceInfo } = await import("../src/mqtt.js");
+    // No printer answers on this address, so the shared download fails fast;
+    // what matters is that the second caller gets the first caller's promise.
+    const printer = { ...freshPrinter(), ip: "127.0.0.1", code: "x", currentJobName: "Würfel" };
+
+    const first = ensureSliceInfo(printer, "Würfel", "Würfel.3mf");
+    const second = ensureSliceInfo(printer, "Würfel", "Würfel.3mf");
+    assert.equal(first, second);
+    assert.equal(printer.sliceFetchInFlight.jobName, "Würfel");
+
+    await Promise.allSettled([first, second]);
+    assert.equal(printer.sliceFetchInFlight, null);
+    // A different job is a different download
+    const other = ensureSliceInfo(printer, "Other", null);
+    assert.notEqual(other, first);
+    await Promise.allSettled([other]);
+});

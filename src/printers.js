@@ -125,6 +125,9 @@ function createRuntimePrinter(entry) {
         // The slots the printer says the running print is taking its filaments
         // from, decoded from print.mapping. Null until a print reports them.
         currentMapping: null,
+        // A slice info download still running for the current job, shared
+        // between the print handler and /api/print. See ensureSliceInfo().
+        sliceFetchInFlight: null,
         // The slots Bambu Studio sent the next job to, from the project_file
         // command the printer echoes before the print starts. Consumed by the
         // start of that print, see notePrintCommand() in mqtt.js.
