@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, slotIsBusy, processData, findExistingSpool, findMatchingExternalFilament } from "../src/ams.js";
+import { correctRemainInt, haveSpoolDataChanged, slotIsOccupied, extractComparableTrayData, hasTrayDataChanged, findMergeableSpool, slotIsBusy, processData, findExistingSpool, findMatchingExternalFilament, spoolTag } from "../src/ams.js";
 import { slotColors } from "../src/utils.js";
 
 test("correctRemainInt passes through a full-size spool unchanged", () => {
@@ -381,4 +381,30 @@ test("processData substitutes the PETG Translucent colour in cols too", () => {
     assert.equal(ams.tray[0].tray_color, "FFFFFF00");
     assert.deepEqual(ams.tray[0].cols, ["FFFFFF00"]);
     assert.deepEqual(slotColors(ams.tray[0]), ["ffffff"]);
+});
+
+/* ---- spoolTag ---- */
+
+test("the tag is read in its stored form, as a bare uuid, and never throws", () => {
+    const uuid = "83362CE88F504A599E53E6A02F6680AD";
+    // What the service writes: the uuid JSON encoded
+    assert.equal(spoolTag({ extra: { tag: `"${uuid}"` } }), uuid);
+    // What a hand edit in Spoolman leaves behind
+    assert.equal(spoolTag({ extra: { tag: uuid } }), uuid);
+    assert.equal(spoolTag({ extra: { tag: ` "${uuid}" ` } }), uuid);
+    // Not a tag at all: empty, quotes only, JSON that is not a string, broken JSON
+    assert.equal(spoolTag({ extra: { tag: "" } }), null);
+    assert.equal(spoolTag({ extra: { tag: '""' } }), null);
+    assert.equal(spoolTag({ extra: { tag: "{" } }), "{");
+    assert.equal(spoolTag({ extra: { tag: "[1,2]" } }), null);
+    assert.equal(spoolTag({ extra: {} }), null);
+    assert.equal(spoolTag(null), null);
+});
+
+test("a spool with a tag that is not JSON is skipped rather than aborting the search", () => {
+    const uuid = "83362CE88F504A599E53E6A02F6680AD";
+    const slot = { tray_uuid: uuid, tray_sub_brands: "PLA Basic", tray_color: "F55A74FF", cols: ["F55A74FF"] };
+    const broken = { id: 1, extra: { tag: "{not json" }, filament: { material: "PLA Basic", color_hex: "F55A74" } };
+    const right = { id: 2, extra: { tag: `"${uuid}"` }, filament: { material: "PLA Basic", color_hex: "F55A74" } };
+    assert.equal(findExistingSpool(slot, [broken, right])?.id, 2);
 });

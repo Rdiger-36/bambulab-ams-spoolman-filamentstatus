@@ -43,6 +43,7 @@ import {
     hasSpoolUiChanged,
     consumptionCandidate,
     matchConsumption,
+    spoolTag,
 } from "./ams.js";
 import { toClientSpool, loadedSlotIds } from "./uispool.js";
 import { traceEnabled } from "./printers.js";
@@ -274,9 +275,17 @@ export function notePrintCommand(printer, message) {
 
     const slots = decodeStudioMapping(command);
     const jobName = typeof command.subtask_name === "string" ? command.subtask_name : "";
+
+    // The P2S sends the echo twice within a second, both with the same
+    // sequence id, so the second one is kept quiet when it says the same.
+    const pending = printer.pendingMapping;
+    const repeated = !!slots && !!pending && pending.jobName === jobName
+        && JSON.stringify(pending.slots) === JSON.stringify(slots);
     printer.pendingMapping = slots ? { jobName, slots, at: Date.now() } : null;
 
-    if (slots) {
+    if (repeated) {
+        debug("print", printer.name, printer.logFilePath, `[Print] Bambu Studio sent "${jobName || "the job"}" a second time, same slots`);
+    } else if (slots) {
         console.log(printer.name, printer.logFilePath,
             `[Print] Bambu Studio sent "${jobName || "the job"}" to the slots ${JSON.stringify(slots)}`);
     } else {
@@ -816,8 +825,8 @@ async function bookConsumption(printer, consumption, state) {
     // mapping is followed as it stands, the slicer's list order is only an
     // estimate and has to be confirmed against the slot.
     debug("print", printer.name, printer.logFilePath, reported
-        ? `[Print] Slots as the printer reported them: ${JSON.stringify(slots)}`
-        : `[Print] The printer named no slots, estimating from the slicer's list order: ${JSON.stringify(slots)}`);
+        ? `[Print] Slots as the printer or Bambu Studio named them: ${JSON.stringify(slots)}`
+        : `[Print] Nobody named the slots, estimating from the slicer's list order: ${JSON.stringify(slots)}`);
 
     resolveSliceSlots(consumption, slots, { reportedByPrinter: !!reported });
 
@@ -957,8 +966,9 @@ export function unbookedReason(info) {
  * the printer's own answer rather than an estimate.
  *
  * `amsIdFromPrinter` is the whole condition. Where it is set, the slot came out
- * of `print.mapping`, so the sliced file and the printer name the same slot and
- * the spool in it is the one that really printed this filament. Where it is
+ * of `print.mapping` or of the `project_file` command Bambu Studio sent (see
+ * `notePrintCommand()`), so the sliced file and the printer name the same slot
+ * and the spool in it is the one that really printed this filament. Where it is
  * not, the slot is `orderedAmsSlots()` guessing from the slicer's list order,
  * which is exactly the guess `matchConsumption()` refuses to book on without
  * confirming, and naming a spool off it would put a filament on a slot nobody
@@ -1167,6 +1177,13 @@ async function handleMqttMessage(printer, topic, message) {
                             state.lastSpoolData = spools;
                             printer.lastMqttAmsUpdate = new Date();
                             printer.lastAmsData = processedAmsData;
+                            // The interval counts from the pass that ran, whatever it
+                            // found. Only the "nothing changed" branch and the legacy
+                            // patch used to set this, so a pass that processed a change
+                            // in G-code mode left the clock alone and the very next
+                            // report fetched Spoolman again for a comparison that the
+                            // interval is there to space out.
+                            printer.lastUpdateTime = currentTime;
                             console.log(printer.name, printer.logFilePath, "");
 
                             broadcastSSE({
@@ -1414,7 +1431,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
 
     if (spools.length !== 0) {
         for (const spool of spools) {
-            if (spool.extra?.tag && JSON.parse(spool.extra.tag) === slot.tray_uuid) {
+            if (spoolTag(spool) === slot.tray_uuid) {
                 trace("spoolman", printer.name, printer.logFilePath, " Connected Spool found: " + JSON.stringify(spool));
                 found = true;
 
@@ -1590,9 +1607,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         // has already been refreshed to include it).
         if (mutated) {
             const freshSpools = await getSpoolmanSpools();
-            const linked = freshSpools.find(
-                s => s.extra?.tag && JSON.parse(s.extra.tag) === slot.tray_uuid
-            );
+            const linked = freshSpools.find(s => spoolTag(s) === slot.tray_uuid);
             if (linked) {
                 existingSpool = linked;
                 found = true;
@@ -1764,14 +1779,7 @@ function autoAssignThirdPartySpool(printer, amsId, slot, spools) {
 function spoolWithTag(list, trayUuid) {
     if (!trayUuid) return null;
 
-    return (list || []).find(spool => {
-        if (!spool?.extra?.tag) return false;
-        try {
-            return JSON.parse(spool.extra.tag) === trayUuid;
-        } catch {
-            return false;
-        }
-    }) || null;
+    return (list || []).find(spool => spoolTag(spool) === trayUuid) || null;
 }
 
 /**

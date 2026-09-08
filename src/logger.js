@@ -70,30 +70,45 @@ function enqueueAppend(filePath, content) {
  */
 function updateLastMatchingLine(logFilePath, messagePrefix, newLogMessage) {
     return enqueueTask(logFilePath, async () => {
-        let data;
+        // Only the tail is read and only the last line is touched. Reading and
+        // rewriting the whole file, which this did before, cost a write of the
+        // entire log for every "nothing changed" line, once per update interval,
+        // and made every `tail -f` on the file start over each time.
+        let fh;
         try {
-            data = await fsp.readFile(logFilePath, "utf8");
+            fh = await fsp.open(logFilePath, "r+");
         } catch (err) {
-            // No file yet is normal on the very first message
             if (err.code !== "ENOENT") {
-                originalConsoleLog(`[ERROR] Failed to read log file: ${err.message}`);
+                originalConsoleLog(`[ERROR] Failed to open log file: ${err.message}`);
                 return;
             }
-            data = "";
+            await fsp.appendFile(logFilePath, newLogMessage.trimEnd() + "\n");
+            return;
         }
+        try {
+            const { size } = await fh.stat();
+            const tailSize = Math.min(size, 16 * 1024);
+            const tail = Buffer.alloc(tailSize);
+            if (tailSize) await fh.read(tail, 0, tailSize, size - tailSize);
 
-        const lines = data.split("\n");
-        if (lines.length && lines[lines.length - 1] === "") lines.pop();
+            // The last line, as bytes: everything after the last newline that
+            // is not the trailing one.
+            let end = tailSize;
+            if (end > 0 && tail[end - 1] === 0x0A) end -= 1;
+            const start = tail.lastIndexOf(0x0A, end - 1) + 1;
+            const lastLine = tail.subarray(start, end).toString("utf8");
+            const lastLineStart = size - (tailSize - start);
 
-        const lastLine = lines[lines.length - 1] || "";
-
-        if (lastLine.includes(messagePrefix)) {
-            lines[lines.length - 1] = newLogMessage.trimEnd();
-        } else {
-            lines.push(newLogMessage.trimEnd());
+            const line = Buffer.from(newLogMessage.trimEnd() + "\n", "utf8");
+            if (lastLine.includes(messagePrefix) && (start > 0 || tailSize === size)) {
+                await fh.truncate(lastLineStart);
+                await fh.write(line, 0, line.length, lastLineStart);
+            } else {
+                await fh.write(line, 0, line.length, size);
+            }
+        } finally {
+            await fh.close();
         }
-
-        await fsp.writeFile(logFilePath, lines.join("\n") + "\n");
     });
 }
 
