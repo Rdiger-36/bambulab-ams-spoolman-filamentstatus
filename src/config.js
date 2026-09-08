@@ -24,6 +24,9 @@ export const configPath = path.join(dataDir, "printers.json");
 export const mappingsPath = path.join(dataDir, "mappings.json");
 // The slicer presets learned from sliced files, see src/presets.js
 export const presetsPath = path.join(dataDir, "presets.json");
+// The start time of the print each printer is running, so a restart of the
+// service does not lose it, see src/printstate.js
+export const printStatePath = path.join(dataDir, "printstate.json");
 // Runtime configuration edited through the Web UI, see settings.js.
 export const settingsPath = path.join(dataDir, "settings.json");
 // API keys for callers that are not a browser, see apikeys.js. Its own file

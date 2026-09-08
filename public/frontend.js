@@ -1522,6 +1522,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return value == null ? "—" : `${Math.round(value)} g`;
     }
 
+    /** A weight to the hundredth of a gram, always with both decimals: "30.00g". */
+    function grams2(value) {
+        return `${Number(value).toFixed(2)}g`;
+    }
+
     function detailDate(value) {
         if (!value) return "—";
         const date = new Date(value);
@@ -2538,7 +2543,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const fullCons = printData.fullConsumption || {};
         const partCons = printData.consumption || {};
 
-        const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true };
+        // Once the booking has run, "On spool" already carries the print, and
+        // subtracting "Needed" from it a second time showed every spool lighter
+        // than it is. Seen on a P2S after a finished two colour print.
+        const booked = !!printData.consumptionBooked && !printData.printResultCleared;
+        const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true, booked };
 
         const columns = [
             ["Spool", "left"],
@@ -2568,7 +2577,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function createGcodeSpoolRow(amsSpool, ctx) {
-        const { fullCons, partCons, keyCount } = ctx;
+        const { fullCons, partCons, keyCount, booked } = ctx;
         const tr = document.createElement("tr");
         tr.setAttribute("data-amsid", amsSpool.amsId);
         renderedSpools.set(amsSpool.amsId, amsSpool);
@@ -2589,7 +2598,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // below, divided by zero in the remain% fallback and rendered "NaNg".
         let totalSpool = Number(slot.tray_weight) || null;
         if ((amsSpool.connectedViaTag || amsSpool.connectedViaMapping) && sp && sp.remaining_weight != null) {
-            onSpool = Math.round(sp.remaining_weight);
+            // To the hundredth of a gram, which is what the booking writes and
+            // what "After print" is computed from: rounded to whole grams first,
+            // 62.13 g minus 5.87 g read 56.13 g instead of 56.26 g.
+            onSpool = Math.round(sp.remaining_weight * 100) / 100;
             if (sp.initial_weight != null) totalSpool = Math.round(sp.initial_weight);
         } else if (onSpool == null && !isEmpty && slot.remain != null && totalSpool) {
             // Fallback if correctedWeight wasn't provided by the backend: derive
@@ -2600,18 +2612,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let neededCell     = "—";
         let afterPrintCell = "—";
-        if (needed > 0) {
+        if (needed > 0 && booked) {
+            // The print is over and booked: what it used is the figure, and the
+            // spool's weight above already has it taken off.
+            neededCell = `${needed}g<br><span class="gc-muted" style="font-size:0.8em">booked: ${used || needed}g</span>`;
+            if (onSpool != null) {
+                afterPrintCell = `<span class="gc-muted" title="Already booked, this is the spool's weight now">${grams2(onSpool)}</span>`;
+            }
+        } else if (needed > 0) {
             neededCell = `${needed}g${used ? `<br><span class="gc-muted" style="font-size:0.8em">printed: ${used}g</span>` : ""}`;
             if (onSpool != null) {
-                const afterPrint = Math.round((onSpool - needed) * 100) / 100;
-                afterPrintCell = `<span class="${afterPrint < 0 ? "gc-bad" : "gc-ok"}">${afterPrint}g</span>`;
+                const afterPrint = onSpool - needed;
+                afterPrintCell = `<span class="${afterPrint < 0 ? "gc-bad" : "gc-ok"}">${grams2(afterPrint)}</span>`;
             }
         }
 
         // 3rd-party spools report tray_weight 0, so only show the total when the
-        // AMS or Spoolman actually knows it.
+        // AMS or Spoolman actually knows it. The weight always carries its two
+        // decimals, "30.00g", so a column of them lines up and a whole number
+        // is not read as a rounded one.
         const onSpoolCell = onSpool != null && !isEmpty
-            ? `${onSpool}g${totalSpool ? ` / ${totalSpool}g` : ""}`
+            ? `${grams2(onSpool)}${totalSpool ? ` / ${totalSpool}g` : ""}`
             : "—";
 
         tr.innerHTML = `

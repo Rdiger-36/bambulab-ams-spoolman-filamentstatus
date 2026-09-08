@@ -19,9 +19,10 @@ import {
     setSpoolArchived,
     logSpoolmanFailure,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
+import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
 import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
@@ -315,11 +316,38 @@ export async function handlePrintStateChange(printer, print) {
     // gcode_file (e.g. /data/Metadata/plate_1.gcode) is an internal path NOT
     // exposed over FTP, so we only fall back to its basename as a last resort.
     const jobName     = print.subtask_name || printer.currentJobName || null;
-    const layerNum    = print.layer_num   ?? printer.currentLayerNum   ?? 0;
     const prevState   = printer.currentGcodeState || "IDLE";
+    // The first report after the service started is the one that may find a
+    // print already running, whose start was measured by the process before.
+    const firstSinceStart = !printer.stateSeenSinceStart;
+    printer.stateSeenSinceStart = true;
 
-    // Always keep layer_num up to date for partial-print calculation
-    if (print.layer_num != null) printer.currentLayerNum = print.layer_num;
+    // A fresh print starts when we transition from a non-active state into an
+    // active one. Reset tracking there (even on a reprint of the same file) so
+    // consumption gets booked again for the new run.
+    const freshStart = ACTIVE_STATES.has(newState) && !ACTIVE_STATES.has(prevState);
+
+    // The layer for the partial booking and the dashboard, read off every
+    // report with three rules measured on a P2S through the raw trace:
+    //
+    //   - the report that starts a job still carries the previous job's last
+    //     layer, 11 from a finished cube five seconds before the 0 of the new
+    //     one, so a job starts at 0. The exception is the first report after
+    //     the service came up, which may find a print already running at
+    //     layer 7 and takes that
+    //   - within a job the counter only goes up: 4, 3, 4 and 9, 8, 9 within a
+    //     second, a stale value in one report type next to the current one in
+    //     the other, and a cancel right after the stale one would book a layer
+    //     too few
+    //   - outside a job the report is taken as it stands
+    if (freshStart) {
+        printer.currentLayerNum = firstSinceStart ? (print.layer_num ?? 0) : 0;
+    } else if (print.layer_num != null) {
+        printer.currentLayerNum = ACTIVE_STATES.has(prevState)
+            ? Math.max(printer.currentLayerNum ?? 0, print.layer_num)
+            : print.layer_num;
+    }
+    const layerNum = printer.currentLayerNum ?? 0;
 
     // What the printer says about the job right now. Read on every report, not
     // only on a transition: these are the values that move while the state
@@ -339,7 +367,6 @@ export async function handlePrintStateChange(printer, print) {
             `[Print] State ${prevState} to ${newState}, layer ${layerNum}, job ${jobName ?? "unnamed"}`);
     }
 
-    const freshStart = ACTIVE_STATES.has(newState) && !ACTIVE_STATES.has(prevState);
     if (freshStart) {
         printer.currentJobName    = jobName;
         printer.currentGcodeFile  = print.gcode_file || null;
@@ -370,7 +397,18 @@ export async function handlePrintStateChange(printer, print) {
         // state: it stays readable for as long as nothing new is printing,
         // which is what makes the summary worth keeping after the card itself
         // has returned to idle.
-        printer.printStartedAt         = Date.now();
+        // Measured here, because no printer reports it. A restart of the
+        // service mid print finds the job running on its first report and
+        // takes the start it wrote before, so "Running for" and the report's
+        // duration count from the print, not from the restart.
+        const recalled = firstSinceStart ? recallPrintStart(printer.id, jobName) : null;
+        printer.printStartedAt = recalled ?? Date.now();
+        if (recalled) {
+            console.log(printer.name, printer.logFilePath,
+                `[Print] Found "${jobName ?? "the job"}" already running, started ${new Date(recalled).toISOString()}`);
+        } else {
+            rememberPrintStart(printer.id, jobName, printer.printStartedAt);
+        }
         printer.lastPrintSummary       = null;
         printer.printResultDismissed   = false;
         printer.printResetAt           = null;
@@ -470,6 +508,7 @@ export async function handlePrintStateChange(printer, print) {
     // Book consumption on transition into a terminal state
     if (TERMINAL_STATES.has(newState) && ACTIVE_STATES.has(prevState) && !printer.consumptionBooked) {
         printer.consumptionBooked = true;
+        forgetPrintStart(printer.id);
 
         // Built before the booking so that the run is summarised even when
         // there is nothing to book. A print whose slice info never arrived is
@@ -504,7 +543,7 @@ export async function handlePrintStateChange(printer, print) {
 
         const consumption = newState === "FINISH"
             ? calcFullConsumption(printer.currentSliceInfo)
-            : calcPartialConsumption(printer.currentSliceInfo, layerNum);
+            : calcPartialConsumption(printer.currentSliceInfo, completedLayerIndex(layerNum));
 
         const outcome = await bookConsumption(printer, consumption, newState);
         summary.rows = outcome.rows;
