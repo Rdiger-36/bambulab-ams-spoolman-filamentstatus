@@ -22,6 +22,8 @@ export const serverLogFilePath = path.join(logsDir, "server.log");
 export const configPath = path.join(dataDir, "printers.json");
 // Manual AMS slot -> Spoolman spool assignments, written by the service itself.
 export const mappingsPath = path.join(dataDir, "mappings.json");
+// The slicer presets learned from sliced files, see src/presets.js
+export const presetsPath = path.join(dataDir, "presets.json");
 // Runtime configuration edited through the Web UI, see settings.js.
 export const settingsPath = path.join(dataDir, "settings.json");
 // API keys for callers that are not a browser, see apikeys.js. Its own file

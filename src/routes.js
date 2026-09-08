@@ -34,9 +34,9 @@ import {
     patchSpoolFields,
     getCachedExternalFilaments,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
+import { calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
-import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 import {
     claimSlotLocation,
@@ -628,7 +628,7 @@ export function registerRoutes(app, printers) {
         const alreadyLookedFor = !req.query.job && printer.lastSliceFetch?.jobName === jobName;
         if (jobName && !sliceInfo && !alreadyLookedFor) {
             try {
-                sliceInfo = await fetchSliceInfo(printer, jobName, req.query.job ? null : printer.currentGcodeFile);
+                sliceInfo = await loadSliceInfo(printer, jobName, req.query.job ? null : printer.currentGcodeFile);
             } catch (err) {
                 // non-fatal, surface the error in the response
                 return res.json({

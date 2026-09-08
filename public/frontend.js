@@ -1250,12 +1250,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Typing a manufacturer that does not exist yet creates it on save
         const vendorNames = new Set((lookups.vendors || []).map(v => v.name.toLowerCase()));
-        $("sp-vendor").addEventListener("input", () => {
+        const noteNewVendor = () => {
             const value = $("sp-vendor").value.trim();
             $("sp-vendor-hint").textContent = value && !vendorNames.has(value.toLowerCase())
                 ? "New manufacturer, will be created"
                 : "";
-        });
+        };
+        $("sp-vendor").addEventListener("input", noteNewVendor);
+        // The field can start filled in from the slot's preset, and a
+        // manufacturer this Spoolman has not seen deserves the note then too.
+        noteNewVendor();
 
         // A filament can carry more than one colour, and both the AMS and the
         // catalogue report all of them. Spoolman keeps them as a list plus the
@@ -1504,7 +1508,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // note under it travel as one block.
         const withNote = (label, note) => `<span>${label}<br><span class="gc-muted">${note}</span></span>`;
         if (preset.kind === "custom") {
-            return withNote(`Custom preset ${id}`, "A vendor or user preset from the slicer. Its name is not in what the printer reports.");
+            if (preset.name) {
+                return withNote(`${escapeHtml(preset.name)} ${id}`, "A vendor or user preset from the slicer. Its name was learned from the sliced file of a print with it.");
+            }
+            return withNote(`Custom preset ${id}`, "A vendor or user preset from the slicer. Its name is not in what the printer reports; it is learned from the sliced file the first time a plate is printed with it.");
         }
         const label = preset.name ? `${escapeHtml(preset.name)} ${id}` : escapeHtml(preset.id);
         if (!chipless) return label;

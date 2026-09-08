@@ -494,6 +494,7 @@ export function resolveRemotePaths(jobName, gcodeFile = null) {
  */
 export function parseSliceInfo(xml, projectSettings = null) {
     const colorSets = parseMultiColours(projectSettings);
+    const presets = parsePresets(projectSettings);
 
     // --- filaments ---
     const filaments = [];
@@ -535,7 +536,42 @@ export function parseSliceInfo(xml, projectSettings = null) {
         }
     }
 
-    return { filaments, totalLayers, rangesByFilamentIdx };
+    return { filaments, totalLayers, rangesByFilamentIdx, presets };
+}
+
+/**
+ * The presets a project names, one per filament of the project, id, preset
+ * name and vendor side by side.
+ *
+ * `project_settings.config` is JSON, and `filament_ids`, `filament_settings_id`
+ * and `filament_vendor` are three lists in the same order. The id is what a
+ * slot reports as `tray_info_idx` when that preset is chosen for it; for a
+ * preset from Studio's cloud library that is a hash, and this is the only place
+ * its name is written down. The "@BBL P2S 0.6 nozzle" tail of a preset name
+ * says which printer profile it was made for and is dropped.
+ *
+ * @param {string|null} json - the file's text
+ * @returns {{id: string, name: string|null, vendor: string|null}[]} empty when
+ *   the file is missing or names no ids
+ */
+export function parsePresets(json) {
+    if (!json) return [];
+    let parsed;
+    try {
+        parsed = JSON.parse(json);
+    } catch {
+        return [];
+    }
+    const ids = Array.isArray(parsed?.filament_ids) ? parsed.filament_ids : [];
+    const names = Array.isArray(parsed?.filament_settings_id) ? parsed.filament_settings_id : [];
+    const vendors = Array.isArray(parsed?.filament_vendor) ? parsed.filament_vendor : [];
+
+    return ids.map((id, index) => {
+        const rawName = typeof names[index] === "string" ? names[index].trim() : "";
+        const name = rawName.replace(/\s*@.*$/, "").trim() || null;
+        const vendor = typeof vendors[index] === "string" && vendors[index].trim() ? vendors[index].trim() : null;
+        return { id: String(id ?? "").trim(), name, vendor };
+    }).filter(preset => preset.id);
 }
 
 /**

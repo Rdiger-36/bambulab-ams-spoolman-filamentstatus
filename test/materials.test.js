@@ -113,8 +113,8 @@ test("a shipped id is named and sorted into Bambu, Generic or a vendor", () => {
 });
 
 test("a slicer hash is a custom preset without a name, as a P2S reported a library vendor", () => {
-    assert.deepEqual(slotPreset({ tray_info_idx: "Pdd34802" }), { id: "Pdd34802", name: null, kind: "custom" });
-    assert.deepEqual(slotPreset({ tray_info_idx: "P8d19ba6" }), { id: "P8d19ba6", name: null, kind: "custom" });
+    assert.deepEqual(slotPreset({ tray_info_idx: "Pdd34802" }), { id: "Pdd34802", name: null, kind: "custom", vendor: null });
+    assert.deepEqual(slotPreset({ tray_info_idx: "P8d19ba6" }), { id: "P8d19ba6", name: null, kind: "custom", vendor: null });
 });
 
 test("an id the table does not know keeps its id, and no id is no preset", () => {
@@ -146,4 +146,17 @@ test("a Bambu, a generic or a custom preset names no manufacturer", () => {
     assert.equal(presetVendor(slotPreset({ tray_info_idx: "Pdd34802" })), null);
     assert.equal(presetVendor(slotPreset({ tray_info_idx: "" })), null);
     assert.equal(presetVendor(null), null);
+});
+
+/* ---- learned presets ---- */
+
+test("a learned name and vendor travel on the slot for a custom preset", () => {
+    const slot = { tray_info_idx: "Pdd34802", tray_type: "PLA", preset_name: "fibrelogy PLA Basic", preset_vendor: "fibrelogy" };
+    assert.deepEqual(slotPreset(slot), { id: "Pdd34802", name: "fibrelogy PLA Basic", kind: "custom", vendor: "fibrelogy" });
+    assert.deepEqual(presetVendor(slotPreset(slot)), { vendor: "fibrelogy", line: null });
+
+    // Not learned yet: a hash without a name, and no manufacturer to propose
+    const bare = slotPreset({ tray_info_idx: "Pdd34802", tray_type: "PLA" });
+    assert.deepEqual(bare, { id: "Pdd34802", name: null, kind: "custom", vendor: null });
+    assert.equal(presetVendor(bare), null);
 });

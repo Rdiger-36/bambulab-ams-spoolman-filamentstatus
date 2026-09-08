@@ -1,0 +1,62 @@
+{
+  "filament_ids": [
+    "GFA00",
+    "GFA06",
+    "GFL99",
+    "GFA00",
+    "GFA00",
+    "GFB00",
+    "GFG02",
+    "Pdd34802"
+  ],
+  "filament_settings_id": [
+    "Bambu PLA Basic @BBL P2S 0.6 nozzle",
+    "Bambu PLA Silk+ @BBL P2S 0.6 nozzle",
+    "Generic PLA @BBL P2S",
+    "Bambu PLA Basic @BBL P2S 0.6 nozzle",
+    "Bambu PLA Basic @BBL P2S 0.6 nozzle",
+    "Bambu ABS @BBL P2S 0.6 nozzle",
+    "Bambu PETG HF @BBL P2S 0.6 nozzle",
+    "fibrelogy PLA Basic @Bambu Lab P2S 0.6 nozzle"
+  ],
+  "filament_vendor": [
+    "Bambu Lab",
+    "Bambu Lab",
+    "Generic",
+    "Bambu Lab",
+    "Bambu Lab",
+    "Bambu Lab",
+    "Bambu Lab",
+    "fibrelogy"
+  ],
+  "filament_multi_colour": [
+    "#F55A74",
+    "#C8C8C8",
+    "#5E6345",
+    "#000000",
+    "#F7E6DE",
+    "#000000",
+    "#000000",
+    "#0EE2A0"
+  ],
+  "filament_colour": [
+    "#F55A74",
+    "#C8C8C8",
+    "#5E6345",
+    "#000000",
+    "#F7E6DE",
+    "#000000",
+    "#000000",
+    "#0EE2A0"
+  ],
+  "filament_type": [
+    "PLA",
+    "PLA",
+    "PLA",
+    "PLA",
+    "PLA",
+    "ABS",
+    "PETG",
+    "PLA"
+  ]
+}

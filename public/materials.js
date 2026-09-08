@@ -229,7 +229,11 @@ export function slotPreset(slot) {
         return { id, name: profile.name, kind };
     }
 
-    if (/^P[0-9A-F]{7}$/i.test(id)) return { id, name: null, kind: "custom" };
+    // The name behind a hash is learned from the sliced file of a print, see
+    // src/presets.js, and travels on the slot as preset_name and preset_vendor.
+    if (/^P[0-9A-F]{7}$/i.test(id)) {
+        return { id, name: slot?.preset_name ?? null, kind: "custom", vendor: slot?.preset_vendor ?? null };
+    }
 
     return { id, name: null, kind: "unknown" };
 }
@@ -263,9 +267,16 @@ const PRESET_VENDORS = {
  *
  * @param {object|null} preset - what `slotPreset()` returned
  * @returns {{vendor: string, line: string|null}|null} the manufacturer as
- *   SpoolmanDB spells it, and the product line word when the name carries one
+ *   SpoolmanDB spells it for a shipped profile, as the slicer spells it for a
+ *   learned one, and the product line word when the name carries one
  */
 export function presetVendor(preset) {
+    // A learned preset says who made it in the slicer's own words. There is no
+    // catalogue spelling to map it to, so the create dialog matches it against
+    // the manufacturers it knows without regard to case.
+    if (preset?.kind === "custom") {
+        return preset.vendor ? { vendor: preset.vendor, line: null } : null;
+    }
     if (preset?.kind !== "vendor" || !preset.name) return null;
     const first = preset.name.split(/\s+/)[0].toUpperCase();
     return PRESET_VENDORS[first] ?? null;

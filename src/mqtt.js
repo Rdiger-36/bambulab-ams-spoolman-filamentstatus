@@ -21,6 +21,7 @@ import {
 } from "./spoolman.js";
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
+import { learnPresets } from "./presets.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
 import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
@@ -101,6 +102,30 @@ function broadcastAmsEnvironment(printer, amsUnits, now) {
     printer.lastAmsEnvBroadcast = serialised;
     printer.lastAmsEnvBroadcastTime = now.getTime();
     broadcastSSE({ type: "ams_env", printer: printer.id, amsEnv });
+}
+
+/**
+ * Fetches the sliced file of a job and learns what it names.
+ *
+ * The names behind the preset hashes of chipless slots are in that file and
+ * nowhere else, so they are kept whenever a file is read, by the print handler
+ * when a print starts and by the manual `?job=` test of `/api/print` alike.
+ * The next slot update shows them.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {string} jobName - `subtask_name` of the job
+ * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
+ * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
+ */
+export async function loadSliceInfo(printer, jobName, gcodeFile = null) {
+    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile);
+    if (!sliceInfo) return null;
+
+    for (const preset of learnPresets(sliceInfo, jobName)) {
+        console.log(printer.name, printer.logFilePath,
+            `[Print] Learned the preset ${preset.id}: "${preset.name}"${preset.vendor ? ` by ${preset.vendor}` : ""}`);
+    }
+    return sliceInfo;
 }
 
 /**
@@ -316,7 +341,7 @@ export async function handlePrintStateChange(printer, print) {
 
         console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
         try {
-            printer.currentSliceInfo = await fetchSliceInfo(printer, jobName, printer.currentGcodeFile);
+            printer.currentSliceInfo = await loadSliceInfo(printer, jobName, printer.currentGcodeFile);
             if (printer.currentSliceInfo) {
                 console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
             } else {

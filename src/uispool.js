@@ -1,3 +1,4 @@
+import { learnedPreset } from "./presets.js";
 import { consumptionKey } from "./gcode.js";
 import { orNull, slotColors, SLOT_OPTIONS } from "./utils.js";
 
@@ -27,7 +28,13 @@ import { orNull, slotColors, SLOT_OPTIONS } from "./utils.js";
  */
 function pickSlot(slot) {
     if (!slot) return null;
+    // The name and vendor behind a preset hash, learned from a sliced file.
+    // Sent with the slot so the client names the preset without a table of its
+    // own, and so a newly learned name reaches the dashboard as a change.
+    const learned = learnedPreset(slot.tray_info_idx);
     return {
+        preset_name: learned?.name ?? null,
+        preset_vendor: learned?.vendor ?? null,
         tray_uuid: orNull(slot.tray_uuid),
         tray_type: orNull(slot.tray_type),
         tray_sub_brands: orNull(slot.tray_sub_brands),
