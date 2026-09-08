@@ -308,6 +308,8 @@ h1 {
 .gc-card-link:hover { opacity: 0.75; }
 .gc-card-link:disabled { cursor: default; opacity: 0.5; }
 .gc-card-booked { color: var(--ok); font-weight: 600; text-decoration-color: #8886; }
+.gc-card-unbooked { color: var(--bad); font-weight: 600; text-decoration-color: #8886; }
+.gc-card-partly { color: var(--warn); font-weight: 600; text-decoration-color: #8886; }
 
 /* A clock that is rewritten every second. Tabular figures are the whole of it:
    every shape formatCounter() produces is fixed length within itself, so the

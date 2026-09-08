@@ -2306,7 +2306,19 @@ document.addEventListener("DOMContentLoaded", () => {
                         class="gc-counter" data-countdown>${formatCountdown(printData.printResetAt)}</span></button>`
                 : `<button class="btn btn-small" data-print-clear
                         title="Clear the result from the dashboard">Clear</button>`;
-            return `<button class="gc-card-link gc-card-booked" data-print-summary>✔ consumption booked</button>${countdown}`;
+            // The flag says the booking ran, not that it booked anything: a
+            // print from a slot nobody assigned ends with every row skipped, and
+            // the card used to read "consumption booked" over it. The rows say
+            // what happened, so the label counts them. A filament the plate did
+            // not use is not a row that could have been booked.
+            const rows = (summary?.rows || []).filter(row => row.status !== "unused");
+            const booked = rows.filter(row => row.status === "booked" || row.status === "ambiguous").length;
+            const label = !rows.length || booked === rows.length
+                ? { text: "✔ consumption booked", className: "gc-card-booked", title: "Open the report of this print" }
+                : booked === 0
+                    ? { text: "✖ nothing booked", className: "gc-card-unbooked", title: "No filament of this print could be booked. Open the report to see why" }
+                    : { text: `✔ ${booked} of ${rows.length} booked`, className: "gc-card-partly", title: "Not every filament of this print could be booked. Open the report to see why" };
+            return `<button class="gc-card-link ${label.className}" data-print-summary title="${label.title}">${label.text}</button>${countdown}`;
         }
 
         if (hasSummary && printData.printResultCleared) {
