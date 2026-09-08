@@ -19,7 +19,7 @@ import {
     setSpoolArchived,
     logSpoolmanFailure,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
@@ -318,8 +318,16 @@ export async function handlePrintStateChange(printer, print) {
     const layerNum    = print.layer_num   ?? printer.currentLayerNum   ?? 0;
     const prevState   = printer.currentGcodeState || "IDLE";
 
-    // Always keep layer_num up to date for partial-print calculation
-    if (print.layer_num != null) printer.currentLayerNum = print.layer_num;
+    // Always keep layer_num up to date for partial-print calculation. Within
+    // one job it only goes up: the P2S was seen reporting 4, 3, 4 and 9, 8, 9
+    // within a second, a stale value in one report type next to the current
+    // one in the other, and a cancel right after the stale one would book a
+    // layer too few. The job start below sets it afresh.
+    if (print.layer_num != null) {
+        printer.currentLayerNum = ACTIVE_STATES.has(prevState)
+            ? Math.max(printer.currentLayerNum ?? 0, print.layer_num)
+            : print.layer_num;
+    }
 
     // What the printer says about the job right now. Read on every report, not
     // only on a transition: these are the values that move while the state
@@ -504,7 +512,7 @@ export async function handlePrintStateChange(printer, print) {
 
         const consumption = newState === "FINISH"
             ? calcFullConsumption(printer.currentSliceInfo)
-            : calcPartialConsumption(printer.currentSliceInfo, layerNum);
+            : calcPartialConsumption(printer.currentSliceInfo, completedLayerIndex(layerNum));
 
         const outcome = await bookConsumption(printer, consumption, newState);
         summary.rows = outcome.rows;

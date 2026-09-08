@@ -2,6 +2,9 @@
 Unreleased
    - Fixes:
       - The sliced file of a print is downloaded once, not twice. The dashboard asks for the print's figures as soon as the job has a name, while the printer is still preparing, and that request fetched the file for itself; the print handler fetched it again three seconds later when the print reached RUNNING, and logged "Learned the preset" a second time. Both now share one download, and the handler says "slice info already loaded" when the dashboard got there first. Seen on a P2S on 2026-09-08
+      - A cancelled print books the layers that were finished, not two more. The printer's layer_num is the layer being printed, counted from 1, and the booking read it as the number of the last finished layer counted from 0, so a cancel before the first layer booked one layer and a cancel at layer N booked N+1. Measured on a P2S through the raw trace: layer_num went to 1 the second printing began, after two and a half minutes of calibration at 0, and a ten layer plate ended at 11
+         - Within a job the layer counter only goes up. The P2S reports a stale layer in one report type next to the current one in the other, 4, 3, 4 within a second, and a cancel right after the stale one would have booked a layer too few
+      - The restart guard says what a restart during a print really costs. It claimed the job's booking would be lost; measured on a P2S, the service is back within seconds and books the job when it ends. What is lost is the start time, and on a P1 or an A1 the slots Bambu Studio sent the job to. The same wording for removing a printer mid print
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.18

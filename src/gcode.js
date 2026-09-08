@@ -435,6 +435,32 @@ export function calcFullConsumption(sliceInfo) {
 }
 
 /**
+ * The last completed layer, as `calcPartialConsumption()` counts, from the
+ * `layer_num` a printer reports.
+ *
+ * `layer_num` is the layer being printed, counted from 1, and `total_layer_num`
+ * is the layer count: measured on a P2S on 2026-09-08 through the raw trace,
+ * `layer_num` went from 0 to 1 in the same second `stg_cur` went to 0
+ * (printing), after two and a half minutes of calibration at 0, and a ten
+ * layer plate ended at 11 with `total_layer_num` 11 while the sliced file's
+ * layer ranges ran 0 to 10. So at `layer_num` N, N-1 layers are complete and
+ * the last of them has the 0-based index N-2; nothing is complete at 0 or 1.
+ *
+ * The booking used to hand `layer_num` over as it stood and count it as a
+ * completed 0-based index, which booked one layer that was still printing and
+ * one more that had not begun: a cancel at layer 0, before the first layer,
+ * booked 1/85 of the plate.
+ *
+ * @param {number|null|undefined} layerNum - `layer_num` from the report
+ * @returns {number} the 0-based index of the last completed layer, -1 for none
+ */
+export function completedLayerIndex(layerNum) {
+    const n = Number(layerNum);
+    if (!Number.isFinite(n)) return -1;
+    return Math.max(-1, Math.floor(n) - 2);
+}
+
+/**
  * Calculates consumed grams per tray_info_idx up to a given layer (for
  * failed/cancelled prints).
  *
@@ -449,8 +475,12 @@ export function calcFullConsumption(sliceInfo) {
  * (purge happens discretely at tool changes) but a solid best-effort estimate
  * without parsing the full multi-MB G-code.
  *
+ * `upToLayer` is the last completed layer as a 0-based index into the sliced
+ * file's layers, which is not what the printer reports: see
+ * `completedLayerIndex()` for the conversion from `layer_num`.
+ *
  * @param {object} sliceInfo  - result of fetchSliceInfo
- * @param {number} upToLayer  - last completed layer number from MQTT (0-based)
+ * @param {number} upToLayer  - last completed layer, 0-based; -1 when none is
  * @returns {{ [key]: { tray_info_idx, color, type, grams } }}
  */
 export function calcPartialConsumption(sliceInfo, upToLayer) {

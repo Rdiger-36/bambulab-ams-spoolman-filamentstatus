@@ -9,6 +9,7 @@ import {
     parseSliceInfo,
     calcFullConsumption,
     calcPartialConsumption,
+    completedLayerIndex,
     normColor,
     consumptionKey,
     resolveSliceSlots,
@@ -428,4 +429,25 @@ test("the mapping drops into the same resolution as the list order", () => {
     assert.deepEqual(Object.values(full).map(e => [e.index, e.amsId]), [
         [3, "B1"], [4, "A3"], [8, "External"],
     ]);
+});
+
+test("the printer's layer_num is the layer being printed, so the last completed one is two below it", () => {
+    // Measured on a P2S on 2026-09-08: layer_num 1 the second printing began,
+    // a ten layer plate ending at 11. Nothing is complete at 0 or 1.
+    assert.equal(completedLayerIndex(0), -1);
+    assert.equal(completedLayerIndex(1), -1);
+    assert.equal(completedLayerIndex(2), 0);
+    assert.equal(completedLayerIndex(11), 9);
+    assert.equal(completedLayerIndex(null), -1);
+    assert.equal(completedLayerIndex("7"), 5);
+});
+
+test("a cancel before the first layer books nothing, and one at layer N books N-1 layers", () => {
+    const noRanges = { ...fourColours, rangesByFilamentIdx: {} };
+    // 85 layers in the file (0 to 84). layer_num 0 and 1: the first layer has
+    // not finished, so nothing. layer_num 43: 42 complete of 85
+    assert.equal(calcPartialConsumption(noRanges, completedLayerIndex(0))["filament0"].grams, 0);
+    assert.equal(calcPartialConsumption(noRanges, completedLayerIndex(1))["filament0"].grams, 0);
+    assert.equal(calcPartialConsumption(noRanges, completedLayerIndex(43))["filament0"].grams, 2.85); // 5.76 * 42/85
+    assert.equal(calcPartialConsumption(fourColours, completedLayerIndex(1))["filament0"].grams, 0);
 });

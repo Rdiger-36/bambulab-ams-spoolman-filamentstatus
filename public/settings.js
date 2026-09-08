@@ -1245,7 +1245,7 @@ async function confirmWhilePrinting(err, retry) {
     const confirmed = await confirmAction({
         title: "A print is running",
         html: `<p>${escapeHtml(err.message)}</p>
-               <p class="set-note">Waiting until the print has finished keeps the booking.</p>`,
+               <p class="set-note">Waiting until the print has finished is the safe way. A restart is usually back within seconds and still books the job, measured on a P2S; what it loses is the start time, and on a P1 or an A1 the slots Bambu Studio sent the job to.</p>`,
         okLabel: "Do it anyway",
     });
 

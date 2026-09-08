@@ -34,7 +34,7 @@ import {
     patchSpoolFields,
     getCachedExternalFilaments,
 } from "./spoolman.js";
-import { calcFullConsumption, calcPartialConsumption, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
+import { calcFullConsumption, calcPartialConsumption, completedLayerIndex, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
 import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo, ensureSliceInfo } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
@@ -674,7 +674,7 @@ export function registerRoutes(app, printers) {
                 consumption = fullConsumption;
             } else if (TERMINAL.has(state) || state === "RUNNING" || state === "PAUSE") {
                 consumption = nameMatchedSlots(
-                    resolveSliceSlots(calcPartialConsumption(sliceInfo, layerNum), slots, from),
+                    resolveSliceSlots(calcPartialConsumption(sliceInfo, completedLayerIndex(layerNum)), slots, from),
                     loadedSpools,
                 );
             }
@@ -1449,7 +1449,7 @@ function respondPrintInFlight(res, printer, what) {
     res.status(409).json({
         ok: false,
         printInFlight: true,
-        error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}, and the consumption of the running job is booked only when it ends, so it would be lost.`,
+        error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}. The job is booked when it ends if the service is back by then; its start time is lost either way, and on a P1 or an A1 the slots Bambu Studio sent it to.`,
     });
 }
 
