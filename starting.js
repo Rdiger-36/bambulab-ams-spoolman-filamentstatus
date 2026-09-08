@@ -22,49 +22,49 @@ import { formatDateLog } from "./src/utils.js";
 // Logging Utilities
 // ---------------------------------------------------------
 function logInfo(message) {
-  process.stdout.write(`[Service] [${formatDateLog(new Date())}] ${message}\n`);
+    process.stdout.write(`[Service] [${formatDateLog(new Date())}] ${message}\n`);
 }
 
 function logError(label, err) {
-  const details = err?.stack || err?.message || String(err);
-  process.stderr.write(`[Service] [${formatDateLog(new Date())}] [${label}] ${details}\n`);
+    const details = err?.stack || err?.message || String(err);
+    process.stderr.write(`[Service] [${formatDateLog(new Date())}] [${label}] ${details}\n`);
 }
 
 // ---------------------------------------------------------
 // Global Error Handling
 // ---------------------------------------------------------
 process.on("uncaughtException", (err) => {
-  logError("UNCAUGHT EXCEPTION", err);
-  process.exit(1); // crash visibly so Docker logs show the reason
+    logError("UNCAUGHT EXCEPTION", err);
+    process.exit(1); // crash visibly so Docker logs show the reason
 });
 
 process.on("unhandledRejection", (reason) => {
-  logError("UNHANDLED REJECTION", reason);
-  process.exit(1);
+    logError("UNHANDLED REJECTION", reason);
+    process.exit(1);
 });
 
 // ---------------------------------------------------------
 // Graceful Shutdown for Docker Stop / Ctrl+C
 // ---------------------------------------------------------
 process.on("SIGTERM", () => {
-  logInfo("SIGTERM received – shutting down backend...");
-  process.exit(0);
+    logInfo("SIGTERM received – shutting down backend...");
+    process.exit(0);
 });
 
 process.on("SIGINT", () => {
-  logInfo("SIGINT (Ctrl+C) received – shutting down backend...");
-  process.exit(0);
+    logInfo("SIGINT (Ctrl+C) received – shutting down backend...");
+    process.exit(0);
 });
 
 process.on("exit", (code) => {
-  logInfo(`Service process exited with code ${code}`);
+    logInfo(`Service process exited with code ${code}`);
 });
 
 // ---------------------------------------------------------
 // Start Backend
 // ---------------------------------------------------------
 (async () => {
-  try {
+    try {
     logInfo("Starting backend.js ...");
 
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -73,8 +73,8 @@ process.on("exit", (code) => {
     await import(path.join(__dirname, "backend.js"));
 
     logInfo("Backend is now running and waiting for events...");
-  } catch (err) {
+    } catch (err) {
     logError("STARTUP ERROR", err);
     process.exit(1);
-  }
+    }
 })();

@@ -2,7 +2,7 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 
-import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot } from "./utils.js";
+import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot, describeConnectionError } from "./utils.js";
 import { debug, trace } from "./logger.js";
 import { normColor } from "../public/shared.js";
 
@@ -18,6 +18,25 @@ import { normColor } from "../public/shared.js";
  */
 export function bambuTlsOptions() {
     return { rejectUnauthorized: false };
+}
+
+/**
+ * Logs in to a printer's FTPS server, the way every fetch and the connection
+ * test do: vsftpd with implicit TLS on port 990, user bblp, the access code as
+ * the password, and the printer's self signed certificate accepted.
+ *
+ * @param {object} client - a basic-ftp client
+ * @param {{ip: string, code: string}} printer - address and access code
+ */
+export function ftpsAccess(client, printer) {
+    return client.access({
+        host: printer.ip,
+        port: 990,
+        user: "bblp",
+        password: printer.code,
+        secure: "implicit",
+        secureOptions: bambuTlsOptions(),
+    });
 }
 
 /**
@@ -49,14 +68,7 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null) {
     printer.lastSliceFetch = record;
 
     try {
-        await client.access({
-            host: printer.ip,
-            port: 990,
-            user: "bblp",
-            password: printer.code,
-            secure: "implicit",
-            secureOptions: bambuTlsOptions(),
-        });
+        await ftpsAccess(client, printer);
 
         debug("gcode", printer.name, printer.logFilePath,
             `[Print] Looking for the sliced file as ${candidates.join(" or ")}`);
@@ -749,14 +761,7 @@ export async function testFtpsConnection(printer, timeout = 8000) {
     client.ftp.verbose = false;
 
     try {
-        await client.access({
-            host: printer.ip,
-            port: 990,
-            user: "bblp",
-            password: printer.code,
-            secure: "implicit",
-            secureOptions: bambuTlsOptions(),
-        });
+        await ftpsAccess(client, printer);
         return { ok: true };
     } catch (err) {
         const detail = err?.message || String(err);
@@ -773,13 +778,8 @@ export async function testFtpsConnection(printer, timeout = 8000) {
  */
 function describeFtpsError(err) {
     const message = err?.message || String(err);
-
     if (err?.code === 530 || /530/.test(message)) return "The printer rejected the access code";
-    if (/ECONNREFUSED/.test(message)) return "Port 990 refused the connection. Is FTP access enabled on the printer?";
-    if (/ETIMEDOUT|timeout|Timeout/.test(message)) return "No answer on port 990 within the timeout";
-    if (/EHOSTUNREACH|ENETUNREACH|ENOTFOUND|EAI_AGAIN/.test(message)) return "The address cannot be reached";
-
-    return message;
+    return describeConnectionError(err, { port: 990, refusedHint: "Is FTP access enabled on the printer?" }) ?? message;
 }
 
 /**

@@ -29,7 +29,7 @@ async function bootstrapSpoolman() {
     state.spoolmanBootstrapRunning = true;
 
     try {
-        await monitorSpoolman();
+        await monitorSpoolman({ untilConnected: true });
 
         // The "tag" extra field is the only link between a physical spool and
         // its Spoolman record, so nothing this service does works without it.

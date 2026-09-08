@@ -4,6 +4,7 @@ import { spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { debug, trace } from "./logger.js";
 import { correctRemainInt } from "./ams.js";
+import { describeConnectionError } from "./utils.js";
 
 /**
  * Derives the used weight a newly created Spoolman spool should start at.
@@ -653,10 +654,7 @@ export async function checkSpoolmanHealth(url, timeout = 5000) {
         return { ok: false, error: `Spoolman reports status "${health.status}"` };
     } catch (err) {
         const message = err?.message || String(err);
-        if (/ECONNREFUSED/.test(message)) return { ok: false, error: "The connection was refused" };
-        if (/ETIMEDOUT|timeout/i.test(message)) return { ok: false, error: "No answer within the timeout" };
-        if (/ENOTFOUND|EAI_AGAIN/.test(message)) return { ok: false, error: "The host name cannot be resolved" };
         if (/404/.test(message)) return { ok: false, error: "Reachable, but there is no Spoolman API at this address" };
-        return { ok: false, error: message };
+        return { ok: false, error: describeConnectionError(err) ?? message };
     }
 }

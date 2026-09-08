@@ -12,6 +12,10 @@ Unreleased
          - "On spool" and "After print" show the hundredth of a gram Spoolman holds, always with both decimals, "267.45g" and "30.00g" rather than "267g", and "After print" is computed from that rather than from the rounded figure
       - A restart of the service during a print keeps the print's start time. "Running for" and the duration in the report counted from the restart, because the start lived in memory only; no Bambu printer reports when its job began. The start is written to printers/printstate.json when a print begins and read back when the service finds the same job running on its first report, and forgotten when the print ends
       - The restart guard says what a restart during a print really costs. It claimed the job's booking would be lost; measured on a P2S, the service is back within seconds and books the job when it ends, now with its start time. What is lost on a P1 or an A1 is the slots Bambu Studio sent the job to. The same wording for removing a printer mid print
+   - Development:
+      - The printer runtime object in src/printers.js declares every field the code assigns to it, with a line each on what it is for; fifteen were set on the fly. spoolmanStatus is gone from it, state.spoolmanStatus is the one that is read
+      - One reader for a spool's tag, one sentence table for a refused, timed out or unreachable connection (describeConnectionError in src/utils.js, used by the MQTT test, the FTPS test and the Spoolman health check), one FTPS login (ftpsAccess in src/gcode.js), one retry limit check and one Spoolman monitor in src/mqtt.js, and one JSON file store (src/jsonfile.js) behind the assignments, the learned presets, the print starts and the API keys. Each of those was two to five copies
+      - Thirteen exports nobody imported are plain functions again, spoolman.js logs error messages rather than whole error objects, and starting.js is indented like the other files
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.18

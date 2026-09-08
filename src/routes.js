@@ -758,10 +758,8 @@ export function registerRoutes(app, printers) {
     // fields the dialog shows are fetched once, on demand, rather than pushed
     // onto every slot of every SSE update.
     app.get("/api/spoolman/spool/:id", async (req, res) => {
-        const spoolId = Number(req.params.id);
-        if (!Number.isInteger(spoolId) || spoolId <= 0) {
-            return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
-        }
+        const spoolId = positiveInteger(req.params.id);
+        if (!spoolId) return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
 
         try {
             res.json(await getSpoolmanSpool(spoolId));
@@ -781,10 +779,8 @@ export function registerRoutes(app, printers) {
     app.patch("/api/spoolman/spool/:id", async (req, res) => {
         if (rejectSpoolEditInLegacyMode(res)) return;
 
-        const spoolId = Number(req.params.id);
-        if (!Number.isInteger(spoolId) || spoolId <= 0) {
-            return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
-        }
+        const spoolId = positiveInteger(req.params.id);
+        if (!spoolId) return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
 
         const payload = {};
 
@@ -866,10 +862,8 @@ export function registerRoutes(app, printers) {
         const printer = resolvePrinter(printerId, printers, res);
         if (!printer) return;
 
-        const spoolId = Number(req.body?.spoolId);
-        if (!Number.isInteger(spoolId) || spoolId <= 0) {
-            return res.status(400).json({ ok: false, error: "spoolId must be a positive integer" });
-        }
+        const spoolId = positiveInteger(req.body?.spoolId);
+        if (!spoolId) return res.status(400).json({ ok: false, error: "spoolId must be a positive integer" });
 
         const uiSpool = resolveUiSpool(printer, amsId, res);
         if (!uiSpool) return;
@@ -1476,6 +1470,12 @@ function disconnectPrinter(printer) {
 }
 
 /** Parses a value into a finite number, or null when it is empty or invalid. */
+/** A Spoolman id as a request carries it, or null for anything that is not one. */
+function positiveInteger(value) {
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function numberOrNull(value) {
     if (value === "" || value === null || value === undefined) return null;
     const n = Number(value);
