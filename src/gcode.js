@@ -260,6 +260,64 @@ export function decodePrintMapping(mapping) {
 }
 
 /**
+ * The slots Bambu Studio sent a job to, read off the `project_file` command
+ * the printer echoes on its report topic.
+ *
+ * A P1 or an A1 never reports `print.mapping`, and until now the only answer
+ * for them was the estimate from the slicer's list order, which cannot be right
+ * for a project that was not synchronised with the printer before slicing:
+ * Bambu Studio then remaps the filaments by colour when the job is sent, and
+ * the list order says nothing about where they went. The command carrying that
+ * remapping is echoed back by the printer, seen on three P1S prints and an X1E
+ * print through issue #146, cloud and LAN alike, two seconds before PREPARE.
+ *
+ * Two fields say the same thing and both are read, `ams_mapping2` first:
+ *
+ *   - `ams_mapping2` is one `{ams_id, slot_id}` per project filament, both
+ *     counting from 0, with 255/255 for a filament the plate does not use. It
+ *     names the unit outright, so an AMS HT at 128 needs no arithmetic
+ *   - `ams_mapping` is a flat index per filament, `unit * 4 + slot` for the four
+ *     slot units and 16 to 23 for an AMS HT, the way ha-bambulab reads it, with
+ *     -1 for an unused filament
+ *
+ * Read off an X1E where the echo said [0, 1, 3] and `print.mapping` said the
+ * same for the whole print, and off a P1S where the echo said [0, 3, 2] for a
+ * plate whose list order was blue, orange, red while the slots were blue, red,
+ * orange: the printer ran 0, 3, 2 in that order. How the external holder is
+ * encoded here has not been seen, so a unit outside the ranges above yields
+ * null, which the caller treats as unknown rather than booking onto "Z".
+ *
+ * @param {object} command - the `print` block of the echoed `project_file` command
+ * @returns {string[]|null} slot labels by filament index, null when the command carries none
+ */
+export function decodeStudioMapping(command) {
+    const label = (unit, slot) => {
+        const u = Number(unit);
+        const sl = Number(slot);
+        if (!Number.isInteger(u) || !Number.isInteger(sl) || u < 0 || sl < 0) return null;
+        if (u === 255 && sl === 255) return null;
+        const named = convertAMSandSlot(u, sl);
+        return named === "Z" ? null : named;
+    };
+
+    if (Array.isArray(command?.ams_mapping2) && command.ams_mapping2.length) {
+        return command.ams_mapping2.map(entry => label(entry?.ams_id, entry?.slot_id));
+    }
+
+    if (Array.isArray(command?.ams_mapping) && command.ams_mapping.length) {
+        return command.ams_mapping.map(value => {
+            const index = Number(value);
+            if (!Number.isInteger(index) || index < 0) return null;
+            if (index < 16) return label(Math.floor(index / 4), index % 4);
+            if (index < 24) return label(128 + (index - 16), 0);
+            return null;
+        });
+    }
+
+    return null;
+}
+
+/**
  * The printer's slots in the order Bambu Studio lists them: the four slot units
  * by ascending unit id and then by slot, then the external holder, then an
  * AMS HT.
