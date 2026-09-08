@@ -112,11 +112,13 @@ What was not:
   percentages whatever `MODE` says, manual only stops creating and merging.
 - [x] **The log detail dialog on a phone.** At 375 px on 2026-09-08 the dialog
   was 355 px wide, nothing reached past the edge and nothing scrolled sideways.
-- [ ] **The `errors` level with a real failure.** That an area switched off
-  cannot hide an error is proven on the running service; that an error still
-  reaches the file at the quietest level is covered only by
-  `test/logdetail.test.js`. It needs a failure provoked on purpose, for instance
-  by pointing the Spoolman endpoint at a dead port for a minute.
+- [x] **The `errors` level with a real failure.** Done on 2026-09-08 with the
+  mock printer and the Spoolman endpoint on a dead port (launch config
+  `mock-dead-spoolman`): with the level at `errors` and every area switched
+  off, "Spoolman is unreachable (ECONNREFUSED)" kept reaching the server log
+  every 30 seconds. Pointing the endpoint back at a live Spoolman brought the
+  service up, 25 slots processed, and neither log carried a single progress
+  line for it, only the `[ERROR]` lines of the scenario's unmatched spools.
 - [x] **`calcPartialConsumption()` and `layer_num`.** Settled on 2026-09-08
   through the capture and two deliberate cancels: `layer_num` is the layer
   being printed, counted from 1, it went to 1 in the second `stg_cur` went to
