@@ -257,14 +257,42 @@ export function slotIsBusy(slot) {
  * @param {object[]} allSpools - the Spoolman spool list
  * @returns {object|null} the connected spool, or null
  */
+/**
+ * The slot tag a Spoolman spool carries, or null.
+ *
+ * The service writes the tag JSON encoded, `"\"UUID\""`, and read it back in
+ * three different ways: a bare `JSON.parse` in the slot loop, a quote strip in
+ * the spool search, and a trim in the merge search. The bare parse threw on a
+ * tag somebody edited by hand into something that is not JSON, and because it
+ * ran inside the AMS update, every report after that ended in "Error
+ * processing message" and nothing was processed any more. One reader, which
+ * takes the JSON form and a bare UUID alike and answers null for anything
+ * else, and the five callers agree on what a tag is.
+ *
+ * @param {object|null} spool - a Spoolman spool
+ * @returns {string|null} the tag as the printer reports it in `tray_uuid`
+ */
+export function spoolTag(spool) {
+    const raw = spool?.extra?.tag;
+    if (typeof raw !== "string") return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+        const parsed = JSON.parse(trimmed);
+        return typeof parsed === "string" && parsed.trim() ? parsed.trim() : null;
+    } catch {
+        const bare = trimmed.replace(/^"+|"+$/g, "").trim();
+        return bare || null;
+    }
+}
+
 export function findExistingSpool(amsSpool, allSpools) {
     const amsColors = slotColors(amsSpool);
     const sortedAmsColors = [...amsColors].sort();
 
     return allSpools.find(spoolmanSpool => {
-        const tag = spoolmanSpool.extra?.tag?.replace(/"/g, "");
         const materialMatches = spoolmanSpool.filament.material === amsSpool.tray_sub_brands;
-        const tagMatches = tag === amsSpool.tray_uuid;
+        const tagMatches = spoolTag(spoolmanSpool) === amsSpool.tray_uuid;
 
         // One comparison for both shapes. A count that differs is what keeps a
         // multi colour record from matching a single colour slot on its first
@@ -380,7 +408,6 @@ export function findMergeableSpool(amsSpool, allSpools) {
     });
 
     return matchingSpools.find(spoolmanSpool => {
-        const tag = (spoolmanSpool.extra?.tag || "").trim();
         // Without a remain reading there is nothing to compare the weight
         // against. Treating the missing value as 0 matched every spool that
         // happened to be empty, so the test is skipped instead and the
@@ -391,18 +418,13 @@ export function findMergeableSpool(amsSpool, allSpools) {
         const weightMatches = spoolRemainingWeight !== null &&
             spoolmanSpool.remaining_weight >= spoolRemainingWeight * 0.85 &&
             spoolmanSpool.remaining_weight <= spoolRemainingWeight * 1.15;
-        const hasTag = tag && tag !== "" && tag !== '""';
+        const hasTag = !!spoolTag(spoolmanSpool);
 
         if (settings.NEVER_MERGE_IF_TAG && hasTag) return false;
 
         const neverUsed = spoolmanSpool.used_weight === 0 || spoolmanSpool.used_weight == null;
 
-        return (
-            (spoolmanSpool.remaining_weight === 0 && hasTag) ||
-            spoolmanSpool.remaining_weight === 0 ||
-            weightMatches ||
-            neverUsed
-        );
+        return spoolmanSpool.remaining_weight === 0 || weightMatches || neverUsed;
     });
 }
 
