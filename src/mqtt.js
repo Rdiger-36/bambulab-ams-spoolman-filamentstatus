@@ -44,6 +44,7 @@ import {
     consumptionCandidate,
     matchConsumption,
     spoolTag,
+    modelCanDry,
 } from "./ams.js";
 import { toClientSpool, loadedSlotIds } from "./uispool.js";
 import { traceEnabled } from "./printers.js";
@@ -240,7 +241,12 @@ export function noteVersionInfo(printer, message) {
     }
 
     if (Array.isArray(printer.amsEnv) && printer.amsEnv.length) {
-        printer.amsEnv = printer.amsEnv.map(entry => ({ ...entry, model: models[entry.amsId]?.model ?? null }));
+        // The model also settles whether the unit has a dryer, which the
+        // readings guessed from the report until now.
+        printer.amsEnv = printer.amsEnv.map(entry => {
+            const model = models[entry.amsId]?.model ?? null;
+            return { ...entry, model, drying: modelCanDry(model) === false ? null : entry.drying };
+        });
         printer.lastAmsEnvBroadcast = JSON.stringify(printer.amsEnv);
         broadcastSSE({ type: "ams_env", printer: printer.id, amsEnv: printer.amsEnv });
     }
@@ -1616,10 +1622,13 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         }
     }
 
-    // Both stay null while the AMS has not reported a percentage yet, so the
-    // dashboard shows a dash instead of a confident "0 g".
+    // What the AMS says is on the spool, from the RFID percentage and the
+    // tray weight. Both stay null while the AMS has not reported a percentage
+    // yet, so the dashboard shows a dash instead of a confident "0 g". What
+    // Spoolman says is on the spool travels in existingSpool; the dashboard
+    // picks between the two by mode and by whether the spool is linked.
     const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
-    const correctedWeight = correctedRemain === null
+    const amsWeight = correctedRemain === null
         ? null
         : Math.round((correctedRemain / 100) * slot.tray_weight);
 
@@ -1669,7 +1678,7 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         slotState: "Loaded (Bambu Lab)",
         error,
         correctedRemain,
-        correctedWeight,
+        amsWeight,
     };
 
     pushSlotUpdate(printer, newUiSpool, prevByAmsId);
@@ -1704,11 +1713,9 @@ function buildEmptySpool(printer, amsId, slot) {
  * Builds the UI entry for a slot holding a spool the printer could not
  * identify. Nothing about it can be matched automatically, so the only action
  * offered is assigning a Spoolman spool by hand, and the displayed weight comes
- * from that assignment rather than from the AMS.
+ * from that assignment rather than from the AMS, which knows nothing about it.
  */
 function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
-    const correctedWeight = mappedSpool?.remaining_weight ?? null;
-
     return {
         amsId,
         slot,
@@ -1724,7 +1731,7 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // dashboard says next to the assignment.
         assignedAutomatically: !!mappedSpool && !!getMapping(printer.id, amsId)?.automatic,
         archived: !!mappedSpool?.archived,
-        correctedWeight,
+        amsWeight: null,
         // Legacy mode offers nothing here. Its weight comes from the RFID
         // percentage, which this spool does not report, so there is no action
         // that would do anything.
@@ -1805,7 +1812,7 @@ function buildArchivedSpool(printer, amsId, slot, archivedSpool) {
         connectedViaTag: false,
         connectedViaMapping: false,
         archived: true,
-        correctedWeight: archivedSpool.remaining_weight ?? null,
+        amsWeight: null,
         option: SLOT_OPTIONS.NONE,
         enableButton: "false",
         printerName: printer.name,

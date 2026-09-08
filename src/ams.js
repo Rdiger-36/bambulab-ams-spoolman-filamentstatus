@@ -709,18 +709,23 @@ export function extractAmsEnvironment(amsArray, models = {}) {
         const dryTime = amsNumber(unit?.dry_time);
         const setting = unit?.dry_setting || null;
 
-        // The dryer is what separates an AMS 2 Pro or HT from the other two, and
-        // the presence of the field is the only thing in the payload that says
-        // so. A unit without it gets no drying section at all, rather than one
-        // reading "not drying", which would claim it could.
-        const canDry = dryTime !== null || !!setting;
+        const amsId = convertAMSandSlot(unit?.id, null);
+        const model = models?.[amsId]?.model ?? null;
+
+        // Whether the unit has a dryer is a fact about the model, and the model
+        // is what get_version says. Until that answer is in, the presence of
+        // the field is all there is to go on, and it is wrong for an original
+        // AMS on current firmware: an X1E's AMS08 sent `dry_time: 0` in every
+        // one of 15,280 reports of a trace read on 2026-09-08. A unit that
+        // cannot dry gets no drying section at all, rather than one reading
+        // "not drying", which would claim it could.
+        const canDry = modelCanDry(model) ?? (dryTime !== null || !!setting);
         const settingTemp = amsNumber(setting?.dry_temperature);
         const settingDuration = amsNumber(setting?.dry_duration);
 
-        const amsId = convertAMSandSlot(unit?.id, null);
         return {
             amsId,
-            model: models?.[amsId]?.model ?? null,
+            model,
             humidity: level !== null && level >= 1 && level <= 5 ? level : null,
             humidityPercent: percent !== null && percent > 0 && percent <= 100 ? percent : null,
             temperature: temperature !== null && temperature > 0 ? temperature : null,
@@ -740,6 +745,20 @@ export function extractAmsEnvironment(amsArray, models = {}) {
         entry.temperature !== null ||
         entry.drying !== null
     );
+}
+
+/**
+ * Whether a unit of this model has a dryer: true for an AMS 2 Pro and an AMS
+ * HT, false for the original AMS and the AMS Lite, null while the model is not
+ * known, which leaves the decision to the report.
+ *
+ * @param {string|null} model - as `amsModelsFromVersion()` names it
+ * @returns {boolean|null}
+ */
+export function modelCanDry(model) {
+    if (model === "AMS 2 Pro" || model === "AMS HT") return true;
+    if (model === "AMS" || model === "AMS Lite") return false;
+    return null;
 }
 
 /**
