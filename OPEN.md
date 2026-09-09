@@ -289,7 +289,7 @@ None of this involved real hardware, so it says nothing about the items above.
 ## Before the next official release
 
 The version deliberately stays on a `-dev` prerelease for now, currently
-`1.3.0-dev.18`. Every dev build is one `chore/version-1.3.0-dev.N` pull request
+`1.3.0-dev.21`. Every dev build is one `chore/version-1.3.0-dev.N` pull request
 that moves `package.json`, `package-lock.json` and `src/config.js` together,
 renames the changelog's `Unreleased` block and folds it into the draft below,
 followed by an annotated tag on the merge commit.
@@ -370,11 +370,10 @@ capable, and `linux/arm64` stays supported.
 ## Settings GUI and printer management
 
 Everything below landed on `feat/settings-ui-and-printer-management` up to
-2026-08-31. The branch is not pushed and has no pull request. Written down here
-because it is large enough that the next session should not have to read the
-diff to know what is in it.
+2026-08-31 and was merged as #81. Kept here because the change is large enough
+that the next session should not have to read the diff to know what is in it.
 
-### What the branch contains
+### What #81 brought
 
 - **A settings page** at `public/settings.html`, rendered from what
   `/api/settings` describes, so a new field only has to be added to
@@ -445,7 +444,8 @@ loops.
 **No automatic recovery after an uncaught exception**, for the same reason. The
 supervisor could do it, and that is deliberately not built.
 
-**The Web UI still has no access protection**, see the entry under known gaps.
+**Access protection came later**, as the request guard, the password and the
+API keys (#110 to #112), see the entry under known gaps.
 
 **A shutdown button was considered and rejected.** The supervisor passes every
 exit code except the restart one straight through, so a shutdown lands on the
