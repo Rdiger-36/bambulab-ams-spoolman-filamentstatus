@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.20 has to be folded in here as well, or regenerate the
+Every dev build after dev.21 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -120,6 +120,8 @@ Version 1.3.0
       - The print card no longer says "consumption booked" over a print that booked nothing. The label counts the report's rows now: "nothing booked", "1 of 3 booked", or "consumption booked" only when every used filament was
       - A print on a P1 or an A1 is booked onto the slots Bambu Studio sent it to, not onto an estimate. Those printers never report where a print runs from, and a reused project is remapped by colour when the job is sent; the printer echoes that command on its report topic, and the service reads it. A printer that reports its slots itself keeps that report; an SD card print or one repeated on the printer's screen keeps the estimate (issue #146)
       - A cancelled print books the layers that were finished, not two more. The printer's layer_num is the layer being printed, counted from 1, and within a job the counter only goes up; measured on a P2S through the raw trace
+      - A P1S or an A1 is tracked between its full reports. Those printers send a full report every few minutes and only what changed in between, and the layer, the stage, the remaining time and the error code sent on their own were dropped, so a finish was logged at "layer 17" while the printer had counted to 38 and a cancel would have booked a layer minutes old. A job with the same name as the last one is named at its start after a restart, from the echo of what Bambu Studio sent (issue #146)
+      - The diagnostics export masks the upload address in the Studio echo, whose path carried the user's Bambu cloud account id; only the host survives
       - "After print" no longer subtracts a booked print a second time, and "On spool" and "After print" show the hundredth of a gram Spoolman holds, "267.45g" rather than "267g"
       - A restart of the service during a print keeps the print's start time, written to printers/printstate.json when the print begins. The restart guard says what a restart really costs: the job is booked when it ends, on a P1 or an A1 the slots Bambu Studio sent it to are lost
       - The sliced file of a print is downloaded once, not twice, when the dashboard asks for the print's figures before the print handler does
