@@ -18,7 +18,7 @@
  */
 
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 import { fork } from "child_process";
 
@@ -117,7 +117,9 @@ async function runInProcess() {
   logInfo("SUPERVISOR=false, running the service in this process.");
 
   try {
-    await import(servicePath);
+    // As a URL, not a path: an absolute Windows path is not an import specifier
+    // the ESM loader accepts, see starting.js.
+    await import(pathToFileURL(servicePath).href);
   } catch (err) {
     logError("STARTUP ERROR", err);
     process.exit(1);
