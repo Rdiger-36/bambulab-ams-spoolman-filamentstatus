@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.19 has to be folded in here as well, or regenerate the
+Every dev build after dev.20 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -90,6 +90,7 @@ Version 1.3.0
       - The create dialog of a chipless slot proposes the filament from the slot's preset. A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal with a line saying how near. A filament sold on a spool heavier than 1 kg cannot sit in an AMS and ranks behind every fitting one; the external holder takes any size. Nothing is created by itself, and a Bambu, a generic or a custom preset names no manufacturer, so the dialog then starts as before (issue #47)
       - The name behind a custom preset is learned from the first print with it. A preset from Bambu Studio's cloud library, or one of the user's own, reaches the slot as a hash such as "Pdd34802", and the printer never sends the name; the sliced file does, next to the id and the vendor, and the service downloads that file for every print it books. The slot then reads "fibrelogy PLA Basic preset" instead of "PLA · custom preset", and the create dialog knows the manufacturer. Kept in printers/presets.json and in the diagnostics bundle (issue #47)
    - Fixes:
+      - The service starts on Windows. starting.js imported backend.js through its absolute path, which Node's module loader reads as a URL with the scheme "d:" and refuses; both dynamic imports go through a file URL now
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
       - Consumption is booked onto the right spool when two loaded spools look alike, and no longer onto a spool that never printed it
       - Multi colour spools show all of their colours, and a gradient spool is no longer taken for a plain spool of the same first colour
