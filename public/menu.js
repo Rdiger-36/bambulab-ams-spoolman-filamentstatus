@@ -75,10 +75,15 @@ function initMenubar(options = {}) {
     return refreshMenubarPrinters();
 }
 
-/** Which of the three pages this is, for the mark in the bar. */
+/**
+ * Which of the three pages this is, for the mark in the bar.
+ *
+ * The API page is reached from the settings page and has no entry of its own,
+ * so it keeps the settings marked: that is where the way back is.
+ */
 function currentPage() {
     const file = (window.location.pathname.split("/").pop() || "index.html").toLowerCase();
-    if (file.startsWith("settings")) return "settings";
+    if (file.startsWith("settings") || file.startsWith("api")) return "settings";
     if (file.startsWith("logs")) return "logs";
     return "dashboard";
 }

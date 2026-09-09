@@ -26,6 +26,7 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
+| `openapi.js` | The API as an OpenAPI 3.0 document, served at `/api/openapi.json` and rendered by the API page of the Web UI. Written by hand next to the routes; `test/openapi.test.js` holds it to the routes the app registers, in both directions. |
 | `auth.js` | Who may talk to this service: the signed session cookie of the Web UI password, the lockout after repeated wrong guesses, and the middleware in front of every page and every route. Without a password the pages are open and `/api/` still needs an API key or a request the browser marks as coming from the Web UI. |
 | `passwords.js` | scrypt hashing and verification, and nothing else. Its own module because `settings.js` needs it and may import nothing that logs. |
 | `apikeys.js` | The named API keys for callers that are not a browser: generation, the SHA-256 stored in `printers/apikeys.json`, the header a key travels in, and the throttled "last used". A key counts as a session in `auth.js`. |
@@ -368,7 +369,10 @@ wipe a value it was never shown. Removing one is an explicit null.
 **Adding an HTTP route:** add it inside `registerRoutes()` in `routes.js`.
 Respond `{ ok: false, error }` with a 4xx/5xx for failures; the frontend's
 `fetchJson()` expects that shape. Never build a Spoolman payload inline. Add a
-function to `spoolman.js`.
+function to `spoolman.js`. Then describe it in `openapi.js`, with its
+parameters, its body and its answers: `test/openapi.test.js` fails on a route
+the document does not carry, and the API page shows only what the document
+says.
 
 **The three write actions report, they do not throw.** `createSpool()`,
 `createFilamentAndSpool()` and `mergeSpool()` answer `{ ok, error }`, because

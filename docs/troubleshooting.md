@@ -136,7 +136,7 @@ Logs and configuration describe a home network: the address of every printer and
 
 A printer's two logs can be picked apart as well: **Log** next to the printer in the Printers card opens its log detail dialog, and the export at the bottom of it ticks the printer log and the raw MQTT trace separately, then downloads the same archive with only those.
 
-The same choice is available to a script through the `scope` query of `GET /api/diagnostics/download`: `server`, serial numbers, `<serial>/log` and `<serial>/trace`, comma separated, for example `?scope=server,01P00A000000042/log`. A bare serial means both of its logs. Without the query the bundle carries every log.
+The same choice is available to a script through the `scope` query of `GET /api/diagnostics/download`, which the [API page](api.md) lists with every other route: `server`, serial numbers, `<serial>/log` and `<serial>/trace`, comma separated, for example `?scope=server,01P00A000000042/log`. A bare serial means both of its logs. Without the query the bundle carries every log.
 
 Anonymised replaces the last octet of every IP address, everything after the first five characters of a serial number (in file names as well), everything after the first four characters of an RFID tag, the whole access code, the Spoolman host name (keeping scheme, port and path), and shortens the data and log paths to their last two segments. Four characters of a tag are enough to see that two lines are about the same spool, and too few to recognise the spool by. What a slot reports when it has no tag at all, `N/A` or an all zero uuid, is not a tag and stays as it is. Printer names and the rest of the spool data are kept: they make a log readable and say nothing about the network.
 

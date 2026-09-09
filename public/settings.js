@@ -1301,7 +1301,11 @@ async function deletePrinter(printer, force) {
 function renderApiKeyShell() {
     return `<div class="set-subsection">
                 <div class="set-subhead">
-                    <h3>API keys</h3>
+                    <h3>API keys
+                        <a class="set-info set-info-link" href="api.html" id="open-api-page"
+                           data-tip="Opens the API page: every route of this service with its parameters and answers, and a button that sends it from the browser."
+                           aria-label="Open the API page">i</a>
+                    </h3>
                     <button class="btn btn-small" type="button" id="add-apikey">Add key</button>
                 </div>
                 <div id="apikey-table"></div>

@@ -45,7 +45,7 @@ An original Bambu Lab spool is recognised by its RFID tag and linked on its own;
 - **G-code tracking is the new default.** Filament consumption is read from the sliced file of the print instead of the AMS RFID remain percentage, so 3rd party spools without a tag are covered as well. The previous behaviour lives on as [Legacy mode](docs/legacy-mode.md).
 - **Everything is configured in the Web UI now.** The [settings page](docs/settings.md) holds every setting and the printer list.
 - **Environment variables and hand-written `printers.json` are deprecated.** They keep working, see [Deprecated configuration](docs/deprecated-configuration.md).
-- **The Web UI can ask for a password, and the API needs a key.** Both are set under **Network access** on the [settings page](docs/settings.md). A script or an integration that called the API without a key needs one now.
+- **The Web UI can ask for a password, and the [API](docs/api.md) needs a key.** Both are set under **Network access** on the [settings page](docs/settings.md). A script or an integration that called the API without a key needs one now.
 - **Slots are numbered the way the printer numbers them.** The first slot of the first unit is `A1`, so every slot label moved up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool.
 
 ## Attention
@@ -89,6 +89,7 @@ x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supp
 - New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
 - Web UI with print dashboard, printer management, settings and log viewer, no container restart needed, and usable on a phone
 - An optional password in front of the Web UI, and named API keys for callers that have no browser
+- An [API page](docs/api.md) in the Web UI that lists every route and sends it from the browser, with the same description as OpenAPI for Swagger UI or Postman
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
 
 ## How it works
@@ -113,6 +114,7 @@ You need a running Spoolman instance and, per printer, its serial number, access
 | [How it works](docs/how-it-works.md) | Merging and creating in Spoolman, G-code tracking, operation modes, slot names, archiving empty spools |
 | [Web UI](docs/web-ui.md) | Dashboard, assigning a spool to a slot, the spool and filament dialog, menu and logs |
 | [Settings](docs/settings.md) | Every card of the settings page, the printer dialog, the service actions, a printer that is switched off |
+| [API](docs/api.md) | Who may call it, the API page in the Web UI, the OpenAPI document, and every route in a table |
 | [Troubleshooting](docs/troubleshooting.md) | Reading the logs, the `debug-printers` CLI, diagnostics and what an export contains |
 | [Legacy mode](docs/legacy-mode.md) | The RFID based tracking of 1.2.x and what it cannot do |
 | [Deprecated configuration](docs/deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the three container level variables |
@@ -123,7 +125,7 @@ You need a running Spoolman instance and, per printer, its serial number, access
 >
 > Other websites cannot reach the API of an installation on your network: the service answers only requests addressed to it, and refuses a writing request that comes from another site. A Web UI reached under a real domain name or through a reverse proxy has to name that host under **Network access** as well.
 >
-> The API answers only the Web UI of this installation and a caller carrying an [API key](docs/settings.md#api-keys), whether or not a password is set. Keys are named and revoked one at a time, shown once and stored as a hash. A script or an integration that called this API without a key needs one now.
+> The [API](docs/api.md) answers only the Web UI of this installation and a caller carrying an [API key](docs/settings.md#api-keys), whether or not a password is set. Keys are named and revoked one at a time, shown once and stored as a hash. A script or an integration that called this API without a key needs one now.
 
 ## Feedback
 

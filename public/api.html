@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      // Applies the stored theme before the first paint so page changes do not flash.
+      try {
+        if (localStorage.getItem("dark-mode") === "true") {
+          document.documentElement.classList.add("dark-mode");
+        }
+      } catch (error) { /* Storage blocked: stay in light mode. */ }
+    </script>
+</head>
+<body class="hide-footer api-page">
+    <div id="menubar">
+        <!-- The whole bar, including the dark mode button, is filled by menu.js -->
+        <div id="menu-root"></div>
+    </div>
+
+    <div class="set-page">
+        <div class="set-page-head">
+            <h1>API</h1>
+            <span class="set-page-note" id="api-version"></span>
+            <!-- The page is reached from the API keys on the settings page and
+                 has no entry in the bar, so the way back sits where the page
+                 was opened from: at the top. -->
+            <a class="btn btn-small api-back" href="settings.html#apikey-table">← Back to the settings</a>
+        </div>
+
+        <!-- Filled by api.js from /api/openapi.json: the introduction of the
+             document, then one card per group of routes. Every route opens
+             into a form that sends the request from this page and shows the
+             answer, so the API can be tried without leaving the browser. -->
+        <div class="set-card api-intro">
+            <div id="api-description" class="api-description"></div>
+        </div>
+
+        <!-- Sticks to the top while the list scrolls under it, because the
+             filter is what finds a route in a list this long. -->
+        <div class="set-card api-toolbar">
+            <label class="api-tool api-tool-grow">
+                <span class="set-field-label"><span>Filter</span></span>
+                <input type="search" id="api-filter" placeholder="Path or description" autocomplete="off">
+            </label>
+            <label class="api-tool api-tool-grow">
+                <span class="set-field-label"><span>API key for the curl lines
+                    <span class="set-info" tabindex="0" role="note"
+                          data-tip="This page is the Web UI and may call the API as it is. The key is only written into the curl line under each request, so the line can be copied into a script as it will be run there.">i</span>
+                </span></span>
+                <input type="text" id="api-key" class="set-mono" placeholder="ams_..." autocomplete="off" spellcheck="false">
+            </label>
+            <div class="api-tool-buttons">
+                <button class="btn" type="button" id="api-expand">Expand all</button>
+                <button class="btn" type="button" id="api-collapse">Collapse all</button>
+                <a class="btn" href="api/openapi.json" target="_blank" rel="noopener" title="The OpenAPI 3.0 document, for Swagger UI, Postman or a client generator">openapi.json</a>
+            </div>
+        </div>
+
+        <div id="api-groups"></div>
+    </div>
+
+    <script src="menu.js"></script>
+    <script type="module" src="api.js"></script>
+</body>
+</html>

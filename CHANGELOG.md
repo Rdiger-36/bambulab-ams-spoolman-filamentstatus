@@ -1,4 +1,13 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Features:
+      - The API has a page of its own in the Web UI, opened with the info button next to the API keys on the settings page: every route with its parameters, an example body and the shapes of its answers, and a "Send" button per route that sends the request from the browser and shows the status, the headers and the answer. A path parameter is prefilled with a real serial number, the event stream is followed live, a download opens as one, and the routes that end the process or remove something ask first. A bar that stays at the top carries a filter over the list, and a curl line under every request carries the key typed at the top so it can be copied into a script as it will be run there
+         - The description behind it is served as OpenAPI 3.0 at /api/openapi.json and imports into Swagger UI, Postman, Bruno or a client generator. Written by hand in src/openapi.js next to the routes; a test holds it to the routes the app registers, in both directions, so a route added without a description fails the suite
+         - The page is dependency free like the rest of the Web UI and works on an installation without internet access. The three pages next to it were the model, not Swagger UI
+   - Fixes:
+      - The service starts on Windows. starting.js imported backend.js through its absolute path, and Node's module loader reads "D:\app\backend.js" as a URL with the scheme "d:" and refuses it, so "node entrypoint.js" ended in ERR_UNSUPPORTED_ESM_URL_SCHEME before anything ran. Both dynamic imports go through a file URL now, which every platform accepts
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.19
    - Fixes:
       - A spool whose tag was edited by hand into something that is not JSON no longer stops every AMS update. The tag was read in three different ways, and the one in the slot loop threw on such a tag, inside the update, so every report after that ended in "Error processing message" and nothing was processed any more. One reader now, which takes the stored form and a bare UUID alike

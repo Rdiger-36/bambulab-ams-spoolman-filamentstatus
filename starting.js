@@ -13,9 +13,6 @@
  * have to live here for the same reason, they only see the process they are in.
  */
 
-import path from "path";
-import { fileURLToPath } from "url";
-
 import { formatDateLog } from "./src/utils.js";
 
 // ---------------------------------------------------------
@@ -67,10 +64,11 @@ process.on("exit", (code) => {
     try {
     logInfo("Starting backend.js ...");
 
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-    // Dynamic import so startup errors can be caught
-    await import(path.join(__dirname, "backend.js"));
+    // Dynamic import so startup errors can be caught. Resolved as a URL rather
+    // than a path: the ESM loader takes a file URL on every platform, while an
+    // absolute Windows path such as D:\app\backend.js is read as the URL
+    // scheme "d:" and refused before the service even starts.
+    await import(new URL("./backend.js", import.meta.url));
 
     logInfo("Backend is now running and waiting for events...");
     } catch (err) {

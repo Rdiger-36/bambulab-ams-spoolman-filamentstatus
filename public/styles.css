@@ -1762,6 +1762,25 @@ body.logs-page .log-page { width: 100%; }
   opacity: 1;
 }
 
+/* The same icon as a link, next to the API keys heading: it opens the API
+   page rather than only telling. Inherits the colour so it reads as part of
+   the heading, and a hand rather than the question mark cursor says it goes
+   somewhere. */
+.set-info-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+/* Opens to the right: the heading sits at the left edge of the card, so the
+   tip would otherwise leave the page on that side. */
+.set-info-link::after {
+  left: -6px;
+  right: auto;
+}
+
 /* Opens towards the page, the icon sits at the right edge of the card */
 .set-info::after {
   content: attr(data-tip);
@@ -2758,4 +2777,349 @@ body.logs-page .log-page { width: 100%; }
   .set-key-row input { flex: 1 0 100%; }
   .set-key-row .btn { flex: 1; min-height: 36px; }
 
+}
+
+/* ---- API page ----
+   Every route of the service as a row that opens into a form. Built on the
+   settings page's cards and fields, so it reads as the fourth page of the same
+   UI rather than as a tool bolted on. */
+.api-description {
+  font-size: 0.9em;
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
+.api-description p { margin: 0 0 8px; }
+
+/* At the right end of the headline, on the same baseline as the note. */
+.api-back {
+  margin-left: auto;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* The toolbar: two fields and the three buttons on one line, everything the
+   same height and aligned along its bottom edge. Sticks under the top of the
+   window while the routes scroll past. */
+.api-toolbar {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px 18px;
+  flex-wrap: wrap;
+}
+
+.api-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.api-tool-grow {
+  flex: 1 1 220px;
+}
+
+.api-tool .set-field-label {
+  font-size: 0.88em;
+}
+
+.api-tool input,
+.api-form input[type="text"],
+.api-form select,
+.api-body {
+  padding: 5px 10px;
+  border: 1px solid #8886;
+  border-radius: 5px;
+  background: var(--input-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.95em;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.api-tool input {
+  height: 34px;
+}
+
+.api-tool input:focus,
+.api-form input:focus,
+.api-form select:focus,
+.api-body:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.api-form small {
+  opacity: 0.7;
+  font-size: 0.84em;
+  line-height: 1.3;
+}
+
+/* The tooltip of the key field opens to the right: the icon sits mid page
+   rather than at the right edge of a card, where the settings page has it. */
+.api-toolbar .set-info::after {
+  left: -6px;
+  right: auto;
+}
+
+.api-tool-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.api-tool-buttons .btn {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+.api-group-note {
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+
+/* One route. The summary is the row; the body only exists once it is open. */
+.api-op {
+  border-bottom: 1px solid var(--border-row);
+}
+
+.api-op:last-child { border-bottom: none; }
+
+.api-op-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+
+.api-op-head::-webkit-details-marker { display: none; }
+
+.api-op-head:hover { background: var(--row-hover-bg); }
+
+.api-op-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.api-method {
+  flex: none;
+  width: 62px;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: 5px;
+  font-size: 0.74em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.api-method-get    { background: #1e7e44; }
+.api-method-post   { background: #1c6fd6; }
+.api-method-put    { background: #b26a00; }
+.api-method-patch  { background: #8a5a00; }
+.api-method-delete { background: #b3261e; }
+
+.api-path {
+  font-family: monospace;
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
+.api-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88em;
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-pill {
+  background: var(--state-bg);
+  color: var(--text-state);
+  font-size: 0.72rem;
+  padding: 2px 8px;
+}
+
+.api-anchor {
+  flex: none;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0 4px;
+  opacity: 0;
+}
+
+.api-op-head:hover .api-anchor,
+.api-anchor:focus-visible { opacity: 1; }
+
+.api-op-body {
+  padding: 4px 4px 14px 76px;
+}
+
+.api-desc {
+  font-size: 0.88em;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.api-desc p { margin: 0 0 6px; }
+
+.api-h4 {
+  margin: 12px 0 6px;
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+/* The status line of a response carries a sentence, and a sentence in capitals
+   turns a field name in it into shouting. */
+.api-h4 .pill,
+.api-h4 .api-h4-text { text-transform: none; letter-spacing: 0; }
+
+.api-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 20px;
+}
+
+.api-body {
+  width: 100%;
+  resize: vertical;
+  font-family: monospace;
+  font-size: 0.88em;
+  line-height: 1.4;
+  tab-size: 2;
+}
+
+.api-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.api-muted {
+  font-size: 0.84em;
+  opacity: 0.7;
+}
+
+.api-warn { color: var(--warn); opacity: 1; }
+
+.api-form-error:empty { display: none; }
+
+/* The curl line, the headers and the shapes: folded by default, so the row
+   opens into the form and nothing else. */
+.api-curl,
+.api-headers,
+.api-schemas {
+  margin-top: 10px;
+  font-size: 0.86em;
+}
+
+.api-curl > summary,
+.api-headers > summary,
+.api-schemas > summary {
+  cursor: pointer;
+  opacity: 0.75;
+  padding: 2px 0;
+}
+
+.api-pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--log-bg);
+  font-family: monospace;
+  font-size: 0.9em;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.api-response { margin-top: 12px; }
+
+.api-response-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.api-response-body { margin-top: 8px; }
+
+/* The shapes as a tree: the field name, its type, what it means, then its own
+   fields one level in. */
+.api-tree {
+  margin: 2px 0 4px;
+  padding-left: 18px;
+  list-style: none;
+  border-left: 1px solid var(--border-row);
+}
+
+.api-tree li {
+  margin: 3px 0;
+  line-height: 1.45;
+}
+
+.api-field {
+  font-family: monospace;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+
+.api-required::after {
+  content: "*";
+  color: var(--bad);
+  margin-left: 1px;
+}
+
+.api-type {
+  color: var(--accent-text);
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.api-type-name {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.api-field-desc { opacity: 0.75; }
+
+@media (max-width: 760px) {
+  .api-back { margin-left: 0; }
+  .api-tool-grow { flex-basis: 100%; }
+  .api-tool-buttons { width: 100%; }
+  .api-tool-buttons .btn { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+  /* Nothing to stick under on a phone, the bar would cover half the screen */
+  .api-toolbar { position: static; }
+
+  .api-op-head { flex-wrap: wrap; }
+
+  .api-summary {
+    flex: 1 0 100%;
+    white-space: normal;
+  }
+
+  .api-op-body { padding-left: 4px; }
+
+  /* Hover does not exist on a touch screen, so the link would sit there as a
+     stray character. The address bar has the link once the row is open. */
+  .api-anchor { display: none; }
 }

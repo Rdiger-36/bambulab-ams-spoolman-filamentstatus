@@ -3,6 +3,7 @@ import { promises as fsp } from "fs";
 import mime from "mime-types";
 import path from "path";
 import { serverLogFilePath, version } from "./config.js";
+import { buildOpenApiDocument } from "./openapi.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
 import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
@@ -1229,6 +1230,14 @@ export function registerRoutes(app, printers) {
 
     app.get("/api/notices", (req, res) => {
         res.json({ [ENV_CONFIG_NOTICE]: deprecatedConfig() });
+    });
+
+    // The API described in OpenAPI, for the API page of the Web UI and for
+    // anything that imports the format. Behind the same middleware as every
+    // other route: the document is not a secret, but it is nothing a caller
+    // without a key has a use for either.
+    app.get("/api/openapi.json", (req, res) => {
+        res.json(buildOpenApiDocument());
     });
 
     app.post("/api/notices/:id/ack", (req, res) => {
