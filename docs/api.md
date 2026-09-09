@@ -19,7 +19,7 @@ A key is a full session. It reads and changes everything the Web UI can.
 
 ## The API page
 
-The **i** next to **API keys** in the **Network access** card of the settings page opens the API page. It lists every route, grouped the way this page groups them, and each one opens into a form:
+The **i** next to **API keys** in the **Network access** card of the settings page opens the API page, and **Back to the settings** at its top leads back to that card. It lists every route, grouped the way this page groups them, and each one opens into a form:
 
 - The path and query parameters as fields. A serial number is prefilled with a printer of this installation, so the first click sends something that exists.
 - An example body for the routes that take one, as JSON to edit in place.

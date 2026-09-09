@@ -2791,6 +2791,13 @@ body.logs-page .log-page { width: 100%; }
 
 .api-description p { margin: 0 0 8px; }
 
+/* At the right end of the headline, on the same baseline as the note. */
+.api-back {
+  margin-left: auto;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 /* The toolbar: two fields and the three buttons on one line, everything the
    same height and aligned along its bottom edge. Sticks under the top of the
    window while the routes scroll past. */
@@ -3096,6 +3103,7 @@ body.logs-page .log-page { width: 100%; }
 .api-field-desc { opacity: 0.75; }
 
 @media (max-width: 760px) {
+  .api-back { margin-left: 0; }
   .api-tool-grow { flex-basis: 100%; }
   .api-tool-buttons { width: 100%; }
   .api-tool-buttons .btn { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
