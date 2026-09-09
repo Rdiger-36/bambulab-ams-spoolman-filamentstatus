@@ -10,6 +10,7 @@ import {
     maskPath,
     maskSerial,
     maskTag,
+    maskCloudUrl,
     maskText,
     maskUrl,
 } from "../src/anonymize.js";
@@ -175,4 +176,26 @@ test("only the settings that carry an address are masked", () => {
     assert.equal(masked.MODE, "automatic");
 
     assert.deepEqual(exportSettings(values, false), values);
+});
+
+test("the upload address in a Studio echo keeps its host and nothing else", () => {
+    const line = '2026-09-09_16:55:23 {"print":{"command":"project_file","subtask_name":"Würfel","ams_mapping":[0,1,3],'
+        + '"url":"https://or-cloud-upload-prod.s3.us-west-2.amazonaws.com/users/2160108466/models/20260909225520.711/USf0c790810afb1e_988629317_1.3mf'
+        + '?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAXY6FH2ERJ3UALUNL%2F20260909%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Signature=e46388b1561a2c87","reason":"success"}}';
+    const masked = maskText(line);
+    assert.ok(masked.includes('"url":"https://or-cloud-upload-prod.s3.us-west-2.amazonaws.com/XXX"'), masked);
+    assert.ok(!masked.includes("2160108466"));
+    assert.ok(!masked.includes("X-Amz-Signature"));
+    // The rest of the echo is what a report is about and stays
+    assert.ok(masked.includes('"ams_mapping":[0,1,3]'));
+});
+
+test("a LAN print's address in a Studio echo is not a cloud address and stays", () => {
+    const line = '{"print":{"command":"project_file","url":"ftp:///cache/Cube.gcode.3mf"}}';
+    assert.equal(maskText(line), line);
+});
+
+test("a cloud address that is not a URL is masked whole", () => {
+    assert.equal(maskCloudUrl("not a url"), "XXX");
+    assert.equal(maskCloudUrl("https://example.com:8443/a/b?c=d"), "https://example.com:8443/XXX");
 });

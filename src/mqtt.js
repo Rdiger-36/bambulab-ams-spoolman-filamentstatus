@@ -309,6 +309,46 @@ const TERMINAL_STATES = new Set(["FINISH", "FAILED", "CANCEL"]);
 export const ACTIVE_STATES = new Set(ACTIVE_PRINT_STATES);
 
 /**
+ * The fields of a report that `handlePrintStateChange()` reads next to
+ * `gcode_state`. A report carrying none of them has nothing to say about the
+ * print, whatever else is in it.
+ */
+const PRINT_DELTA_FIELDS = [
+    "layer_num", "subtask_name", "gcode_file", "stg_cur", "mc_remaining_time",
+    "print_error", "mc_print_error_code", "fail_reason", "mapping",
+];
+
+/**
+ * A delta report completed with the state the printer last named, or null
+ * when it is not one the print tracking should see.
+ *
+ * A P1S or an A1 sends a full report every one to five minutes and, in
+ * between, only what changed: `layer_num` on its own, `gcode_file` on its
+ * own, and `subtask_name` not at all when the job has the same name as the
+ * last one. A P2S or an X1 repeats the whole print block every time. The
+ * tracking used to run on reports with a `gcode_state` only, which dropped
+ * every one of those deltas. Measured on a P1S through the raw trace on
+ * 2026-09-09: FINISH was logged at "layer 17" while the deltas had counted to
+ * 38, so a cancel would have booked a layer minutes old, and the dashboard's
+ * layer, stage and remaining time stood still between the full reports.
+ *
+ * An omitted field means "unchanged" on those printers, so a delta is read as
+ * one more report of the state last seen. Nothing is known before the first
+ * report with a state, and that first report has a rule of its own (it may
+ * find a print already running), so a delta ahead of it is dropped as before.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} print - the `print` block of the report, without a state
+ * @returns {object|null} the block with the last known state, or null
+ */
+export function deltaAsReport(printer, print) {
+    if (!print || typeof print !== "object" || print.gcode_state) return null;
+    if (!printer.stateSeenSinceStart || !printer.currentGcodeState) return null;
+    if (!PRINT_DELTA_FIELDS.some(field => print[field] !== undefined)) return null;
+    return { ...print, gcode_state: printer.currentGcodeState };
+}
+
+/**
  * Tracks gcode_state transitions and triggers filament consumption tracking.
  * Called on every MQTT message that contains a gcode_state field.
  *
@@ -327,10 +367,6 @@ export const ACTIVE_STATES = new Set(ACTIVE_PRINT_STATES);
  */
 export async function handlePrintStateChange(printer, print) {
     const newState    = print.gcode_state;
-    // subtask_name is the job name used for the FTP file (/cache/<name>.gcode.3mf).
-    // gcode_file (e.g. /data/Metadata/plate_1.gcode) is an internal path NOT
-    // exposed over FTP, so we only fall back to its basename as a last resort.
-    const jobName     = print.subtask_name || printer.currentJobName || null;
     const prevState   = printer.currentGcodeState || "IDLE";
     // The first report after the service started is the one that may find a
     // print already running, whose start was measured by the process before.
@@ -341,6 +377,21 @@ export async function handlePrintStateChange(printer, print) {
     // active one. Reset tracking there (even on a reprint of the same file) so
     // consumption gets booked again for the new run.
     const freshStart = ACTIVE_STATES.has(newState) && !ACTIVE_STATES.has(prevState);
+
+    // subtask_name is the job name used for the FTP file (/cache/<name>.gcode.3mf).
+    // gcode_file (e.g. /data/Metadata/plate_1.gcode) is an internal path NOT
+    // exposed over FTP, so we only fall back to its basename as a last resort.
+    //
+    // A P1S leaves subtask_name out of the report that starts a job when the
+    // job has the same name as the last one, because it only sends what
+    // changed. After a restart of the service nothing remembers that name, and
+    // the job was "unnamed" until the next full report minutes later, with the
+    // slice fetch waiting on it. The project_file echo Bambu Studio's job
+    // arrived with names it, so that is the second source at a start.
+    const jobName = print.subtask_name
+        || (freshStart ? printer.pendingMapping?.jobName : null)
+        || printer.currentJobName
+        || null;
 
     // The layer for the partial booking and the dashboard, read off every
     // report with three rules measured on a P2S through the raw trace:
@@ -458,7 +509,12 @@ export async function handlePrintStateChange(printer, print) {
     // else, including nothing at all, it has moved on and whatever comes after
     // belongs to this print. An identical error really happening again inside
     // this print is only missed while the old one has not been cleared once.
-    if (printer.staleErrorText && reported !== printer.staleErrorText) {
+    //
+    // Only a report that names the error fields at all can say the printer has
+    // moved on. A P1S delta leaves them out when they did not change, which
+    // must not read as "cleared".
+    const namesError = "print_error" in print || "mc_print_error_code" in print || "fail_reason" in print;
+    if (printer.staleErrorText && namesError && reported !== printer.staleErrorText) {
         printer.staleErrorText = null;
     }
 
@@ -1082,8 +1138,9 @@ async function handleMqttMessage(printer, topic, message) {
             // the G-code tracking must stay out of it entirely. Running both
             // would download the sliced file on every print and book consumption
             // that the next AMS update then overwrites again.
-            if (!legacyMode() && data?.print?.gcode_state) {
-                await handlePrintStateChange(printer, data.print);
+            if (!legacyMode()) {
+                const report = data?.print?.gcode_state ? data.print : deltaAsReport(printer, data?.print);
+                if (report) await handlePrintStateChange(printer, report);
             }
 
             debug("mqtt", printer.name, printer.logFilePath, "Check if message contains AMS Data");

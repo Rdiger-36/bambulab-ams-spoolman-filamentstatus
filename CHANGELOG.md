@@ -1,4 +1,12 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - A P1S or an A1 is tracked between its full reports. Those printers send a full report every one to five minutes and only what changed in between, and the print tracking ran on reports with a gcode_state only, so a layer sent on its own, the stage, the remaining time and the error code were dropped. Measured on a P1S through the raw trace on 2026-09-09: FINISH was logged at "layer 17" while the printer had counted to 38, a cancel would have booked a layer minutes old, and the dashboard's layer stood still between the full reports. A delta is read as one more report of the state last seen; nothing changes for a P2S or an X1, which repeat the whole print block every time
+         - The error a P1S names three seconds before FAILED, in a delta of its own, now reaches the print's summary
+         - A job with the same name as the last one is named at its start after a restart of the service. The P1S leaves subtask_name out of the report that starts it, nothing remembered the name, and the slice fetch waited "unnamed" for the next full report, three and a half minutes into a nine minute print. The project_file echo Bambu Studio's job arrived with names it, and is read at a start when the report does not
+      - The diagnostics export masks the upload address in the Studio echo. A cloud print's project_file command, echoed by the printer into the MQTT trace, carries a signed link into Bambu's upload bucket whose path is the user's cloud account id; only the host survives now, and a LAN print's ftp address stays as it is
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.20
    - Features:
       - The API has a page of its own in the Web UI, opened with the info button next to the API keys on the settings page: every route with its parameters, an example body and the shapes of its answers, and a "Send" button per route that sends the request from the browser and shows the status, the headers and the answer. A path parameter is prefilled with a real serial number, the event stream is followed live, a download opens as one, and the routes that end the process or remove something ask first. A bar that stays at the top carries a filter over the list, and a curl line under every request carries the key typed at the top so it can be copied into a script as it will be run there
