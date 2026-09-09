@@ -47,6 +47,12 @@ const JSON_TAG = /("(?:tray_uuid|tag)"\s*:\s*")((?:\\"|[^"])*)(")/g;
 // A tag of a current AMS is 32 hex characters, which nothing else in a log is,
 // so this catches one wherever it turns up without an anchor to hold on to.
 const LONG_TAG = /\b[0-9A-F]{32}\b/g;
+// The address a cloud print is fetched from, echoed by the printer in the
+// project_file command Bambu Studio sent and so written into the MQTT trace: a
+// signed link into Bambu's upload bucket whose path carries the user's cloud
+// account id and whose query carries the signature. Neither is of any use in
+// a report; the host says which cloud the print came through and stays.
+const JSON_URL = /("url"\s*:\s*")(https?:\/\/[^"]*)(")/g;
 
 /** The placeholders a slot reports instead of a tag. Neither identifies a spool. */
 function isTagPlaceholder(value) {
@@ -173,6 +179,28 @@ export function maskUrl(value) {
 }
 
 /**
+ * Reduces a cloud upload address to its host.
+ *
+ * `maskUrl` keeps the path and the query because a wrong port or a forgotten
+ * subfolder is what a Spoolman address report is about. The address in a
+ * project_file echo is the opposite case: the path is the user's cloud account
+ * id and the upload's model id, the query is an AWS signature, and the only
+ * thing worth reading is which host it points at.
+ *
+ * @param {string} value - the URL
+ * @returns {string} the scheme and the host, followed by the mask
+ */
+export function maskCloudUrl(value) {
+    let url;
+    try {
+        url = new URL(String(value ?? ""));
+    } catch {
+        return MASKED_CODE;
+    }
+    return `${url.protocol}//${url.host}/${MASKED_CODE}`;
+}
+
+/**
  * Shortens a file system path to its last two segments.
  *
  * A container path is `/app/printers` and says nothing, but the same service run
@@ -267,6 +295,7 @@ export function maskText(text, known = {}) {
     }
 
     out = out.replace(IPV4, (match, a, b, c) => `${a}.${b}.${c}.XXX`);
+    out = out.replace(JSON_URL, (match, head, value, tail) => head + maskCloudUrl(value) + tail);
 
     return out;
 }
