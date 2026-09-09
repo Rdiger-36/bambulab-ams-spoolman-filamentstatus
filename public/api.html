@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      // Applies the stored theme before the first paint so page changes do not flash.
+      try {
+        if (localStorage.getItem("dark-mode") === "true") {
+          document.documentElement.classList.add("dark-mode");
+        }
+      } catch (error) { /* Storage blocked: stay in light mode. */ }
+    </script>
+</head>
+<body class="hide-footer api-page">
+    <div id="menubar">
+        <!-- The whole bar, including the dark mode button, is filled by menu.js -->
+        <div id="menu-root"></div>
+    </div>
+
+    <div class="set-page">
+        <div class="set-page-head">
+            <h1>API</h1>
+            <span class="set-page-note" id="api-version"></span>
+        </div>
+
+        <!-- Filled by api.js from /api/openapi.json: the introduction of the
+             document, then one card per group of routes. Every route opens
+             into a form that sends the request from this page and shows the
+             answer, so the API can be tried without leaving the browser. -->
+        <div class="set-card api-intro">
+            <div id="api-description" class="api-description"></div>
+            <div class="api-tools">
+                <label class="api-key-field">
+                    <span class="set-field-label"><span>API key for the curl line</span></span>
+                    <input type="text" id="api-key" class="set-mono" placeholder="ams_..." autocomplete="off" spellcheck="false">
+                    <small>This page is the Web UI and is already allowed to call the API. The key only goes into the curl line under each request, so it can be copied into a script as it will be run there.</small>
+                </label>
+                <label class="api-filter-field">
+                    <span class="set-field-label"><span>Filter</span></span>
+                    <input type="search" id="api-filter" placeholder="Path or description" autocomplete="off">
+                </label>
+                <div class="api-links">
+                    <a class="btn btn-small" href="api/openapi.json" target="_blank" rel="noopener">Open openapi.json</a>
+                    <button class="btn btn-small" type="button" id="api-expand">Expand all</button>
+                    <button class="btn btn-small" type="button" id="api-collapse">Collapse all</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="api-groups"></div>
+    </div>
+
+    <script src="menu.js"></script>
+    <script type="module" src="api.js"></script>
+</body>
+</html>

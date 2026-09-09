@@ -89,6 +89,7 @@ x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supp
 - New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
 - Web UI with print dashboard, printer management, settings and log viewer, no container restart needed, and usable on a phone
 - An optional password in front of the Web UI, and named API keys for callers that have no browser
+- An API page in the Web UI that lists every route and sends it from the browser, with the same description as OpenAPI for Swagger UI or Postman
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
 
 ## How it works

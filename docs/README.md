@@ -8,6 +8,7 @@ The documentation of **Bambulab AMS Spoolman Filament Status**. It belongs to th
 | [How it works](how-it-works.md) | Merging and creating in Spoolman, G-code tracking, operation modes, slot names, archiving empty spools |
 | [Web UI](web-ui.md) | Dashboard, assigning a spool to a slot, the spool and filament dialog, menu and logs |
 | [Settings](settings.md) | Every card of the settings page, the printer dialog, the service actions, a printer that is switched off |
+| [API](api.md) | Who may call it, the API page in the Web UI, the OpenAPI document, and every route in a table |
 | [Troubleshooting](troubleshooting.md) | Reading the logs, the `debug-printers` CLI, diagnostics and what an export contains |
 | [Legacy mode](legacy-mode.md) | The RFID based tracking of 1.2.x and what it cannot do |
 | [Deprecated configuration](deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the three container level variables |
