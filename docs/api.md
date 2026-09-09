@@ -19,7 +19,7 @@ A key is a full session. It reads and changes everything the Web UI can.
 
 ## The API page
 
-**API** in the menu bar of the Web UI lists every route, grouped the way this page groups them, and each one opens into a form:
+The **i** next to **API keys** in the **Network access** card of the settings page opens the API page. It lists every route, grouped the way this page groups them, and each one opens into a form:
 
 - The path and query parameters as fields. A serial number is prefilled with a printer of this installation, so the first click sends something that exists.
 - An example body for the routes that take one, as JSON to edit in place.
@@ -27,7 +27,7 @@ A key is a full session. It reads and changes everything the Web UI can.
 - A **curl** line under every request. The key typed at the top of the page goes into it, and only into it: the page itself is the Web UI and is already allowed to call the API, so the line is what to copy into a script as it will be run there.
 - **Request and response shapes**: every field of the body and of each documented answer, with its type and what it means.
 
-A filter at the top narrows the list by path or description, and every route has a link of its own, `api.html#get-api-printers` for example, that opens it on load.
+The bar at the top stays put while the list scrolls: a filter that narrows the list by path or description, the key field, and the buttons that expand or fold every route and open the document. Every route has a link of its own, `api.html#get-api-printers` for example, that opens it on load.
 
 ## The OpenAPI document
 

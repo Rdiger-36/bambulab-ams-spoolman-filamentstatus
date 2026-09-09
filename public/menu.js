@@ -3,7 +3,7 @@
 // the dashboard, the log viewer and the settings page.
 //
 // The bar carries two things and no more: where you can go, and your session.
-// The four pages sit in it with the current one marked, and the dark mode
+// The three pages sit in it with the current one marked, and the dark mode
 // button and, once a password is set, the log out sit at the other end.
 //
 // What the page is showing does not belong in the bar, it belongs in the page.
@@ -75,12 +75,16 @@ function initMenubar(options = {}) {
     return refreshMenubarPrinters();
 }
 
-/** Which of the four pages this is, for the mark in the bar. */
+/**
+ * Which of the three pages this is, for the mark in the bar.
+ *
+ * The API page is reached from the settings page and has no entry of its own,
+ * so it keeps the settings marked: that is where the way back is.
+ */
 function currentPage() {
     const file = (window.location.pathname.split("/").pop() || "index.html").toLowerCase();
-    if (file.startsWith("settings")) return "settings";
+    if (file.startsWith("settings") || file.startsWith("api")) return "settings";
     if (file.startsWith("logs")) return "logs";
-    if (file.startsWith("api")) return "api";
     return "dashboard";
 }
 
@@ -100,7 +104,6 @@ function renderMenubar() {
             <div class="menu-pages" id="menu-pages">
                 <a class="menu-item" href="index.html"${page === "dashboard" ? ' aria-current="page"' : ""}>Dashboard</a>
                 <a class="menu-item" href="settings.html"${page === "settings" ? ' aria-current="page"' : ""}>Settings</a>
-                <a class="menu-item" href="api.html"${page === "api" ? ' aria-current="page"' : ""}>API</a>
                 <div class="menu-host">
                     <button class="menu-item menu-caret" type="button" id="menu-logs"
                             aria-haspopup="true" aria-expanded="false" aria-controls="menu-logs-panel"

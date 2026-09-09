@@ -1762,6 +1762,25 @@ body.logs-page .log-page { width: 100%; }
   opacity: 1;
 }
 
+/* The same icon as a link, next to the API keys heading: it opens the API
+   page rather than only telling. Inherits the colour so it reads as part of
+   the heading, and a hand rather than the question mark cursor says it goes
+   somewhere. */
+.set-info-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+/* Opens to the right: the heading sits at the left edge of the card, so the
+   tip would otherwise leave the page on that side. */
+.set-info-link::after {
+  left: -6px;
+  right: auto;
+}
+
 /* Opens towards the page, the icon sits at the right edge of the card */
 .set-info::after {
   content: attr(data-tip);
@@ -2772,29 +2791,39 @@ body.logs-page .log-page { width: 100%; }
 
 .api-description p { margin: 0 0 8px; }
 
-.api-tools {
-  display: grid;
-  grid-template-columns: minmax(240px, 2fr) minmax(180px, 1fr) auto;
-  gap: 12px 20px;
-  align-items: end;
-  margin-top: 8px;
+/* The toolbar: two fields and the three buttons on one line, everything the
+   same height and aligned along its bottom edge. Sticks under the top of the
+   window while the routes scroll past. */
+.api-toolbar {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px 18px;
+  flex-wrap: wrap;
 }
 
-.api-key-field,
-.api-filter-field {
+.api-tool {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 0.88em;
+  gap: 4px;
   min-width: 0;
 }
 
-.api-key-field input,
-.api-filter-field input,
+.api-tool-grow {
+  flex: 1 1 220px;
+}
+
+.api-tool .set-field-label {
+  font-size: 0.88em;
+}
+
+.api-tool input,
 .api-form input[type="text"],
 .api-form select,
 .api-body {
-  padding: 5px 8px;
+  padding: 5px 10px;
   border: 1px solid #8886;
   border-radius: 5px;
   background: var(--input-bg);
@@ -2805,8 +2834,11 @@ body.logs-page .log-page { width: 100%; }
   box-sizing: border-box;
 }
 
-.api-key-field input:focus,
-.api-filter-field input:focus,
+.api-tool input {
+  height: 34px;
+}
+
+.api-tool input:focus,
 .api-form input:focus,
 .api-form select:focus,
 .api-body:focus {
@@ -2814,21 +2846,32 @@ body.logs-page .log-page { width: 100%; }
   border-color: var(--accent);
 }
 
-.api-key-field small,
 .api-form small {
   opacity: 0.7;
   font-size: 0.84em;
   line-height: 1.3;
 }
 
-.api-links {
+/* The tooltip of the key field opens to the right: the icon sits mid page
+   rather than at the right edge of a card, where the settings page has it. */
+.api-toolbar .set-info::after {
+  left: -6px;
+  right: auto;
+}
+
+.api-tool-buttons {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  padding-bottom: 1px;
 }
 
-.api-links a { text-decoration: none; }
+.api-tool-buttons .btn {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  text-decoration: none;
+}
 
 .api-group-note {
   font-size: 0.82em;
@@ -3053,7 +3096,11 @@ body.logs-page .log-page { width: 100%; }
 .api-field-desc { opacity: 0.75; }
 
 @media (max-width: 760px) {
-  .api-tools { grid-template-columns: 1fr; }
+  .api-tool-grow { flex-basis: 100%; }
+  .api-tool-buttons { width: 100%; }
+  .api-tool-buttons .btn { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+  /* Nothing to stick under on a phone, the bar would cover half the screen */
+  .api-toolbar { position: static; }
 
   .api-op-head { flex-wrap: wrap; }
 

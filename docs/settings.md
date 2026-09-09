@@ -64,7 +64,7 @@ curl -H "Authorization: Bearer ams_..." http://192.168.1.50:4000/api/printers
 
 `X-API-Key: ams_...` works just as well, which is the header most home automations ask for by name.
 
-What there is to call is on the [API page](api.md): every route with its parameters, opened in the Web UI under **API** with a button that sends it, and as an OpenAPI document for Swagger UI or Postman.
+What there is to call is on the [API page](api.md): every route with its parameters and a button that sends it, opened with the **i** next to the **API keys** heading, and as an OpenAPI document for Swagger UI or Postman.
 
 A key is a full session: it reads and it changes everything the Web UI can, including the settings and other keys. There is no permission split, because an installation of this size has no two kinds of caller to separate. What a key does buy over the password is that each one can be revoked on its own, without signing anybody out and without the other keys noticing.
 
