@@ -1,7 +1,12 @@
 -----------------------------------------------------------------------------------------------
 Unreleased
+-----------------------------------------------------------------------------------------------
+Unreleased
    - Changes:
       - The print card tells a time of day from a duration. "Started 19:14" and "Running for 14:50" stood side by side as two pairs of digits with a colon, and the second one read as a time of day; the durations are written in words now, "14 min 50 s", "1 hour 14 min 50 s", "2 Days 5 hours 13 min", the way the remaining time next to them already was, and every moment says "at": "Started at", "Expected to end at", and in the summary dialog "Started at" and "Ended at". The countdown on the Clear button and the duration in the summary dialog use the same words
+   - Fixes:
+      - The layer no longer starts at the previous job's number. The report that starts a job carries the last layer of the job before, and the tracking starts at 0 there, but a P2S keeps sending that number for the seconds after the start and the "only goes up within a job" rule then took it for the current layer. Seen on 2026-09-20: a 36 layer print had left 37, the next job showed 37 of 69 through its whole preparation while the printer reported 0, with the remaining time at 0 minutes and a partial consumption computed as if half the print were done, and a cancel there would have booked exactly that. The number the start report carried is remembered and ignored until the printer has reported something else
+
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.21

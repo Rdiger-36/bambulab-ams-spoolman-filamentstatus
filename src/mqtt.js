@@ -405,13 +405,29 @@ export async function handlePrintStateChange(printer, print) {
     //     second, a stale value in one report type next to the current one in
     //     the other, and a cancel right after the stale one would book a layer
     //     too few
+    //   - the previous job's number is not only in the report that starts the
+    //     job. Seen on a P2S on 2026-09-20: a 36 layer print left 37 behind,
+    //     the next job started at 0 in the tracking, and the reports of the
+    //     following seconds still said 37, which the "only goes up" rule then
+    //     took for the current layer. The dashboard showed 37 of 69 through
+    //     the whole preparation while the printer sent 0, and a cancel there
+    //     would have booked half the print. So the number the start report
+    //     carried is remembered and ignored until the printer has reported
+    //     something else, which is the 0 or 1 the new job begins with
     //   - outside a job the report is taken as it stands
     if (freshStart) {
         printer.currentLayerNum = firstSinceStart ? (print.layer_num ?? 0) : 0;
+        printer.staleLayerNum = firstSinceStart ? null : (print.layer_num ?? null);
     } else if (print.layer_num != null) {
-        printer.currentLayerNum = ACTIVE_STATES.has(prevState)
-            ? Math.max(printer.currentLayerNum ?? 0, print.layer_num)
-            : print.layer_num;
+        const stale = ACTIVE_STATES.has(prevState)
+            && printer.staleLayerNum != null
+            && print.layer_num === printer.staleLayerNum;
+        if (!stale) {
+            printer.staleLayerNum = null;
+            printer.currentLayerNum = ACTIVE_STATES.has(prevState)
+                ? Math.max(printer.currentLayerNum ?? 0, print.layer_num)
+                : print.layer_num;
+        }
     }
     const layerNum = printer.currentLayerNum ?? 0;
 

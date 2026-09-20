@@ -158,6 +158,7 @@ function createRuntimePrinter(entry) {
         // start of that print, see notePrintCommand() in mqtt.js.
         pendingMapping: null,
         currentLayerNum: 0,
+        staleLayerNum: null,
         consumptionBooked: false,
         sliceFetchDone: false,
         // When the running print became active, in epoch milliseconds. Measured
