@@ -116,6 +116,30 @@ test("the report that starts a job still carries the previous job's last layer, 
     forgetPrintStart("SERIAL");
 });
 
+test("the previous job's layer is ignored while the printer keeps repeating it after the start", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Old", layer_num: 37 });
+    // Seen on a P2S on 2026-09-20: a 36 layer print leaves 37, the next job
+    // starts and the reports of the following seconds still say 37
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Zylinder", layer_num: 37 });
+    assert.equal(p.currentLayerNum, 0);
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Zylinder", layer_num: 37 });
+    assert.equal(p.currentLayerNum, 0);
+    // A delta on a P1S carries the same stale number the same way
+    await handlePrintStateChange(p, deltaAsReport(p, { layer_num: 37 }));
+    assert.equal(p.currentLayerNum, 0);
+    // The printer's own reset ends it, and from there the counter runs as before
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Zylinder", layer_num: 0 });
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Zylinder", layer_num: 2 });
+    assert.equal(p.currentLayerNum, 2);
+    // Reaching the old number for real is taken, the marker is gone
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Zylinder", layer_num: 37 });
+    assert.equal(p.currentLayerNum, 37);
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Zylinder", layer_num: 70 });
+    assert.equal(p.currentLayerNum, 70);
+    forgetPrintStart("SERIAL");
+});
+
 test("the first report after the service came up takes the running print's layer", async () => {
     const p = printer();
     await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 7 });
