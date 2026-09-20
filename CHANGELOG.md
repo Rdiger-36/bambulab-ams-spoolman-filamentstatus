@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - The layer no longer starts at the previous job's number. The report that starts a job carries the last layer of the job before, and the tracking starts at 0 there, but a P2S keeps sending that number for the seconds after the start and the "only goes up within a job" rule then took it for the current layer. Seen on 2026-09-20: a 36 layer print had left 37, the next job showed 37 of 69 through its whole preparation while the printer reported 0, with the remaining time at 0 minutes and a partial consumption computed as if half the print were done, and a cancel there would have booked exactly that. The number the start report carried is remembered and ignored until the printer has reported something else
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.21
    - Fixes:
       - A P1S or an A1 is tracked between its full reports. Those printers send a full report every one to five minutes and only what changed in between, and the print tracking ran on reports with a gcode_state only, so a layer sent on its own, the stage, the remaining time and the error code were dropped. Measured on a P1S through the raw trace on 2026-09-09: FINISH was logged at "layer 17" while the printer had counted to 38, a cancel would have booked a layer minutes old, and the dashboard's layer stood still between the full reports. A delta is read as one more report of the state last seen; nothing changes for a P2S or an X1, which repeat the whole print block every time
