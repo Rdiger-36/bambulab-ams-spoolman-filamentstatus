@@ -2264,7 +2264,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // the full date as soon as it runs over midnight at either end.
         const withDate = !allToday(printData.startedAt, printData.estimatedEndAt);
 
-        if (printData.startedAt) facts.push(["Started", formatMoment(printData.startedAt, withDate)]);
+        // "at" on every moment and a unit on every duration: a start at 19:14 and
+        // a run of 14 min 50 s used to be "19:14" and "14:50" side by side.
+        if (printData.startedAt) facts.push(["Started at", formatMoment(printData.startedAt, withDate)]);
         // Carries the start so the ticker can keep it moving between two SSE
         // events, which are up to a slot update interval apart.
         if (printData.startedAt != null) {
@@ -2288,7 +2290,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // name an end that moves further away the longer the pause lasts.
             if (left) facts.push(["Left after resuming", left]);
         } else if (printData.estimatedEndAt) {
-            facts.push(["Expected to end", `${formatMoment(printData.estimatedEndAt, withDate)} (${left})`]);
+            facts.push(["Expected to end at", `${formatMoment(printData.estimatedEndAt, withDate)} (${left})`]);
         }
 
         return factsRow(facts);
@@ -2484,8 +2486,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const facts = [
             ["Result", summary.state],
-            ["Started", summary.startedAt ? formatMoment(summary.startedAt, !sameDay) : "unknown"],
-            ["Ended", summary.endedAt ? formatMoment(summary.endedAt, !sameDay) : "unknown"],
+            ["Started at", summary.startedAt ? formatMoment(summary.startedAt, !sameDay) : "unknown"],
+            ["Ended at", summary.endedAt ? formatMoment(summary.endedAt, !sameDay) : "unknown"],
             ["Duration", formatDuration(summary.durationMs)],
             ["Layers", humanTotal ? `${humanLayer} / ${humanTotal}` : `${humanLayer}`],
         ];

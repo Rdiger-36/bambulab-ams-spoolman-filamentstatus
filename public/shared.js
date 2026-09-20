@@ -174,35 +174,43 @@ export function formatDate(date) {
 }
 
 /**
- * A duration, at the precision the length of it deserves.
+ * A running duration, in words: how long a print has been running, how long
+ * its result still has before it clears itself, and how long a finished print
+ * took.
  *
- * Three shapes, because a print is anything from a ten minute plate to a five
- * day one and no single shape reads well across that:
+ *   under a minute  SS s                     05 s
+ *   under an hour   M min SS s               14 min 50 s
+ *   under a day     H hour(s) MM min SS s    1 hour 14 min 50 s
+ *   a day and over  D Day(s) H hour(s) M min 2 Days 5 hours 13 min
  *
- *   under an hour   mm:ss             05:13
- *   under a day     HH:mm:ss          05:13:44
- *   a day and over  D Days HH:mm      2 Days 05:13
+ * This was a clock, "14:50", until a screenshot of 2026-09-20 put it next to
+ * "Started 19:14" and "Expected to end 19:30": three pairs of digits with a
+ * colon on one line, and only one of them a duration. The units keep the
+ * shapes apart. The remaining time next to it already spoke this way,
+ * "~ 1 hour 30 min", so the words are its words.
  *
  * Seconds fall away once days are on the line: at that length they are noise,
- * and the label they sit in is rewritten every second anyway. Days are not
- * padded, so a print goes from "23:59:59" to "1 Days 00:00".
+ * and the label they sit in is rewritten every second anyway.
  *
- * Clock shape rather than prose throughout, because prose changes width as it
- * counts. "10 min" to "9 min" to "59s" moved everything after it along the line
- * on every step, which is what this replaced.
+ * The seconds are padded and the minutes and hours are not: a counter that
+ * ticks every second must not move the text after it on every tick, and the
+ * minutes only change width once, at the tenth minute. Padding the minutes
+ * too would read "04 min", which is not how anyone writes a duration.
  */
 export function formatCounter(ms) {
     const total = Math.max(0, Math.round(ms / 1000));
     const pad = value => String(value).padStart(2, "0");
 
-    const seconds = pad(total % 60);
-    const minutes = pad(Math.floor(total / 60) % 60);
+    const seconds = total % 60;
+    const minutes = Math.floor(total / 60) % 60;
     const hours = Math.floor(total / 3600) % 24;
     const days = Math.floor(total / 86400);
 
-    if (days) return `${days} Days ${pad(hours)}:${minutes}`;
-    if (total >= 3600) return `${pad(hours)}:${minutes}:${seconds}`;
-    return `${minutes}:${seconds}`;
+    const hourWord = `${hours} ${hours === 1 ? "hour" : "hours"}`;
+    if (days) return `${days} ${days === 1 ? "Day" : "Days"} ${hourWord} ${minutes} min`;
+    if (total >= 3600) return `${hourWord} ${pad(minutes)} min ${pad(seconds)} s`;
+    if (total >= 60) return `${minutes} min ${pad(seconds)} s`;
+    return `${pad(seconds)} s`;
 }
 
 /**
