@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - The print card tells a time of day from a duration. "Started 19:14" and "Running for 14:50" stood side by side as two pairs of digits with a colon, and the second one read as a time of day; the durations are written in words now, "14 min 50 s", "1 hour 14 min 50 s", "2 Days 5 hours 13 min", the way the remaining time next to them already was, and every moment says "at": "Started at", "Expected to end at", and in the summary dialog "Started at" and "Ended at". The countdown on the Clear button and the duration in the summary dialog use the same words
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.21
    - Fixes:
       - A P1S or an A1 is tracked between its full reports. Those printers send a full report every one to five minutes and only what changed in between, and the print tracking ran on reports with a gcode_state only, so a layer sent on its own, the stage, the remaining time and the error code were dropped. Measured on a P1S through the raw trace on 2026-09-09: FINISH was logged at "layer 17" while the printer had counted to 38, a cancel would have booked a layer minutes old, and the dashboard's layer stood still between the full reports. A delta is read as one more report of the state last seen; nothing changes for a P2S or an X1, which repeat the whole print block every time
