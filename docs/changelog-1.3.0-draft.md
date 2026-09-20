@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.21 has to be folded in here as well, or regenerate the
+Every dev build after dev.22 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -89,6 +89,7 @@ Version 1.3.0
       - The Logs page carries its choices as controls: a Source button over the server and the printers, a Log / Raw MQTT trace switch for a printer, and the download next to a line saying what the page shows and what the download would carry, "capture disabled" in front when that printer's trace is not being written. The switch writes into the address, so a link to a trace still opens the trace
       - The create dialog of a chipless slot proposes the filament from the slot's preset. A vendor preset chosen in Bambu Studio, "SUNLU PETG" or "PolyLite PETG", names the manufacturer, so the catalogue is narrowed to that maker and the slot's material when the dialog opens, and the entry nearest the slot's colour is filled in as a proposal with a line saying how near. A filament sold on a spool heavier than 1 kg cannot sit in an AMS and ranks behind every fitting one; the external holder takes any size. Nothing is created by itself, and a Bambu, a generic or a custom preset names no manufacturer, so the dialog then starts as before (issue #47)
       - The name behind a custom preset is learned from the first print with it. A preset from Bambu Studio's cloud library, or one of the user's own, reaches the slot as a hash such as "Pdd34802", and the printer never sends the name; the sliced file does, next to the id and the vendor, and the service downloads that file for every print it books. The slot then reads "fibrelogy PLA Basic preset" instead of "PLA · custom preset", and the create dialog knows the manufacturer. Kept in printers/presets.json and in the diagnostics bundle (issue #47)
+      - The print card tells a time of day from a duration: durations are written in words, "14 min 50 s", "1 hour 14 min 50 s", the way the remaining time next to them already was, and every moment says "at", "Started at", "Expected to end at", "Ended at"
    - Fixes:
       - The service starts on Windows. starting.js imported backend.js through its absolute path, which Node's module loader reads as a URL with the scheme "d:" and refuses; both dynamic imports go through a file URL now
       - A spool is created with the weight the AMS reports instead of always starting at 100 % (issue #59)
@@ -122,6 +123,7 @@ Version 1.3.0
       - A cancelled print books the layers that were finished, not two more. The printer's layer_num is the layer being printed, counted from 1, and within a job the counter only goes up; measured on a P2S through the raw trace
       - A P1S or an A1 is tracked between its full reports. Those printers send a full report every few minutes and only what changed in between, and the layer, the stage, the remaining time and the error code sent on their own were dropped, so a finish was logged at "layer 17" while the printer had counted to 38 and a cancel would have booked a layer minutes old. A job with the same name as the last one is named at its start after a restart, from the echo of what Bambu Studio sent (issue #146)
       - The diagnostics export masks the upload address in the Studio echo, whose path carried the user's Bambu cloud account id; only the host survives
+      - The layer no longer starts at the previous job's number. The report that starts a job carries the last layer of the job before, and a P2S keeps sending that number for the seconds after the start, which the "only goes up" rule then took for the current layer; a cancel during preparation booked half the print. The number the start report carried is ignored until the printer has reported something else
       - "After print" no longer subtracts a booked print a second time, and "On spool" and "After print" show the hundredth of a gram Spoolman holds, "267.45g" rather than "267g"
       - A restart of the service during a print keeps the print's start time, written to printers/printstate.json when the print begins. The restart guard says what a restart really costs: the job is booked when it ends, on a P1 or an A1 the slots Bambu Studio sent it to are lost
       - The sliced file of a print is downloaded once, not twice, when the dashboard asks for the print's figures before the print handler does
