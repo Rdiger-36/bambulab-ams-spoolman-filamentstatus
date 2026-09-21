@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - The expected end of a print no longer counts seconds. It is "now plus the whole minutes the printer reports", so its seconds were those of the clock at the moment of the request and moved on with every refresh of the dashboard, visible as soon as a print ran over midnight and the moment was written with its date. Seen on 2026-09-21 on an X1C that had been running since the day before. A moment is written without seconds now, on the print card and in the summary dialog, and the API cuts the estimate to the whole minute the printer's number has
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.22
    - Changes:
       - The print card tells a time of day from a duration. "Started 19:14" and "Running for 14:50" stood side by side as two pairs of digits with a colon, and the second one read as a time of day; the durations are written in words now, "14 min 50 s", "1 hour 14 min 50 s", "2 Days 5 hours 13 min", the way the remaining time next to them already was, and every moment says "at": "Started at", "Expected to end at", and in the summary dialog "Started at" and "Ended at". The countdown on the Clear button and the duration in the summary dialog use the same words
