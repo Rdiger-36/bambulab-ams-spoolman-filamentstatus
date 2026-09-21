@@ -251,7 +251,7 @@ export function formatRemaining(minutes) {
  *
  * Asked once for the pair rather than per timestamp, so the two ends of a print
  * are always written the same way. A job that started yesterday and ends today
- * would otherwise read "02.09.2026 22:10:04" next to a bare "07:31", and the
+ * would otherwise read "02.09.2026 22:10" next to a bare "07:31", and the
  * short one is the half that needs the date most.
  *
  * @param {...(number|null|undefined)} moments - epoch milliseconds
@@ -263,8 +263,14 @@ export function allToday(...moments) {
 }
 
 /**
- * One end of a print: the time of day while it all happens today, and the full
- * date with seconds as soon as it does not.
+ * One end of a print: the time of day while it all happens today, and the date
+ * in front of it as soon as it does not.
+ *
+ * Never with seconds. The expected end is "now plus the printer's whole
+ * minutes", so its seconds are the clock's at the moment of the request and
+ * were counting up with every refresh of the dashboard; and a start or an end
+ * is read as a time of day, where a second hand says nothing the duration
+ * next to it does not say better.
  *
  * `withDate` is the answer allToday() gave for the whole pair, not a question
  * about this one timestamp.
@@ -275,9 +281,12 @@ export function allToday(...moments) {
  */
 export function formatMoment(at, withDate) {
     const date = new Date(at);
-    if (withDate) return formatDate(date);
+    const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    if (!withDate) return time;
 
-    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${day}.${month}.${date.getFullYear()} ${time}`;
 }
 
 /**

@@ -81,6 +81,10 @@ function resolvePrinter(printerId, printers, res) {
  * @param {string} state - the effective gcode state, after clearing
  * @returns {object} the fields to merge into the print response
  */
+function wholeMinute(ms) {
+    return ms - ms % 60_000;
+}
+
 function liveProgress(printer, state) {
     if (!ACTIVE_STATES.has(state)) {
         return { startedAt: null, elapsedMs: null, remainingMinutes: null, estimatedEndAt: null, stage: null, preparing: false };
@@ -100,7 +104,10 @@ function liveProgress(printer, state) {
         remainingMinutes: remaining ?? null,
         // A remaining time of 0 is a real answer near the end of a print, so it
         // is only the absence of the field that makes the estimate unknown.
-        estimatedEndAt: !paused && remaining != null ? Date.now() + remaining * 60_000 : null,
+        // Cut to the whole minute: the printer's estimate has none finer, and
+        // the seconds were those of the clock at the moment of the request,
+        // different on every refresh for one and the same estimate.
+        estimatedEndAt: !paused && remaining != null ? wholeMinute(Date.now() + remaining * 60_000) : null,
         stage: printStageName(printer.currentStage),
         preparing: isPreparingStage(printer.currentStage),
     };
