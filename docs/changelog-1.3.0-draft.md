@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.22 has to be folded in here as well, or regenerate the
+Every dev build after dev.23 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -124,6 +124,8 @@ Version 1.3.0
       - A P1S or an A1 is tracked between its full reports. Those printers send a full report every few minutes and only what changed in between, and the layer, the stage, the remaining time and the error code sent on their own were dropped, so a finish was logged at "layer 17" while the printer had counted to 38 and a cancel would have booked a layer minutes old. A job with the same name as the last one is named at its start after a restart, from the echo of what Bambu Studio sent (issue #146)
       - The diagnostics export masks the upload address in the Studio echo, whose path carried the user's Bambu cloud account id; only the host survives
       - The layer no longer starts at the previous job's number. The report that starts a job carries the last layer of the job before, and a P2S keeps sending that number for the seconds after the start, which the "only goes up" rule then took for the current layer; a cancel during preparation booked half the print. The number the start report carried is ignored until the printer has reported something else
+      - The expected end of a print no longer counts seconds. It is "now plus the whole minutes the printer reports", so its seconds were the clock's at the moment of the request and moved with every refresh, visible once a print ran over midnight and the moment was written with its date; a moment is written without seconds now, and the API cuts the estimate to the whole minute
+      - A Bambu Lab PLA Basic spool is created from the Basic entry of the SpoolmanDB catalogue. The catalogue writes Basic without a line word, so the lookup fell through to every PLA entry of the colour and took the first, which is Aero Black since the catalogue lists PLA Aero; among the entries of a colour, the line the AMS names wins when its word is in the id, and otherwise the entry whose name carries no line word, with the line words read off the catalogue itself
       - "After print" no longer subtracts a booked print a second time, and "On spool" and "After print" show the hundredth of a gram Spoolman holds, "267.45g" rather than "267g"
       - A restart of the service during a print keeps the print's start time, written to printers/printstate.json when the print begins. The restart guard says what a restart really costs: the job is booked when it ends, on a P1 or an A1 the slots Bambu Studio sent it to are lost
       - The sliced file of a print is downloaded once, not twice, when the dashboard asks for the print's figures before the print handler does
