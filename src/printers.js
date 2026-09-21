@@ -185,6 +185,11 @@ function createRuntimePrinter(entry) {
         // than on the slot interval, and meaningless once the print has ended.
         currentStage: null,
         currentRemainingMinutes: null,
+        // When the printer last changed its mind about the minutes, in epoch
+        // milliseconds. The expected end is counted from here rather than from
+        // the moment somebody asks, so it stands still between two revisions
+        // instead of sliding forward with every refresh of the dashboard.
+        remainingRevisedAt: null,
         // The closing report of the last finished print: what was booked, what
         // was skipped and why. Held in memory only, dropped when the next print
         // starts, and never written anywhere.

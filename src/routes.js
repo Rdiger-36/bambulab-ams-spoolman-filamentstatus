@@ -75,7 +75,11 @@ function resolvePrinter(printerId, printers, res) {
  *
  * The estimated end is derived here rather than in the browser so that every
  * client agrees on it, and it is derived from `mc_remaining_time`, which the
- * printer reports in minutes and revises as it goes.
+ * printer reports in minutes and revises as it goes. It is counted from the
+ * moment of that revision, not from the moment of the request: the figure
+ * stands for up to a minute while the clock moves on, and adding it to "now"
+ * gave an end that crept forward by a few seconds with every refresh of the
+ * dashboard until the printer revised the figure and it jumped back.
  *
  * @param {object} printer - the runtime printer
  * @param {string} state - the effective gcode state, after clearing
@@ -100,7 +104,9 @@ function liveProgress(printer, state) {
         remainingMinutes: remaining ?? null,
         // A remaining time of 0 is a real answer near the end of a print, so it
         // is only the absence of the field that makes the estimate unknown.
-        estimatedEndAt: !paused && remaining != null ? Date.now() + remaining * 60_000 : null,
+        estimatedEndAt: !paused && remaining != null
+            ? (printer.remainingRevisedAt ?? Date.now()) + remaining * 60_000
+            : null,
         stage: printStageName(printer.currentStage),
         preparing: isPreparingStage(printer.currentStage),
     };

@@ -2290,7 +2290,9 @@ document.addEventListener("DOMContentLoaded", () => {
             // name an end that moves further away the longer the pause lasts.
             if (left) facts.push(["Left after resuming", left]);
         } else if (printData.estimatedEndAt) {
-            facts.push(["Expected to end at", `${formatMoment(printData.estimatedEndAt, withDate)} (${left})`]);
+            // Without seconds even in the long form: the printer knows whole
+            // minutes, and a second hand on an estimate is one that moves.
+            facts.push(["Expected to end at", `${formatMoment(printData.estimatedEndAt, withDate, false)} (${left})`]);
         }
 
         return factsRow(facts);

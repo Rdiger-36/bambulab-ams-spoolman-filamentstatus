@@ -211,6 +211,41 @@ test("a delta without the error fields does not clear the error the print starte
     forgetPrintStart("SERIAL");
 });
 
+test("the remaining time keeps the moment it was revised, not the moment it was repeated", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "IDLE" });
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 1, mc_remaining_time: 42 });
+    const revised = p.remainingRevisedAt;
+    assert.equal(p.currentRemainingMinutes, 42);
+    assert.equal(typeof revised, "number");
+
+    // The same figure again, a report later: the moment stays
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 2, mc_remaining_time: 42 });
+    assert.equal(p.remainingRevisedAt, revised);
+
+    // A delta without the figure leaves both alone
+    await handlePrintStateChange(p, deltaAsReport(p, { layer_num: 3 }));
+    assert.equal(p.currentRemainingMinutes, 42);
+    assert.equal(p.remainingRevisedAt, revised);
+
+    // The printer revises the figure: a new moment
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 4, mc_remaining_time: 41 });
+    assert.equal(p.currentRemainingMinutes, 41);
+    assert.ok(p.remainingRevisedAt > revised);
+
+    // A pause and a resume carry the figure unchanged, and the resume starts
+    // the count over: the minutes are what the job still needs from the moment
+    // it runs again, not from before the pause.
+    const beforePause = p.remainingRevisedAt;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await handlePrintStateChange(p, { gcode_state: "PAUSE", subtask_name: "Cube", layer_num: 4, mc_remaining_time: 41 });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await handlePrintStateChange(p, { gcode_state: "RUNNING", subtask_name: "Cube", layer_num: 4, mc_remaining_time: 41 });
+    assert.ok(p.remainingRevisedAt > beforePause);
+});
+
 test("a job with the same name as the last one takes its name from the Studio echo", async () => {
     // After a restart nothing remembers the last name, and the P1S leaves
     // subtask_name out of the report that starts the job

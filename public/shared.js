@@ -269,15 +269,26 @@ export function allToday(...moments) {
  * `withDate` is the answer allToday() gave for the whole pair, not a question
  * about this one timestamp.
  *
+ * The seconds go with the date, except for a moment nobody measured to the
+ * second: the expected end of a print is the printer's whole minutes added to
+ * a clock, and "01:32:47" next to it claimed a precision the figure does not
+ * have, one that moved with every refresh while the minutes stood still.
+ *
  * @param {number} at - epoch milliseconds
  * @param {boolean} withDate - whether to spell out the date
+ * @param {boolean} [withSeconds=true] - whether the long form carries seconds
  * @returns {string} the moment
  */
-export function formatMoment(at, withDate) {
+export function formatMoment(at, withDate, withSeconds = true) {
     const date = new Date(at);
-    if (withDate) return formatDate(date);
+    if (withDate && withSeconds) return formatDate(date);
 
-    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    if (!withDate) return time;
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${day}.${month}.${date.getFullYear()} ${time}`;
 }
 
 /**

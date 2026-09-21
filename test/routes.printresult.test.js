@@ -405,6 +405,24 @@ test("a running print reports its start, its estimate and its stage", async () =
     assert.equal(body.preparing, true);
 });
 
+test("the expected end stands still between two revisions of the remaining time", async () => {
+    printer.currentGcodeState       = "RUNNING";
+    printer.consumptionBooked       = false;
+    printer.printResetAt            = null;
+    printer.currentRemainingMinutes = 42;
+    // The printer said 42 minutes half a minute ago and has not changed its
+    // mind since. Counting from "now" instead moved the end forward with every
+    // refresh of the dashboard, a few seconds at a time.
+    printer.remainingRevisedAt      = Date.now() - 30_000;
+
+    const first  = await call(`${app.url}/api/print/${SERIAL}`);
+    const second = await call(`${app.url}/api/print/${SERIAL}`);
+
+    assert.equal(first.body.estimatedEndAt, printer.remainingRevisedAt + 42 * 60_000);
+    assert.equal(second.body.estimatedEndAt, first.body.estimatedEndAt);
+    printer.remainingRevisedAt = null;
+});
+
 test("a paused print reports no expected end, only the work left", async () => {
     printer.currentGcodeState       = "PAUSE";
     printer.consumptionBooked       = false;

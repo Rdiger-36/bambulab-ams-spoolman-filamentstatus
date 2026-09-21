@@ -294,7 +294,7 @@ const schemas = {
         startedAt: t.nullable(t.number("When the print was first seen running, epoch milliseconds.")),
         elapsedMs: t.nullable(t.number()),
         remainingMinutes: t.nullable(t.integer("What the printer says the job still needs.")),
-        estimatedEndAt: t.nullable(t.number("Epoch milliseconds. Null while paused.")),
+        estimatedEndAt: t.nullable(t.number("Epoch milliseconds, counted from the moment the printer last revised the remaining time. Null while paused.")),
         stage: t.nullable(t.string("The printer's current stage in words.")),
         preparing: t.boolean("Whether the printer is still calibrating or heating."),
         error: t.string("Set instead of `sliceInfo` when the sliced file could not be fetched."),

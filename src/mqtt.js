@@ -435,8 +435,21 @@ export async function handlePrintStateChange(printer, print) {
     // only on a transition: these are the values that move while the state
     // stays RUNNING, and they are what the dashboard shows next to the layer
     // progress.
-    if (print.stg_cur != null)          printer.currentStage = Number(print.stg_cur);
-    if (print.mc_remaining_time != null) printer.currentRemainingMinutes = Number(print.mc_remaining_time);
+    if (print.stg_cur != null) printer.currentStage = Number(print.stg_cur);
+    if (print.mc_remaining_time != null) {
+        const remaining = Number(print.mc_remaining_time);
+        // The moment the figure was revised is what the expected end is counted
+        // from. A figure that has not moved keeps its moment, so the estimate
+        // stands still between two revisions instead of creeping forward with
+        // every report. A change of state starts it over even when the figure
+        // stayed the same: a print resumed from a pause carries the minutes it
+        // had when it stopped, and counting them from before the pause would
+        // name an end that has already passed.
+        if (remaining !== printer.currentRemainingMinutes || newState !== prevState) {
+            printer.currentRemainingMinutes = remaining;
+            printer.remainingRevisedAt = Date.now();
+        }
+    }
 
     // A fresh print starts when we transition from a non-active state into an
     // active one. Reset tracking here (even on a reprint of the same file) so
