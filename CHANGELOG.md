@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - A Bambu Lab PLA Basic spool is created from the Basic entry of the SpoolmanDB catalogue again. The catalogue writes Basic without a line word, "Black" under bambulab_pla_black, so the lookup by the AMS name fell through to "every PLA entry in this colour" and took the first, and since the catalogue lists PLA Aero that first entry is Aero Black: seen on an X1C on 2026-09-15, two Basic spools created as "PLA Basic Aero Black" and "PLA Basic Aero White" with Aero's density and temperatures. Among the entries of a colour, the line the AMS names wins when the catalogue writes its word into the id, and otherwise the entry whose name carries no line word, which is how the catalogue writes Basic; which words are lines is read off the catalogue, so a line added there needs no change here. Filaments created wrongly before stay as they are and want renaming in Spoolman
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.22
    - Changes:
       - The print card tells a time of day from a duration. "Started 19:14" and "Running for 14:50" stood side by side as two pairs of digits with a colon, and the second one read as a time of day; the durations are written in words now, "14 min 50 s", "1 hour 14 min 50 s", "2 Days 5 hours 13 min", the way the remaining time next to them already was, and every moment says "at": "Started at", "Expected to end at", and in the summary dialog "Started at" and "Ended at". The countdown on the Clear button and the duration in the summary dialog use the same words

@@ -356,6 +356,36 @@ test("findMatchingExternalFilament matches a multi colour catalogue entry", () =
     assert.equal(findMatchingExternalFilament(gildedRose, catalogue).id, "bambulab_pla_gildedrose(pink-gold)_1000_175_n");
 });
 
+test("findMatchingExternalFilament takes the Basic line over the ones that sort before it", () => {
+    // Ids and names as SpoolmanDB writes them, in its alphabetical order.
+    // Basic has no line word in the catalogue, so the first black entry under
+    // "bambulab_pla" is Aero Black, and that is what a black Basic spool got.
+    const catalogue = [
+        { id: "bambulab_pla_aeroblack_1000_175_n", name: "Aero Black", material: "PLA", color_hex: "000000" },
+        { id: "bambulab_pla_black_1000_175_n", name: "Black", material: "PLA", color_hex: "000000" },
+        { id: "bambulab_pla_liteblack_1000_175_n", name: "Lite Black", material: "PLA", color_hex: "000000" },
+        { id: "bambulab_pla_mattecharcoal_1000_175_n", name: "Matte Charcoal", material: "PLA", color_hex: "000000" },
+        { id: "bambulab_pla_aerowhite_1000_175_n", name: "Aero White", material: "PLA", color_hex: "FFFFFF" },
+        { id: "bambulab_pla_jadewhite_1000_175_n", name: "Jade White", material: "PLA", color_hex: "FFFFFF" },
+        { id: "bambulab_pla_litewhite_1000_175_n", name: "Lite White", material: "PLA", color_hex: "FFFFFF" },
+        { id: "bambulab_pla_gray_1000_175_n", name: "Gray", material: "PLA", color_hex: "8E9089" },
+        { id: "bambulab_pla_slategraysparkle_1000_175_n", name: "Slate Gray Sparkle", material: "PLA", color_hex: "8E9089" },
+    ];
+    const slot = (subBrand, color) => ({ ...gildedRose, cols: [color], tray_color: color, tray_sub_brands: subBrand, tray_type: "PLA" });
+
+    assert.equal(findMatchingExternalFilament(slot("PLA Basic", "000000FF"), catalogue).name, "Black");
+    // The lines the catalogue writes into the id are found by the id.
+    assert.equal(findMatchingExternalFilament(slot("PLA Aero", "000000FF"), catalogue).name, "Aero Black");
+    assert.equal(findMatchingExternalFilament(slot("PLA Matte", "000000FF"), catalogue).name, "Matte Charcoal");
+    // "Jade White" is as long as "Aero White" and sorts after it: it wins
+    // because "Aero" starts two colours in the catalogue and "Jade" one.
+    assert.equal(findMatchingExternalFilament(slot("PLA Basic", "FFFFFFFF"), catalogue).name, "Jade White");
+    // A line the catalogue writes at the end of the name wins by its word,
+    // and the plain colour of the same hex stays with Basic.
+    assert.equal(findMatchingExternalFilament(slot("PLA Sparkle", "8E9089FF"), catalogue).name, "Slate Gray Sparkle");
+    assert.equal(findMatchingExternalFilament(slot("PLA Basic", "8E9089FF"), catalogue).name, "Gray");
+});
+
 test("extractComparableTrayData sees a colour set change that tray_color misses", () => {
     // Two multi colour filaments sharing their first colour. Without `cols` the
     // projection is byte identical and the slot is never reprocessed, so the
