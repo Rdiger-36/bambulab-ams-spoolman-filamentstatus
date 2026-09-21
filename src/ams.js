@@ -309,15 +309,27 @@ export function findExistingSpool(amsSpool, allSpools) {
  * Finds the SpoolmanDB catalogue entry for a slot, which is what supplies the
  * density, diameter and temperatures needed to create a filament.
  *
- * Catalogue ids look like `bambulab_pla_basic`, built from the material name,
- * but the AMS reports that name in a shape that does not always match. Three
- * transformations are tried in order, from strictest to loosest: lowercase,
- * lowercase with spaces turned into underscores, and finally the first word
- * stripped to letters only. Support material is keyed differently and needs the
- * base material from `tray_type` in the id as well.
+ * Catalogue ids are built from the product name, `bambulab_pla_mattecharcoal`
+ * or `bambulab_petg_hfblack`, but the AMS names the line in a shape that does
+ * not always match. Three transformations are tried in order, from strictest
+ * to loosest: lowercase, lowercase with spaces turned into underscores, and
+ * finally the first word stripped to letters only. Support material is keyed
+ * differently and needs the base material from `tray_type` in the id as well.
  *
  * The colour set must match exactly in every attempt, so a looser material
  * match can never pull in the wrong colour.
+ *
+ * The loosest attempt matches every line of the material, so it has to choose
+ * among them rather than take the first: the catalogue is alphabetical, and a
+ * "PLA Basic" spool in black got `bambulab_pla_aeroblack`, Aero Black, because
+ * that id sorts before `bambulab_pla_black`. The line the AMS names wins when
+ * an id carries its word anywhere ("PLA Sparkle" is "Slate Gray Sparkle" in
+ * the catalogue). Otherwise the entry without a line word does, which is how
+ * the catalogue writes Basic: "Black" and "Jade White" against "Aero Black"
+ * and "Aero White". Which words are lines is read off the catalogue itself
+ * rather than kept in a list here: a word that starts the names of two
+ * different colours, Aero, Lite, Matte, Silk+, names a line and not a colour.
+ * The shortest name breaks what is left, and the catalogue order after that.
  *
  * @param {object|null} amsSpool - a normalised AMS slot
  * @param {object[]} externalFilaments - the SpoolmanDB catalogue
@@ -326,35 +338,74 @@ export function findExistingSpool(amsSpool, allSpools) {
 export function findMatchingExternalFilament(amsSpool, externalFilaments) {
     if (!amsSpool) return null;
 
+    const subBrand = amsSpool.tray_sub_brands || "";
     const transformations = [
         material => material.toLowerCase(),
         material => material.replace(/\s+/g, "_").toLowerCase(),
         material => material.split(" ")[0].replace(/[^A-Za-z]/g, "").toLowerCase(),
     ];
+    const loosest = transformations.length - 1;
 
-    const amsColors = slotColors(amsSpool).sort();
+    const amsColors = JSON.stringify(slotColors(amsSpool).sort());
+    const sameColors = filament => {
+        const filamentColors = filament.color_hex
+            ? [filament.color_hex.toLowerCase()]
+            : (filament.color_hexes || []).map(c => c.toLowerCase()).sort();
+        return JSON.stringify(filamentColors) === amsColors;
+    };
 
-    for (const transform of transformations) {
-        const transformedMaterial = transform(amsSpool.tray_sub_brands || "");
+    // The words after the material, as the ids write them: "PLA Basic" gives
+    // "basic", "Support for PLA" gives "forpla".
+    const line = subBrand.split(" ").slice(1).join("").replace(/[^A-Za-z]/g, "").toLowerCase();
 
-        const matchingFilament = externalFilaments.find(filament => {
-            const filamentColors = filament.color_hex
-                ? [filament.color_hex.toLowerCase()]
-                : (filament.color_hexes || []).map(c => c.toLowerCase()).sort();
+    for (const [attempt, transform] of transformations.entries()) {
+        const transformedMaterial = transform(subBrand);
+        const prefix = subBrand.toLowerCase().includes("support")
+            ? `bambulab_${amsSpool.tray_type.split("-")[0].toLowerCase()}_${transformedMaterial}`
+            : `bambulab_${transformedMaterial}`;
 
-            let idMatches;
-            if (amsSpool.tray_sub_brands.toLowerCase().includes("support")) {
-                idMatches = filament.id.startsWith(`bambulab_${amsSpool.tray_type.split("-")[0].toLowerCase()}_${transformedMaterial}`);
-            } else {
-                idMatches = filament.id.startsWith(`bambulab_${transformedMaterial}`);
-            }
+        const candidates = externalFilaments.filter(filament => filament.id.startsWith(prefix) && sameColors(filament));
+        if (!candidates.length) continue;
+        if (attempt < loosest) return candidates[0];
 
-            return idMatches && JSON.stringify(filamentColors) === JSON.stringify(amsColors);
-        });
+        const named = line && candidates.filter(filament => filament.id.includes(line));
+        if (named && named.length) return named[0];
 
-        if (matchingFilament) return matchingFilament;
+        const lines = lineWords(externalFilaments.filter(filament => filament.id.startsWith(prefix)));
+        const plain = candidates.filter(filament => !lines.has(firstWord(filament)));
+        return (plain.length ? plain : candidates)
+            .reduce((best, filament) => nameLength(filament) < nameLength(best) ? filament : best);
     }
     return null;
+}
+
+/** The first word of a catalogue entry's name, falling back to its id. */
+function firstWord(filament) {
+    return (filament.name ?? filament.id).split(" ")[0];
+}
+
+/** The length a catalogue entry's name has, falling back to its id. */
+function nameLength(filament) {
+    return (filament.name ?? filament.id).length;
+}
+
+/**
+ * The words that name a line rather than a colour among these catalogue
+ * entries: a first word that starts the names of two different colour sets.
+ * "Aero" starts Aero Black and Aero White; "Jade" starts Jade White alone.
+ *
+ * @param {object[]} filaments - the entries of one material
+ * @returns {Set<string>} the line words
+ */
+function lineWords(filaments) {
+    const colorsByWord = new Map();
+    for (const filament of filaments) {
+        const word = firstWord(filament);
+        const colors = JSON.stringify(filament.color_hex ? [filament.color_hex.toLowerCase()] : (filament.color_hexes || []).map(c => c.toLowerCase()).sort());
+        if (!colorsByWord.has(word)) colorsByWord.set(word, new Set());
+        colorsByWord.get(word).add(colors);
+    }
+    return new Set([...colorsByWord].filter(([, colors]) => colors.size > 1).map(([word]) => word));
 }
 
 /**
