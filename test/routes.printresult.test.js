@@ -401,6 +401,8 @@ test("a running print reports its start, its estimate and its stage", async () =
     assert.ok(body.elapsedMs >= 5 * 60_000);
     assert.equal(body.remainingMinutes, 42);
     assert.ok(body.estimatedEndAt > Date.now());
+    // The printer's estimate is whole minutes, so the moment carries none finer.
+    assert.equal(body.estimatedEndAt % 60_000, 0);
     assert.equal(body.stage, "Heatbed preheating");
     assert.equal(body.preparing, true);
 });

@@ -261,9 +261,10 @@ test("both ends of a print are written the same way", async () => {
     assert.equal(allToday(null, today.getTime()), false);
     assert.equal(allToday(), true);
 
-    // The time alone while it all happens today, the full date once it does not.
+    // The time alone while it all happens today, the date in front once it does
+    // not, and never the seconds: an expected end carries the clock's.
     assert.equal(formatMoment(today.getTime(), false), "13:04");
-    assert.match(formatMoment(today.getTime(), true), /^\d{2}\.\d{2}\.\d{4} 13:04:17$/);
+    assert.match(formatMoment(today.getTime(), true), /^\d{2}\.\d{2}\.\d{4} 13:04$/);
 });
 
 // The time a print has left. The printer reports whole minutes and revises them
