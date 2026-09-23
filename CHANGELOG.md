@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - The debug-printers tool in the container lists the files on a printer over FTPS. The log of a print whose sliced file was not found names the paths that were tried and nothing else, and where a printer keeps the file differs between models; the listing shows what is really there, two levels deep, without the camera and timelapse folders. Added for an X2D that keeps its sliced files somewhere no other printer does (issue #179)
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.23
    - Fixes:
       - A Bambu Lab PLA Basic spool is created from the Basic entry of the SpoolmanDB catalogue again. The catalogue writes Basic without a line word, "Black" under bambulab_pla_black, so the lookup by the AMS name fell through to "every PLA entry in this colour" and took the first, and since the catalogue lists PLA Aero that first entry is Aero Black: seen on an X1C on 2026-09-15, two Basic spools created as "PLA Basic Aero Black" and "PLA Basic Aero White" with Aero's density and temperatures. Among the entries of a colour, the line the AMS names wins when the catalogue writes its word into the id, and otherwise the entry whose name carries no line word, which is how the catalogue writes Basic; which words are lines is read off the catalogue, so a line added there needs no change here. Filaments created wrongly before stay as they are and want renaming in Spoolman
