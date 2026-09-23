@@ -35,9 +35,9 @@ import {
     patchSpoolFields,
     getCachedExternalFilaments,
 } from "./spoolman.js";
-import { calcFullConsumption, calcPartialConsumption, completedLayerIndex, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage } from "./gcode.js";
+import { calcFullConsumption, calcPartialConsumption, completedLayerIndex, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage, SLICE_FETCH_ATTEMPTS } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
-import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo, ensureSliceInfo } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo, ensureSliceInfo, sliceFetchFailure } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 import {
     claimSlotLocation,
@@ -688,6 +688,19 @@ export function registerRoutes(app, printers) {
             }
         }
 
+        // Why there is no slice info for the running job, while there is none:
+        // the dashboard used to show a bare job name for a print whose file
+        // was never found, and the first word about it came with the summary.
+        const lookup = printer.lastSliceFetch;
+        const sliceFetch = !sliceInfo && jobName && lookup?.jobName === jobName && !lookup.path
+            ? {
+                attempt: lookup.attempt || 1,
+                attempts: SLICE_FETCH_ATTEMPTS,
+                final: (lookup.attempt || 1) >= SLICE_FETCH_ATTEMPTS,
+                reason: sliceFetchFailure(lookup),
+            }
+            : null;
+
         res.json({
             gcodeState: state,
             jobName,
@@ -696,6 +709,7 @@ export function registerRoutes(app, printers) {
             sliceInfo:      sliceInfo ? {
                 filaments: sliceInfo.filaments,
             } : null,
+            sliceFetch,
             loadedSpools,
             fullConsumption,
             consumption,

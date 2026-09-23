@@ -284,6 +284,12 @@ const schemas = {
         sliceInfo: t.nullable(t.object({
             filaments: t.array(t.object({}, { additional: true }), "The filament list of the sliced file."),
         })),
+        sliceFetch: t.nullable(t.object({
+            attempt: t.integer("Which fetch of the sliced file this was, counted from 1."),
+            attempts: t.integer("How many fetches a print gets in all."),
+            final: t.boolean("Whether this was the last attempt, so nothing will be booked for this print."),
+            reason: t.string("What the printer answered, as the log says it."),
+        }, { description: "Set while the running job has no slice info because the sliced file was not found. Null once it is, or when nothing was looked for." })),
         loadedSpools: t.array(t.ref("ClientSpool"), "The same list as `GET /api/spools/{printerId}`."),
         fullConsumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What the whole print needs, per sliced filament." })),
         consumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What has been consumed at the current layer, or the whole amount once the print finished." })),

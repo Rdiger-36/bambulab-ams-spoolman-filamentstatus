@@ -19,11 +19,12 @@ import {
     setSpoolArchived,
     logSpoolmanFailure,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodeStudioMapping } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodeStudioMapping, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
 import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
+import { humanLayers } from "../public/shared.js";
 import { describePrintError } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
@@ -166,6 +167,57 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = n
         });
     printer.sliceFetchInFlight = { jobName, promise };
     return promise;
+}
+
+/**
+ * The slice info in one clause for the log: "1 filament(s), 15 layers".
+ *
+ * `totalLayers` is the last layer's 0-based index, which the booking maths
+ * counts with, and read "0 layers" for a one layer plate. The count is what
+ * the dashboard shows, through the same helper.
+ *
+ * @param {object} sliceInfo - what `fetchSliceInfo()` returned
+ * @returns {string} the clause
+ */
+function describeSliceInfo(sliceInfo) {
+    return `${sliceInfo.filaments.length} filament(s), ${humanLayers(0, sliceInfo.totalLayers).total} layers`;
+}
+
+/**
+ * One fetch of the running print's sliced file, with the log lines around it.
+ *
+ * Shared by the fetch at RUNNING and the retries after it, so both say the
+ * same thing. A failure that leaves attempts says when the next one comes,
+ * the last one says that the print will not be tracked.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {string} jobName - `subtask_name` of the job
+ */
+async function fetchSliceInfoForPrint(printer, jobName) {
+    try {
+        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName);
+        if (sliceInfo) {
+            console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
+            return;
+        }
+        console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
+    } catch (err) {
+        console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
+    }
+}
+
+/**
+ * What happens after a failed fetch, for the end of its log line.
+ *
+ * @param {object|null} record - `printer.lastSliceFetch`
+ * @returns {string} one clause, without a full stop
+ */
+function sliceFetchOutlook(record) {
+    const attempt = record?.attempt || 1;
+    if (record && !record.path && attempt < SLICE_FETCH_ATTEMPTS) {
+        return `trying again in ${Math.round(SLICE_FETCH_RETRY_MS / 1000)} seconds`;
+    }
+    return "consumption tracking unavailable for this print";
 }
 
 /**
@@ -600,20 +652,19 @@ export async function handlePrintStateChange(printer, print) {
         if (printer.currentSliceInfo) {
             // The dashboard asked /api/print while the job was preparing, and
             // that request already fetched the file. See ensureSliceInfo().
-            console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", slice info already loaded: ${printer.currentSliceInfo.filaments.length} filament(s), ${printer.currentSliceInfo.totalLayers} layers`);
+            console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", slice info already loaded: ${describeSliceInfo(printer.currentSliceInfo)}`);
         } else {
             console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
-            try {
-                const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName);
-                if (sliceInfo) {
-                    console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${sliceInfo.filaments.length} filament(s), ${sliceInfo.totalLayers} layers`);
-                } else {
-                    console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, consumption tracking unavailable for this print`);
-                }
-            } catch (err) {
-                console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}`);
-            }
+            await fetchSliceInfoForPrint(printer, jobName);
         }
+    } else if (ACTIVE_STATES.has(newState) && jobName && printer.sliceFetchDone && !printer.currentSliceInfo
+        && sliceFetchRetryDue(printer.lastSliceFetch, Date.now())) {
+        // The first fetch found nothing, see sliceFetchRetryDue() for why that
+        // is not the last word. Driven by the reports, which arrive every few
+        // seconds, so the wait is what the constant says plus one report.
+        console.log(printer.name, printer.logFilePath,
+            `[Print] Looking for the sliced file again, attempt ${(printer.lastSliceFetch.attempt || 1) + 1} of ${SLICE_FETCH_ATTEMPTS}...`);
+        await fetchSliceInfoForPrint(printer, jobName);
     }
 
     // Followed for as long as the print is active rather than read once, and
@@ -667,8 +718,8 @@ export async function handlePrintStateChange(printer, print) {
         // wrong is nearly always the layer this was handed, and the ordinary log
         // prints the result without ever naming the input.
         debug("print", printer.name, printer.logFilePath, newState === "FINISH"
-            ? `[Print] FINISH, taking the full consumption of ${printer.currentSliceInfo.totalLayers} layers`
-            : `[Print] ${newState}, taking the consumption up to layer ${layerNum} of ${printer.currentSliceInfo.totalLayers}`);
+            ? `[Print] FINISH, taking the full consumption of ${humanLayers(0, printer.currentSliceInfo.totalLayers).total} layers`
+            : `[Print] ${newState}, taking the consumption up to layer ${layerNum} of ${humanLayers(0, printer.currentSliceInfo.totalLayers).total}`);
 
         const consumption = newState === "FINISH"
             ? calcFullConsumption(printer.currentSliceInfo)
