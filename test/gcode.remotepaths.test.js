@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS } from "../src/gcode.js";
 import { sliceFetchFailure, localFileName } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -99,4 +99,27 @@ test("the log names the problem it actually had", () => {
         }),
         "No sliced file on the printer under /cache/Würfel.3mf (550 Failed to open file.), /cache/Würfel.gcode.3mf",
     );
+});
+
+test("a fetch that found nothing is tried again, a few times, after a wait", () => {
+    const at = 1_000_000;
+    // A P2S recovering from an extruder error on 2026-09-23: the login timed
+    // out, and the only fetch of the print was gone
+    const timedOut = { jobName: "A1mini", attempt: 1, tried: [], error: "Timeout (control socket)", path: null, at };
+    assert.equal(sliceFetchRetryDue(timedOut, at + 1000), false);
+    assert.equal(sliceFetchRetryDue(timedOut, at + SLICE_FETCH_RETRY_MS), true);
+
+    // A file not there yet is the same case from the other side
+    const notFound = { jobName: "A1mini", attempt: 1, tried: ["/cache/A1mini.gcode.3mf"], path: null, at };
+    assert.equal(sliceFetchRetryDue(notFound, at + SLICE_FETCH_RETRY_MS + 1), true);
+
+    // The last attempt is the last one
+    assert.equal(sliceFetchRetryDue({ ...notFound, attempt: SLICE_FETCH_ATTEMPTS }, at + 10 * SLICE_FETCH_RETRY_MS), false);
+    assert.equal(sliceFetchRetryDue({ ...notFound, attempt: SLICE_FETCH_ATTEMPTS - 1 }, at + SLICE_FETCH_RETRY_MS), true);
+
+    // A file that was found and carried no slice info will not change
+    assert.equal(sliceFetchRetryDue({ ...notFound, path: "/cache/A1mini.gcode.3mf", sliceInfo: false }, at + 10 * SLICE_FETCH_RETRY_MS), false);
+    // A record without an attempt count is the first attempt
+    assert.equal(sliceFetchRetryDue({ jobName: "x", tried: [], path: null, at }, at + SLICE_FETCH_RETRY_MS), true);
+    assert.equal(sliceFetchRetryDue(null, at), false);
 });

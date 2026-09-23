@@ -65,11 +65,23 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
     client.ftp.verbose = false;
 
     const candidates = resolveRemotePaths(jobName, gcodeFile, fileName);
-    const record = { jobName, tried: candidates, reasons: {}, path: null, sliceInfo: false, at: Date.now() };
+    // The attempt counts on from the last fetch of the same job, so a retry
+    // knows how many came before it. See sliceFetchRetryDue().
+    const previous = printer.lastSliceFetch;
+    const attempt = (previous?.jobName === jobName ? previous.attempt || 0 : 0) + 1;
+    const record = { jobName, attempt, tried: candidates, reasons: {}, error: null, path: null, sliceInfo: false, at: Date.now() };
     printer.lastSliceFetch = record;
 
     try {
-        await ftpsAccess(client, printer);
+        try {
+            await ftpsAccess(client, printer);
+        } catch (err) {
+            // Nothing was tried: the printer did not let us in. Kept apart from
+            // "not at any path", because that is a file missing and this is a
+            // printer busy or unreachable, which a retry can outwait.
+            record.error = err.message;
+            throw err;
+        }
 
         debug("gcode", printer.name, printer.logFilePath,
             `[Print] Looking for the sliced file as ${candidates.join(" or ")}`);
@@ -490,6 +502,35 @@ export function calcPartialConsumption(sliceInfo, upToLayer) {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/** How long a failed slice fetch waits before the print handler tries again. */
+export const SLICE_FETCH_RETRY_MS = 30000;
+/** How many fetches a print gets in all, the first one included. */
+export const SLICE_FETCH_ATTEMPTS = 3;
+
+/**
+ * Whether the sliced file of the running print should be fetched again.
+ *
+ * The file was fetched exactly once, when the print reached RUNNING, and a
+ * printer that did not answer just then lost the whole print: a P2S recovering
+ * from an extruder error on 2026-09-23 let the FTPS login time out for 20
+ * seconds, and the job was never booked although the file was there a minute
+ * later. A file that is not there yet is the same story from the other side,
+ * a printer copying the job to its USB stick after it has started.
+ *
+ * So a fetch that found nothing is repeated, `SLICE_FETCH_RETRY_MS` after the
+ * last one and up to `SLICE_FETCH_ATTEMPTS` times in all. A file that was
+ * found but carried no slice info is not retried: the file will not change.
+ *
+ * @param {object|null} record - `printer.lastSliceFetch`
+ * @param {number} now - the current time, `Date.now()`
+ * @returns {boolean} whether another fetch is due
+ */
+export function sliceFetchRetryDue(record, now) {
+    if (!record || record.path) return false;
+    if ((record.attempt || 1) >= SLICE_FETCH_ATTEMPTS) return false;
+    return now - record.at >= SLICE_FETCH_RETRY_MS;
+}
 
 /**
  * The FTPS paths the sliced 3MF of a job may sit under, most likely first.
