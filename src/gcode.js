@@ -944,7 +944,12 @@ export function isPreparingStage(code) {
     // temperature has not started either. 36 to 77 are checks, calibrations
     // and heating of the same kind, except the two that cool something down,
     // 50 and 69, which sit at the end of a job like 29 does.
+    // 4 and 22, changing and unloading filament, are what a job does before
+    // its first layer when the nozzle holds the wrong spool, and read as
+    // RUNNING next to "Changing filament" on a P2S until they were added.
+    // In the middle of a print they are the same stages; the card keeps
+    // RUNNING there on its own, by the layer count.
     const number = Number(code);
     if (number >= 36 && number <= 77) return number !== 50 && number !== 69;
-    return [1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 24, 25].includes(number);
+    return [1, 2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 22, 24, 25].includes(number);
 }

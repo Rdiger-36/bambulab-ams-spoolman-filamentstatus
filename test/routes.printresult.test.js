@@ -495,6 +495,10 @@ test("a named stage reads as its name, an unnamed one as its number", async () =
     // the plate, and a bed still coming up to temperature has not started.
     assert.equal(isPreparingStage(51), true);
     assert.equal(isPreparingStage(54), true);
+    // Changing, unloading and loading filament before the first layer
+    assert.equal(isPreparingStage(4), true);
+    assert.equal(isPreparingStage(22), true);
+    assert.equal(isPreparingStage(24), true);
     // A pause is its own state the printer already reports as PAUSE.
     assert.equal(isPreparingStage(16), false);
 });
