@@ -270,6 +270,10 @@ h1 {
 .gc-muted    { opacity: 0.6; }
 .gc-required { color: var(--bad); }
 .gc-error { margin: 10px 0 0; }
+/* The line under the card head that says the sliced file was not found:
+   grey while attempts are left, red (gc-required) after the last one */
+.gc-card-lookup { margin: 10px 0 0; text-align: center; }
+.gc-card-lookup-open { color: var(--text-muted); }
 
 /* The toast after an action, bottom right, fades out on its own */
 .action-note {

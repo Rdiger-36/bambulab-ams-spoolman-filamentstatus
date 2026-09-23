@@ -2235,8 +2235,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (active && printData.sliceFetch) {
             const lookup = printData.sliceFetch;
             html += lookup.final
-                ? `<p class="gc-required gc-error" title="${escapeHtml(lookup.reason)}">No sliced file on the printer, nothing will be booked for this print</p>`
-                : `<p class="gc-required gc-muted" title="${escapeHtml(lookup.reason)}">Sliced file not found yet, looking again (attempt ${lookup.attempt} of ${lookup.attempts})</p>`;
+                ? `<p class="gc-card-lookup gc-required" title="${escapeHtml(lookup.reason)}">No sliced file on the printer, nothing will be booked for this print</p>`
+                : `<p class="gc-card-lookup gc-card-lookup-open" title="${escapeHtml(lookup.reason)}">Sliced file not found yet, looking again (attempt ${lookup.attempt} of ${lookup.attempts})</p>`;
         }
         // The backend reports why consumption data is missing (e.g. the FTPS
         // download failed); without this the table would just show a placeholder with no
