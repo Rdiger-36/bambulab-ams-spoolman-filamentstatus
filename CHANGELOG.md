@@ -1,5 +1,5 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.25
    - Changes:
       - The print card says PREPARE instead of RUNNING while the printer is heating, homing, levelling or calibrating. The printer reports RUNNING from the first second of a job, and "RUNNING" next to "Homing toolhead" read like a contradiction; the stage badge next to it still names what the printer is doing. A filament change before the first layer counts as preparation too
       - The P2S, the H2 series and the X2D need a USB stick in the printer for consumption tracking, and the README, the installation page and the troubleshooting page say so now. These printers expose only the stick over FTPS: with one in, the printer copies every job to /cache on it and the sliced file is read from there, without one the file exists only in internal storage and every print ended with "No sliced file on the printer". Found on an X2D in issue #179 and reproduced on a P2S with the stick pulled; the X2D is listed as supported
