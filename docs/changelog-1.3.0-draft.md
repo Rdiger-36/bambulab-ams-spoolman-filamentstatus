@@ -6,7 +6,7 @@ between two builds. This file is the consolidated release block, written into
 CHANGELOG.md in place of those dev blocks when the release build is cut, not
 before.
 
-Every dev build after dev.23 has to be folded in here as well, or regenerate the
+Every dev build after dev.24 has to be folded in here as well, or regenerate the
 whole block from the dev blocks at release time.
 
 ## Draft
@@ -59,6 +59,7 @@ Version 1.3.0
       - Every MQTT message a printer sends can be captured into logs/<serial>.mqtt.log, one line per message, with its own size and history budget. It is what the printer really sent rather than what this service made of it, and it is every kind of message, not only the status reports this service reads: a P2S print produced seven, of which one is looked at anywhere. Measured on a P2S it runs at about 22 MB an hour, idle and under a print alike. Readable and downloadable like any other log and part of the diagnostics archive
       - Every printer can have log settings of its own, "Log" next to it in the Printers card, so one machine can run at trace with its capture going while the rest of the service stays quiet
       - The print path says what it is doing at debug level, which it never did before: the FTPS fetch names the paths it looks for and which one answered, and the booking names every state change, which consumption sum ran and on what layer, where the slots came from, and what the matcher answered per filament
+      - The debug-printers tool in the container lists the files on a printer over FTPS, two levels deep, without the camera and timelapse folders. The log of a print whose sliced file was not found names the paths that were tried and nothing else, and where a printer keeps the file differs between models (issue #179)
       - A clean print does not inherit the failure of the one before it. A P2S keeps repeating its previous complaint for a report or two after a new print has started, so the summary of a FINISH could say the print had failed
       - Connection test for Spoolman and for a printer, MQTT and FTPS, against the values in the form
       - Each AMS unit says how it is doing above its slot table: relative humidity, the temperature inside it, and the drying cycle while one is running, with its target temperature and the minutes left
