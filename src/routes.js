@@ -642,7 +642,7 @@ export function registerRoutes(app, printers) {
             try {
                 sliceInfo = req.query.job
                     ? await loadSliceInfo(printer, jobName, null)
-                    : await ensureSliceInfo(printer, jobName, printer.currentGcodeFile);
+                    : await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName);
             } catch (err) {
                 // non-fatal, surface the error in the response
                 return res.json({

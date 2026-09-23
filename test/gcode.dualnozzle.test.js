@@ -10,8 +10,8 @@ import {
     calcPartialConsumption,
     resolveSliceSlots,
     orderedAmsSlots,
-    decodePrintMapping,
 } from "../src/gcode.js";
+import { decodePrintMapping } from "../src/utils.js";
 import { matchConsumption, consumptionCandidate } from "../src/ams.js";
 
 // A real print off a dual nozzle H2C, sliced in Bambu Studio 02.07.01.62:

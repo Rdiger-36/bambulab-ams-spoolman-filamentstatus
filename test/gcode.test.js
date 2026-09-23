@@ -14,9 +14,9 @@ import {
     consumptionKey,
     resolveSliceSlots,
     orderedAmsSlots,
-    decodePrintMapping,
     bambuTlsOptions,
 } from "../src/gcode.js";
+import { decodePrintMapping } from "../src/utils.js";
 
 // Real Metadata/slice_info.config files, pulled off a P2S over FTPS:
 //   four_colours        4 filaments in one AMS, two sharing the generic GFL99
