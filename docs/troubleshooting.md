@@ -80,14 +80,17 @@ The container ships a script that checks the network and MQTT status of a printe
 docker exec -it CONTAINER_NAME debug-printers
 ```
 
-Pick a printer by number, then choose between subscribing to its MQTT messages, which prints everything the printer sends including the AMS spool data, and a reachability check on port 8883:
+Pick a printer by number, then choose between subscribing to its MQTT messages, which prints everything the printer sends including the AMS spool data, a reachability check on port 8883, and a listing of the files on the printer over FTPS, which shows where the printer keeps the sliced file of a print when the log says it was not found:
 
 ```bash
 --- Options for Bambu Lab P1S ---
 1. Subscribe to MQTT messages
 2. Check reachability
-3. Back to main menu
+3. List the files on the printer (FTPS)
+4. Back to main menu
 ```
+
+The listing goes two levels deep and leaves out the camera and timelapse folders. It can also be run on its own, `docker exec CONTAINER_NAME node scripts/list-files.js PRINTER_IP ACCESS_CODE`.
 
 ## The Web UI answers with 403
 

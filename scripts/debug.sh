@@ -35,7 +35,8 @@ printer_menu() {
     echo "--- Options for $name ---"
     echo "1. Subscribe to MQTT messages"
     echo "2. Check reachability"
-    echo "3. Back to main menu"
+    echo "3. List the files on the printer (FTPS)"
+    echo "4. Back to main menu"
     echo " "
     echo "Choose a option (number): "
     read option
@@ -48,6 +49,9 @@ printer_menu() {
             ping_printer "$ip" "$serial"
             ;;
         3)
+            list_files "$ip" "$access_code"
+            ;;
+        4)
             main_menu
             ;;
         *)
@@ -68,6 +72,21 @@ mqtt_messages() {
     echo " "
 
     node /app/scripts/mqtt.js "$ip" "$access_code" "$serial"
+}
+
+# Function to list the printer's storage over FTPS
+list_files() {
+    ip="$1"
+    access_code="$2"
+
+    echo "Listing the files on the printer at $ip over FTPS..."
+    echo " "
+
+    node /app/scripts/list-files.js "$ip" "$access_code"
+
+    echo
+    read -rp "Press Enter to continue..."
+    main_menu
 }
 
 # Function to check printer port with nc
