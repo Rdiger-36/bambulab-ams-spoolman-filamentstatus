@@ -2340,11 +2340,18 @@ document.addEventListener("DOMContentLoaded", () => {
             // not use is not a row that could have been booked.
             const rows = (summary?.rows || []).filter(row => row.status !== "unused");
             const booked = rows.filter(row => row.status === "booked" || row.status === "ambiguous").length;
-            const label = !rows.length || booked === rows.length
-                ? { text: "✔ consumption booked", className: "gc-card-booked", title: "Open the report of this print" }
-                : booked === 0
-                    ? { text: "✖ nothing booked", className: "gc-card-unbooked", title: "No filament of this print could be booked. Open the report to see why" }
-                    : { text: `✔ ${booked} of ${rows.length} booked`, className: "gc-card-partly", title: "Not every filament of this print could be booked. Open the report to see why" };
+            // A print that ended before it used anything, a cancel during the
+            // preparation, has only unused rows: nothing was booked and nothing
+            // went wrong, and "consumption booked" over it claimed a booking
+            // that never happened.
+            const nothingUsed = !!summary?.rows?.length && !rows.length;
+            const label = nothingUsed
+                ? { text: "nothing to book", className: "gc-card-nothing", title: "The print ended before it used any filament. Open the report of this print" }
+                : !rows.length || booked === rows.length
+                    ? { text: "✔ consumption booked", className: "gc-card-booked", title: "Open the report of this print" }
+                    : booked === 0
+                        ? { text: "✖ nothing booked", className: "gc-card-unbooked", title: "No filament of this print could be booked. Open the report to see why" }
+                        : { text: `✔ ${booked} of ${rows.length} booked`, className: "gc-card-partly", title: "Not every filament of this print could be booked. Open the report to see why" };
             return `<button class="gc-card-link ${label.className}" data-print-summary title="${label.title}">${label.text}</button>${countdown}`;
         }
 
