@@ -191,3 +191,36 @@ test("a file the print handler did not find is not looked for again on every ref
     printer.currentSliceInfo = sliceInfo;
     printer.lastSliceFetch = null;
 });
+
+test("a job whose sliced file was not found says so, and whether attempts are left", async () => {
+    const { SLICE_FETCH_ATTEMPTS } = await import("../src/gcode.js");
+    const saved = printer.currentSliceInfo;
+    printer.currentSliceInfo = null;
+    printer.currentMapping = null;
+    try {
+        // The first attempt failed on every path, two more are due
+        printer.lastSliceFetch = {
+            jobName: "four colours", attempt: 1, path: null,
+            tried: ["/cache/four colours.gcode.3mf"], reasons: { "/cache/four colours.gcode.3mf": "550 Failed to open file." },
+        };
+        let { body } = await call(`${app.url}/api/print/${SERIAL}`);
+        assert.equal(body.sliceInfo, null);
+        assert.deepEqual(body.sliceFetch, {
+            attempt: 1, attempts: SLICE_FETCH_ATTEMPTS, final: false,
+            reason: "No sliced file on the printer under /cache/four colours.gcode.3mf (550 Failed to open file.)",
+        });
+
+        // The last attempt: nothing will be booked
+        printer.lastSliceFetch.attempt = SLICE_FETCH_ATTEMPTS;
+        ({ body } = await call(`${app.url}/api/print/${SERIAL}`));
+        assert.equal(body.sliceFetch.final, true);
+
+        // A file that was found but carried no slice info is not "not found"
+        printer.lastSliceFetch.path = "/cache/four colours.gcode.3mf";
+        ({ body } = await call(`${app.url}/api/print/${SERIAL}`));
+        assert.equal(body.sliceFetch, null);
+    } finally {
+        printer.currentSliceInfo = saved;
+        printer.lastSliceFetch = null;
+    }
+});

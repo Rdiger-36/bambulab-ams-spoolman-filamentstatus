@@ -2229,6 +2229,15 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>`;
         }
         if (active) html += printProgressFacts(printData);
+        // The sliced file was not found. While attempts are left the card says
+        // so quietly, after the last one in red: nothing will be booked, and a
+        // job that ran with a bare name used to say that only in its summary.
+        if (active && printData.sliceFetch) {
+            const lookup = printData.sliceFetch;
+            html += lookup.final
+                ? `<p class="gc-required gc-error" title="${escapeHtml(lookup.reason)}">No sliced file on the printer, nothing will be booked for this print</p>`
+                : `<p class="gc-required gc-muted" title="${escapeHtml(lookup.reason)}">Sliced file not found yet, looking again (attempt ${lookup.attempt} of ${lookup.attempts})</p>`;
+        }
         // The backend reports why consumption data is missing (e.g. the FTPS
         // download failed); without this the table would just show a placeholder with no
         // explanation.
@@ -2345,9 +2354,14 @@ document.addEventListener("DOMContentLoaded", () => {
             // went wrong, and "consumption booked" over it claimed a booking
             // that never happened.
             const nothingUsed = !!summary?.rows?.length && !rows.length;
-            const label = nothingUsed
-                ? { text: "nothing to book", className: "gc-card-nothing", title: "The print ended before it used any filament. Open the report of this print" }
-                : !rows.length || booked === rows.length
+            // A summary with a note and no rows at all is a print that had no
+            // sliced file: nothing was booked because nothing could be read
+            const noFile = !!summary?.note && !summary.rows?.length;
+            const label = noFile
+                ? { text: "✖ no sliced file", className: "gc-card-unbooked", title: `${summary.note} Open the report of this print` }
+                : nothingUsed
+                    ? { text: "nothing to book", className: "gc-card-nothing", title: "The print ended before it used any filament. Open the report of this print" }
+                    : !rows.length || booked === rows.length
                     ? { text: "✔ consumption booked", className: "gc-card-booked", title: "Open the report of this print" }
                     : booked === 0
                         ? { text: "✖ nothing booked", className: "gc-card-unbooked", title: "No filament of this print could be booked. Open the report to see why" }
