@@ -27,7 +27,7 @@
 Based on the idea of a script from [Diogo Resende](https://github.com/dresende), posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
 
 > [!IMPORTANT]
-> Version 1.3.0 is still in development.
+> Version 1.3.0 is still in development and this Documentation depends on it!
 > To use the pre-release version you need to use the dev build:
 > 
 > ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:dev
