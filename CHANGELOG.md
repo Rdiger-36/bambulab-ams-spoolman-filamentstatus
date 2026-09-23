@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - The P2S, the H2 series and the X2D need a USB stick in the printer for consumption tracking, and the README, the installation page and the troubleshooting page say so now. These printers expose only the stick over FTPS: with one in, the printer copies every job to /cache on it and the sliced file is read from there, without one the file exists only in internal storage and every print ended with "No sliced file on the printer". Found on an X2D in issue #179 and reproduced on a P2S with the stick pulled; the X2D is listed as supported
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.24
    - Changes:
       - The debug-printers tool in the container lists the files on a printer over FTPS. The log of a print whose sliced file was not found names the paths that were tried and nothing else, and where a printer keeps the file differs between models; the listing shows what is really there, two levels deep, without the camera and timelapse folders. Added for an X2D that keeps its sliced files somewhere no other printer does (issue #179)
