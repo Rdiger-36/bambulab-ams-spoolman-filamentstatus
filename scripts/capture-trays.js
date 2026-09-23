@@ -1,6 +1,6 @@
 import mqtt from "mqtt";
 
-import { decodePrintMapping } from "../src/gcode.js";
+import { decodePrintMapping } from "../src/utils.js";
 
 /**
  * Prints what a printer says about its slots, once, and exits.
@@ -18,7 +18,9 @@ import { decodePrintMapping } from "../src/gcode.js";
  *
  * Usage: node scripts/capture-trays.js <ip> <code> <serial>
  *
- * This runs outside the service, so the plain console is correct here.
+ * This runs outside the service, so the plain console is correct here, and
+ * `decodePrintMapping` comes from utils.js on purpose: gcode.js pulls in the
+ * logger, whose console override turned this script's output into log lines.
  */
 
 const [,, ip, code, serial] = process.argv;

@@ -5,7 +5,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError, decodePrintMapping } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -19,7 +19,7 @@ import {
     setSpoolArchived,
     logSpoolmanFailure,
 } from "./spoolman.js";
-import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodePrintMapping, decodeStudioMapping } from "./gcode.js";
+import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodeStudioMapping } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
 import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
@@ -118,10 +118,11 @@ function broadcastAmsEnvironment(printer, amsUnits, now) {
  * @param {object} printer - the printer runtime object
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
+ * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export async function loadSliceInfo(printer, jobName, gcodeFile = null) {
-    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile);
+export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
+    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName);
     if (!sliceInfo) return null;
 
     for (const preset of learnPresets(sliceInfo, jobName)) {
@@ -148,13 +149,14 @@ export async function loadSliceInfo(printer, jobName, gcodeFile = null) {
  * @param {object} printer - the printer runtime object
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
+ * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export function ensureSliceInfo(printer, jobName, gcodeFile = null) {
+export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
     if (printer.currentSliceInfo) return Promise.resolve(printer.currentSliceInfo);
     if (printer.sliceFetchInFlight?.jobName === jobName) return printer.sliceFetchInFlight.promise;
 
-    const promise = loadSliceInfo(printer, jobName, gcodeFile)
+    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName)
         .then(sliceInfo => {
             if (sliceInfo) printer.currentSliceInfo = sliceInfo;
             return sliceInfo;
@@ -179,7 +181,12 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null) {
 export function sliceFetchFailure(record) {
     if (!record) return "No sliced file was fetched";
     if (!record.path) {
-        return `No sliced file on the printer under ${record.tried.join(", ")}`;
+        // The printer's answer per path, when the fetch recorded one: a 550
+        // from a printer without a USB stick and a data connection that never
+        // opened used to read the same, and telling them apart took a debug log
+        const reasons = record.reasons || {};
+        const tried = record.tried.map(path => (reasons[path] ? `${path} (${reasons[path]})` : path));
+        return `No sliced file on the printer under ${tried.join(", ")}`;
     }
     return `${record.path} carries no Metadata/slice_info.config`;
 }
@@ -281,6 +288,7 @@ export function notePrintCommand(printer, message) {
 
     const slots = decodeStudioMapping(command);
     const jobName = typeof command.subtask_name === "string" ? command.subtask_name : "";
+    const fileName = localFileName(command.url);
 
     // The P2S sends the echo twice within a second, both with the same
     // sequence id, so the second one is kept quiet when it says the same.
@@ -288,17 +296,45 @@ export function notePrintCommand(printer, message) {
     const repeated = !!slots && !!pending && pending.jobName === jobName
         && JSON.stringify(pending.slots) === JSON.stringify(slots);
     printer.pendingMapping = slots ? { jobName, slots, at: Date.now() } : null;
+    printer.pendingFileName = fileName ? { jobName, fileName } : null;
+
+    // A file:// url means the printer sent this command to itself, for a job
+    // started on its screen from its storage. Bambu Studio's are https:// for
+    // a cloud print and ftp:// for a LAN print.
+    const sender = fileName ? `The printer started "${jobName || "the job"}" from ${fileName}` : `Bambu Studio sent "${jobName || "the job"}"`;
 
     if (repeated) {
-        debug("print", printer.name, printer.logFilePath, `[Print] Bambu Studio sent "${jobName || "the job"}" a second time, same slots`);
+        debug("print", printer.name, printer.logFilePath, `[Print] ${sender} a second time, same slots`);
     } else if (slots) {
-        console.log(printer.name, printer.logFilePath,
-            `[Print] Bambu Studio sent "${jobName || "the job"}" to the slots ${JSON.stringify(slots)}`);
+        console.log(printer.name, printer.logFilePath, `[Print] ${sender} to the slots ${JSON.stringify(slots)}`);
     } else {
-        debug("print", printer.name, printer.logFilePath,
-            `[Print] Bambu Studio sent "${jobName || "the job"}" without a slot mapping`);
+        debug("print", printer.name, printer.logFilePath, `[Print] ${sender} without a slot mapping`);
     }
     return true;
+}
+
+/**
+ * The file a `project_file` command names on the printer's own storage.
+ *
+ * A print started on the printer's screen is announced by the printer itself,
+ * with `url` "file:///userdata/model/history/A1mini.gcode.3mf": the copy it
+ * made of the file on the USB stick. Its `subtask_name` is the model's title
+ * from inside the 3MF, so the basename here is the only place the file's real
+ * name appears. A cloud or LAN print names a remote object instead, which says
+ * nothing about the name on the printer, and yields null.
+ *
+ * @param {unknown} url - the `url` of the command
+ * @returns {string|null} the basename, or null when the url is not a local file
+ */
+export function localFileName(url) {
+    if (typeof url !== "string" || !/^file:\/\//i.test(url)) return null;
+    let name = url.replace(/^file:\/\/+/i, "").split("/").pop();
+    try {
+        name = decodeURIComponent(name);
+    } catch {
+        // Kept as it came: a name the printer did not encode is still a name
+    }
+    return name || null;
 }
 
 // Print states that signal the end of a print job
@@ -464,6 +500,12 @@ export async function handlePrintStateChange(printer, print) {
         // left over from a job that never started, or a reprint started on the
         // printer's screen, must not name the slots of a different plate. A
         // printer that reports print.mapping replaces it below on every report.
+        const pendingFile = printer.pendingFileName;
+        printer.pendingFileName = null;
+        printer.currentFileName = pendingFile && (!pendingFile.jobName || !jobName || pendingFile.jobName === jobName)
+            ? pendingFile.fileName
+            : null;
+
         const pending = printer.pendingMapping;
         printer.pendingMapping = null;
         if (pending && (!pending.jobName || !jobName || pending.jobName === jobName)) {
@@ -562,7 +604,7 @@ export async function handlePrintStateChange(printer, print) {
         } else {
             console.log(printer.name, printer.logFilePath, `[Print] Print running: "${jobName}", fetching slice info via FTPS...`);
             try {
-                const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile);
+                const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName);
                 if (sliceInfo) {
                     console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${sliceInfo.filaments.length} filament(s), ${sliceInfo.totalLayers} layers`);
                 } else {

@@ -144,6 +144,10 @@ function createRuntimePrinter(entry) {
         // gcode_file as the printer reports it, which says whether the sliced
         // file is a .3mf (cloud) or a .gcode.3mf (LAN). See resolveRemotePaths().
         currentGcodeFile: null,
+        // The file name the printer itself gave the job, from the project_file
+        // command it sends for a print started on its screen. Null for a job
+        // Bambu Studio sent. See localFileName() in mqtt.js.
+        currentFileName: null,
         currentSliceInfo: null,
         // What the last slice info fetch tried and found. See fetchSliceInfo().
         lastSliceFetch: null,
@@ -157,6 +161,9 @@ function createRuntimePrinter(entry) {
         // command the printer echoes before the print starts. Consumed by the
         // start of that print, see notePrintCommand() in mqtt.js.
         pendingMapping: null,
+        // The file name from that same command, taken by the print of that
+        // name the way pendingMapping is.
+        pendingFileName: null,
         currentLayerNum: 0,
         staleLayerNum: null,
         consumptionBooked: false,

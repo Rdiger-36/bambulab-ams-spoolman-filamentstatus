@@ -4,7 +4,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { decodeStudioMapping, decodePrintMapping, parseSliceInfo, calcFullConsumption, resolveSliceSlots, orderedAmsSlots } from "../src/gcode.js";
+import { decodeStudioMapping, parseSliceInfo, calcFullConsumption, resolveSliceSlots, orderedAmsSlots } from "../src/gcode.js";
+import { decodePrintMapping } from "../src/utils.js";
 import { matchConsumption, consumptionCandidate } from "../src/ams.js";
 import { loadedSlotIds } from "../src/uispool.js";
 
@@ -133,6 +134,34 @@ const freshPrinter = () => ({
     pendingMapping: null,
     lastPrintSummary: null,
     lastPrintError: null,
+});
+
+test("a start on the printer's screen names the file, and the print takes it", async () => {
+    const { notePrintCommand, handlePrintStateChange } = await import("../src/mqtt.js");
+    const printer = freshPrinter();
+    // A P2S, 2026-09-23: A1mini.gcode.3mf on the USB stick, started on the
+    // screen. The printer announces it with its own url and the model's title
+    const command = {
+        command: "project_file",
+        subtask_name: "Perfectly clean bed for perfect prints!",
+        url: "file:///userdata/model/history/A1mini.gcode.3mf",
+        ams_mapping: [0],
+        ams_mapping2: [{ ams_id: 0, slot_id: 0 }],
+    };
+    assert.equal(notePrintCommand(printer, Buffer.from(JSON.stringify({ print: command }))), true);
+    assert.deepEqual(printer.pendingFileName, { jobName: "Perfectly clean bed for perfect prints!", fileName: "A1mini.gcode.3mf" });
+
+    await handlePrintStateChange(printer, { gcode_state: "RUNNING", subtask_name: "Perfectly clean bed for perfect prints!", layer_num: 0 });
+    assert.equal(printer.currentFileName, "A1mini.gcode.3mf");
+    assert.equal(printer.pendingFileName, null);
+    assert.deepEqual(printer.currentMapping, ["A1"]);
+
+    // Bambu Studio's own command names a remote object, which is no file name
+    printer.currentGcodeState = "FINISH";
+    notePrintCommand(printer, Buffer.from(JSON.stringify({ print: { ...command, url: "https://example.invalid/x.3mf?sig=1" } })));
+    assert.equal(printer.pendingFileName, null);
+    await handlePrintStateChange(printer, { gcode_state: "RUNNING", subtask_name: "Perfectly clean bed for perfect prints!", layer_num: 0 });
+    assert.equal(printer.currentFileName, null);
 });
 
 test("the echo is kept and taken by the print of that name", async () => {

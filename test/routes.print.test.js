@@ -88,7 +88,7 @@ test("what the printer reports beats the colours the file was sliced with", asyn
     const [f0, f1, f2, f3] = fixtureFilaments();
     // The printer runs filament 0 from A4 and filament 3 from A1, which is the
     // remap it reports and the sliced colours cannot know about.
-    const { decodePrintMapping } = await import("../src/gcode.js");
+    const { decodePrintMapping } = await import("../src/utils.js");
     printer.currentMapping = decodePrintMapping([0x0003, 0x0001, 0x0002, 0x0000]);
     printer.spoolData = [
         loadedSlot("A1", { id: 101, idx: f0.idx, type: "PLA", color: f0.color }),

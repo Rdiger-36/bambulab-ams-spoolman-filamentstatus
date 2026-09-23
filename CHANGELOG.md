@@ -2,6 +2,11 @@
 Unreleased
    - Changes:
       - The P2S, the H2 series and the X2D need a USB stick in the printer for consumption tracking, and the README, the installation page and the troubleshooting page say so now. These printers expose only the stick over FTPS: with one in, the printer copies every job to /cache on it and the sliced file is read from there, without one the file exists only in internal storage and every print ended with "No sliced file on the printer". Found on an X2D in issue #179 and reproduced on a P2S with the stick pulled; the X2D is listed as supported
+   - Fixes:
+      - A print started on the printer's screen from a USB stick is tracked. Its job is named after the model's title inside the file, "Perfectly clean bed for perfect prints!" for a plate stored as A1mini.gcode.3mf, so the sliced file was never found under the job name; the command the printer sends itself for such a start names the file, and that name is tried first now. Seen on a P2S on 2026-09-23
+      - When the sliced file is not found, the log says what the printer answered for every path it tried, "550 Failed to open file." and the like, which used to be in the debug log only; a printer without a USB stick and a broken FTPS connection read the same without it
+      - The log says "The printer started ... from <file>" rather than "Bambu Studio sent ..." for a print the printer announced itself
+      - The output of scripts/capture-trays.js is plain JSON again. It imported the mapping decoder from a module that pulls in the logger, whose console override turned the output into a log line
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.24

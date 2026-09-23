@@ -57,14 +57,15 @@ export function ftpsAccess(client, printer) {
  * @param {object} printer  - printer object with .ip and .code
  * @param {string} jobName  - subtask_name from MQTT
  * @param {string|null} [gcodeFile] - gcode_file from MQTT, when the report carries one
+ * @param {string|null} [fileName] - the file name from the printer's own project_file command, see resolveRemotePaths()
  * @returns {object|null} parsed slice info or null if not found
  */
-export async function fetchSliceInfo(printer, jobName, gcodeFile = null) {
+export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
     const client = new ftp.Client(20000); // 20 s timeout
     client.ftp.verbose = false;
 
-    const candidates = resolveRemotePaths(jobName, gcodeFile);
-    const record = { jobName, tried: candidates, path: null, sliceInfo: false, at: Date.now() };
+    const candidates = resolveRemotePaths(jobName, gcodeFile, fileName);
+    const record = { jobName, tried: candidates, reasons: {}, path: null, sliceInfo: false, at: Date.now() };
     printer.lastSliceFetch = record;
 
     try {
@@ -91,6 +92,10 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null) {
                 // where the file sits depends on how the job was sent. The
                 // reason is still worth having, because "no slice info" with
                 // every attempt silent is the hardest version of this to answer.
+                // Kept on the record as well, so the ordinary log can say it
+                // when every candidate fails: a 550 from a printer without a
+                // USB stick and a broken data connection read the same without.
+                record.reasons[path] = err.message;
                 debug("gcode", printer.name, printer.logFilePath,
                     `[Print] Not at ${path}: ${err.message}`);
             }
@@ -224,51 +229,6 @@ export function resolveSliceSlots(consumption, amsIds, { reportedByPrinter = fal
         entry.amsIdFromPrinter = entry.amsId !== null && reportedByPrinter;
     }
     return consumption;
-}
-
-/**
- * The value `print.mapping` uses for a filament the plate does not print.
- * Decoding it would otherwise read as unit 255 slot 255 and name the external
- * spool holder, which is unit 255 slot 0.
- */
-const MAPPING_UNUSED = 0xFFFF;
-
-/**
- * The slots a printer says a print is actually taking its filaments from.
- *
- * `print.mapping` is the printer's own answer to the question `orderedAmsSlots`
- * can only estimate, and it is the better one twice over: it needs no
- * assumption about how the slicer numbers its list, and it is the assignment
- * after any remapping the printer did when the job was sent, not the slicer's
- * intention before it.
- *
- * One entry per filament of the slicer's project, in the same order, so the
- * result drops straight into `resolveSliceSlots()`. Each is the unit in the
- * high byte and the slot in the low one: 0x0100 is B1, 0x0002 is A3, 0xFF00 is
- * the external holder, and 0xFFFF means the plate does not use that filament.
- * Both bytes count from 0, while the labels count a unit's slots from 1, which
- * is what `convertAMSandSlot()` is doing to the low byte.
- *
- * Read off a P2S across two prints, where all seven entries matched the slots
- * the print was really running from, including the holder and the unused
- * marker.
- *
- * A unit this service cannot address yields null rather than a label, so the
- * caller treats it as unknown instead of booking onto whatever "Z" would name.
- *
- * @param {number[]|undefined} mapping - `print.mapping` from an MQTT report
- * @returns {string[]|null} slot labels by filament index, null when not reported
- */
-export function decodePrintMapping(mapping) {
-    if (!Array.isArray(mapping) || !mapping.length) return null;
-
-    return mapping.map(value => {
-        const number = Number(value);
-        if (!Number.isInteger(number) || number < 0 || number === MAPPING_UNUSED) return null;
-
-        const label = convertAMSandSlot(number >> 8, number & 0xFF);
-        return label === "Z" ? null : label;
-    });
 }
 
 /**
@@ -550,12 +510,28 @@ export function calcPartialConsumption(sliceInfo, upToLayer) {
  * spellings under /cache, then both in the FTP root, where older firmware was
  * seen to keep the file.
  *
+ * A print started on the printer's screen breaks the rule that the job is
+ * named after the file: a P2S printing `A1mini.gcode.3mf` off its USB stick
+ * reported the model's title as `subtask_name`, "Perfectly clean bed for
+ * perfect prints!", and the four paths built from it all answered 550. The
+ * `project_file` command the printer sends itself for such a start carries
+ * `file:///userdata/model/history/A1mini.gcode.3mf`, and that basename is
+ * `fileName`, tried before everything else. Measured on 2026-09-23.
+ *
  * @param {string} jobName - `subtask_name` from MQTT
  * @param {string|null} [gcodeFile] - `gcode_file` from MQTT
+ * @param {string|null} [fileName] - the file name from the printer's own `project_file` command
  * @returns {string[]} candidate paths, without duplicates
  */
-export function resolveRemotePaths(jobName, gcodeFile = null) {
+export function resolveRemotePaths(jobName, gcodeFile = null, fileName = null) {
     const candidates = [];
+
+    // The name the printer itself gave the file, when it named one: a print
+    // started on the printer's screen carries it in the project_file echo,
+    // while its job name is the model's title. Tried in both places first.
+    if (typeof fileName === "string" && /\.3mf$/i.test(fileName)) {
+        candidates.push(`/cache/${fileName}`, `/${fileName}`);
+    }
 
     const reported = typeof gcodeFile === "string" ? gcodeFile.split("/").pop() : "";
     if (/\.3mf$/i.test(reported)) candidates.push(`/cache/${reported}`);

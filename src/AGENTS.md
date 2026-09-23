@@ -241,7 +241,7 @@ build their Spoolman payload from.
   working it out.** `print.mapping` carries one entry per filament of the
   slicer's project, the unit in the high byte and the slot in the low one:
   `0x0100` is B1, `0xFF00` the external holder, `0xFFFF` a filament the plate
-  does not use. `decodePrintMapping()` turns it into the same shape
+  does not use. `decodePrintMapping()` in `utils.js` turns it into the same shape
   `orderedAmsSlots()` produces, so `resolveSliceSlots()` takes either without
   knowing which. It is captured at the transition to RUNNING and kept on the
   printer as `currentMapping`, like the slice info and for the same reason: the

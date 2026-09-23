@@ -10,8 +10,8 @@ import {
     calcPartialConsumption,
     resolveSliceSlots,
     orderedAmsSlots,
-    decodePrintMapping,
 } from "../src/gcode.js";
+import { decodePrintMapping } from "../src/utils.js";
 import { matchConsumption, consumptionCandidate } from "../src/ams.js";
 import { loadedSlotIds } from "../src/uispool.js";
 

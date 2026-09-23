@@ -6,9 +6,9 @@ import { fileURLToPath } from "node:url";
 
 import { processData, extractComparableTrayData, hasTrayDataChanged, extractAmsEnvironment, slotIsOccupied } from "../src/ams.js";
 import { externalSpoolUnits, rememberedExternalSpoolUnits } from "../src/mqtt.js";
-import { decodePrintMapping, orderedAmsSlots, printStageName, isPreparingStage } from "../src/gcode.js";
+import { orderedAmsSlots, printStageName, isPreparingStage } from "../src/gcode.js";
 import { slotFingerprint } from "../src/mappings.js";
-import { convertAMSandSlot } from "../src/utils.js";
+import { convertAMSandSlot, decodePrintMapping } from "../src/utils.js";
 
 /**
  * Every report under test/fixtures/reports through the pure half of the
