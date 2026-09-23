@@ -72,6 +72,17 @@ It stays on until it is switched off. Nothing turns it off by itself, on purpose
 
 The trace is readable in the Web UI like any other log, under **Raw MQTT traces** in the picker in the headline of the log page, and it is in the diagnostics archive as `logs/<serial>.mqtt.current.log`. The download asks the same anonymising question every other log download asks, and it matters more here: a raw report carries every field the printer knows about itself.
 
+## No sliced file on a P2S, H2 or X2D
+
+The P2S, the H2 series and the X2D keep the file of a print in internal storage, and their FTPS server shows only a USB stick. Without a stick in the printer, every print ends like this and nothing is booked:
+
+```bash
+[LOG] Bambu Lab P2S - [Print] Print running: "bracket", fetching slice info via FTPS...
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf, /cache/bracket.3mf, /bracket.gcode.3mf, /bracket.3mf, consumption tracking unavailable for this print
+```
+
+Put a USB stick into the printer. From then on the printer copies every job to `/cache` on the stick by itself, whether it was sent from Bambu Studio, through the cloud or from the Handy app, and the next print is tracked. Nothing has to change in Bambu Studio. The file listing of the [Debug-Printers CLI](#debug-printers-cli) below shows what the printer exposes: an empty listing means no stick.
+
 ## Debug-Printers CLI
 
 The container ships a script that checks the network and MQTT status of a printer from inside the container:
