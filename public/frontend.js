@@ -2196,11 +2196,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const { layer: humanLayer, total: humanTotal, percent: progressPct } =
             humanLayers(printData.layerNum, printData.totalLayers);
 
+        // The printer reports RUNNING from the first second of a job, through
+        // minutes of heating, homing and calibration, and read "RUNNING" next
+        // to "Homing toolhead" like a contradiction. The state badge says
+        // PREPARE for as long as the stage is one of those and no layer has
+        // been printed; the stage badge next to it still names which. A
+        // filament load in the middle of a print is the same stage and stays
+        // RUNNING. The state itself stays RUNNING for everything that decides
+        // on it, the tracking included.
+        const beforeFirstLayer = !(Number(printData.layerNum) >= 1);
+        const shownState = printData.gcodeState === "RUNNING" && printData.preparing && beforeFirstLayer
+            ? "PREPARE"
+            : printData.gcodeState;
+
         const card = document.createElement("div");
         card.className = "gc-card";
 
         let html = `<div class="gc-card-head">
-            ${gcodeStateBadge(printData.gcodeState)}
+            ${gcodeStateBadge(shownState)}
             ${printStageBadge(printData)}
             <strong>${printData.jobName ? escapeHtml(printData.jobName) : "No active print"}</strong>
             <span class="gc-card-note">${printResultControls(printData)}</span>
@@ -2556,7 +2569,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // subtracting "Needed" from it a second time showed every spool lighter
         // than it is. Seen on a P2S after a finished two colour print.
         const booked = !!printData.consumptionBooked && !printData.printResultCleared;
-        const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true, booked };
+        // Whether the server said what the print actually used. A cancel before
+        // the first layer books 0 g, and 0 is an answer, not a missing one.
+        const usedKnown = printData.consumption != null;
+        const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true, booked, usedKnown };
 
         const columns = [
             ["Spool", "left"],
@@ -2586,7 +2602,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function createGcodeSpoolRow(amsSpool, ctx) {
-        const { fullCons, partCons, keyCount, booked } = ctx;
+        const { fullCons, partCons, keyCount, booked, usedKnown } = ctx;
         const tr = document.createElement("tr");
         tr.setAttribute("data-amsid", amsSpool.amsId);
         renderedSpools.set(amsSpool.amsId, amsSpool);
@@ -2623,8 +2639,10 @@ document.addEventListener("DOMContentLoaded", () => {
         let afterPrintCell = "—";
         if (needed > 0 && booked) {
             // The print is over and booked: what it used is the figure, and the
-            // spool's weight above already has it taken off.
-            neededCell = `${needed}g<br><span class="gc-muted" style="font-size:0.8em">booked: ${used || needed}g</span>`;
+            // spool's weight above already has it taken off. `used || needed`
+            // stood here and showed the whole plate as booked for a print
+            // cancelled at layer 0, whose 0 g fell through to the fallback.
+            neededCell = `${needed}g<br><span class="gc-muted" style="font-size:0.8em">booked: ${usedKnown ? used : needed}g</span>`;
             if (onSpool != null) {
                 afterPrintCell = `<span class="gc-muted" title="Already booked, this is the spool's weight now">${grams2(onSpool)}</span>`;
             }
