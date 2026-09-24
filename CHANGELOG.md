@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------------------------------
 Unreleased
    - Fixes:
+      - The log routes answer a failure as { ok: false, error }, the shape every other route uses; their 404 and 500 carried the message alone
+      - The OpenAPI document says what the handlers send and read: restartRequired on the settings answer is the list of keys that need a restart, printResetAt is epoch milliseconds, tray_weight is the printer's raw string, externalMaterials are the catalogue's material records, string settings are nullable, a nullable reference is written as allOf plus nullable since OpenAPI 3.0 ignores nullable next to $ref, logDetail is accepted on a new printer, every operation lists the 401 and 403 the guards can answer, the login routes are marked open, undocumented 500s are listed and a 502 or 400 that could never happen is gone. The API page renders the value list of an array, an open object and every content type of a response
       - In automatic mode a spool is created or merged once. The check that keeps a slot from being written a second time compared a preview of the slot against its last entry, and the preview carried an empty state and lacked six fields the entry has, so the two never matched and the check never held: a creation whose follow-up lookup missed the new spool was repeated on the next pass, and a failed write was retried on every one. The preview carries the same fields now
       - The merge confirmation shows the grams the row shows. It worked the remaining weight out from the raw percentage while the row reads the server's figure, which corrects the percentage for spools lighter than 1 kg, so the two disagreed for exactly those spools
    - Changes:
