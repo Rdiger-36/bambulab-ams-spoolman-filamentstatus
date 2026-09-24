@@ -28,7 +28,7 @@ export function bambuTlsOptions() {
  * @param {object} client - a basic-ftp client
  * @param {{ip: string, code: string}} printer - address and access code
  */
-export function ftpsAccess(client, printer) {
+function ftpsAccess(client, printer) {
     return client.access({
         host: printer.ip,
         port: 990,

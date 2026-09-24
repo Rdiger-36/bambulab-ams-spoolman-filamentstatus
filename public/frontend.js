@@ -2848,9 +2848,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 </table>
             `;
         } else if (button.textContent === SLOT_OPTIONS.MERGE) {
-            const remain = amsSpool.slot.remain == null
+            // The server's figure, which applies the same correction the row
+            // shows; the raw percentage is only a fallback for an entry that
+            // carries none.
+            const remain = amsSpool.amsWeight ?? (amsSpool.slot.remain == null
                 ? null
-                : (amsSpool.slot.remain / 100) * amsSpool.slot.tray_weight;
+                : (amsSpool.slot.remain / 100) * amsSpool.slot.tray_weight);
 
             return `
                 <p>Do you really want to merge this Spool with an existing Spool in Spoolman?</p>

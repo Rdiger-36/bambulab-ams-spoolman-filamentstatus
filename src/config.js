@@ -2,7 +2,10 @@ import { config } from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-config();
+// Not under `node --test`: the suite must see the same environment on every
+// machine, and a developer's .env carries MODE, LEGACY_MODE and a Spoolman
+// endpoint that would otherwise decide what the tests run against.
+if (!process.env.NODE_TEST_CONTEXT) config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __rootDir = path.dirname(path.dirname(__filename));
