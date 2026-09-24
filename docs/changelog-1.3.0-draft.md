@@ -10,8 +10,8 @@ It is written for a reader of 1.2.1. A fix of something that only ever existed
 in a dev build is not a fix to that reader, so those are folded into the feature
 they belong to or left out; the dev blocks keep them. Every dev build after
 dev.25 has to be folded in here as well; the two entries under "Unreleased" on
-main as of 2026-09-24, the update notice (PR 191) and the storage hint (PR 192),
-are in.
+main as of 2026-09-24, the update notice (PR 191), the storage hint (PR 192) and the pre-release
+review (PRs 193 to 195), are in.
 
 ## Draft
 
@@ -109,6 +109,9 @@ Version 1.3.0
       - A spool whose tag was edited by hand into something that is not JSON no longer stops every AMS update
       - The log lost most of its lines while the service was running, and it rewrote itself for every "nothing changed" line; only the last line is replaced now
       - A Spoolman write that failed was answered with success; it is a 502 now and names what Spoolman said
+      - In automatic mode a spool is created or merged once. A slot that has not changed since the last pass is not written again, so a creation whose follow-up lookup missed the new spool is not repeated and a failed write is not retried on every pass
+      - The merge confirmation shows the grams the row shows. It worked the remaining weight out from the raw percentage while the row uses the corrected figure, so the two disagreed for spools lighter than 1 kg
+      - The log routes answer a failure as { ok: false, error }, the shape every other route uses
       - A failing "Bambu Lab" vendor lookup no longer stops the whole startup
       - MODE="auto" is accepted, and an unknown value is reported instead of quietly falling back to manual
       - Support material ("-S") no longer has its remaining percentage rescaled to a 1 kg basis
