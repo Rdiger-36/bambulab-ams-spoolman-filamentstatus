@@ -1,5 +1,6 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.26
+   Release candidate for 1.3.0. This build carries the code 1.3.0 ships; only the version differs. What is found on it goes into 1.3.0, and nothing else is planned before the release
    - Fixes:
       - The log routes answer a failure as { ok: false, error }, the shape every other route uses; their 404 and 500 carried the message alone
       - The OpenAPI document says what the handlers send and read: restartRequired on the settings answer is the list of keys that need a restart, printResetAt is epoch milliseconds, tray_weight is the printer's raw string, externalMaterials are the catalogue's material records, string settings are nullable, a nullable reference is written as allOf plus nullable since OpenAPI 3.0 ignores nullable next to $ref, logDetail is accepted on a new printer, every operation lists the 401 and 403 the guards can answer, the login routes are marked open, undocumented 500s are listed and a 502 or 400 that could never happen is gone. The API page renders the value list of an array, an open object and every content type of a response
