@@ -548,10 +548,17 @@ export function migrateStored(values, schemaVersion) {
     return migrated;
 }
 
+// Whether settings.json was there when this process started. Read by the
+// upgrade notice, which tells a 1.2.x installation apart from a fresh one by
+// exactly this: 1.2.x never wrote the file, and a fresh 1.3.0 install has no
+// printers.json either.
+let settingsFileExisted = false;
+
 /** Reads the settings file, treating a missing or unreadable file as empty. */
 function readStoredSettings() {
     try {
         const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+        settingsFileExisted = true;
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
             throw new Error("settings.json must contain an object");
         }
@@ -562,10 +569,16 @@ function readStoredSettings() {
         return migrateStored(file.values, file.schemaVersion);
     } catch (err) {
         if (err.code !== "ENOENT") {
+            settingsFileExisted = true;
             settingsLoadIssues.push(`Could not read settings.json, falling back to environment and defaults: ${err.message}`);
         }
         return {};
     }
+}
+
+/** Whether settings.json existed when this process started. */
+export function settingsFileExistedAtStart() {
+    return settingsFileExisted;
 }
 
 /** Writes the settings file atomically, so a crash mid write cannot truncate it. */
@@ -604,6 +617,24 @@ loadSettings();
  */
 export function getAcknowledgedNotices() {
     return { ...storedNotices };
+}
+
+/**
+ * Marks a notice as pending, in memory only, unless the file already knows it.
+ *
+ * A pending notice is stored as `false`, an acknowledged one as `true`, and one
+ * the file never heard of is absent. Nothing is written here, for the reason
+ * `loadSettings()` gives; the mark rides along with whatever writes the file
+ * next, a save on the settings page or the acknowledgement of another notice.
+ * That is what keeps a notice from being lost when the condition that raised
+ * it, such as a missing settings.json, is gone by the next start.
+ *
+ * @param {string} id - the notice id
+ */
+export function markNoticePending(id) {
+    if (storedNotices[id] === undefined) {
+        storedNotices = { ...storedNotices, [id]: false };
+    }
 }
 
 /**

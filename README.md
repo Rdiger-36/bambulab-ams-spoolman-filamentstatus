@@ -48,6 +48,8 @@ An original Bambu Lab spool is recognised by its RFID tag and linked on its own;
 - **The Web UI can ask for a password, and the [API](docs/api.md) needs a key.** Both are set under **Network access** on the [settings page](docs/settings.md). A script or an integration that called the API without a key needs one now.
 - **Slots are numbered the way the printer numbers them.** The first slot of the first unit is `A1`, so every slot label moved up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool.
 
+Coming from 1.2.x? [Updating from 1.2.x](docs/updating.md) lists what can need you and what keeps working. The dashboard says the same once on the first visit after the update.
+
 ## Attention
 
 Works with Bambu Lab printers with a connected AMS of the A, P, H and X series.
