@@ -132,20 +132,84 @@ document.addEventListener("DOMContentLoaded", () => {
         console.error("Error with the SSE connection:", error);
     };
 
-    // Configuration through environment variables is deprecated since 1.3.0.
-    // Shown once per installation rather than once per browser: the dismissal
-    // is stored server side, and the notice stops being sent on its own as soon
-    // as the values have been saved on the settings page.
-    async function showDeprecationNotice() {
-        let notice;
-        try {
-            const response = await fetch("./api/notices");
-            notice = (await response.json())["env-config"];
-        } catch {
-            // A hint is not worth an error message of its own.
-            return;
-        }
+    /**
+     * Shows one notice in the dialog and resolves once it was dismissed.
+     *
+     * Both buttons dismiss it, because both mean the hint was read, and the
+     * dismissal is stored server side: a notice is shown once per installation
+     * rather than once per browser. Escape closes the dialog without storing
+     * anything, so it comes back on the next load, which is the safe way round.
+     *
+     * @param {string} id - the notice id the server acknowledges
+     * @param {string} title
+     * @param {string[]} parts - the paragraphs, as markup
+     * @returns {Promise<void>}
+     */
+    function showNoticeDialog(id, title, parts) {
+        const dialog = document.getElementById("notice-dialog");
+        document.getElementById("notice-dialog-title").textContent = title;
+        document.getElementById("notice-dialog-content").innerHTML = parts.join("");
 
+        const acknowledge = async () => {
+            try {
+                await fetch(`./api/notices/${encodeURIComponent(id)}/ack`, { method: "POST" });
+            } catch {
+                // Then it is shown again on the next load.
+            }
+        };
+
+        return new Promise(resolve => {
+            document.getElementById("notice-dialog-close").onclick = async () => {
+                await acknowledge();
+                dialog.close();
+                resolve();
+            };
+
+            document.getElementById("notice-dialog-open").onclick = async () => {
+                await acknowledge();
+                dialog.close();
+                window.location.href = "settings.html";
+            };
+
+            dialog.showModal();
+            document.getElementById("notice-dialog-close").focus();
+        });
+    }
+
+    /**
+     * An installation updated from 1.2.x is told what changed, once.
+     *
+     * The three things it can trip over are not visible on the dashboard: the
+     * slot labels moved up by one, the API asks for a key, and a name the
+     * service is reached under has to be allowed. The server decides whether
+     * this installation is one, from its files, see src/upgradenotice.js.
+     */
+    async function showUpgradeNotice(notice) {
+        if (!notice || !notice.active || notice.acknowledged) return;
+
+        const docsLink = notice.docs
+            ? `<p>Everything else that changed, with what to do about it: <a href="${escapeHtml(notice.docs)}" target="_blank" rel="noopener">Updating from 1.2.x</a>.</p>`
+            : "";
+
+        await showNoticeDialog("upgrade-1.3.0", "Updated from 1.2.x", [
+            "<p>This installation was set up with <b>version 1.2.x</b>. Four things changed in 1.3.0 that may need you:</p>",
+            "<ul>",
+            "<li><b>AMS slots are numbered from 1</b>, the way the printer numbers them: the first slot of the first unit is <code>A1</code>, so every slot label moved up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool. Nothing to do here unless a script or a home automation reads slot labels from the API.</li>",
+            "<li><b>The API needs a key.</b> It answers only this Web UI and a caller with an API key. A script or an integration that called it without one, the Home Assistant integration among them, needs a key from <b>Network access</b> on the settings page.</li>",
+            "<li><b>A host name has to be allowed.</b> Reaching the service under a domain name or through a reverse proxy needs that name under <b>Allowed host names</b> in the same card. An IP address, <code>localhost</code> and a <code>.local</code> name work as before.</li>",
+            "<li><b>Consumption comes from the sliced file</b> of a print now, not from the RFID remain percentage, which covers 3rd party spools as well. A P2S, an H2 series printer or an X2D needs a USB stick in the printer for it. <code>LEGACY_MODE=true</code> keeps the old behaviour.</li>",
+            "</ul>",
+            docsLink,
+        ]);
+    }
+
+    /**
+     * Configuration through environment variables is deprecated since 1.3.0.
+     *
+     * The notice stops being sent on its own as soon as the values have been
+     * saved on the settings page.
+     */
+    async function showDeprecationNotice(notice) {
         if (!notice || !notice.active || notice.acknowledged) return;
 
         const code = list => `<code>${list.map(escapeHtml).join("</code>, <code>")}</code>`;
@@ -166,35 +230,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
         parts.push("<p>One thing to know before editing your compose file again: once a setting has been saved here, the settings file owns it and the matching variable stops changing anything.</p>");
 
-        const dialog = document.getElementById("notice-dialog");
-        document.getElementById("notice-dialog-title").textContent = "Configuration has moved into the Web UI";
-        document.getElementById("notice-dialog-content").innerHTML = parts.join("");
-
-        // Dismissed either way, because both buttons mean the hint was read.
-        const acknowledge = async () => {
-            try {
-                await fetch("./api/notices/env-config/ack", { method: "POST" });
-            } catch {
-                // Then it is shown again on the next load, which is the safe way round.
-            }
-        };
-
-        document.getElementById("notice-dialog-close").onclick = async () => {
-            await acknowledge();
-            dialog.close();
-        };
-
-        document.getElementById("notice-dialog-open").onclick = async () => {
-            await acknowledge();
-            dialog.close();
-            window.location.href = "settings.html";
-        };
-
-        dialog.showModal();
-        document.getElementById("notice-dialog-close").focus();
+        await showNoticeDialog("env-config", "Configuration has moved into the Web UI", parts);
     }
 
-    showDeprecationNotice();
+    // One dialog at a time, the update notice first: an installation updated
+    // from 1.2.x is by definition still configured through the environment, so
+    // it gets both on its first visit, and what changed matters more than
+    // where the settings live now.
+    async function showNotices() {
+        let notices;
+        try {
+            const response = await fetch("./api/notices");
+            notices = await response.json();
+        } catch {
+            // A hint is not worth an error message of its own.
+            return;
+        }
+
+        await showUpgradeNotice(notices["upgrade-1.3.0"]);
+        await showDeprecationNotice(notices["env-config"]);
+    }
+
+    showNotices();
 
     // Check if any modal dialog is currently open. A live update that rerenders
     // the table underneath an open dialog replaces the row it was opened from,

@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - An installation updated from 1.2.x is told what changed, once. The dashboard opens a dialog on the first visit after the update naming the four things that can need a hand, the slot labels moved up by one, the API asks for a key, a domain name has to be allowed, and consumption comes from the sliced file now, with a link to the new "Updating from 1.2.x" page of the documentation; the same lines are printed to docker logs on every start until the dialog is dismissed, because an installation reached under a name that is not allowed yet has only the log. A 1.2.x installation is recognised by its files, a printers.json without a settings.json, so a fresh install and an installation that has run a 1.3.0 build before never see it. The notice is held across restarts once it was raised, even when the settings page was saved before the dashboard was ever opened. It is upgrade-1.3.0 on /api/notices
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.25
    - Changes:
       - The print card says PREPARE instead of RUNNING while the printer is heating, homing, levelling or calibrating. The printer reports RUNNING from the first second of a job, and "RUNNING" next to "Homing toolhead" read like a contradiction; the stage badge next to it still names what the printer is doing. A filament change before the first layer counts as preparation too
