@@ -26,12 +26,6 @@
 
 Based on the idea of a script from [Diogo Resende](https://github.com/dresende), posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
 
-> [!IMPORTANT]
-> Version 1.3.0 is still in development and this Documentation depends on it!
-> To use the pre-release version you need to use the dev build:
-> 
-> ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:dev
-
 ## What it does
 
 Every Bambu Lab printer reports what its AMS holds, and every sliced print says how much of each filament it needs. This service listens to both and keeps [Spoolman](https://github.com/Donkie/Spoolman) in step with them: it recognises the spools in your AMS, links them to the spools in your inventory, and books what a print actually used onto the right one when the job is done, without you touching Spoolman.
@@ -52,7 +46,7 @@ Coming from 1.2.x? [Updating from 1.2.x](docs/updating.md) lists what can need y
 
 ## Attention
 
-Works with Bambu Lab printers with a connected AMS of the A, P, H and X series.
+Works with Bambu Lab printers of the A, P, H and X series, with or without an AMS: a printer without one is tracked through its external spool holder.
 
 Automatic creating and merging of spools and filaments in Spoolman relies on the RFID tag of original Bambu Lab spools. A 3rd party spool is linked to a Spoolman spool in the Web UI instead, by hand or, when switched on, automatically where exactly one spool of its material and colour exists; its consumption is then tracked like any other.
 
@@ -60,7 +54,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 
 | Printer | Supported |
 | :---- | :---- |
-| A series with AMS Lite | ⚠️ read only in [legacy mode](docs/legacy-mode.md) |
+| A series with AMS Lite | ⚠️ no weight updates in [legacy mode](docs/legacy-mode.md) |
 | A1 with AMS Standard / 2 Pro | ✅ |
 | P1 series | ✅ |
 | P2S | ✅ with a USB stick in the printer, see below |
@@ -74,7 +68,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 | AMS | ✅ |
 | AMS 2 Pro | ✅ |
 | AMS HT | ✅ |
-| AMS Lite | ⚠️ read only in [legacy mode](docs/legacy-mode.md) |
+| AMS Lite | ⚠️ no weight updates in [legacy mode](docs/legacy-mode.md) |
 
 Up to 12 AMS on one printer: max. 4 AMS Standard / 2 Pro plus 8 AMS HT.
 
@@ -93,7 +87,7 @@ x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supp
 - Manual assignment of a Spoolman spool to a slot for spools the printer cannot identify, checked against the material the printer reports
 - A detail dialog per slot: everything Spoolman holds about the spool and its filament, next to what the printer reports, with the remaining weight, lot number and comment editable in place
 - New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
-- Web UI with print dashboard, printer management, settings and log viewer, no container restart needed, and usable on a phone
+- Web UI with print dashboard, printer management, settings and log viewer, no container restart needed except for switching legacy mode, and usable on a phone
 - An optional password in front of the Web UI, and named API keys for callers that have no browser
 - An [API page](docs/api.md) in the Web UI that lists every route and sends it from the browser, with the same description as OpenAPI for Swagger UI or Postman
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
@@ -123,7 +117,8 @@ You need a running Spoolman instance and, per printer, its serial number, access
 | [API](docs/api.md) | Who may call it, the API page in the Web UI, the OpenAPI document, and every route in a table |
 | [Troubleshooting](docs/troubleshooting.md) | Reading the logs, the `debug-printers` CLI, diagnostics and what an export contains |
 | [Legacy mode](docs/legacy-mode.md) | The RFID based tracking of 1.2.x and what it cannot do |
-| [Deprecated configuration](docs/deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the three container level variables |
+| [Updating from 1.2.x](docs/updating.md) | The four things an installation updated from 1.2.x can trip over, and what keeps working |
+| [Deprecated configuration](docs/deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the four container level variables |
 | [FAQ](docs/faq.md) | The questions that come up most |
 
 > [!IMPORTANT]
@@ -140,7 +135,7 @@ Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger
 ## Credits
 
 - [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) is the filament catalogue new filaments are filled in from, and a subset of it is what the mock Spoolman of the test server serves.
-- [ha-bambulab](https://github.com/greghesp/ha-bambulab), the Home Assistant integration for Bambu Lab printers, is where the printer reports under `test/fixtures/reports` come from. They are what real A1, X1C, H2D, X2D, P1P and A2L printers sent, hardware nobody working on this project owns.
+- [ha-bambulab](https://github.com/greghesp/ha-bambulab), the Home Assistant integration for Bambu Lab printers, is where all but one of the printer reports under `test/fixtures/reports` come from. They are what real A1, A2L, H2C, H2D, H2D Pro, H2S, P1P, P2S, X1C and X2D printers sent, most of them hardware nobody working on this project owns. The one exception, `p1s.json`, is the raw MQTT trace a user attached to issue #131.
 
 The licences of both are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

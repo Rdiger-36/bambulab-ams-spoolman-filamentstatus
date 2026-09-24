@@ -9,7 +9,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 | Card | Holds |
 | :---- | :---- |
 | **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
-| **Tracking** | Operation mode, whether a [3rd party spool is assigned automatically](web-ui.md), and [legacy mode](legacy-mode.md) |
+| **Tracking** | Operation mode, whether a [3rd party spool is assigned automatically](web-ui.md), **Clear print result after**, the minutes a finished print stays on the dashboard before the card returns to idle (ten by default, 0 keeps the result until it is cleared by hand), and [legacy mode](legacy-mode.md) |
 | **Synchronisation** | Slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
 | **Logging** | Log file size and how many rotated files are kept, for the server and per printer, plus **Log detail...**: the [log level, the areas and the raw MQTT capture](troubleshooting.md#how-much-gets-logged). The same dialog per printer, **Log** in the Printers card, also [exports that printer's logs](troubleshooting.md#diagnostics-and-privacy) |
@@ -32,8 +32,8 @@ The **Service** card is what a support question usually asks for first, plus the
 - **Restart service**: the container runs a small supervisor, so this works whether or not the container has a restart policy. While a print is running it asks first.
 - **Reconnect all printers**: rebuilds the MQTT connections without ending the process, so the consumption tracking of a running print is kept.
 - **Pause all monitoring**: nothing is processed and nothing written to Spoolman, for while Spoolman is being worked on.
-- **Download diagnostics**: see [Diagnostics and privacy](troubleshooting.md#diagnostics-and-privacy).
-- **Update check** against the GitHub releases. Nothing is downloaded or installed and nothing about the installation is sent, it is one request for the latest version number, cached for six hours.
+- **Download diagnostics...**: see [Diagnostics and privacy](troubleshooting.md#diagnostics-and-privacy).
+The card also says whether a newer release exists, checked against the GitHub releases: "Up to date, the latest release is 1.3.0.", or the version that is available with a link to its release notes. There is no button for it. Nothing is downloaded or installed and nothing about the installation is sent, it is one request for the latest version number, cached for six hours.
 
 ## The Web UI password
 

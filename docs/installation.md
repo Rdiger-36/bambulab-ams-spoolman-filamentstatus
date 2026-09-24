@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 ```
 
-Both volumes are worth mounting: `/app/printers` holds `printers.json`, `settings.json`, `mappings.json` and `apikeys.json` and makes the configuration survive a container update, `/app/logs` keeps the logs.
+Both volumes are worth mounting: `/app/printers` holds `printers.json`, `settings.json`, `mappings.json`, `apikeys.json`, `presets.json` and `printstate.json` and makes the configuration survive a container update, `/app/logs` keeps the logs.
 
 `TZ` sets the time zone the log timestamps follow. Without it the container runs on UTC.
 
@@ -68,4 +68,4 @@ Both volumes are worth mounting: `/app/printers` holds `printers.json`, `setting
 3. Add your printers under **Printers**, each with name, serial number, IP and access code. The dialog tests MQTT and FTPS before saving.
 4. Pick the **operation mode**, `automatic` or `manual`, see [Operation modes](how-it-works.md#operation-modes).
 
-Nothing has to be prepared in Spoolman. The vendor "Bambu Lab" and the extra field `tag` for spools are created by the service on the first start.
+Nothing has to be prepared in Spoolman. The extra field `tag` for spools is created by the service on the first start, the vendor "Bambu Lab" when the first filament is created.

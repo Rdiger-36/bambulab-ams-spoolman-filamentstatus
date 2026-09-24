@@ -25,6 +25,9 @@ and `../starting.js`) or the Express app wiring itself (`../backend.js`).
 | `gcode.js` | FTPS fetch of the sliced 3MF, `slice_info.config` parsing, consumption maths. |
 | `spoolman.js` | Every Spoolman HTTP call. No other module talks to Spoolman directly. |
 | `mappings.js` | Manual AMS-slot → Spoolman-spool assignments, persisted to `printers/mappings.json`. |
+| `presets.js` | The slicer preset names learned from the sliced file, keyed by the `P` hash a chipless slot reports as `tray_info_idx`, persisted to `printers/presets.json` and read once on first use. What turns "PLA · custom preset" into the preset's name and manufacturer. |
+| `printstate.js` | When the running print of each printer started, persisted to `printers/printstate.json` so a restart mid print keeps the clock. Forgotten when the print ends, and a stored start older than a week is not trusted. |
+| `jsonfile.js` | `readJsonFile()` and `writeJsonFile()`: a missing file reads as empty, any other failure is logged, and the write goes through a temporary file plus rename. Shared by `mappings.js`, `presets.js`, `printstate.js` and `apikeys.js`. |
 | `routes.js` | All Express handlers, registered by `registerRoutes(app, printers)`. |
 | `openapi.js` | The API as an OpenAPI 3.0 document, served at `/api/openapi.json` and rendered by the API page of the Web UI. Written by hand next to the routes; `test/openapi.test.js` holds it to the routes the app registers, in both directions. |
 | `auth.js` | Who may talk to this service: the signed session cookie of the Web UI password, the lockout after repeated wrong guesses, and the middleware in front of every page and every route. Without a password the pages are open and `/api/` still needs an API key or a request the browser marks as coming from the Web UI. |
