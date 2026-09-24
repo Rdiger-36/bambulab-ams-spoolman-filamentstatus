@@ -71,19 +71,42 @@ test("every operation names a group the document lists, a summary and its answer
     }
 });
 
-test("every reference points at a schema the document carries", async () => {
+test("every reference points at a component the document carries", async () => {
     const { body } = await call(`${app.url}/api/openapi.json`);
-    const known = new Set(Object.keys(body.components.schemas));
 
+    // A reference names its section: `#/components/schemas/Error` is a shape,
+    // `#/components/responses/Unauthorized` one of the shared answers.
     const walk = (node, where) => {
         if (!node || typeof node !== "object") return;
         if (typeof node.$ref === "string") {
-            const name = node.$ref.split("/").pop();
-            assert.ok(known.has(name), `${where} refers to the unknown schema ${name}`);
+            const match = node.$ref.match(/^#\/components\/([^/]+)\/([^/]+)$/);
+            assert.ok(match, `${where} carries the reference ${node.$ref}, which is not a component`);
+            const [, section, name] = match;
+            assert.ok(body.components[section]?.[name], `${where} refers to the unknown ${section} entry ${name}`);
         }
         for (const [key, value] of Object.entries(node)) walk(value, `${where}.${key}`);
     };
     walk(body, "document");
+});
+
+test("every operation carries the shared answers, and only a public one is open", async () => {
+    const { body } = await call(`${app.url}/api/openapi.json`);
+
+    for (const [path, methods] of Object.entries(body.paths)) {
+        for (const [method, op] of Object.entries(methods)) {
+            const where = `${method.toUpperCase()} ${path}`;
+            assert.equal(op.responses[403]?.$ref, "#/components/responses/Forbidden", `${where} documents no 403`);
+            if (op["x-public"]) {
+                assert.deepEqual(op.security, [], `${where} is public but not marked open`);
+                // The login route has a 401 of its own, the wrong password;
+                // what a public route must not carry is the one of the middleware.
+                assert.notEqual(op.responses[401]?.$ref, "#/components/responses/Unauthorized", `${where} is public but documents the login 401`);
+            } else {
+                assert.equal(op.responses[401]?.$ref, "#/components/responses/Unauthorized", `${where} documents no 401`);
+                assert.equal(op.security, undefined, `${where} overrides the global security`);
+            }
+        }
+    }
 });
 
 test("the settings map lists every field of the schema", async () => {

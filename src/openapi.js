@@ -46,6 +46,10 @@ const t = {
         ...(additional !== undefined ? { additionalProperties: additional } : {}),
     }),
     ref: name => ({ $ref: `#/components/schemas/${name}` }),
+    // OpenAPI 3.0 ignores everything written next to `$ref`, so a nullable
+    // reference has to wrap the reference in `allOf` and put `nullable` beside
+    // that. A `nullable` written straight onto the reference is silently lost.
+    nullableRef: name => ({ allOf: [t.ref(name)], nullable: true }),
 };
 
 /** A JSON response of one schema. */
@@ -81,6 +85,25 @@ const PRINT_IN_FLIGHT = json(
 /** The 409 the assignment routes answer in legacy mode. */
 const LEGACY_MODE = failure("Not available in legacy mode");
 
+/** A reference to one of the shared responses under `components.responses`. */
+const sharedResponse = name => ({ $ref: `#/components/responses/${name}` });
+
+/**
+ * The two answers every operation can give before its handler runs, described
+ * once and referenced from each operation by `op()` below.
+ *
+ * The 403 comes from the request guard in security.js, which sits in front of
+ * everything, the login routes included. The 401 comes from auth.js and is the
+ * answer of every route that is not public.
+ */
+const responses = {
+    Unauthorized: json(
+        "No session and no API key. `apiKeyRequired` is set while no Web UI password exists and the request did not come from the Web UI, `authRequired` while a password is set and the request carries no valid session.",
+        t.ref("Unauthenticated"),
+    ),
+    Forbidden: failure("The `Host` header is not on the allowed list, or a request that changes something came from another origin."),
+};
+
 /** Path parameter: the serial number of a printer. */
 const printerId = {
     name: "printerId",
@@ -95,7 +118,7 @@ const amsId = {
     name: "amsId",
     in: "path",
     required: true,
-    description: "The slot label: `A1` to `D4` for the AMS units, `HT-A` and following for an AMS HT, `External` for the spool holder.",
+    description: "The slot label: `A1` to `D4` for the AMS units, `HT-A` and following for an AMS HT, `External` for the spool holder and `External-2` for the second holder of a dual nozzle printer.",
     schema: t.string(null, { example: "A1" }),
 };
 
@@ -120,6 +143,13 @@ const schemas = {
 
     Ok: t.object({ ok: t.boolean(null, { enum: [true] }) }, { required: ["ok"] }),
 
+    Unauthenticated: t.object({
+        ok: t.boolean(null, { enum: [false] }),
+        error: t.string("What to send instead."),
+        apiKeyRequired: t.boolean("Set while no Web UI password exists: the API takes a key, or a request from the Web UI itself.", { enum: [true] }),
+        authRequired: t.boolean("Set while a password exists and the request carries no valid session.", { enum: [true] }),
+    }, { required: ["ok", "error"], description: "The 401 of auth.js. One of the two flags is set, never both." }),
+
     PrintInFlight: t.object({
         ok: t.boolean(null, { enum: [false] }),
         printInFlight: t.boolean(null, { enum: [true] }),
@@ -135,7 +165,7 @@ const schemas = {
         level: t.string("Overrides the global log level.", { enum: LOG_LEVELS }),
         categories: t.array(t.string(null, { enum: LOG_CATEGORIES }), "Overrides the areas that write debug and trace lines. An empty list silences them all."),
         mqttTrace: t.boolean("Overrides the raw MQTT trace switch."),
-    }, { description: "A per printer log override. Every field is optional and an absent one follows the global setting." }),
+    }, { description: "A per printer log override. Every field is optional and an absent one follows the global setting. A level or a category the service does not know is dropped without an error, so a misspelt level puts the printer back on the global one, and a body that is not an object counts as an empty one." }),
 
     Printer: t.object({
         id: t.string("The serial number."),
@@ -152,6 +182,7 @@ const schemas = {
         name: t.string("How the printer is shown. Also the prefix of the Spoolman location of its slots."),
         ip: t.string("The address on the local network."),
         code: t.string("The LAN access code from the printer's screen."),
+        logDetail: t.ref("LogDetail"),
     }, { required: ["id", "name", "ip", "code"] }),
 
     PrinterPatch: t.object({
@@ -194,7 +225,7 @@ const schemas = {
         LEGACY_MODE: t.boolean("The tracking mode the process is running in, frozen at startup."),
         SPOOLMAN_URL: t.string("The Spoolman base URL the service talks to."),
         VERSION: t.string("The version of this service."),
-        SPOOLMAN_FQDN: t.string("The Spoolman address the links in the Web UI use, when it differs from the one the service uses."),
+        SPOOLMAN_FQDN: t.nullable(t.string("The Spoolman address the links in the Web UI use, when it differs from the one the service uses. Null while unset.")),
         monitoringEnabled: t.boolean(),
         amsEnv: t.array(t.ref("AmsEnvironment"), "Humidity, temperature and drying state per AMS unit."),
         gcodeState: t.string("What the printer says it is doing: `IDLE`, `PREPARE`, `RUNNING`, `PAUSE`, `FINISH`, `FAILED` or `CANCEL`."),
@@ -209,7 +240,11 @@ const schemas = {
         cols: t.array(t.string(), "Every colour of the filament as six hex digits, in the printer's order."),
         tray_color: t.nullable(t.string("The first colour, with the alpha byte the AMS appends.")),
         tray_info_idx: t.nullable(t.string("The filament profile id, `GFA00` and so on.")),
-        tray_weight: t.nullable(t.number("The spool weight the tag reports, in grams.")),
+        tray_weight: {
+            oneOf: [t.string(), t.number()],
+            nullable: true,
+            description: "The spool weight the tag reports, in grams. Passed through as the printer sends it, which is a string such as `\"1000\"`; an empty slot carries the number 0, which the normalisation fills in. Null when the field is missing.",
+        },
         remain: t.nullable(t.integer("The RFID remain percentage. Null means not reported, never empty.")),
     }),
 
@@ -235,8 +270,8 @@ const schemas = {
         amsId: t.string("The slot label."),
         slotState: t.string(null, { enum: ["Empty", "Loaded (Bambu Lab)", "Loaded (3rd party)", "Loaded (archived)"] }),
         slot: t.ref("Slot"),
-        existingSpool: t.nullable(t.ref("SpoolRef")),
-        mergeableSpool: t.nullable(t.ref("SpoolRef")),
+        existingSpool: t.nullableRef("SpoolRef"),
+        mergeableSpool: t.nullableRef("SpoolRef"),
         matchingInternalFilament: t.nullable(t.object({
             id: t.integer(),
             name: t.nullable(t.string()),
@@ -280,8 +315,8 @@ const schemas = {
     PrintState: t.object({
         gcodeState: t.string("`IDLE`, `PREPARE`, `RUNNING`, `PAUSE`, `FINISH`, `FAILED` or `CANCEL`."),
         jobName: t.nullable(t.string()),
-        layerNum: t.integer("The layer being printed, counted from 1."),
-        totalLayers: t.nullable(t.integer()),
+        layerNum: t.integer("The layer being printed, counted from 1. 0 means none: the printer is idle, the result was cleared, or no layer has been reported yet."),
+        totalLayers: t.nullable(t.integer("The 0-based index of the last layer of the sliced file, which is what the booking maths counts with, so a plate of 15 layers reads 14. Null without slice info.")),
         sliceInfo: t.nullable(t.object({
             filaments: t.array(t.object({}, { additional: true }), "The filament list of the sliced file."),
         })),
@@ -290,14 +325,14 @@ const schemas = {
             attempts: t.integer("How many fetches a print gets in all."),
             final: t.boolean("Whether this was the last attempt, so nothing will be booked for this print."),
             reason: t.string("What the printer answered, as the log says it."),
-        }, { description: "Set while the running job has no slice info because the sliced file was not found. Null once it is, or when nothing was looked for." })),
+        }, { description: "Set while the running job has no slice info and the last fetch of its file did not deliver a path: while that fetch is still under way, after the printer refused the FTPS login, or once every candidate path was tried and none held the file. Null once the file is read, or when nothing was looked for." })),
         storagePresent: t.nullable(t.boolean("Whether the printer's USB stick or SD card is in, from `print.sdcard`. It is the storage the sliced file is read from, so `false` means nothing will be booked. Null until a report carried the field.")),
         loadedSpools: t.array(t.ref("ClientSpool"), "The same list as `GET /api/spools/{printerId}`."),
         fullConsumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What the whole print needs, per sliced filament." })),
         consumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What has been consumed at the current layer, or the whole amount once the print finished." })),
         consumptionBooked: t.boolean("Whether the consumption of the last print has been written to Spoolman."),
         lastPrintSummary: t.nullable(t.object({}, { additional: true, description: "The closing report of the last print: what was booked where, and what could not be." })),
-        printResetAt: t.nullable(t.string("When the result card clears itself, ISO 8601.")),
+        printResetAt: t.nullable(t.number("When the result card clears itself, epoch milliseconds. Null while no countdown runs.")),
         printResultCleared: t.boolean(),
         startedAt: t.nullable(t.number("When the print was first seen running, epoch milliseconds.")),
         elapsedMs: t.nullable(t.number()),
@@ -305,12 +340,12 @@ const schemas = {
         estimatedEndAt: t.nullable(t.number("Epoch milliseconds, cut to the whole minute the printer's estimate has. Null while paused.")),
         stage: t.nullable(t.string("The printer's current stage in words.")),
         preparing: t.boolean("Whether the printer is still calibrating or heating."),
-        error: t.string("Set instead of `sliceInfo` when the sliced file could not be fetched."),
+        error: t.string("Set instead of `sliceInfo` when the sliced file could not be fetched. That answer is a short one: only `gcodeState`, `jobName`, `layerNum`, `error`, a null `sliceInfo`, an empty `loadedSpools` and a null `consumption`, none of the other fields."),
     }),
 
     Mapping: t.object({
         spoolId: t.integer("The Spoolman spool the slot is assigned to."),
-        fingerprint: t.nullable(t.string("Material and colours of the slot when it was assigned. The assignment is dropped when the slot stops matching.")),
+        fingerprint: t.nullable(t.string("What the slot held when it was assigned, as `tray_info_idx|tray_type|COLOUR`, with the sorted colour set appended as a fourth part for a multi colour spool: `GFA00|PLA|FF0000`. The assignment is dropped when the slot stops matching. A file written by an older version may carry the two part `PLA|FF0000` form, which is still read.")),
         updatedAt: t.string("ISO 8601."),
         automatic: t.boolean("Present and true when the service made the assignment."),
     }, { required: ["spoolId", "updatedAt"] }),
@@ -347,7 +382,7 @@ const schemas = {
         group: t.string("The card of the settings page the field belongs to."),
         label: t.string(),
         description: t.string(),
-        options: t.nullable(t.array(t.object({}, { additional: true }))),
+        options: t.nullable(t.array(t.string(), "The values an `enum` field takes, or a `set` field picks from. Null for every other type.")),
         default: t.nullable({}),
         min: t.nullable(t.number()),
         max: t.nullable(t.number()),
@@ -437,7 +472,7 @@ const schemas = {
         printer: t.string("The serial number of the printer the event is about, where it is about one."),
     }, {
         additional: true,
-        description: "The `data:` field of every event, as JSON. `slot_update` carries a `spool` (a ClientSpool), `ams_env` an `amsEnv` list, `monitoring_update` an `enabled` flag, `status` a `lastMqttUpdate` and `settings_update` the new `values`.",
+        description: "The `data:` field of every event, as JSON. `slot_update` carries a `spool` (a ClientSpool), `ams_env` an `amsEnv` list, `monitoring_update` an `enabled` flag, `status` a `lastMqttUpdate` and a `lastMqttAmsUpdate` (both ISO 8601, the second null until the slots were processed once) and `settings_update` the new `values`. `printers_update` and `settings_update` name no printer.",
     }),
 };
 
@@ -464,7 +499,9 @@ function settingSchema(field) {
         case "set":
             return { type: "array", items: { type: "string", ...(field.options ? { enum: [...field.options] } : {}) }, ...base };
         default:
-            return { type: "string", ...base };
+            // A string field defaults to null and goes back to null when it is
+            // saved blank, so there is no string field that is never null.
+            return { type: "string", nullable: true, ...base };
     }
 }
 
@@ -481,9 +518,26 @@ function settingSchema(field) {
 export function buildOpenApiDocument() {
     const paths = {};
 
-    /** Registers one operation, so the list below reads path by path. */
+    /**
+     * Registers one operation, so the list below reads path by path.
+     *
+     * The answers every route shares are attached here rather than written
+     * forty times: the 403 of the request guard on every operation, the 401
+     * of the login middleware on every operation that is not public. A public
+     * one gets an empty `security` on top, which is how Swagger UI and Postman
+     * learn that the document's global requirement does not apply to it.
+     */
     const op = (method, path, operation) => {
-        (paths[path] ||= {})[method] = operation;
+        const isPublic = !!operation["x-public"];
+        const shared = {
+            ...(isPublic ? {} : { 401: sharedResponse("Unauthorized") }),
+            403: sharedResponse("Forbidden"),
+        };
+        (paths[path] ||= {})[method] = {
+            ...operation,
+            ...(isPublic ? { security: [] } : {}),
+            responses: { ...operation.responses, ...shared },
+        };
     };
 
     // ---- Login -----------------------------------------------------------
@@ -508,7 +562,11 @@ export function buildOpenApiDocument() {
         requestBody: body(t.object({ password: t.string() }, { required: ["password"] })),
         responses: {
             200: json("Logged in, or no password is set (`required: false`)", t.object({ ok: t.boolean(), required: t.boolean() })),
-            401: failure("Wrong password"),
+            401: json("Wrong password", t.object({
+                ok: t.boolean(null, { enum: [false] }),
+                error: t.string(),
+                retryAfter: t.integer("Always 0 here; the wait is what the 429 carries.", { enum: [0] }),
+            })),
             429: json("Too many wrong attempts from this address", t.object({
                 ok: t.boolean(null, { enum: [false] }),
                 error: t.string(),
@@ -553,7 +611,7 @@ export function buildOpenApiDocument() {
     op("put", "/api/printers/{printerId}", {
         tags: ["Printers"],
         summary: "Rename a printer or change its address or access code",
-        description: "A new address or code reconnects the printer, which loses the booking of a running print, so that case is refused with 409 unless `force` is set. A rename alone does not reconnect and renames the Spoolman locations of its slots.",
+        description: "A new address or code reconnects the printer, which loses the booking of a running print. The 409 guard is stricter than the reconnect: it fires on a changed `ip` and on any non-empty `code`, the stored code being unknown to the caller, so re-sending the same code mid print is refused unless `force` is set, while the reconnect itself happens only when the address or the code really differs (`reconnected` says whether it did). A rename alone does not reconnect; it renames the Spoolman locations of the printer's slots while `SET_LOCATION` is on.",
         parameters: [printerId],
         requestBody: body(t.ref("PrinterPatch"), { example: { name: "Bambu P2S", ip: "192.168.1.60", code: "" } }),
         responses: {
@@ -567,12 +625,11 @@ export function buildOpenApiDocument() {
     op("put", "/api/printers/{printerId}/logdetail", {
         tags: ["Printers"],
         summary: "Set how much this printer writes to its log",
-        description: "An empty object puts the printer back on the global log settings.",
+        description: "An empty object puts the printer back on the global log settings, and so does a body that is not an object. A field the service does not know, or a level or category it does not know, is dropped without an error rather than refused; the `printer` in the answer says what was kept.",
         parameters: [printerId],
         requestBody: body(t.ref("LogDetail"), { example: { level: "debug", categories: ["mqtt", "ams"], mqttTrace: false } }),
         responses: {
-            200: json("Stored", t.object({ ok: t.boolean(), printer: t.ref("Printer") })),
-            400: failure("Not an object"),
+            200: json("Stored, as normalised", t.object({ ok: t.boolean(), printer: t.ref("Printer") })),
             404: PRINTER_NOT_FOUND,
         },
     });
@@ -580,8 +637,8 @@ export function buildOpenApiDocument() {
     op("delete", "/api/printers/{printerId}", {
         tags: ["Printers"],
         summary: "Remove a printer",
-        description: "Disconnects it, gives back the Spoolman locations this service wrote for its slots and drops its assignments. The log file is kept.",
-        "x-confirm": "This removes the printer, its assignments and the Spoolman locations of its slots.",
+        description: "Disconnects it, gives back the Spoolman locations this service wrote for its slots while `SET_LOCATION` is on, and drops its assignments. The log file is kept.",
+        "x-confirm": "This removes the printer and its assignments, and while SET_LOCATION is on the Spoolman locations this service wrote for its slots.",
         parameters: [printerId],
         requestBody: body(t.object({ force }), { required: false }),
         responses: {
@@ -649,7 +706,7 @@ export function buildOpenApiDocument() {
     op("get", "/api/print/{printerId}", {
         tags: ["Status"],
         summary: "The running or last print: state, progress and consumption per slot",
-        description: "The consumption comes from the sliced file, which is fetched from the printer over FTPS once per job. `?job=` fetches the file of a named job instead, which is the manual test of that path.",
+        description: "The consumption comes from the sliced file, which is fetched from the printer over FTPS once per job. `?job=` fetches the file of a named job instead, which is the manual test of that path. When that fetch throws, the answer is still a 200 but a short one: `gcodeState`, `jobName`, `layerNum`, `error`, a null `sliceInfo`, an empty `loadedSpools` and a null `consumption`, nothing else.",
         parameters: [printerId, {
             name: "job",
             in: "query",
@@ -745,6 +802,7 @@ export function buildOpenApiDocument() {
         responses: {
             200: json("Written", t.ref("Ok")),
             404: failure("No such printer or slot"),
+            500: failure("The write threw; the message is the error's"),
             502: failure("Spoolman refused the write"),
         },
     });
@@ -770,7 +828,7 @@ export function buildOpenApiDocument() {
         parameters: [printerId],
         responses: {
             200: json("Keyed by slot label", t.object({}, { additional: t.ref("Mapping") }), {
-                A2: { spoolId: 12, fingerprint: "PLA|FF0000", updatedAt: "2026-09-08T20:15:00.000Z" },
+                A2: { spoolId: 12, fingerprint: "GFA00|PLA|FF0000", updatedAt: "2026-09-08T20:15:00.000Z" },
             }),
             404: PRINTER_NOT_FOUND,
         },
@@ -779,7 +837,7 @@ export function buildOpenApiDocument() {
     op("put", "/api/mappings/{printerId}/{amsId}", {
         tags: ["Assignments"],
         summary: "Assign a Spoolman spool to a slot",
-        description: "For a slot the printer cannot identify, a 3rd party spool, or to pick between two tagged spools of the same kind. The spool takes the slot's Spoolman location, and the one assigned before gives it back. Not available in legacy mode.",
+        description: "For a slot the printer cannot identify, a 3rd party spool, or to pick between two tagged spools of the same kind. While `SET_LOCATION` is on, the spool takes the slot's Spoolman location and the one assigned before gives it back. Not available in legacy mode.",
         parameters: [printerId, amsId],
         requestBody: body(t.object({ spoolId: t.integer(null, { minimum: 1 }) }, { required: ["spoolId"] }), { example: { spoolId: 12 } }),
         responses: {
@@ -787,13 +845,15 @@ export function buildOpenApiDocument() {
             400: failure("`spoolId` is not a positive integer"),
             404: failure("No such printer, slot or Spoolman spool"),
             409: LEGACY_MODE,
+            500: failure("The assignment or a location write threw; the message is the error's"),
         },
     });
 
     op("delete", "/api/mappings/{printerId}/{amsId}", {
         tags: ["Assignments"],
         summary: "Remove the assignment of a slot",
-        description: "The spool gives back the slot's Spoolman location when this service wrote it. Not available in legacy mode.",
+        description: "While `SET_LOCATION` is on, the spool gives back the slot's Spoolman location when this service wrote it. Not available in legacy mode.",
+        "x-confirm": "This removes the assignment. Nothing is booked from the slot until it is assigned again.",
         parameters: [printerId, amsId],
         responses: {
             200: json("Removed, or there was nothing to remove", t.object({ ok: t.boolean(), removed: t.boolean() })),
@@ -836,10 +896,9 @@ export function buildOpenApiDocument() {
     op("get", "/api/spoolman/spools", {
         tags: ["Spoolman"],
         summary: "Every spool in Spoolman, as Spoolman answers it",
-        description: "Passed through untouched, archived spools left out. What the assign dialog picks from.",
+        description: "Passed through untouched, archived spools left out. What the assign dialog picks from. A Spoolman outage is answered with 200 and an empty list, never with a failure; `GET /api/status/{printerId}` says whether Spoolman is reachable.",
         responses: {
             200: json("The list, in Spoolman's own shape", t.array(t.object({}, { additional: true }))),
-            502: failure("Spoolman could not be reached"),
         },
     });
 
@@ -870,7 +929,9 @@ export function buildOpenApiDocument() {
             200: json("The spool as Spoolman answers it after the change", t.object({}, { additional: true })),
             400: failure("Nothing to change, or a value is unusable"),
             404: failure("No such spool"),
-            409: json("A print is running with this spool, or legacy mode is on", t.ref("PrintInFlight")),
+            409: json("A print is running with this spool (a PrintInFlight, with `printInFlight: true`), or legacy mode is on (a plain Error, without that field)", {
+                oneOf: [t.ref("PrintInFlight"), t.ref("Error")],
+            }),
             502: failure("Spoolman refused the change"),
         },
     });
@@ -882,7 +943,12 @@ export function buildOpenApiDocument() {
             200: json("The lists", t.object({
                 vendors: t.array(t.object({}, { additional: true }), "Spoolman's vendors."),
                 materials: t.array(t.string(), "The materials of the filaments in Spoolman."),
-                externalMaterials: t.array(t.string(), "The materials the SpoolmanDB catalogue knows."),
+                externalMaterials: t.array(t.object({
+                    material: t.string(),
+                    density: t.nullable(t.number("Grams per cubic centimetre.")),
+                    extruder_temp: t.nullable(t.number("Degrees Celsius.")),
+                    bed_temp: t.nullable(t.number("Degrees Celsius.")),
+                }), "The materials the SpoolmanDB catalogue knows, as Spoolman's external material list answers them."),
                 locations: t.array(t.string()),
                 filaments: t.array(t.object({}, { additional: true }), "Spoolman's filaments."),
                 externalVendors: t.array(t.string(), "The manufacturers of the catalogue."),
@@ -894,19 +960,18 @@ export function buildOpenApiDocument() {
     op("get", "/api/spoolman/external/filaments", {
         tags: ["Spoolman"],
         summary: "Search the SpoolmanDB catalogue",
-        description: "Filtered here rather than in the browser: the whole catalogue is thousands of entries. `facet` lists the manufacturers or materials still on offer under the other filters instead of the entries themselves.",
         parameters: [
             { name: "manufacturer", in: "query", schema: t.string(), description: "Exact manufacturer name." },
-            { name: "material", in: "query", schema: t.string(), description: "Exact material." },
-            { name: "q", in: "query", schema: t.string(), description: "A search term matched against the name." },
-            { name: "limit", in: "query", schema: t.integer(null, { minimum: 1, maximum: 500, default: 100 }) },
+            { name: "material", in: "query", schema: t.string(), description: "Matched by material family, so `PLA` also finds `PLA+` and `PLA Matte`." },
+            { name: "q", in: "query", schema: t.string(), description: "A search term matched against the manufacturer, the name and the material, case insensitive." },
+            { name: "limit", in: "query", schema: t.integer(null, { minimum: 1, maximum: 500, default: 100 }), description: "Ignored when `facet` is set: the facet lists every value." },
             { name: "facet", in: "query", schema: t.string(null, { enum: ["manufacturer", "material"] }), description: "List the distinct values of this field instead of the entries." },
         ],
+        description: "Filtered here rather than in the browser: the whole catalogue is thousands of entries. `facet` lists the manufacturers or materials still on offer under the other filters instead of the entries themselves. A catalogue that cannot be loaded is answered with 200 and an empty list, never with a failure.",
         responses: {
             200: json("The matching entries, or the facet values as strings", t.array({
                 oneOf: [t.object({}, { additional: true }), t.string()],
             })),
-            502: failure("The catalogue could not be loaded"),
         },
     });
 
@@ -917,17 +982,16 @@ export function buildOpenApiDocument() {
         requestBody: body(t.object({
             SPOOLMAN_ENDPOINT: t.string("A full URL. When set, the three fields below are ignored."),
             SPOOLMAN_IP: t.string(),
-            SPOOLMAN_PORT: t.integer(),
+            SPOOLMAN_PORT: t.string("The port, as the setting stores it: a string. A number is taken as well and turned into one."),
             SPOOLMAN_SUBFOLDER: t.string("The path Spoolman lives under behind a reverse proxy."),
-        }), { example: { SPOOLMAN_IP: "192.168.1.50", SPOOLMAN_PORT: 7912, SPOOLMAN_SUBFOLDER: "" } }),
+        }), { example: { SPOOLMAN_IP: "192.168.1.50", SPOOLMAN_PORT: "7912", SPOOLMAN_SUBFOLDER: "" } }),
         responses: {
-            200: json("The result, with the URL that was tried", t.object({
+            200: json("The result, with the URL that was tried. All four fields are plain strings, so no value is ever refused; a wrong one shows up as `ok: false` here.", t.object({
                 ok: t.boolean(),
                 status: t.string("Spoolman's own health status, when reachable."),
                 error: t.string("What to fix, when `ok` is false."),
                 url: t.string(),
             })),
-            400: failure("A value is unusable"),
         },
     });
 
@@ -942,14 +1006,14 @@ export function buildOpenApiDocument() {
     op("put", "/api/settings", {
         tags: ["Settings"],
         summary: "Change settings",
-        description: "Takes a map of the fields to change, or that map under `values` together with the `revision` that was read, in which case a save against a replaced state is refused with 409. Applied to the running process at once, except for the fields the schema marks as restart required. A new password hands the caller a fresh session.",
+        description: "Takes a map of the fields to change, or that map under `values` together with the `revision` that was read, in which case a save against a replaced state is refused with 409. A wrapped body without a revision, or with one that is not an integer, is applied without the check, like the bare map. Applied to the running process at once, except for the fields the schema marks as restart required. A new password hands the caller a fresh session.",
         requestBody: body({
             oneOf: [
                 t.object({}, { additional: true, description: "The bare field map." }),
                 t.object({
-                    revision: t.integer(),
+                    revision: t.integer("The revision `GET /api/settings` handed out. Left out or not an integer, the check is skipped."),
                     values: t.object({}, { additional: true }),
-                }, { required: ["revision", "values"], description: "The field map with the revision it was read at." }),
+                }, { required: ["values"], description: "The field map with the revision it was read at." }),
             ],
         }, { example: { UPDATE_INTERVAL: 120000, MODE: "manual" } }),
         responses: {
@@ -957,15 +1021,20 @@ export function buildOpenApiDocument() {
                 allOf: [t.ref("SettingsView"), t.object({
                     ok: t.boolean(),
                     changed: t.array(t.string(), "The keys whose value changed."),
-                    restartRequired: t.boolean("One of them takes effect on the next start."),
+                    restartRequired: t.array(t.string(), "The changed keys that take effect on the next start. Empty when none does."),
                 })],
             }),
-            400: failure("An unknown setting or an unusable value; the message names it"),
+            400: json("An unknown setting or an unusable value; the message names it", t.object({
+                ok: t.boolean(null, { enum: [false] }),
+                error: t.string("The messages, joined with ` / `."),
+                conflict: t.boolean("Always false here; the 409 is the conflict.", { enum: [false] }),
+            })),
             409: json("The revision is stale", t.object({
                 ok: t.boolean(null, { enum: [false] }),
                 error: t.string(),
                 conflict: t.boolean(null, { enum: [true] }),
             })),
+            500: failure("settings.json could not be written"),
         },
     });
 
@@ -990,6 +1059,7 @@ export function buildOpenApiDocument() {
                 keys: t.array(t.ref("ApiKey")),
             })),
             400: failure("No name, a name too long, or one already in use"),
+            500: failure("apikeys.json could not be written"),
         },
     });
 
@@ -1001,6 +1071,7 @@ export function buildOpenApiDocument() {
         responses: {
             200: json("Revoked", t.object({ ok: t.boolean(), removed: t.ref("ApiKey"), keys: t.array(t.ref("ApiKey")) })),
             404: failure("No key with this id"),
+            500: failure("apikeys.json could not be written"),
         },
     });
 
@@ -1034,6 +1105,7 @@ export function buildOpenApiDocument() {
         responses: {
             200: json("The lines", t.ref("LogLines")),
             404: failure("No such printer, or the server was asked for a trace"),
+            500: failure("The file could not be read"),
         },
     });
 
@@ -1056,7 +1128,8 @@ export function buildOpenApiDocument() {
                     "application/zip": { schema: t.string(null, { format: "binary" }) },
                 },
             },
-            404: failure("No such printer or no log file yet"),
+            404: failure("No such printer, no log file yet, or the server was asked for a trace"),
+            500: failure("The files could not be read or archived"),
         },
     });
 
@@ -1096,6 +1169,7 @@ export function buildOpenApiDocument() {
         responses: {
             200: { description: "The bundle", content: { "application/zip": { schema: t.string(null, { format: "binary" }) } } },
             400: failure("The scope names an unknown printer or log"),
+            500: failure("The bundle could not be built"),
         },
     });
 
@@ -1128,6 +1202,7 @@ export function buildOpenApiDocument() {
         responses: {
             200: json("Dismissed", t.ref("Ok")),
             404: failure("Unknown notice"),
+            500: failure("settings.json, which holds the acknowledgement, could not be written"),
         },
     });
 
@@ -1149,10 +1224,13 @@ export function buildOpenApiDocument() {
                 "",
                 "**Who may call it.** The Web UI of this installation, and any caller carrying an API key in",
                 "`Authorization: Bearer <key>` or `X-API-Key: <key>`. Keys are created under *Network access* on the settings page.",
-                "Anything else is answered with 401, whether or not a Web UI password is set. Only the three login routes are open.",
+                "Anything else is answered with 401: without a Web UI password a request the browser marks as the Web UI's own passes,",
+                "with one set a browser needs a session from `POST /api/auth/login`. Only the three login routes are open.",
+                "Before any of that, every request has to pass the request guard: a `Host` that is not on the allowed list, or a",
+                "request that changes something and comes from another origin, is answered with 403, the login routes included.",
                 "",
                 "**Slot labels** count the way the printer does: `A1` is the first slot of the first AMS, `External` the spool holder,",
-                "`HT-A` the first AMS HT.",
+                "`External-2` the second holder of a dual nozzle printer, `HT-A` the first AMS HT.",
             ].join("\n"),
             license: { name: "GPL-3.0", url: "https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/LICENSE" },
         },
@@ -1172,7 +1250,7 @@ export function buildOpenApiDocument() {
             { name: "Settings", description: "The runtime configuration, stored in printers/settings.json." },
             { name: "API keys", description: "Keys for callers that have no browser to log in with. A key is a full session." },
             { name: "Logs", description: "The log and the raw MQTT trace of each printer, and the server log." },
-            { name: "Service", description: "Facts about the installation, the update check, the support bundle, the restart, and this document." },
+            { name: "Service", description: "Facts about the installation, the update check, the support bundle, the restart, the notices the dashboard shows, and this document." },
         ],
         paths,
         components: {
@@ -1182,6 +1260,7 @@ export function buildOpenApiDocument() {
                 session: { type: "apiKey", in: "cookie", name: "ams_session", description: "The cookie `POST /api/auth/login` sets. What the Web UI uses." },
             },
             schemas,
+            responses,
         },
         security: [{ bearer: [] }, { apiKey: [] }, { session: [] }],
     };
