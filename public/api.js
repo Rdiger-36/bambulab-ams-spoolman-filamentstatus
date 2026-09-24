@@ -525,15 +525,34 @@ function renderShapes(op) {
         parts.push(`<h4 class="api-h4">Request body</h4>${renderSchema(requestSchema)}`);
     }
 
-    for (const [status, response] of Object.entries(op.responses || {})) {
-        const [type, media] = Object.entries(response.content || {})[0] || [];
+    for (const [status, entry] of Object.entries(op.responses || {})) {
+        const response = resolveResponse(entry);
+        // A response can be served in more than one form, the log download
+        // as text or as a zip, and every form is listed: the first alone used
+        // to hide the archive.
+        const contents = Object.entries(response.content || {});
+        const types = contents.map(([type]) => type).join(" or ");
         const pillClass = status.startsWith("2") ? "pill-ok" : "pill-bad";
         parts.push(`
-            <h4 class="api-h4"><span class="pill ${pillClass}">${escapeHtml(status)}</span> <span class="api-h4-text">${markdown(response.description || "")}</span>${type ? ` <span class="api-muted">${escapeHtml(type)}</span>` : ""}</h4>
-            ${media?.schema ? renderSchema(media.schema) : ""}`);
+            <h4 class="api-h4"><span class="pill ${pillClass}">${escapeHtml(status)}</span> <span class="api-h4-text">${markdown(response.description || "")}</span>${types ? ` <span class="api-muted">${escapeHtml(types)}</span>` : ""}</h4>`);
+        for (const [type, media] of contents) {
+            if (!media?.schema) continue;
+            parts.push(`${contents.length > 1 ? `<div class="api-muted">${escapeHtml(type)}</div>` : ""}${renderSchema(media.schema)}`);
+        }
     }
 
     return parts.join("");
+}
+
+/**
+ * A response as written, or the shared one it refers to. The answers every
+ * route can give, the 401 and the 403, are described once under
+ * `components.responses` and referenced from each operation.
+ */
+function resolveResponse(response) {
+    if (!response?.$ref) return response;
+    const name = response.$ref.split("/").pop();
+    return spec.components?.responses?.[name] || { description: name };
 }
 
 /**
@@ -543,26 +562,42 @@ function renderShapes(op) {
  * look up elsewhere; a reference met twice on the same branch is shown by name
  * to stop a cycle.
  */
-function renderSchema(schema, seen = new Set()) {
+function renderSchema(schema, seen = new Set(), { nullable = false } = {}) {
     if (!schema) return "";
 
     if (schema.$ref) {
         const name = schema.$ref.split("/").pop();
-        if (seen.has(name)) return `<span class="api-type">${escapeHtml(name)}</span>`;
+        const orNull = nullable ? ` <span class="api-type">or null</span>` : "";
+        if (seen.has(name)) return `<span class="api-type">${escapeHtml(name)}</span>${orNull}`;
         const resolved = spec.components?.schemas?.[name];
-        if (!resolved) return `<span class="api-type">${escapeHtml(name)}</span>`;
-        return `<span class="api-type-name">${escapeHtml(name)}</span> ${renderSchema(resolved, new Set([...seen, name]))}`;
+        if (!resolved) return `<span class="api-type">${escapeHtml(name)}</span>${orNull}`;
+        return `<span class="api-type-name">${escapeHtml(name)}</span>${orNull} ${renderSchema(resolved, new Set([...seen, name]))}`;
+    }
+
+    // A nullable reference. OpenAPI 3.0 ignores everything next to `$ref`, so
+    // the document wraps the reference in `allOf` and puts `nullable` beside
+    // that; shown as the reference it is, with the null it may be.
+    if (schema.nullable && schema.allOf?.length === 1 && schema.allOf[0].$ref) {
+        return renderSchema(schema.allOf[0], seen, { nullable: true });
     }
 
     if (schema.oneOf || schema.allOf) {
         const list = schema.oneOf || schema.allOf;
-        const word = schema.oneOf ? "one of" : "all of";
-        return `<span class="api-muted">${word}</span><ul class="api-tree">${list.map(item => `<li>${renderSchema(item, seen)}</li>`).join("")}</ul>`;
+        const word = `${schema.oneOf ? "one of" : "all of"}${schema.nullable ? ", or null" : ""}`;
+        const note = schema.description ? ` <span class="api-field-desc">${markdown(schema.description)}</span>` : "";
+        return `<span class="api-muted">${word}</span>${note}<ul class="api-tree">${list.map(item => `<li>${renderSchema(item, seen)}</li>`).join("")}</ul>`;
     }
 
     const type = typeLabel(schema);
     const note = schema.description ? ` <span class="api-field-desc">${markdown(schema.description)}</span>` : "";
-    const enumNote = schema.enum ? ` <span class="api-muted">${schema.enum.map(value => `<code>${escapeHtml(JSON.stringify(value))}</code>`).join(" ")}</span>` : "";
+    // The allowed values of the field, or of every item of a list of them.
+    const allowed = schema.enum || (schema.type === "array" ? schema.items?.enum : null);
+    const enumNote = allowed ? ` <span class="api-muted">${allowed.map(value => `<code>${escapeHtml(JSON.stringify(value))}</code>`).join(" ")}</span>` : "";
+    // An object that takes fields beyond the listed ones says so, otherwise it
+    // reads as closed and a pass-through record looks empty.
+    const open = schema.additionalProperties === true
+        ? `<li><code class="api-field">*</code> <span class="api-muted">any other field</span></li>`
+        : "";
 
     if (schema.type === "object" && schema.properties && Object.keys(schema.properties).length) {
         const required = new Set(schema.required || []);
@@ -573,7 +608,7 @@ function renderSchema(schema, seen = new Set()) {
             </li>`).join("");
         const extra = schema.additionalProperties && typeof schema.additionalProperties === "object"
             ? `<li><code class="api-field">*</code> ${renderSchema(schema.additionalProperties, seen)}</li>`
-            : "";
+            : open;
         return `<span class="api-type">${type}</span>${note}<ul class="api-tree">${rows}${extra}</ul>`;
     }
 
@@ -581,7 +616,11 @@ function renderSchema(schema, seen = new Set()) {
         return `<span class="api-type">${type}</span>${note}<ul class="api-tree"><li><code class="api-field">*</code> ${renderSchema(schema.additionalProperties, seen)}</li></ul>`;
     }
 
-    if (schema.type === "array" && schema.items && (schema.items.$ref || schema.items.properties || schema.items.oneOf)) {
+    if (schema.type === "object" && open) {
+        return `<span class="api-type">${type}</span>${note}<ul class="api-tree">${open}</ul>`;
+    }
+
+    if (schema.type === "array" && schema.items && (schema.items.$ref || schema.items.properties || schema.items.oneOf || schema.items.allOf)) {
         return `<span class="api-type">${type}</span>${note}<ul class="api-tree"><li>${renderSchema(schema.items, seen)}</li></ul>`;
     }
 
