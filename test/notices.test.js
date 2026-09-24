@@ -22,6 +22,13 @@ test("the deprecation notice is served with the variables it found", async () =>
     assert.equal(body["env-config"].acknowledged, false);
 });
 
+test("a fresh installation, without a printers.json, is not told it was updated", async () => {
+    const { body } = await call(`${app.url}/api/notices`);
+
+    assert.equal(body["upgrade-1.3.0"].active, false);
+    assert.equal(body["upgrade-1.3.0"].acknowledged, false);
+});
+
 test("acknowledging the notice does not hand a single setting to the file", async () => {
     const before = await call(`${app.url}/api/settings`);
     assert.equal(app.readJson("settings.json"), null);
@@ -36,6 +43,8 @@ test("acknowledging the notice does not hand a single setting to the file", asyn
     const stored = app.readJson("settings.json");
     assert.deepEqual(stored.values, {});
     assert.equal(stored.notices["env-config"], true);
+    // The upgrade notice was never raised here, so the file knows nothing of it.
+    assert.equal("upgrade-1.3.0" in stored.notices, false);
 
     const after = await call(`${app.url}/api/settings`);
     assert.deepEqual(after.body.sources, before.body.sources);

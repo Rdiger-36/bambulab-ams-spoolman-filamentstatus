@@ -81,7 +81,7 @@ The P2S, the H2 series and the X2D keep the file of a print in internal storage,
 [LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf, /cache/bracket.3mf, /bracket.gcode.3mf, /bracket.3mf, consumption tracking unavailable for this print
 ```
 
-Put a USB stick into the printer. From then on the printer copies every job to `/cache` on the stick by itself, whether it was sent from Bambu Studio, through the cloud or from the Handy app, and the next print is tracked. Nothing has to change in Bambu Studio. The file listing of the [Debug-Printers CLI](#debug-printers-cli) below shows what the printer exposes: an empty listing means no stick.
+The printer reports whether a stick is in, and the print card on the dashboard says "No USB stick or SD card in the printer, nothing will be booked" for as long as none is, while idle as well; the log says the same once when the stick goes missing. Put a USB stick into the printer. From then on the printer copies every job to `/cache` on the stick by itself, whether it was sent from Bambu Studio, through the cloud or from the Handy app, and the next print is tracked. Nothing has to change in Bambu Studio. The file listing of the [Debug-Printers CLI](#debug-printers-cli) below shows what the printer exposes: an empty listing means no stick.
 
 ## Debug-Printers CLI
 

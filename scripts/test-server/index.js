@@ -27,7 +27,7 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  * Usage:
  *   node scripts/test-server/index.js [--spoolman-port 7912] [--printer-port 8883]
  *                                     [--interval 3000] [--no-service]
- *                                     [--delta-reports]
+ *                                     [--delta-reports] [--no-storage]
  *                                     [--real-printer <ip> <code> <serial>]
  *                                     [--spoolman <url>] [--mode manual|automatic]
  *                                     [--report <name>] [--ams-model n3f|ams|ams_f1]
@@ -53,6 +53,10 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  * between two full ones, confirmed by the trace of issue #131. The holder has to stay on
  * the dashboard through it; before the fix it vanished and came back with
  * every report.
+ *
+ * `--no-storage` makes the mock printer report `sdcard` false, a P2S with its
+ * USB stick pulled. The print card has to say so, because such a printer keeps
+ * printing from internal storage and only the booking goes missing.
  *
  * `--real-printer` skips the mock printer and points the service at a physical
  * one, while Spoolman stays the mock. That is the way to see how a spool nobody
@@ -88,6 +92,7 @@ function readOptions(argv) {
         interval: 3000,
         service: true,
         deltaReports: false,
+        storage: true,
         realPrinter: null,
         spoolman: null,
         mode: "manual",
@@ -103,6 +108,7 @@ function readOptions(argv) {
             case "--interval": options.interval = Number(value); i++; break;
             case "--no-service": options.service = false; break;
             case "--delta-reports": options.deltaReports = true; break;
+            case "--no-storage": options.storage = false; break;
             case "--spoolman":
                 if (!value || !/^https?:\/\//.test(value)) {
                     console.error("--spoolman takes a base URL, for example http://spoolman.example:7912");
@@ -213,6 +219,7 @@ async function main() {
             log: prefixed("printer"),
             report: options.report?.print ?? null,
             deltaReports: options.deltaReports,
+            storage: options.storage,
             amsModel: options.amsModel,
         });
 

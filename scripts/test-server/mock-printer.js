@@ -201,8 +201,9 @@ function topicMatches(filter, topic) {
  *   never repeats. The point of a fixture is to see what the service makes of
  *   a report nobody here can produce, so nothing else is touched
  * @param {boolean} delta - leave the holder out, as a delta report does
+ * @param {boolean} storage - what the scenario reports as `sdcard`
  */
-function buildReport(fixture, delta) {
+function buildReport(fixture, delta, storage) {
     if (fixture) {
         return JSON.stringify({ print: { ...fixture, sequence_id: String(Date.now()) } });
     }
@@ -215,6 +216,8 @@ function buildReport(fixture, delta) {
             gcode_state: "IDLE",
             layer_num: 0,
             subtask_name: "",
+            // Whether the USB stick is in. A real P2S reports true with one.
+            sdcard: storage,
             // The external spool holder, which the printer reports outside the
             // AMS block. Older firmware called the same thing vt_tray.
             ...(delta ? {} : { vir_slot: EXTERNAL_SPOOL }),
@@ -275,13 +278,15 @@ const REPORTS_DIR = path.join(
  * @param {boolean} [options.deltaReports] - make every second report a delta
  *   that leaves the external spool holder out, the way a P1S does. See
  *   `buildReport()`
+ * @param {boolean} [options.storage] - what the scenario reports as `sdcard`,
+ *   true unless `--no-storage` was given. A fixture carries its own value
  * @param {string} [options.amsModel] - what the four slot units answer as in
  *   `get_version`: `n3f` (AMS 2 Pro, the default, which is what the scenario's
  *   P2S carries), `ams` (original AMS) or `ams_f1` (AMS Lite). See
  *   `versionAnswer()`
  * @returns {Promise<{close: () => Promise<void>, reports: () => number}>}
  */
-export function startMockPrinter({ serial, port, interval, log, report = null, deltaReports = false, amsModel = "n3f" }) {
+export function startMockPrinter({ serial, port, interval, log, report = null, deltaReports = false, storage = true, amsModel = "n3f" }) {
     const topic = `device/${serial}/report`;
     const units = report?.ams?.ams ?? AMS_UNITS;
     const clients = new Set();
@@ -356,7 +361,7 @@ export function startMockPrinter({ serial, port, interval, log, report = null, d
     const timer = setInterval(() => {
         // Full, delta, full, delta: the first report a client sees is the one
         // it has to build the slots from, so the full one comes first.
-        const payload = buildReport(report, deltaReports && built % 2 === 1);
+        const payload = buildReport(report, deltaReports && built % 2 === 1, storage);
         built++;
         let sent = 0;
 

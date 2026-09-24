@@ -1,6 +1,7 @@
 import { version } from "./config.js";
 import { LOG_CATEGORIES, LOG_LEVELS, SETTINGS_SCHEMA } from "./settings.js";
 import { ENV_CONFIG_NOTICE } from "./deprecation.js";
+import { UPGRADE_NOTICE } from "./upgradenotice.js";
 import { SLOT_OPTIONS } from "./utils.js";
 
 /**
@@ -290,6 +291,7 @@ const schemas = {
             final: t.boolean("Whether this was the last attempt, so nothing will be booked for this print."),
             reason: t.string("What the printer answered, as the log says it."),
         }, { description: "Set while the running job has no slice info because the sliced file was not found. Null once it is, or when nothing was looked for." })),
+        storagePresent: t.nullable(t.boolean("Whether the printer's USB stick or SD card is in, from `print.sdcard`. It is the storage the sliced file is read from, so `false` means nothing will be booked. Null until a report carried the field.")),
         loadedSpools: t.array(t.ref("ClientSpool"), "The same list as `GET /api/spools/{printerId}`."),
         fullConsumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What the whole print needs, per sliced filament." })),
         consumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What has been consumed at the current layer, or the whole amount once the print finished." })),
@@ -408,10 +410,17 @@ const schemas = {
 
     Notice: t.object({
         active: t.boolean(),
+        acknowledged: t.boolean("Dismissed in the Web UI. Stored server side, so it holds for every browser."),
         variables: t.array(t.string(), "The settings whose value still comes from the environment."),
         printerVariables: t.array(t.string(), "The PRINTER_* variables that are set."),
         printerVariablesIgnored: t.boolean("They no longer do anything because printers.json owns the list."),
     }, { additional: true }),
+
+    UpgradeNotice: t.object({
+        active: t.boolean("This process, or one before it, started on the files of a 1.2.x installation and the notice has not been dismissed."),
+        acknowledged: t.boolean("Dismissed in the Web UI. Stored server side, so it holds for every browser."),
+        docs: t.string("The page of the documentation that lists what changed."),
+    }),
 
     LogLines: t.object({
         logs: t.array(t.string(), "The last lines, oldest first, read across the rotated files."),
@@ -1105,9 +1114,9 @@ export function buildOpenApiDocument() {
     op("get", "/api/notices", {
         tags: ["Service"],
         summary: "The notices the dashboard may show",
-        description: `One so far, \`${ENV_CONFIG_NOTICE}\`: this installation is still configured through environment variables.`,
+        description: `Two: \`${UPGRADE_NOTICE}\`, this installation was updated from 1.2.x and has not read what changed, and \`${ENV_CONFIG_NOTICE}\`, it is still configured through environment variables.`,
         responses: {
-            200: json("Keyed by notice id", t.object({ [ENV_CONFIG_NOTICE]: t.ref("Notice") })),
+            200: json("Keyed by notice id", t.object({ [UPGRADE_NOTICE]: t.ref("UpgradeNotice"), [ENV_CONFIG_NOTICE]: t.ref("Notice") })),
         },
     });
 
@@ -1115,7 +1124,7 @@ export function buildOpenApiDocument() {
         tags: ["Service"],
         summary: "Dismiss a notice",
         description: "Stored server side, so it stays dismissed in every browser.",
-        parameters: [{ name: "id", in: "path", required: true, schema: t.string(null, { enum: [ENV_CONFIG_NOTICE] }) }],
+        parameters: [{ name: "id", in: "path", required: true, schema: t.string(null, { enum: [UPGRADE_NOTICE, ENV_CONFIG_NOTICE] }) }],
         responses: {
             200: json("Dismissed", t.ref("Ok")),
             404: failure("Unknown notice"),

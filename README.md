@@ -27,7 +27,7 @@
 Based on the idea of a script from [Diogo Resende](https://github.com/dresende), posted in this [issue](https://github.com/Donkie/Spoolman/issues/217).
 
 > [!IMPORTANT]
-> Version 1.3.0 is still in development.
+> Version 1.3.0 is still in development and this Documentation depends on it!
 > To use the pre-release version you need to use the dev build:
 > 
 > ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:dev
@@ -47,6 +47,8 @@ An original Bambu Lab spool is recognised by its RFID tag and linked on its own;
 - **Environment variables and hand-written `printers.json` are deprecated.** They keep working, see [Deprecated configuration](docs/deprecated-configuration.md).
 - **The Web UI can ask for a password, and the [API](docs/api.md) needs a key.** Both are set under **Network access** on the [settings page](docs/settings.md). A script or an integration that called the API without a key needs one now.
 - **Slots are numbered the way the printer numbers them.** The first slot of the first unit is `A1`, so every slot label moved up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool.
+
+Coming from 1.2.x? [Updating from 1.2.x](docs/updating.md) lists what can need you and what keeps working. The dashboard says the same once on the first visit after the update.
 
 ## Attention
 
@@ -76,7 +78,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 
 Up to 12 AMS on one printer: max. 4 AMS Standard / 2 Pro plus 8 AMS HT.
 
-**The second generation printers, the P2S, the H2 series and the X2D, need a USB stick in the printer for consumption tracking.** Their FTPS server shows the stick and nothing else. With a stick in, the printer copies every job to `/cache` on it and the sliced file is read from there. Without one, the file only exists in the printer's internal storage, which nothing outside the printer can read, and every print ends with "No sliced file on the printer" in the log (issue #179).
+**The second generation printers, the P2S, the H2 series and the X2D, need a USB stick in the printer for consumption tracking.** Their FTPS server shows the stick and nothing else. With a stick in, the printer copies every job to `/cache` on it and the sliced file is read from there. Without one, the file only exists in the printer's internal storage, which nothing outside the printer can read, and every print ends with "No sliced file on the printer" in the log (issue #179). The printer reports whether a stick is in, and the print card says "No USB stick or SD card in the printer" for as long as none is.
 
 The external spool holder counts as one more slot, named `External`, on a printer that reports it, and a dual nozzle printer gets `External-2` for its second holder. It carries no RFID chip, so it is assigned to a Spoolman spool by hand like any 3rd party spool, and it is not read in [legacy mode](docs/legacy-mode.md), where the weight comes from the chip.
 
