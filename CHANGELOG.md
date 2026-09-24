@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - The print card says "No USB stick or SD card in the printer, nothing will be booked" for as long as the printer reports none, while idle as well, so the stick is in before the next print rather than found missing by it. The printer reports its removable storage as sdcard in every full report, the USB stick on a P2S, an H2 series printer or an X2D and the microSD card on the others, and that storage is the one FTPS shows: without it no sliced file can be read. The second generation printers keep printing without it, which is what made the case silent (issue #179). The log says it once when the stick goes missing and once when it is back; legacy mode, which never reads the file, says nothing. The API carries it as storagePresent on /api/print/{printerId}, null until a report said. scripts/test-server takes --no-storage to show it without hardware
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.25
    - Changes:
       - The print card says PREPARE instead of RUNNING while the printer is heating, homing, levelling or calibrating. The printer reports RUNNING from the first second of a job, and "RUNNING" next to "Homing toolhead" read like a contradiction; the stage badge next to it still names what the printer is doing. A filament change before the first layer counts as preparation too

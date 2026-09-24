@@ -224,3 +224,15 @@ test("a job whose sliced file was not found says so, and whether attempts are le
         printer.lastSliceFetch = null;
     }
 });
+
+test("the print view says whether the printer's removable storage is in", async () => {
+    // Null until a report carried the field, which none did here.
+    printer.storagePresent = null;
+    assert.equal((await call(`${app.url}/api/print/${SERIAL}`)).body.storagePresent, null);
+
+    printer.storagePresent = false;
+    assert.equal((await call(`${app.url}/api/print/${SERIAL}`)).body.storagePresent, false);
+
+    printer.storagePresent = true;
+    assert.equal((await call(`${app.url}/api/print/${SERIAL}`)).body.storagePresent, true);
+});
