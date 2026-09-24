@@ -14,12 +14,12 @@ Startup and the AMS report:
 [LOG] Server - Setting up configuration...
 [LOG] Server - Backend running on http://localhost:4000
 [LOG] Server - Spoolman connected successfully!
-[LOG] Server - Vendor "Bambu Lab" exists: true
+[LOG] Server - Checking Extra Field "tag"...
 [LOG] Server - Spoolman Extra Field "tag" for Spool is set: true
 [LOG] Bambu Lab P1S - Setting up MQTT connection for Printer: 01PXXXXXXXXXX...
 [LOG] Bambu Lab P1S - MQTT client connected for Printer: 01PXXXXXXXXXX
-[LOG] Bambu Lab P1S - AMS [A] (hum: 5, temp: 0.0ºC)
-[LOG] Bambu Lab P1S -     - [A1] PLA Basic 000000FF [[ XXXXXX00000A ]] => Spool-ID 1 (G-code mode)
+[LOG] Bambu Lab P1S - [AMS] Units as the printer names them: A AMS
+[LOG] Bambu Lab P1S -  [A1] PLA Basic 000000FF [[ XXXXXX00000A ]] => Spool-ID 1 (G-code mode)
 ```
 
 A slot that is already linked is logged once, when the loaded filament changes. The remain percentage of the AMS is not logged for it, the weight does not come from there.
@@ -70,15 +70,19 @@ It has its own size and history budget next to the log, because a printer report
 
 It stays on until it is switched off. Nothing turns it off by itself, on purpose: a fault that shows up twice a day is not caught by a capture that ended an hour ago. Size it for the gap between two occurrences of whatever you are hunting, and turn it off again afterwards.
 
-The trace is readable in the Web UI like any other log, under **Raw MQTT traces** in the picker in the headline of the log page, and it is in the diagnostics archive as `logs/<serial>.mqtt.current.log`. The download asks the same anonymising question every other log download asks, and it matters more here: a raw report carries every field the printer knows about itself.
+The trace is readable in the Web UI like any other log: pick the printer under **Source** on the log page and switch **Show** from **Log** to **Raw MQTT trace**. It is in the diagnostics archive as `logs/<serial>.mqtt.current.log`. The download asks the same anonymising question every other log download asks, and it matters more here: a raw report carries every field the printer knows about itself.
 
 ## No sliced file on a P2S, H2 or X2D
 
-The P2S, the H2 series and the X2D keep the file of a print in internal storage, and their FTPS server shows only a USB stick. Without a stick in the printer, every print ends like this and nothing is booked:
+The P2S, the H2 series and the X2D keep the file of a print in internal storage, and their FTPS server shows only a USB stick. Without a stick in the printer, every print starts like this, looks twice more with 30 seconds in between, and nothing is booked. The printer's answer for each path is in parentheses; a 550 on every one of them is what a missing stick looks like:
 
 ```bash
 [LOG] Bambu Lab P2S - [Print] Print running: "bracket", fetching slice info via FTPS...
-[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf, /cache/bracket.3mf, /bracket.gcode.3mf, /bracket.3mf, consumption tracking unavailable for this print
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.), trying again in 30 seconds
+[LOG] Bambu Lab P2S - [Print] Looking for the sliced file again, attempt 2 of 3...
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.), trying again in 30 seconds
+[LOG] Bambu Lab P2S - [Print] Looking for the sliced file again, attempt 3 of 3...
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.), consumption tracking unavailable for this print
 ```
 
 The printer reports whether a stick is in, and the print card on the dashboard says "No USB stick or SD card in the printer, nothing will be booked" for as long as none is, while idle as well; the log says the same once when the stick goes missing. Put a USB stick into the printer. From then on the printer copies every job to `/cache` on the stick by itself, whether it was sent from Bambu Studio, through the cloud or from the Handy app, and the next print is tracked. Nothing has to change in Bambu Studio. The file listing of the [Debug-Printers CLI](#debug-printers-cli) below shows what the printer exposes: an empty listing means no stick.
@@ -113,14 +117,17 @@ a reverse proxy:
 
 ```
 Host "ams.example.com" is not allowed. Reach this service under its IP address,
-or add the name to "Allowed host names" on the settings page. The IP address always works, so the settings page is reachable that way; a fresh installation that will only ever be reached under a name can carry `ALLOWED_HOSTS=that.name` in its compose file, which seeds the setting before the first start.
+or add the name to "Allowed host names" on the settings page.
 ```
 
-The server log carries the same line once per refused name. Open the Web UI
+The server log says `[Security] Refused a request for host "ams.example.com".
+Add it to ALLOWED_HOSTS to allow it.` once per refused name. Open the Web UI
 under the IP address of the host, which is never refused, and add the name under
 **Network access** on the settings page, comma separated for more than one. It
-takes effect on save, without a restart. `ALLOWED_HOSTS` in the container
-definition seeds the same setting on an installation that has never saved it.
+takes effect on save, without a restart. `ALLOWED_HOSTS=that.name` in the
+container definition seeds the same setting on an installation that has never
+saved it, which is how a fresh installation that will only ever be reached under
+a name can carry it in its compose file before the first start.
 
 A `PUT` or `POST` answered with 403 while the pages load has the same cause
 behind a reverse proxy that rewrites the `Host` header: the same entry fixes
@@ -146,7 +153,7 @@ password is doing what it should.
 
 Logs and configuration describe a home network: the address of every printer and of Spoolman, the serial numbers, and in `printers.json` the access codes. Every download that can carry them asks first and offers an anonymised variant.
 
-**Download diagnostics** produces one archive with everything a bug report needs: `info.json` (version, Node, platform, uptime, tracking mode), `settings.json` with the origin of each value, `printers.json`, `mappings.json` and `logs/` including the rotated history and the raw MQTT trace of every printer it was captured for. The dialog lets you tick which logs go in, the server log and each printer separately; the configuration files are in every bundle, and `info.json` says which logs were asked for, so a missing printer log reads as a choice rather than as a printer that never logged. With several printers and a trace running on one of them, ticking that printer alone keeps the archive small. The API keys are not in it at all, and the Web UI password and the printer access codes are replaced before the archive is written. **Download log** on the log page asks the same question for that one log.
+**Download diagnostics...** produces one archive with everything a bug report needs: `info.json` (version, Node, platform, uptime, tracking mode), `settings.json` with the origin of each value, `printers.json`, `mappings.json`, `presets.json` once a preset has been learned, and `logs/` including the rotated history and the raw MQTT trace of every printer it was captured for. The dialog lets you tick which logs go in, the server log and each printer separately; the configuration files are in every bundle, and `info.json` says which logs were asked for, so a missing printer log reads as a choice rather than as a printer that never logged. With several printers and a trace running on one of them, ticking that printer alone keeps the archive small. The API keys are not in it at all, and the Web UI password and the printer access codes are replaced before the archive is written. **Download this log file...** on the log page, or **Download all N log files...** once the log has rotated, asks the same question for that one log.
 
 A printer's two logs can be picked apart as well: **Log** next to the printer in the Printers card opens its log detail dialog, and the export at the bottom of it ticks the printer log and the raw MQTT trace separately, then downloads the same archive with only those.
 

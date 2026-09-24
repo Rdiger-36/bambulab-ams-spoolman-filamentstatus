@@ -21,7 +21,7 @@ The link is dropped automatically as soon as a different filament is detected in
 Two things follow from booking per print rather than per report:
 
 - **A slot needs a link before its consumption can be booked**, either the tag of a Bambu Lab spool or a manual assignment. A filament the print uses from a slot that has neither is named in the log and skipped, so it is visible which spool is missing its link rather than silently going untracked.
-- **Nothing is written to Spoolman while a print runs.** The whole amount is booked when the job reaches its final state, so a spool in Spoolman stands still during the print and then jumps. The Web UI shows the progress in the meantime, per spool as "on spool / needed / rest".
+- **Nothing is written to Spoolman while a print runs.** The whole amount is booked when the job reaches its final state, so a spool in Spoolman stands still during the print and then jumps. The Web UI shows the progress in the meantime, per spool in the columns "On spool / total", "Needed" and "After print".
 
 The download needs LAN access to the printer on port 990 (FTPS) with the printer's access code, the same code MQTT already uses. Without it the print is logged as running but nothing is booked.
 
@@ -35,10 +35,9 @@ The download needs LAN access to the printer on port 990 (FTPS) with the printer
 Example of a merge in automatic mode:
 
 ```bash
-  - [A1] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
-        - Found mergeable Spool => Spoolman Spool ID: 1, Material: PETG HF, Color: HF Black
-          merging Spool...
-          Spool successfully merged with Spool-ID 1 => HF Black
+ [A1] PETG HF 000000FF (18%) [[ A012456878ABCDEF ]]
+    Found mergeable Spool => Spoolman Spool ID: 1, Material: PETG HF, Color: HF Black
+    Spool successfully merged with Spool-ID 1 => HF Black
 ```
 
 From then on the slot is linked and the consumption of every print is booked onto that spool.
