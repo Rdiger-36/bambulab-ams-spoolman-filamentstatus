@@ -135,20 +135,26 @@ document.addEventListener("DOMContentLoaded", () => {
     /**
      * Shows one notice in the dialog and resolves once it was dismissed.
      *
-     * Both buttons dismiss it, because both mean the hint was read, and the
+     * Every button dismisses it, because each means the hint was read, and the
      * dismissal is stored server side: a notice is shown once per installation
      * rather than once per browser. Escape closes the dialog without storing
      * anything, so it comes back on the next load, which is the safe way round.
      *
+     * "Open the settings" is only offered where the settings page is the
+     * answer to the notice; it leaves the page, and with it any notice still
+     * waiting behind this one.
+     *
      * @param {string} id - the notice id the server acknowledges
      * @param {string} title
      * @param {string[]} parts - the paragraphs, as markup
+     * @param {boolean} [settingsButton] - whether to offer "Open the settings"
      * @returns {Promise<void>}
      */
-    function showNoticeDialog(id, title, parts) {
+    function showNoticeDialog(id, title, parts, settingsButton = false) {
         const dialog = document.getElementById("notice-dialog");
         document.getElementById("notice-dialog-title").textContent = title;
         document.getElementById("notice-dialog-content").innerHTML = parts.join("");
+        document.getElementById("notice-dialog-open").hidden = !settingsButton;
 
         const acknowledge = async () => {
             try {
@@ -230,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         parts.push("<p>One thing to know before editing your compose file again: once a setting has been saved here, the settings file owns it and the matching variable stops changing anything.</p>");
 
-        await showNoticeDialog("env-config", "Configuration has moved into the Web UI", parts);
+        await showNoticeDialog("env-config", "Configuration has moved into the Web UI", parts, true);
     }
 
     // One dialog at a time, the update notice first: an installation updated
