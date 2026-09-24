@@ -711,6 +711,11 @@ export function registerRoutes(app, printers) {
                 filaments: sliceInfo.filaments,
             } : null,
             sliceFetch,
+            // Whether the printer's USB stick or SD card is in, which is the
+            // storage the sliced file is read from. Null until a report said.
+            // Not tied to the job: the card says it while idle as well, so the
+            // stick is in before the next print rather than found missing by it.
+            storagePresent: printer.storagePresent ?? null,
             loadedSpools,
             fullConsumption,
             consumption,

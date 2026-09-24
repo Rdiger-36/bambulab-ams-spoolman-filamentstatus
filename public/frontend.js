@@ -2292,10 +2292,18 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>`;
         }
         if (active) html += printProgressFacts(printData);
+        // The printer has no USB stick or SD card in, which is the storage the
+        // sliced file is read from. Said while idle as well, so the stick is in
+        // before the next print rather than found missing by it, and it makes
+        // the lookup line below redundant: the file cannot be there.
+        const noStorage = printData.storagePresent === false;
+        if (noStorage) {
+            html += `<p class="gc-card-lookup gc-required">No USB stick or SD card in the printer, nothing will be booked${active ? " for this print" : ""}</p>`;
+        }
         // The sliced file was not found. While attempts are left the card says
         // so quietly, after the last one in red: nothing will be booked, and a
         // job that ran with a bare name used to say that only in its summary.
-        if (active && printData.sliceFetch) {
+        if (active && printData.sliceFetch && !noStorage) {
             const lookup = printData.sliceFetch;
             html += lookup.final
                 ? `<p class="gc-card-lookup gc-required" title="${escapeHtml(lookup.reason)}">No sliced file on the printer, nothing will be booked for this print</p>`

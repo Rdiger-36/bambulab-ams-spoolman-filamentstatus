@@ -437,6 +437,43 @@ export function deltaAsReport(printer, print) {
 }
 
 /**
+ * Notes whether the printer's removable storage is in, from `print.sdcard`.
+ *
+ * The field means the microSD card on an X1, a P1 or an A1 and the USB stick
+ * on a P2S, an H2 series printer or an X2D, and in every case it is the one
+ * storage the printer's FTPS server shows: without it no sliced file can be
+ * read and nothing is booked. The second generation printers keep printing
+ * from internal storage without it, which is what makes the case silent, see
+ * issue #179. A report without the field, such as a delta, says nothing about
+ * it and leaves the last value alone; a report with it replaces the value.
+ *
+ * Logged once per change rather than per report, and only in G-code tracking,
+ * because legacy mode never reads the file. The dashboard reads the value off
+ * `/api/print` and says it on the print card.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} print - the `print` block of the report
+ * @returns {boolean} whether the value changed
+ */
+export function noteStorage(printer, print) {
+    if (!print || typeof print.sdcard !== "boolean") return false;
+    if (printer.storagePresent === print.sdcard) return false;
+
+    const wasKnown = typeof printer.storagePresent === "boolean";
+    printer.storagePresent = print.sdcard;
+
+    if (!legacyMode()) {
+        if (!print.sdcard) {
+            console.log(printer.name, printer.logFilePath, "[Print] No USB stick or SD card in the printer. The sliced file of a print cannot be read from it, so nothing will be booked until one is in.");
+        } else if (wasKnown) {
+            console.log(printer.name, printer.logFilePath, "[Print] USB stick or SD card is in the printer again, the next print will be tracked.");
+        }
+    }
+
+    return true;
+}
+
+/**
  * Tracks gcode_state transitions and triggers filament consumption tracking.
  * Called on every MQTT message that contains a gcode_state field.
  *
@@ -1242,6 +1279,8 @@ async function handleMqttMessage(printer, topic, message) {
                         : null,
                 });
             }
+
+            noteStorage(printer, data?.print);
 
             // Legacy mode derives the weight from the RFID remain percentage, so
             // the G-code tracking must stay out of it entirely. Running both

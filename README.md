@@ -78,7 +78,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 
 Up to 12 AMS on one printer: max. 4 AMS Standard / 2 Pro plus 8 AMS HT.
 
-**The second generation printers, the P2S, the H2 series and the X2D, need a USB stick in the printer for consumption tracking.** Their FTPS server shows the stick and nothing else. With a stick in, the printer copies every job to `/cache` on it and the sliced file is read from there. Without one, the file only exists in the printer's internal storage, which nothing outside the printer can read, and every print ends with "No sliced file on the printer" in the log (issue #179).
+**The second generation printers, the P2S, the H2 series and the X2D, need a USB stick in the printer for consumption tracking.** Their FTPS server shows the stick and nothing else. With a stick in, the printer copies every job to `/cache` on it and the sliced file is read from there. Without one, the file only exists in the printer's internal storage, which nothing outside the printer can read, and every print ends with "No sliced file on the printer" in the log (issue #179). The printer reports whether a stick is in, and the print card says "No USB stick or SD card in the printer" for as long as none is.
 
 The external spool holder counts as one more slot, named `External`, on a printer that reports it, and a dual nozzle printer gets `External-2` for its second holder. It carries no RFID chip, so it is assigned to a Spoolman spool by hand like any 3rd party spool, and it is not read in [legacy mode](docs/legacy-mode.md), where the weight comes from the chip.
 

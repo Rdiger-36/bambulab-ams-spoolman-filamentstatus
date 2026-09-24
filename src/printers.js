@@ -154,6 +154,12 @@ function createRuntimePrinter(entry) {
         // Bambu Studio sent. See localFileName() in mqtt.js.
         currentFileName: null,
         currentSliceInfo: null,
+        // Whether the printer has its removable storage in, the USB stick of a
+        // P2S, an H2 or an X2D and the microSD card of the others, from
+        // print.sdcard. Null until a report carries the field. That storage is
+        // what FTPS shows, so without it no sliced file can be read. See
+        // noteStorage() in mqtt.js.
+        storagePresent: null,
         // What the last slice info fetch tried and found. See fetchSliceInfo().
         lastSliceFetch: null,
         // The slots the printer says the running print is taking its filaments
