@@ -6,6 +6,7 @@ import { serverLogFilePath, version } from "./config.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
 import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
+import { UPGRADE_NOTICE, upgradeNotice } from "./upgradenotice.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
@@ -1255,7 +1256,10 @@ export function registerRoutes(app, printers) {
     // ---------------------------------------------------------------------
 
     app.get("/api/notices", (req, res) => {
-        res.json({ [ENV_CONFIG_NOTICE]: deprecatedConfig() });
+        res.json({
+            [UPGRADE_NOTICE]: upgradeNotice(),
+            [ENV_CONFIG_NOTICE]: deprecatedConfig(),
+        });
     });
 
     // The API described in OpenAPI, for the API page of the Web UI and for
@@ -1267,7 +1271,7 @@ export function registerRoutes(app, printers) {
     });
 
     app.post("/api/notices/:id/ack", (req, res) => {
-        if (req.params.id !== ENV_CONFIG_NOTICE) {
+        if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE].includes(req.params.id)) {
             return res.status(404).json({ ok: false, error: "Unknown notice" });
         }
 

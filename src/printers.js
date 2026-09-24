@@ -22,6 +22,11 @@ const PERSISTED_FIELDS = ["id", "code", "ip", "name"];
 // the seed is written to it during this very import.
 let seededFromEnvironment = false;
 
+// Whether printers.json was there when this process started, before the seed
+// above may have written it. Read by the upgrade notice: a 1.2.x installation
+// has the file, a fresh one does not.
+let fileExisted = false;
+
 /**
  * Reads a stored per-printer log override, dropping anything unusable.
  *
@@ -300,6 +305,7 @@ function loadPrintersConfig() {
 
     try {
         const parsed = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        fileExisted = true;
         if (!Array.isArray(parsed)) throw new Error("printers.json must contain an array");
 
         parsed.forEach(printer => {
@@ -313,6 +319,7 @@ function loadPrintersConfig() {
         debug("service", "Server", serverLogFilePath, "Printers loaded successfully:", entries.map(redactPrinter));
     } catch (error) {
         if (error.code !== "ENOENT") {
+            fileExisted = true;
             console.error("Server", serverLogFilePath, "Error loading printers configuration:", error.message);
         }
 
@@ -346,6 +353,11 @@ function loadPrintersConfig() {
 /** Whether the printer list of this run came from the PRINTER_* variables. */
 export function printerListSeededFromEnv() {
     return seededFromEnvironment;
+}
+
+/** Whether printers.json existed when this process started. */
+export function printerFileExistedAtStart() {
+    return fileExisted;
 }
 
 /**

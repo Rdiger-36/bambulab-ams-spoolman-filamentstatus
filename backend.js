@@ -6,6 +6,7 @@ import "./src/logger.js"; // must be first, sets up console overrides
 import { PORT, serverLogFilePath, version } from "./src/config.js";
 import { rotateLogFile } from "./src/logger.js";
 import { deprecatedConfig, deprecationLogLines } from "./src/deprecation.js";
+import { upgradeLogLines, upgradeNotice } from "./src/upgradenotice.js";
 import { printers } from "./src/printers.js";
 import { requireAuth } from "./src/auth.js";
 import { registerRoutes } from "./src/routes.js";
@@ -51,7 +52,7 @@ app.listen(PORT, "0.0.0.0", () => {
     // Printed on every start rather than once, so it is in the log of whichever
     // run somebody attaches to a bug report. Says nothing when the installation
     // is already configured through the Web UI.
-    for (const line of deprecationLogLines(deprecatedConfig())) {
+    for (const line of [...upgradeLogLines(upgradeNotice()), ...deprecationLogLines(deprecatedConfig())]) {
         console.log("Server", serverLogFilePath, line);
     }
 
