@@ -32,14 +32,14 @@ A request is refused unless it was addressed to this service under a name it acc
 
 Filament consumption is tracked from the sliced G-code of a print instead of the AMS RFID remain percentage, and that is the default. The sliced file is fetched from the printer over FTPS while the print runs and booked onto the Spoolman spool when the job ends, which covers 3rd party spools without an RFID chip as well.
 
-- A P2S, an H2 series printer or an X2D needs a USB stick in the printer. These printers expose only the stick over FTPS; without one nothing is booked, and the log and the print card say "No sliced file on the printer". See [Installation](installation.md).
+- A P2S, an H2 series printer or an X2D needs a USB stick in the printer. These printers expose only the stick over FTPS; without one nothing is booked, the log says "No sliced file on the printer" and the print card says "No USB stick or SD card in the printer, nothing will be booked". See [Installation](installation.md).
 - A 3rd party spool is booked only once its slot is linked to a Spoolman spool, by hand in the Web UI or automatically when switched on. See [Web UI](web-ui.md).
-- `LEGACY_MODE=true` keeps the previous behaviour. See [Legacy mode](legacy-mode.md) for what it cannot do.
+- **Legacy mode** under **Settings → Tracking** keeps the previous behaviour, and `LEGACY_MODE=true` in the container definition seeds that setting on an installation that has never saved it. See [Legacy mode](legacy-mode.md) for what it cannot do.
 
 ## What keeps working
 
 - **Environment variables and a hand-written `printers.json`.** Both are deprecated and both keep working. A variable only seeds a setting that has never been saved in the Web UI; after the first save, `printers/settings.json` owns the value. The printer list is edited on the settings page from now on, and the service writes `printers.json` itself. See [Deprecated configuration](deprecated-configuration.md).
-- **The volumes.** `/app/printers` and `/app/logs` are the same as before. `settings.json`, `mappings.json` and `apikeys.json` appear next to `printers.json` as they are needed.
+- **The volumes.** `/app/printers` and `/app/logs` are the same as before. `settings.json`, `mappings.json`, `apikeys.json`, `presets.json` and `printstate.json` appear next to `printers.json` as they are needed.
 - **`TZ`, `DATA_DIR`, `LOG_DIR` and `SUPERVISOR`** are container level and stay as they are.
 
 The full list of what changed is in the [CHANGELOG](../CHANGELOG.md).

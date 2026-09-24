@@ -12,7 +12,7 @@ The documentation of **Bambulab AMS Spoolman Filament Status**. It belongs to th
 | [Troubleshooting](troubleshooting.md) | Reading the logs, the `debug-printers` CLI, diagnostics and what an export contains |
 | [Legacy mode](legacy-mode.md) | The RFID based tracking of 1.2.x and what it cannot do |
 | [Updating from 1.2.x](updating.md) | The four things an installation updated from 1.2.x can trip over, and what keeps working |
-| [Deprecated configuration](deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the three container level variables |
+| [Deprecated configuration](deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the four container level variables |
 | [FAQ](faq.md) | The questions that come up most |
 
 Something missing or wrong? [Open an issue](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues).

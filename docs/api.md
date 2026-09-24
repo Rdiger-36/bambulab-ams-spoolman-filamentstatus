@@ -6,7 +6,9 @@ Everything the Web UI does, it does over this API, and a script, a home automati
 
 ## Who may call it
 
-Two kinds of caller, whether or not a Web UI [password](settings.md#the-web-ui-password) is set: the Web UI of this installation, and a request carrying an [API key](settings.md#api-keys). Anything else is answered with 401 and a sentence saying so. Only the three login routes are open.
+Two kinds of caller: the Web UI of this installation, and a request carrying an [API key](settings.md#api-keys). Without a Web UI [password](settings.md#the-web-ui-password) a request the browser marks as the Web UI's own passes as it is; once a password is set, the Web UI needs the session `POST /api/auth/login` hands out, and a request without one is answered with 401 like any other. Anything else is answered with 401 and a sentence saying so. Only the three login routes are open.
+
+Before any of that, every request passes the request guard configured in the **Network access** card of the settings page: a `Host` header that is not on the allowed list, or a request that changes something and comes from another origin, is answered with 403, the login routes included.
 
 The key travels in a header, never in the URL:
 
@@ -41,17 +43,17 @@ It is written by hand in `src/openapi.js`, next to the routes, and a test holds 
 
 ## Slot labels
 
-A slot is named the way the printer names it: `A1` is the first slot of the first AMS unit, `D4` the last slot of a fourth unit, `HT-A` the first AMS HT, and `External` the spool holder on the printer itself. That label is what `amsId` carries wherever a slot is addressed, and what the Spoolman location of a spool ends in.
+A slot is named the way the printer names it: `A1` is the first slot of the first AMS unit, `D4` the last slot of a fourth unit, `HT-A` the first AMS HT, `External` the spool holder on the printer itself, and `External-2` the second holder of a dual nozzle printer. That label is what `amsId` carries wherever a slot is addressed, and what the Spoolman location of a spool ends in.
 
 ## Live updates
 
-`GET /api/events` is a [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) stream for every printer at once. The `data:` field of every event is a JSON document whose `type` says what happened and whose `printer` names the serial number it is about:
+`GET /api/events` is a [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) stream for every printer at once. The `data:` field of every event is a JSON document whose `type` says what happened and whose `printer` names the serial number it is about; `printers_update` and `settings_update` are about the installation and carry no `printer`:
 
 | Type | When | Carries |
 | :---- | :---- | :---- |
 | `slot_update` | A slot changed | `spool`, the slot as `GET /api/spools/{printerId}` lists it |
 | `status` | The printer reported | `lastMqttUpdate`, `lastMqttAmsUpdate` |
-| `refresh` | Spoolman was written to; the dashboard reloads its lists | |
+| `refresh` | The first AMS report of a connection was processed; the dashboard reloads its lists | |
 | `ams_env` | Humidity, temperature or drying changed, at most every 30 seconds | `amsEnv`, one entry per unit |
 | `monitoring_update` | Monitoring was paused or resumed | `enabled` |
 | `printers_update` | A printer was added, changed or removed | |
@@ -177,7 +179,7 @@ The log and the raw MQTT trace of each printer, and the server log.
 
 ### Service
 
-Facts about the installation, the update check, the support bundle, the restart, and this document.
+Facts about the installation, the update check, the support bundle, the restart, the notices the dashboard shows, and this document.
 
 | Route | Does |
 | :---- | :---- |

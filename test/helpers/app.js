@@ -38,6 +38,7 @@ export async function startTestApp({ seedPrinters } = {}) {
     const { printers } = await import("../../src/printers.js");
     const { hostGuard } = await import("../../src/security.js");
     const { requireAuth } = await import("../../src/auth.js");
+    const { flushLogs } = await import("../../src/logger.js");
 
     const app = express();
     // Same order as backend.js, so a route is exercised behind the guard rather
@@ -65,6 +66,13 @@ export async function startTestApp({ seedPrinters } = {}) {
         },
         async close() {
             await new Promise(resolve => server.close(resolve));
+            // Log writes are queued per file; a write still in flight when the
+            // directory goes lands on a path that no longer exists and prints
+            // an ENOENT into the test output.
+            const logDir = process.env.LOG_DIR;
+            for (const name of fs.readdirSync(logDir)) {
+                await flushLogs(path.join(logDir, name));
+            }
             fs.removeSync(dir);
         },
     };

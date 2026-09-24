@@ -281,7 +281,7 @@ const BAMBU_VENDOR = "Bambu Lab";
  * @returns {Promise<number>} the vendor id
  * @throws when Spoolman cannot be read or the vendor cannot be created
  */
-export async function ensureVendor() {
+async function ensureVendor() {
     if (state.vendorID) return state.vendorID;
 
     console.log("Server", serverLogFilePath, "Checking Vendors...");

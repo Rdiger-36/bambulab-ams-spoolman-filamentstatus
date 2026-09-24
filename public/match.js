@@ -111,7 +111,7 @@ export function catalogueColors(entry) {
 }
 
 /** What an AMS slot can take: a spool of this weight or less, in grams. */
-export const AMS_SPOOL_LIMIT = 1000;
+const AMS_SPOOL_LIMIT = 1000;
 
 /**
  * The catalogue entries that could be the spool in a chipless slot, best first.

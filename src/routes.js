@@ -394,7 +394,7 @@ export function registerRoutes(app, printers) {
                 if (wantsTrace) capturing = traceEnabled(printer);
             } else if (wantsTrace) {
                 // There is no server trace: the raw messages belong to a printer
-                return res.status(404).json({ error: "The server has no MQTT trace" });
+                return res.status(404).json({ ok: false, error: "The server has no MQTT trace" });
             }
 
             const [lines, files] = await Promise.all([
@@ -411,7 +411,7 @@ export function registerRoutes(app, printers) {
             });
         } catch (err) {
             console.error("Server", serverLogFilePath, `Failed to read log file: ${err.message}`);
-            return res.status(500).json({ error: "Failed to read log file" });
+            return res.status(500).json({ ok: false, error: "Failed to read log file" });
         }
     });
 
@@ -444,7 +444,7 @@ export function registerRoutes(app, printers) {
             let filePath, baseName;
 
             if (printerId === "server") {
-                if (wantsTrace) return res.status(404).json({ error: "The server has no MQTT trace" });
+                if (wantsTrace) return res.status(404).json({ ok: false, error: "The server has no MQTT trace" });
                 filePath = serverLogFilePath;
                 baseName = "server";
             } else {
@@ -460,7 +460,7 @@ export function registerRoutes(app, printers) {
             const suffixed = anonymize ? baseName : `${baseName}_full`;
 
             const files = await logFileSet(filePath);
-            if (files.length === 0) return res.status(404).json({ error: "No log file found" });
+            if (files.length === 0) return res.status(404).json({ ok: false, error: "No log file found" });
 
             if (files.length === 1) {
                 res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
@@ -494,7 +494,7 @@ export function registerRoutes(app, printers) {
             return res.end(buffer);
         } catch (err) {
             console.error("Server", serverLogFilePath, `Download error: ${err.message}`);
-            res.status(500).json({ error: "Download failed" });
+            res.status(500).json({ ok: false, error: "Download failed" });
         }
     });
 
