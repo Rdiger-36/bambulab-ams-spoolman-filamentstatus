@@ -9,13 +9,16 @@ before.
 It is written for a reader of 1.2.1. A fix of something that only ever existed
 in a dev build is not a fix to that reader, so those are folded into the feature
 they belong to or left out; the dev blocks keep them. Every dev build after
-dev.25 has to be folded in here as well.
+dev.25 has to be folded in here as well; the two entries under "Unreleased" on
+main as of 2026-09-24, the update notice (PR 191) and the storage hint (PR 192),
+are in.
 
 ## Draft
 
 -----------------------------------------------------------------------------------------------
 Version 1.3.0
    - Breaking:
+      - An installation updated from 1.2.x is told what changed, once: the dashboard opens a dialog on the first visit after the update naming the four things below that can need a hand, with a link to the new "Updating from 1.2.x" page of the documentation, and docker logs repeat them on every start until the dialog is dismissed, because an installation reached under a name that is not allowed yet has only the log. A 1.2.x installation is recognised by its files, a printers.json without a settings.json, so a fresh install never sees it
       - AMS slots are numbered the way the printer numbers them: the first slot of the first unit is A1, the last one of a fourth unit is D4. Every slot label moves up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool
          - Nothing has to be done by hand. The assignments in printers/mappings.json are renumbered on the first start, and the Spoolman location follows on the next reading of the AMS, so "P1S - A0" becomes "P1S - A1" on its own. A location set by hand is still left alone
          - A caller of the API sees the new labels in amsId, which is what to look at first for a script or a home automation reading them. The Home Assistant integration is the one to check
@@ -36,7 +39,7 @@ Version 1.3.0
          - TZ, DATA_DIR, LOG_DIR and SUPERVISOR are not deprecated: they are container level and have no field in the UI
    - New Features:
       - Filament consumption is tracked from the sliced G-code instead of the AMS RFID remain percentage, and is the default. The sliced .gcode.3mf is fetched from the printer over FTPS while the print runs and booked onto the Spoolman spool when the job ends, scaled to the layers that were finished if it was cancelled. It covers 3rd party spools without an RFID chip, which the remain percentage never could. LEGACY_MODE=true keeps the previous behaviour
-         - A P2S, an H2 series printer or an X2D needs a USB stick in the printer. These printers expose only the stick over FTPS: with one in, the printer copies every job to /cache on it and the sliced file is read from there, without one the file exists only in internal storage and nothing is booked. The log says "No sliced file on the printer" then, and so does the print card
+         - A P2S, an H2 series printer or an X2D needs a USB stick in the printer. These printers expose only the stick over FTPS: with one in, the printer copies every job to /cache on it and the sliced file is read from there, without one the file exists only in internal storage and nothing is booked. The printer reports whether its stick is in, and the print card says "No USB stick or SD card in the printer, nothing will be booked" for as long as none is, while idle as well, so the stick is in before the next print rather than found missing by it; the log says it once when the stick goes missing and once when it is back. The API carries it as storagePresent on /api/print/{printerId}
          - A print sent over the LAN and a print sent through the Bambu cloud, from Bambu Studio or the Handy app, are both found, under the two names the printer gives them. A print started on the printer's own screen from the USB stick is found under the name the printer announces for it, which is not its job name. The file is looked for up to three times, 30 seconds apart, for a printer that does not answer in the first seconds of a job or is still copying the file to its stick
          - Each filament is booked onto the slot the print really ran it from. A P2S, an X1 and the H2 series report that themselves. A P1 or an A1 never does, so for them the service reads the command Bambu Studio sends with the job, which the printer echoes and which carries the slots after any remapping Studio did for a project that was not synchronised with the printer; an empty slot in the middle of an AMS is handled, and so is the external holder. A print started from the SD card or repeated on the printer's screen on those two families falls back to the order of the sliced file (issue #146)
          - A P1 or an A1 is tracked between its full reports, which come minutes apart with only the changes in between, so a layer, a stage or an error sent on its own is not lost and a cancel books the layer the printer is really on
