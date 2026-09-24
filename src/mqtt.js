@@ -1,5 +1,4 @@
 import mqtt from "mqtt";
-import got from "got";
 import * as net from "node:net";
 import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
@@ -14,6 +13,7 @@ import {
     createSpool,
     createFilamentAndSpool,
     mergeSpool,
+    checkSpoolmanHealth,
     patchSpoolWeight,
     useSpoolWeight,
     setSpoolArchived,
@@ -1719,6 +1719,18 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         }
     }
 
+    // What the AMS says is on the spool, from the RFID percentage and the
+    // tray weight. Both stay null while the AMS has not reported a percentage
+    // yet, so the dashboard shows a dash instead of a confident "0 g". What
+    // Spoolman says is on the spool travels in existingSpool; the dashboard
+    // picks between the two by mode and by whether the spool is linked.
+    // Computed before the automatic actions below, because their preview of
+    // the slot has to carry them as well.
+    const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
+    const amsWeight = correctedRemain === null
+        ? null
+        : Math.round((correctedRemain / 100) * slot.tray_weight);
+
     // An archived spool is gone from `spools`, which is what archiving is for,
     // and the slot it still sits in would therefore look like a spool Spoolman
     // has never seen: automatic mode would create a second record for the same
@@ -1742,9 +1754,14 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
 
         // The three automatic actions differ only in the option they stand for
         // and the Spoolman call they make, so they are run through one place.
-        // The preview is what the slot would look like once the action has run:
-        // a slot that has not changed since the last pass must not be written a
-        // second time, which is what would create the same spool twice.
+        // The preview is what the slot's entry looked like after the last pass
+        // ran this same action: a slot that has not changed since then must not
+        // be written a second time, which is what would create the same spool
+        // twice when the lookup after a creation missed the new spool, and what
+        // would retry a failed write on every pass. It has to carry every field
+        // the real entry below carries, because `hasSpoolUiChanged()` compares
+        // the whole projection: with `slotState: ""` and six fields missing it
+        // never matched, and the guard never held.
         //
         // Answers whether Spoolman was mutated, which is what tells the caller
         // its cached lists are stale.
@@ -1752,7 +1769,24 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
             if (!automatic) return false;
 
             const prev = prevByAmsId[amsId];
-            const preview = { amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, existingSpool, option: chosen, enableButton, slotState: "", error };
+            const preview = {
+                amsId,
+                slot,
+                mergeableSpool,
+                matchingInternalFilament,
+                matchingExternalFilament,
+                existingSpool,
+                connectedViaTag: false,
+                connectedViaMapping: false,
+                assignedAutomatically: false,
+                archived: false,
+                option: chosen,
+                enableButton,
+                slotState: "Loaded (Bambu Lab)",
+                error,
+                correctedRemain,
+                amsWeight,
+            };
             if (prev && !hasSpoolUiChanged(preview, prev)) return false;
 
             const result = await action({ amsId, slot, mergeableSpool, matchingInternalFilament, matchingExternalFilament, printerName: printer.name, logFilePath: printer.logFilePath });
@@ -1827,16 +1861,6 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         }
     }
 
-    // What the AMS says is on the spool, from the RFID percentage and the
-    // tray weight. Both stay null while the AMS has not reported a percentage
-    // yet, so the dashboard shows a dash instead of a confident "0 g". What
-    // Spoolman says is on the spool travels in existingSpool; the dashboard
-    // picks between the two by mode and by whether the spool is linked.
-    const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
-    const amsWeight = correctedRemain === null
-        ? null
-        : Math.round((correctedRemain / 100) * slot.tray_weight);
-
     // A manual assignment wins over the automatic tag match: it is the only way
     // for the user to resolve two tagged spools that are identical in
     // tray_info_idx and color, which the tag match alone cannot tell apart.
@@ -1875,6 +1899,9 @@ async function processSlot(printer, ams, slot, spools, archivedSpools, externalF
         // candidates (findExistingSpool).
         connectedViaTag: found,
         connectedViaMapping: !!mappedSpool,
+        // Never chosen by the colour match for a tagged spool, but the field is
+        // carried so every builder sets the same set.
+        assignedAutomatically: !!mappedSpool && !!getMapping(printer.id, amsId)?.automatic,
         archived: !!existingSpool?.archived,
         option,
         enableButton,
@@ -1905,6 +1932,12 @@ function buildEmptySpool(printer, amsId, slot) {
         matchingInternalFilament: null,
         matchingExternalFilament: null,
         existingSpool: null,
+        connectedViaTag: false,
+        connectedViaMapping: false,
+        assignedAutomatically: false,
+        archived: false,
+        correctedRemain: null,
+        amsWeight: null,
         option: slotIsBusy(slot) ? SLOT_OPTIONS.WAITING : SLOT_OPTIONS.NONE,
         enableButton: "false",
         printerName: printer.name,
@@ -1936,6 +1969,8 @@ function buildThirdPartySpool(printer, amsId, slot, mappedSpool = null) {
         // dashboard says next to the assignment.
         assignedAutomatically: !!mappedSpool && !!getMapping(printer.id, amsId)?.automatic,
         archived: !!mappedSpool?.archived,
+        // A chipless spool reports no percentage, so the AMS knows no weight.
+        correctedRemain: null,
         amsWeight: null,
         // Legacy mode offers nothing here. Its weight comes from the RFID
         // percentage, which this spool does not report, so there is no action
@@ -2004,6 +2039,13 @@ function spoolWithTag(list, trayUuid) {
  * restoring it in Spoolman is what brings the slot back to normal.
  */
 function buildArchivedSpool(printer, amsId, slot, archivedSpool) {
+    // The tag still reports a percentage, and the dashboard shows what the
+    // AMS reads off the spool the same way it does for a linked one.
+    const correctedRemain = correctRemainInt(slot.remain, slot.tray_weight, slot.tray_type);
+    const amsWeight = correctedRemain === null
+        ? null
+        : Math.round((correctedRemain / 100) * slot.tray_weight);
+
     return {
         amsId,
         slot,
@@ -2016,8 +2058,10 @@ function buildArchivedSpool(printer, amsId, slot, archivedSpool) {
         // location sync would hand it the slot it is sitting in again.
         connectedViaTag: false,
         connectedViaMapping: false,
+        assignedAutomatically: false,
         archived: true,
-        amsWeight: null,
+        correctedRemain,
+        amsWeight,
         option: SLOT_OPTIONS.NONE,
         enableButton: "false",
         printerName: printer.name,
@@ -2502,26 +2546,29 @@ export function describeRequestError(err) {
  * @param {boolean} [options.untilConnected] - return after the first healthy answer
  * @param {number} [options.intervalMs] - pause between two checks
  */
+/**
+ * How long one health probe of the monitor may take. The settings page test
+ * waits five seconds; the monitor is patient with a slow Spoolman, because a
+ * probe that times out marks Spoolman disconnected and stops every AMS update.
+ */
+const SPOOLMAN_MONITOR_TIMEOUT_MS = 15000;
+
 export async function monitorSpoolman({ untilConnected = false, intervalMs = untilConnected ? 30000 : 60000 } = {}) {
     while (true) {
-        try {
-            const response = await got(`${spoolmanUrl()}/api/v1/health`);
-            const health = JSON.parse(response.body);
-            if (health.status === "healthy") {
-                if (state.spoolmanStatus !== "Connected") {
-                    console.log("Server", serverLogFilePath, untilConnected ? "Spoolman connected successfully!" : "Spoolman reconnected successfully!");
-                }
-                state.spoolmanStatus = "Connected";
-                if (untilConnected) return;
-            } else {
-                console.error("Server", serverLogFilePath, untilConnected
-                    ? "Spoolman reported an unhealthy status, retrying..."
-                    : "Spoolman reported an unhealthy status!");
-                if (!untilConnected) state.spoolmanStatus = "Disconnected";
+        // The same check the settings page runs, so Spoolman is reached from
+        // spoolman.js alone and an outage reads the same in both places. It
+        // never throws: a refused or unhealthy answer comes back as `ok: false`
+        // with the sentence that says why.
+        const health = await checkSpoolmanHealth(spoolmanUrl(), SPOOLMAN_MONITOR_TIMEOUT_MS);
+        if (health.ok) {
+            if (state.spoolmanStatus !== "Connected") {
+                console.log("Server", serverLogFilePath, untilConnected ? "Spoolman connected successfully!" : "Spoolman reconnected successfully!");
             }
-        } catch (err) {
+            state.spoolmanStatus = "Connected";
+            if (untilConnected) return;
+        } else {
             console.error("Server", serverLogFilePath,
-                `Spoolman is unreachable (${describeRequestError(err)}). Retrying in ${Math.round(intervalMs / 1000)} seconds...`);
+                `Spoolman is unreachable (${health.error}). Retrying in ${Math.round(intervalMs / 1000)} seconds...`);
             if (!untilConnected) state.spoolmanStatus = "Disconnected";
         }
         await sleep(intervalMs);
