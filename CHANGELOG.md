@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - The log line for a sliced file found by listing the USB stick reads "Sliced file found on the stick: <path>, written 2 seconds after the start, <why>", where dev.27 said "Found the sliced file by its time instead of its name"
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.27
    Second release candidate for 1.3.0. It adds what dev.26 was missing for issue #179, the sliced file of a print is found on the USB stick when the job's name does not lead to it, and the tray details and the active slot the Home Assistant integration reads. Like dev.26, what is found on it goes into 1.3.0
    - Changes:

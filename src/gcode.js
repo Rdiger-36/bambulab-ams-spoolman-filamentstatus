@@ -125,7 +125,7 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
                 buf = found.buf;
                 record.path = found.path;
                 console.log(printer.name, printer.logFilePath,
-                    `[Print] Found the sliced file by its time instead of its name: ${found.path}, written ${describeOffset(found.modifiedAt - running.startedAt)} the print started, ${found.reason}`);
+                    `[Print] Sliced file found on the stick: ${found.path}, written ${describeOffset(found.modifiedAt - running.startedAt)} the start, ${found.reason}`);
             }
         }
 
@@ -526,7 +526,7 @@ export function settleSlicedFile(judged) {
 }
 
 /**
- * A time difference in words, for "written ... the print started":
+ * A time difference in words, for "written ... the start":
  * "12 seconds before", "3 minutes after".
  *
  * @param {number} ms - the file's time minus the start
