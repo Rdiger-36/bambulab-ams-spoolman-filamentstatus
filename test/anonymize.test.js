@@ -140,6 +140,18 @@ test("the tag is masked in the debug dumps as well", () => {
     );
 });
 
+test("the md5 of a print command is not taken for a tag", () => {
+    // Bambu Studio sends it uppercase, which is the shape of a current AMS tag.
+    // It names the sliced file and nothing else, and ties the print to it
+    const command = `{ "print": { "command": "project_file", "md5": "8E9BB94962BAD047A4EDB1596F7029F9", "tray_uuid": "A5F4AA8300000000000000000000ABCD" } }`;
+    assert.equal(
+        maskText(command, {}),
+        `{ "print": { "command": "project_file", "md5": "8E9BB94962BAD047A4EDB1596F7029F9", "tray_uuid": "A5F4XXXXXXXXXXXXXXXXXXXXXXXXXXXX" } }`,
+    );
+    // The same value anywhere else is still masked
+    assert.equal(maskText("seen 8E9BB94962BAD047A4EDB1596F7029F9", {}), "seen 8E9BXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
+});
+
 test("a placeholder tag survives every pass of the masking", () => {
     assert.equal(maskText(`[External] N/A [[ N/A ]] {"tray_uuid":"N/A"}`, {}), `[External] N/A [[ N/A ]] {"tray_uuid":"N/A"}`);
 });
