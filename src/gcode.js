@@ -245,10 +245,14 @@ async function findSlicedFileByTime(client, printer, tried, running, record) {
     debug("gcode", printer.name, printer.logFilePath,
         `[Print] 3MF files on the printer: ${files.length ? files.map(f => `${f.path} (${new Date(f.modifiedAt).toISOString()})`).join(", ") : "none"}`);
 
+    const identity = running.identity || {};
     const expected = {
         jobName: record.jobName,
-        plate: reportedPlate(running.gcodeFile),
+        plate: reportedPlate(running.gcodeFile) ?? identity.plate ?? null,
         layers: Number(running.totalLayers) > 0 ? Number(running.totalLayers) : null,
+        md5: identity.md5 ?? null,
+        modelId: identity.modelId ?? null,
+        profileId: identity.profileId ?? null,
     };
 
     const judged = [];
@@ -336,19 +340,50 @@ export function reportedPlate(gcodeFile) {
  * own leaves both empty. Only the head of the entry is read, the metadata
  * comes before the meshes.
  *
+ * Next to the titles it carries `DesignModelId` and `DesignProfileId`, and
+ * every sliced plate has its G-code's md5 in `Metadata/plate_N.gcode.md5`,
+ * which Bambu Studio's command may carry as well.
+ *
  * @param {object} zip - the opened archive, an AdmZip
- * @returns {{titles: string[], plates: number[], layers: number|null}}
+ * @returns {{titles: string[], plates: number[], layers: number|null, md5: object, modelId: string|null, profileId: string|null}}
  */
 export function readSlicedFileFacts(zip) {
     const model = zip.getEntry("3D/3dmodel.model");
     const head = model ? model.getData().subarray(0, 65536).toString("utf8") : "";
     const sliceInfo = zip.getEntry("Metadata/slice_info.config");
     const xml = sliceInfo ? sliceInfo.getData().toString("utf8") : "";
+    const plates = parsePlateIndices(xml);
+    const md5 = {};
+    for (const plate of plates) {
+        const entry = zip.getEntry(`Metadata/plate_${plate}.gcode.md5`);
+        const value = entry ? entry.getData().toString("utf8").trim() : "";
+        if (value) md5[plate] = value;
+    }
+    const ids = parseModelIds(head);
     return {
         titles: parseModelTitles(head),
-        plates: parsePlateIndices(xml),
+        plates,
         layers: xml ? parseSliceInfo(xml).totalLayers + 1 : null,
+        md5,
+        modelId: ids.modelId,
+        profileId: ids.profileId,
     };
+}
+
+/**
+ * MakerWorld's `DesignModelId` and `DesignProfileId` of a `3dmodel.model`,
+ * null where the file carries none.
+ *
+ * @param {string} xml - the entry, or its head
+ * @returns {{modelId: string|null, profileId: string|null}}
+ */
+export function parseModelIds(xml) {
+    const read = name => {
+        const m = new RegExp(`<metadata\\s+name="${name}"\\s*>([^<]*)</metadata>`).exec(xml);
+        const value = m ? unescapeXml(m[1]).trim() : "";
+        return value && value !== "0" ? value : null;
+    };
+    return { modelId: read("DesignModelId"), profileId: read("DesignProfileId") };
 }
 
 /**
@@ -405,15 +440,19 @@ function unescapeXml(text) {
  *     plate the printer reports has to be in the file, and the layer count
  *     has to match `total_layer_num`. The count is the last layer's 0-based
  *     index plus one, see `completedLayerIndex()`
- *   - identity, which proves the file when it matches and rules it out when it
- *     does not: the job name against the file's titles. Only a file that
- *     carries a title can be judged that way, a project of one's own does not
+ *   - identity, where the first piece both sides carry decides: the md5 of the
+ *     plate's G-code against the one in Bambu Studio's command, then the
+ *     MakerWorld profile id, then the model id, then the job name against the
+ *     file's titles. A project of one's own carries no ids and no titles
  *
- * The md5 and the MakerWorld ids of the project_file echo belong in the
- * identity step once a trace has shown which fields carry them.
+ * The md5 and the ids only confirm for now. Which field of the command equals
+ * which entry of the file is read off one X2D trace and not proven by a
+ * match, so a mismatch is reported in the reason and the next piece decides.
+ * The title does both: proven on the P2S and in the X2D's own file, where
+ * ProfileTitle is the job name.
  *
- * @param {{titles: string[], plates: number[], layers: number|null}} facts - see `readSlicedFileFacts()`
- * @param {{jobName: string|null, plate: number|null, layers: number|null}} expected - what the printer reports
+ * @param {object} facts - see `readSlicedFileFacts()`
+ * @param {{jobName: string|null, plate: number|null, layers: number|null, md5?: string|null, modelId?: string|null, profileId?: string|null}} expected - what the printer reports
  * @returns {{verdict: "confirmed"|"rejected"|"possible", reason: string}}
  */
 export function judgeSlicedFile(facts, expected) {
@@ -423,13 +462,27 @@ export function judgeSlicedFile(facts, expected) {
     if (expected.layers != null && facts.layers != null && facts.layers !== expected.layers) {
         return { verdict: "rejected", reason: `${facts.layers} layers where the printer reports ${expected.layers}` };
     }
-    const jobName = (expected.jobName || "").trim();
-    if (facts.titles.length && jobName) {
-        return facts.titles.includes(jobName)
-            ? { verdict: "confirmed", reason: `its title is the job name` }
-            : { verdict: "rejected", reason: `its titles ${facts.titles.map(t => `"${t}"`).join(" and ")} are not the job name` };
+    const unproven = [];
+    const fileMd5 = expected.plate != null ? facts.md5?.[expected.plate] : Object.values(facts.md5 || {})[0];
+    if (expected.md5 && fileMd5) {
+        if (fileMd5.toUpperCase() === expected.md5.toUpperCase()) return { verdict: "confirmed", reason: "its md5 is the one Bambu Studio sent" };
+        unproven.push("its md5 differs from the one Bambu Studio sent");
     }
-    return { verdict: "possible", reason: "nothing in it names the job, and nothing rules it out" };
+    for (const [key, label] of [["profileId", "MakerWorld profile id"], ["modelId", "MakerWorld model id"]]) {
+        if (expected[key] && facts[key]) {
+            if (facts[key] === expected[key]) return { verdict: "confirmed", reason: `its ${label} is the print's` };
+            unproven.push(`its ${label} ${facts[key]} differs from ${expected[key]}`);
+        }
+    }
+    const note = unproven.length ? `, although ${unproven.join(" and ")}` : "";
+
+    const jobName = (expected.jobName || "").trim();
+    if (facts.titles?.length && jobName) {
+        return facts.titles.includes(jobName)
+            ? { verdict: "confirmed", reason: `its title is the job name${note}` }
+            : { verdict: "rejected", reason: `its titles ${facts.titles.map(t => `"${t}"`).join(" and ")} are not the job name${note ? `, and ${unproven.join(" and ")}` : ""}` };
+    }
+    return { verdict: "possible", reason: `nothing in it names the job, and nothing rules it out${note}` };
 }
 
 /**
@@ -444,7 +497,7 @@ export function judgeSlicedFile(facts, expected) {
  */
 export function settleSlicedFile(judged) {
     const confirmed = judged.find(file => file.verdict === "confirmed");
-    if (confirmed) return { file: confirmed, reason: "its title is the job name" };
+    if (confirmed) return { file: confirmed, reason: confirmed.reason };
     const possible = judged.filter(file => file.verdict === "possible");
     if (possible.length === 1) return { file: possible[0], reason: "the only file written at the start that nothing rules out" };
     if (possible.length > 1) return { file: null, reason: `${possible.length} files written at the start could be it, so none is taken` };

@@ -176,10 +176,14 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = n
  * by listing is checked against, see `findSlicedFileByTime()` in gcode.js.
  *
  * @param {object} printer - the printer runtime object
- * @returns {{startedAt: number|null, totalLayers: number|null}}
+ * @returns {{startedAt: number|null, totalLayers: number|null, identity: object|null}}
  */
 export function runningPrint(printer) {
-    return { startedAt: printer.printStartedAt ?? null, totalLayers: printer.currentTotalLayers ?? null };
+    return {
+        startedAt: printer.printStartedAt ?? null,
+        totalLayers: printer.currentTotalLayers ?? null,
+        identity: printer.currentIdentity ?? null,
+    };
 }
 
 /**
@@ -366,6 +370,8 @@ export function notePrintCommand(printer, message) {
         && JSON.stringify(pending.slots) === JSON.stringify(slots);
     printer.pendingMapping = slots ? { jobName, slots, at: Date.now() } : null;
     printer.pendingFileName = fileName ? { jobName, fileName } : null;
+    const identity = printIdentity(command);
+    printer.pendingIdentity = identity ? { jobName, ...identity } : null;
 
     // A file:// url means the printer sent this command to itself, for a job
     // started on its screen from its storage. Bambu Studio's are https:// for
@@ -380,6 +386,33 @@ export function notePrintCommand(printer, message) {
         debug("print", printer.name, printer.logFilePath, `[Print] ${sender} without a slot mapping`);
     }
     return true;
+}
+
+/**
+ * What a `project_file` command says about the file it sends, for telling that
+ * file apart from the others on the stick. See `judgeSlicedFile()` in gcode.js.
+ *
+ * Read off an X2D cloud print on 2026-09-22 (issue #179): `md5` as 32
+ * uppercase hex digits, the format of the `Metadata/plate_N.gcode.md5` entry
+ * in the file, `model_id` in the "US" plus hex format of the file's
+ * `DesignModelId`, a numeric `profile_id`, and `plate_idx`. Whether each
+ * really equals its counterpart in the file is not proven yet, so a match
+ * confirms a file and a mismatch is only logged. A "0" or an empty string is
+ * what a print without a cloud project sends, and counts as nothing.
+ *
+ * @param {object} command - the `print` block of the command
+ * @returns {{md5: string|null, modelId: string|null, profileId: string|null, plate: number|null}|null}
+ */
+export function printIdentity(command) {
+    const text = value => (value == null || value === "" || String(value) === "0" ? null : String(value));
+    const plate = Number(command?.plate_idx);
+    const identity = {
+        md5: text(command?.md5),
+        modelId: text(command?.model_id),
+        profileId: text(command?.profile_id),
+        plate: Number.isInteger(plate) && plate > 0 ? plate : null,
+    };
+    return Object.values(identity).some(v => v != null) ? identity : null;
 }
 
 /**
@@ -617,6 +650,13 @@ export async function handlePrintStateChange(printer, print) {
             ? pendingFile.fileName
             : null;
 
+        // What Bambu Studio's command says about the file, taken the same way
+        const pendingIdentity = printer.pendingIdentity;
+        printer.pendingIdentity = null;
+        printer.currentIdentity = pendingIdentity && (!pendingIdentity.jobName || !jobName || pendingIdentity.jobName === jobName)
+            ? pendingIdentity
+            : null;
+
         const pending = printer.pendingMapping;
         printer.pendingMapping = null;
         if (pending && (!pending.jobName || !jobName || pending.jobName === jobName)) {
@@ -701,6 +741,16 @@ export async function handlePrintStateChange(printer, print) {
     // sliced file is a .3mf (cloud) or a .gcode.3mf (LAN). Read on every report
     // like the job name: it can arrive a report or two after the state does.
     if (print.gcode_file) printer.currentGcodeFile = print.gcode_file;
+
+    // A cloud print repeats the ids of its command in every report, which is
+    // all a restart mid print has left of them. The md5 is in the command only.
+    if (ACTIVE_STATES.has(newState)) {
+        const reported = printIdentity({ model_id: print.model_id, profile_id: print.profile_id });
+        if (reported) {
+            const known = printer.currentIdentity || {};
+            printer.currentIdentity = { ...known, modelId: known.modelId ?? reported.modelId, profileId: known.profileId ?? reported.profileId };
+        }
+    }
 
     // Fetch slice info once we reach RUNNING (the sliced file is reliably present
     // in /cache by then). Guarded so we only attempt it once per print.

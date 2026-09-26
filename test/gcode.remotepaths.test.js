@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts } from "../src/gcode.js";
-import { sliceFetchFailure, localFileName } from "../src/mqtt.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds } from "../src/gcode.js";
+import { sliceFetchFailure, localFileName, printIdentity } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
 // the printer says which in gcode_file. Every name below is one a real printer
@@ -197,4 +197,35 @@ test("the log says when the listing found nothing either", () => {
         sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, listed: 2, settled: "2 files written at the start could be it, so none is taken" }),
         "No sliced file on the printer under /cache/Würfel.3mf. Listed 2 3MF files on the printer: 2 files written at the start could be it, so none is taken",
     );
+});
+
+test("Bambu Studio's command and the file carry md5 and MakerWorld ids", () => {
+    // The X2D's project_file echo of 2026-09-22, md5 anonymised
+    assert.deepEqual(printIdentity({
+        command: "project_file", md5: "774F0000000000000000000000000000", model_id: "USac90b077599b7c",
+        profile_id: "1017501024", plate_idx: "1", design_id: "3071033",
+    }), { md5: "774F0000000000000000000000000000", modelId: "USac90b077599b7c", profileId: "1017501024", plate: 1 });
+    // A print without a cloud project sends zeros and empty strings
+    assert.equal(printIdentity({ model_id: "", profile_id: "0", project_id: "0" }), null);
+
+    assert.deepEqual(parseModelIds(`<metadata name="DesignModelId">USc2c7ad817530fc</metadata>
+ <metadata name="DesignProfileId">167787430</metadata>`), { modelId: "USc2c7ad817530fc", profileId: "167787430" });
+    assert.deepEqual(parseModelIds(`<metadata name="Title"></metadata>`), { modelId: null, profileId: null });
+});
+
+test("a matching md5 or id proves a file, a differing one decides nothing yet", () => {
+    const file = { titles: [], plates: [1], layers: 15, md5: { 1: "E01DB1EC85533608D4554E3A4890B19C" }, modelId: "US59c38024b82730", profileId: "885007612" };
+    const base = { jobName: "0.2mm layer, 3 walls, 15% infill", plate: 1, layers: 15 };
+
+    assert.equal(judgeSlicedFile(file, { ...base, md5: "e01db1ec85533608d4554e3a4890b19c" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, profileId: "885007612" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, modelId: "US59c38024b82730" }).verdict, "confirmed");
+
+    // Not proven which field equals which, so a mismatch hands on to the title
+    const differs = { ...base, md5: "774F0000000000000000000000000000", modelId: "USac90b077599b7c", profileId: "1017501024" };
+    assert.equal(judgeSlicedFile(file, differs).verdict, "possible");
+    assert.match(judgeSlicedFile(file, differs).reason, /md5 differs/);
+    assert.equal(judgeSlicedFile({ ...file, titles: ["0.2mm layer, 3 walls, 15% infill", "CartPicker"] }, differs).verdict, "confirmed");
+    // The exclusions still come first
+    assert.equal(judgeSlicedFile({ ...file, layers: 16 }, { ...base, md5: "E01DB1EC85533608D4554E3A4890B19C" }).verdict, "rejected");
 });
