@@ -1,6 +1,7 @@
 import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
+import { createHash } from "crypto";
 
 import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot, describeConnectionError } from "./utils.js";
 import { debug, trace } from "./logger.js";
@@ -274,7 +275,7 @@ async function findSlicedFileByTime(client, printer, tried, running, record) {
 
         let facts;
         try {
-            facts = readSlicedFileFacts(new AdmZip(buf));
+            facts = { ...readSlicedFileFacts(new AdmZip(buf)), fileMd5: createHash("md5").update(buf).digest("hex") };
         } catch (err) {
             debug("gcode", printer.name, printer.logFilePath, `[Print] ${file.path} is not a readable archive: ${err.message}`);
             continue;
@@ -340,34 +341,51 @@ export function reportedPlate(gcodeFile) {
  * own leaves both empty. Only the head of the entry is read, the metadata
  * comes before the meshes.
  *
- * Next to the titles it carries `DesignModelId` and `DesignProfileId`, and
- * every sliced plate has its G-code's md5 in `Metadata/plate_N.gcode.md5`,
- * which Bambu Studio's command may carry as well.
+ * Next to the titles it carries `DesignModelId` and `DesignProfileId`, the
+ * `model_id` and `profile_id` of a print from MakerWorld.
+ *
+ * The layer count is counted over the layer lists that name a filament only.
+ * A P2S plate sliced by MakerWorld on 2026-09-26 listed its 248 layers as
+ * "0 247" plus an empty list over "248 249", and its G-code header and the
+ * printer's `total_layer_num` both said 248.
  *
  * @param {object} zip - the opened archive, an AdmZip
- * @returns {{titles: string[], plates: number[], layers: number|null, md5: object, modelId: string|null, profileId: string|null}}
+ * @returns {{titles: string[], plates: number[], layers: number|null, modelId: string|null, profileId: string|null}}
  */
 export function readSlicedFileFacts(zip) {
     const model = zip.getEntry("3D/3dmodel.model");
     const head = model ? model.getData().subarray(0, 65536).toString("utf8") : "";
     const sliceInfo = zip.getEntry("Metadata/slice_info.config");
     const xml = sliceInfo ? sliceInfo.getData().toString("utf8") : "";
-    const plates = parsePlateIndices(xml);
-    const md5 = {};
-    for (const plate of plates) {
-        const entry = zip.getEntry(`Metadata/plate_${plate}.gcode.md5`);
-        const value = entry ? entry.getData().toString("utf8").trim() : "";
-        if (value) md5[plate] = value;
-    }
     const ids = parseModelIds(head);
     return {
         titles: parseModelTitles(head),
-        plates,
-        layers: xml ? parseSliceInfo(xml).totalLayers + 1 : null,
-        md5,
+        plates: parsePlateIndices(xml),
+        layers: countPrintedLayers(xml),
         modelId: ids.modelId,
         profileId: ids.profileId,
     };
+}
+
+/**
+ * The number of layers a `slice_info.config` prints filament on, null when
+ * it lists none. See `readSlicedFileFacts()` for why an empty list is skipped.
+ *
+ * @param {string} xml - the raw slice_info.config
+ * @returns {number|null}
+ */
+export function countPrintedLayers(xml) {
+    let last = -1;
+    const re = /<layer_filament_list\s+([^>]+?)\/>/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+        const a = parseAttrs(m[1]);
+        if (!(a.filament_list || "").trim()) continue;
+        for (const [, end] of parseLayerRanges(a.layer_ranges || "")) {
+            if (end > last) last = end;
+        }
+    }
+    return last >= 0 ? last + 1 : null;
 }
 
 /**
@@ -441,15 +459,18 @@ function unescapeXml(text) {
  *     has to match `total_layer_num`. The count is the last layer's 0-based
  *     index plus one, see `completedLayerIndex()`
  *   - identity, where the first piece both sides carry decides: the md5 of the
- *     plate's G-code against the one in Bambu Studio's command, then the
+ *     whole file against the one in Bambu Studio's command, then the
  *     MakerWorld profile id, then the model id, then the job name against the
  *     file's titles. A project of one's own carries no ids and no titles
  *
- * The md5 and the ids only confirm for now. Which field of the command equals
- * which entry of the file is read off one X2D trace and not proven by a
- * match, so a mismatch is reported in the reason and the next piece decides.
- * The title does both: proven on the P2S and in the X2D's own file, where
- * ProfileTitle is the job name.
+ * Measured on a P2S printing a MakerWorld model from Bambu Handy on
+ * 2026-09-26: the command's `md5` was the md5 of the whole 3MF on the stick,
+ * lowercase, and its `model_id` and `profile_id` were the file's
+ * `DesignModelId` and `DesignProfileId`. The md5 therefore decides both ways.
+ * The ids only confirm: an X2D printing a MakerWorld model that was changed in
+ * Bambu Studio sent ids of the user's own cloud copy, which the file does not
+ * carry, so a mismatch there proves nothing and the next piece decides. The
+ * title decides both ways, ProfileTitle being the job name on that X2D.
  *
  * @param {object} facts - see `readSlicedFileFacts()`
  * @param {{jobName: string|null, plate: number|null, layers: number|null, md5?: string|null, modelId?: string|null, profileId?: string|null}} expected - what the printer reports
@@ -463,10 +484,10 @@ export function judgeSlicedFile(facts, expected) {
         return { verdict: "rejected", reason: `${facts.layers} layers where the printer reports ${expected.layers}` };
     }
     const unproven = [];
-    const fileMd5 = expected.plate != null ? facts.md5?.[expected.plate] : Object.values(facts.md5 || {})[0];
-    if (expected.md5 && fileMd5) {
-        if (fileMd5.toUpperCase() === expected.md5.toUpperCase()) return { verdict: "confirmed", reason: "its md5 is the one Bambu Studio sent" };
-        unproven.push("its md5 differs from the one Bambu Studio sent");
+    if (expected.md5 && facts.fileMd5) {
+        return facts.fileMd5.toLowerCase() === expected.md5.toLowerCase()
+            ? { verdict: "confirmed", reason: "its md5 is the one Bambu Studio sent" }
+            : { verdict: "rejected", reason: "its md5 is not the one Bambu Studio sent" };
     }
     for (const [key, label] of [["profileId", "MakerWorld profile id"], ["modelId", "MakerWorld model id"]]) {
         if (expected[key] && facts[key]) {

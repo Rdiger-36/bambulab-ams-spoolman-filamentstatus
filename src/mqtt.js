@@ -392,13 +392,11 @@ export function notePrintCommand(printer, message) {
  * What a `project_file` command says about the file it sends, for telling that
  * file apart from the others on the stick. See `judgeSlicedFile()` in gcode.js.
  *
- * Read off an X2D cloud print on 2026-09-22 (issue #179): `md5` as 32
- * uppercase hex digits, the format of the `Metadata/plate_N.gcode.md5` entry
- * in the file, `model_id` in the "US" plus hex format of the file's
- * `DesignModelId`, a numeric `profile_id`, and `plate_idx`. Whether each
- * really equals its counterpart in the file is not proven yet, so a match
- * confirms a file and a mismatch is only logged. A "0" or an empty string is
- * what a print without a cloud project sends, and counts as nothing.
+ * `md5` is the md5 of the whole 3MF, `model_id` and `profile_id` are
+ * MakerWorld's ids of a print from MakerWorld, and `plate_idx` the plate.
+ * Measured on a P2S printing from Bambu Handy on 2026-09-26, where all of them
+ * matched the file on the stick. A "0" or an empty string is what a print
+ * without a cloud project sends, and counts as nothing.
  *
  * @param {object} command - the `print` block of the command
  * @returns {{md5: string|null, modelId: string|null, profileId: string|null, plate: number|null}|null}

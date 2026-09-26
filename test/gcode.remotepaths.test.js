@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers } from "../src/gcode.js";
 import { sliceFetchFailure, localFileName, printIdentity } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -213,19 +213,36 @@ test("Bambu Studio's command and the file carry md5 and MakerWorld ids", () => {
     assert.deepEqual(parseModelIds(`<metadata name="Title"></metadata>`), { modelId: null, profileId: null });
 });
 
-test("a matching md5 or id proves a file, a differing one decides nothing yet", () => {
-    const file = { titles: [], plates: [1], layers: 15, md5: { 1: "E01DB1EC85533608D4554E3A4890B19C" }, modelId: "US59c38024b82730", profileId: "885007612" };
-    const base = { jobName: "0.2mm layer, 3 walls, 15% infill", plate: 1, layers: 15 };
+test("the md5 decides both ways, a MakerWorld id only confirms", () => {
+    // A P2S printing PenroseTriangle from Bambu Handy on 2026-09-26: the
+    // command's md5 was the whole file's, its ids the file's Design ids
+    const file = { titles: ["Fast print and less filament - 0.2mm layer, 2 walls", "PenroseTriangle"], plates: [1], layers: 248,
+        modelId: "US911eafb6a009f0", profileId: "801288487", fileMd5: "0d1b4dabe3b479109f4e64cd875daff7" };
+    const base = { jobName: "PenroseTriangle", plate: 1, layers: 248 };
 
-    assert.equal(judgeSlicedFile(file, { ...base, md5: "e01db1ec85533608d4554e3a4890b19c" }).verdict, "confirmed");
-    assert.equal(judgeSlicedFile(file, { ...base, profileId: "885007612" }).verdict, "confirmed");
-    assert.equal(judgeSlicedFile(file, { ...base, modelId: "US59c38024b82730" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, md5: "0D1B4DABE3B479109F4E64CD875DAFF7" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, md5: "774f0000000000000000000000000000" }).verdict, "rejected");
+    // After a restart mid print only the ids are left, which every report repeats
+    assert.equal(judgeSlicedFile(file, { ...base, profileId: "801288487" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, modelId: "US911eafb6a009f0" }).verdict, "confirmed");
 
-    // Not proven which field equals which, so a mismatch hands on to the title
-    const differs = { ...base, md5: "774F0000000000000000000000000000", modelId: "USac90b077599b7c", profileId: "1017501024" };
-    assert.equal(judgeSlicedFile(file, differs).verdict, "possible");
-    assert.match(judgeSlicedFile(file, differs).reason, /md5 differs/);
-    assert.equal(judgeSlicedFile({ ...file, titles: ["0.2mm layer, 3 walls, 15% infill", "CartPicker"] }, differs).verdict, "confirmed");
+    // An X2D printing a changed MakerWorld model sent ids of the user's own
+    // cloud copy, so differing ids hand on to the title
+    const cloudCopy = { ...base, jobName: "0.2mm layer, 3 walls, 15% infill", modelId: "USac90b077599b7c", profileId: "1017501024" };
+    const cartPicker = { ...file, titles: ["0.2mm layer, 3 walls, 15% infill", "CartPicker"], modelId: "US59c38024b82730", profileId: "885007612", fileMd5: null };
+    assert.equal(judgeSlicedFile(cartPicker, cloudCopy).verdict, "confirmed");
+    assert.match(judgeSlicedFile(cartPicker, cloudCopy).reason, /profile id 885007612 differs/);
+    assert.equal(judgeSlicedFile({ ...cartPicker, titles: [] }, cloudCopy).verdict, "possible");
     // The exclusions still come first
-    assert.equal(judgeSlicedFile({ ...file, layers: 16 }, { ...base, md5: "E01DB1EC85533608D4554E3A4890B19C" }).verdict, "rejected");
+    assert.equal(judgeSlicedFile({ ...file, layers: 250 }, { ...base, md5: "0d1b4dabe3b479109f4e64cd875daff7" }).verdict, "rejected");
+});
+
+test("only the layers that print filament are counted", () => {
+    // PenroseTriangle again: 248 layers in the G-code header and in total_layer_num
+    const xml = `<layer_filament_lists>
+      <layer_filament_list filament_list="" layer_ranges="248 249" />
+      <layer_filament_list filament_list="0" layer_ranges="0 247" />
+    </layer_filament_lists>`;
+    assert.equal(countPrintedLayers(xml), 248);
+    assert.equal(countPrintedLayers(""), null);
 });
