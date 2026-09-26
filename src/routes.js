@@ -38,7 +38,7 @@ import {
 } from "./spoolman.js";
 import { calcFullConsumption, calcPartialConsumption, completedLayerIndex, testFtpsConnection, resolveSliceSlots, orderedAmsSlots, printStageName, isPreparingStage, SLICE_FETCH_ATTEMPTS } from "./gcode.js";
 import { consumptionCandidate, matchConsumption } from "./ams.js";
-import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo, ensureSliceInfo, sliceFetchFailure } from "./mqtt.js";
+import { setupMqtt, closeMqtt, broadcastSlotUpdate, broadcastSSE, testMqttConnection, resetOfflineBackoff, ACTIVE_STATES, printResultCleared, loadSliceInfo, ensureSliceInfo, sliceFetchFailure, runningPrint } from "./mqtt.js";
 import { getMappings, setMapping, clearMapping, clearPrinterMappings } from "./mappings.js";
 import {
     claimSlotLocation,
@@ -643,7 +643,7 @@ export function registerRoutes(app, printers) {
             try {
                 sliceInfo = req.query.job
                     ? await loadSliceInfo(printer, jobName, null)
-                    : await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, printer.printStartedAt);
+                    : await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, runningPrint(printer));
             } catch (err) {
                 // non-fatal, surface the error in the response
                 return res.json({

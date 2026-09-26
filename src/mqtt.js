@@ -120,11 +120,11 @@ function broadcastAmsEnvironment(printer, amsUnits, now) {
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
  * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
- * @param {number|null} [startedAt] - when the print started, for finding the file by its time
+ * @param {object|null} [running] - the running print as `runningPrint()` describes it, for finding the file by its time
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null, startedAt = null) {
-    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName, startedAt);
+export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null, running = null) {
+    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName, running);
     if (!sliceInfo) return null;
 
     for (const preset of learnPresets(sliceInfo, jobName)) {
@@ -152,14 +152,14 @@ export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
  * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
- * @param {number|null} [startedAt] - when the print started, for finding the file by its time
+ * @param {object|null} [running] - the running print as `runningPrint()` describes it, for finding the file by its time
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null, startedAt = null) {
+export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null, running = null) {
     if (printer.currentSliceInfo) return Promise.resolve(printer.currentSliceInfo);
     if (printer.sliceFetchInFlight?.jobName === jobName) return printer.sliceFetchInFlight.promise;
 
-    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName, startedAt)
+    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName, running)
         .then(sliceInfo => {
             if (sliceInfo) printer.currentSliceInfo = sliceInfo;
             return sliceInfo;
@@ -169,6 +169,17 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = n
         });
     printer.sliceFetchInFlight = { jobName, promise };
     return promise;
+}
+
+/**
+ * What the printer reports about its running print that a sliced file found
+ * by listing is checked against, see `findSlicedFileByTime()` in gcode.js.
+ *
+ * @param {object} printer - the printer runtime object
+ * @returns {{startedAt: number|null, totalLayers: number|null}}
+ */
+export function runningPrint(printer) {
+    return { startedAt: printer.printStartedAt ?? null, totalLayers: printer.currentTotalLayers ?? null };
 }
 
 /**
@@ -197,7 +208,7 @@ function describeSliceInfo(sliceInfo) {
  */
 async function fetchSliceInfoForPrint(printer, jobName) {
     try {
-        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, printer.printStartedAt);
+        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, runningPrint(printer));
         if (sliceInfo) {
             console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
             return;
@@ -242,7 +253,7 @@ export function sliceFetchFailure(record) {
         const tried = record.tried.map(path => (reasons[path] ? `${path} (${reasons[path]})` : path));
         // Only when the storage was listed at all, which needs the print's start
         const listed = typeof record.listed === "number"
-            ? `, and none of the ${record.listed} 3MF files on the printer was written when the print started`
+            ? `. Listed ${record.listed} 3MF files on the printer: ${record.settled || "no 3MF was written at the start"}`
             : "";
         return `No sliced file on the printer under ${tried.join(", ")}${listed}`;
     }
@@ -549,6 +560,7 @@ export async function handlePrintStateChange(printer, print) {
     if (freshStart) {
         printer.currentLayerNum = firstSinceStart ? (print.layer_num ?? 0) : 0;
         printer.staleLayerNum = firstSinceStart ? null : (print.layer_num ?? null);
+        printer.currentTotalLayers = null;
     } else if (print.layer_num != null) {
         const stale = ACTIVE_STATES.has(prevState)
             && printer.staleLayerNum != null
@@ -568,6 +580,10 @@ export async function handlePrintStateChange(printer, print) {
     // progress.
     if (print.stg_cur != null)          printer.currentStage = Number(print.stg_cur);
     if (print.mc_remaining_time != null) printer.currentRemainingMinutes = Number(print.mc_remaining_time);
+    // Only what a sliced file found by listing is checked against. It may still
+    // be the previous job's in the first report of a new one, like layer_num
+    // above, and a file rejected for that is looked at again on the next retry.
+    if (print.total_layer_num != null) printer.currentTotalLayers = Number(print.total_layer_num);
 
     // A fresh print starts when we transition from a non-active state into an
     // active one. Reset tracking here (even on a reprint of the same file) so

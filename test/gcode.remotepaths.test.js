@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, pickSlicedFileByTime, SLICED_FILE_TIME_WINDOW_MS } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts } from "../src/gcode.js";
 import { sliceFetchFailure, localFileName } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -124,30 +124,77 @@ test("a fetch that found nothing is tried again, a few times, after a wait", () 
     assert.equal(sliceFetchRetryDue(null, at), false);
 });
 
-test("a file whose name is unknown is taken by the time it was written", () => {
+test("the time only picks the candidates, closest to the start first", () => {
     // The X2D of issue #179 on 2026-09-26: the job was named after the print
     // profile, the file on the USB stick after the project, written at the start
     const startedAt = Date.parse("2026-09-26T13:44:17Z");
     const cartPicker = { path: "/CartPicker.gcode.3mf", modifiedAt: Date.parse("2026-09-26T13:44:05Z") };
     const yesterday = { path: "/cache/Benchy.gcode.3mf", modifiedAt: Date.parse("2026-09-25T18:02:00Z") };
-    assert.deepEqual(pickSlicedFileByTime([yesterday, cartPicker], startedAt), cartPicker);
-
-    // The one closest to the start, not the newest: a file sent after the
-    // start belongs to the next print
+    // Closest rather than newest: a file sent after the start belongs to the next print
     const next = { path: "/Next.gcode.3mf", modifiedAt: startedAt + 5 * 60 * 1000 };
-    assert.deepEqual(pickSlicedFileByTime([next, cartPicker], startedAt), cartPicker);
+    assert.deepEqual(slicedFileCandidates([yesterday, next, cartPicker], startedAt), [cartPicker, next]);
 
-    // Nothing near the start is nothing, rather than the least wrong file
-    assert.equal(pickSlicedFileByTime([yesterday], startedAt), null);
-    assert.equal(pickSlicedFileByTime([{ path: "/x.3mf", modifiedAt: startedAt - SLICED_FILE_TIME_WINDOW_MS - 1 }], startedAt), null);
-    assert.equal(pickSlicedFileByTime([{ path: "/x.3mf", modifiedAt: NaN }], startedAt), null);
-    assert.equal(pickSlicedFileByTime([cartPicker], null), null);
-    assert.equal(pickSlicedFileByTime([], startedAt), null);
+    assert.deepEqual(slicedFileCandidates([yesterday], startedAt), []);
+    assert.deepEqual(slicedFileCandidates([{ path: "/x.3mf", modifiedAt: startedAt - SLICED_FILE_TIME_WINDOW_MS - 1 }], startedAt), []);
+    assert.deepEqual(slicedFileCandidates([{ path: "/x.3mf", modifiedAt: NaN }], startedAt), []);
+    assert.deepEqual(slicedFileCandidates([cartPicker], null), []);
+});
+
+test("the plate comes off gcode_file", () => {
+    assert.equal(reportedPlate("/data/Metadata/plate_1.gcode"), 1);
+    assert.equal(reportedPlate("Metadata/plate_12.gcode"), 12);
+    assert.equal(reportedPlate("Würfel.gcode.3mf"), null);
+    assert.equal(reportedPlate(undefined), null);
+});
+
+test("a file names itself through MakerWorld's titles", () => {
+    // Heads of 3D/3dmodel.model as Bambu Studio 2.8 writes them, read off the P2S stick
+    const clippy = `<model>
+ <metadata name="Designer">iLab 3D</metadata>
+ <metadata name="ProfileTitle">0.2mm layer - 10 clips</metadata>
+ <metadata name="Title">CLIPPY - Filament clip</metadata>
+ <resources>`;
+    assert.deepEqual(parseModelTitles(clippy), ["0.2mm layer - 10 clips", "CLIPPY - Filament clip"]);
+    // A project of one's own leaves both empty
+    assert.deepEqual(parseModelTitles(`<metadata name="ProfileTitle"></metadata>\n <metadata name="Title"></metadata>`), []);
+    assert.deepEqual(parseModelTitles(`<metadata name="Title">Tom &amp; Jerry &quot;v2&quot;</metadata>`), ['Tom & Jerry "v2"']);
+
+    assert.deepEqual(parsePlateIndices(`<config>\n  <plate>\n    <metadata key="index" value="1"/>\n  </plate>\n  <plate>\n    <metadata key="index" value="3"/>`), [1, 3]);
+});
+
+test("the content of a candidate proves it, rules it out or leaves it open", () => {
+    const x2d = { jobName: "0.2mm layer, 3 walls, 15% infill", plate: 1, layers: 15 };
+    const makerWorld = { titles: ["0.2mm layer, 3 walls, 15% infill", "CartPicker"], plates: [1], layers: 15 };
+
+    assert.equal(judgeSlicedFile(makerWorld, x2d).verdict, "confirmed");
+    // The exclusions come first, a matching title does not outweigh them
+    assert.equal(judgeSlicedFile({ ...makerWorld, plates: [2] }, x2d).verdict, "rejected");
+    assert.equal(judgeSlicedFile({ ...makerWorld, layers: 16 }, x2d).verdict, "rejected");
+    // A title that is not the job name rules the file out
+    assert.equal(judgeSlicedFile({ ...makerWorld, titles: ["0.2mm layer - 10 clips"] }, x2d).verdict, "rejected");
+    // A project of one's own carries no title and is left open
+    assert.equal(judgeSlicedFile({ titles: [], plates: [1], layers: 15 }, x2d).verdict, "possible");
+    // What the printer has not reported checks nothing
+    assert.equal(judgeSlicedFile({ titles: [], plates: [2], layers: 99 }, { jobName: "x", plate: null, layers: null }).verdict, "possible");
+});
+
+test("a guess between two files books nothing", () => {
+    const confirmed = { path: "/a.3mf", verdict: "confirmed" };
+    const possible = { path: "/b.3mf", verdict: "possible" };
+    const other = { path: "/c.3mf", verdict: "possible" };
+    const rejected = { path: "/d.3mf", verdict: "rejected" };
+
+    assert.equal(settleSlicedFile([possible, confirmed]).file, confirmed);
+    assert.equal(settleSlicedFile([rejected, possible]).file, possible);
+    assert.equal(settleSlicedFile([possible, other]).file, null);
+    assert.match(settleSlicedFile([possible, other]).reason, /2 files/);
+    assert.equal(settleSlicedFile([rejected]).file, null);
+    assert.equal(settleSlicedFile([]).file, null);
 });
 
 test("the log says when the listing found nothing either", () => {
     assert.equal(
-        sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, listed: 2 }),
-        "No sliced file on the printer under /cache/Würfel.3mf, and none of the 2 3MF files on the printer was written when the print started",
+        sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, listed: 2, settled: "2 files written at the start could be it, so none is taken" }),
+        "No sliced file on the printer under /cache/Würfel.3mf. Listed 2 3MF files on the printer: 2 files written at the start could be it, so none is taken",
     );
 });
