@@ -29,10 +29,13 @@ function uiSpool(overrides = {}) {
             tray_info_idx: "GFA00",
             tray_weight: "1000",
             remain: 63,
-            // Fields the printer sends and the UI never shows
+            // Fields the printer sends and no client is handed
+            state: 11,
+            xcam_info: "8813AC0DE803E803CDCC4C3F",
+            // Fields a client is handed although the dashboard shows none of them
             bed_temp: "45",
             nozzle_temp_max: "240",
-            state: 11,
+            tag_uid: "0000000000000000",
         },
         existingSpool: {
             id: 42,
@@ -64,8 +67,8 @@ test("the projection keeps the server's own fields and the firmware noise out", 
 
     assert.equal(client.printerName, undefined);
     assert.equal(client.logFilePath, undefined);
-    assert.equal(client.slot.bed_temp, undefined);
     assert.equal(client.slot.state, undefined);
+    assert.equal(client.slot.xcam_info, undefined);
     assert.equal(client.existingSpool.last_used, undefined);
 
     // What the dashboard reads has to survive
@@ -141,9 +144,24 @@ test("a 3rd party slot keeps what the printer does know", () => {
     assert.equal(client.key, "GFL99|0ACC38");
 });
 
+test("the tray details reach a client as numbers, and a zero as nothing", () => {
+    const client = toClientSpool(uiSpool({ slot: { ...uiSpool().slot, k: "0.019999999552965164", drying_temp: "0" } }));
+
+    // The printer sends every one of these as a string, and 0 for a spool it
+    // knows nothing about.
+    assert.equal(client.slot.bed_temp, 45);
+    assert.equal(client.slot.nozzle_temp_max, 240);
+    assert.equal(client.slot.nozzle_temp_min, null);
+    assert.equal(client.slot.drying_temp, null);
+    assert.equal(client.slot.k, 0.019999999552965164);
+    // Sixteen zeros is a slot without a tag, not a tag
+    assert.equal(client.slot.tag_uid, null);
+    assert.equal(toClientSpool(uiSpool({ slot: { ...uiSpool().slot, tag_uid: "4352F4A100000100" } })).slot.tag_uid, "4352F4A100000100");
+});
+
 test("a change the UI does not show does not trigger a broadcast", () => {
     const prev = uiSpool();
-    const next = uiSpool({ slot: { ...uiSpool().slot, bed_temp: "60", nozzle_temp_max: "250" } });
+    const next = uiSpool({ slot: { ...uiSpool().slot, state: 3, xcam_info: "D007D007E803E8036666663F" } });
 
     assert.equal(hasSpoolUiChanged(next, prev), false);
 });
