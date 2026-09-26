@@ -750,7 +750,13 @@ export async function handlePrintStateChange(printer, print) {
 
     // A cloud print repeats the ids of its command in every report, which is
     // all a restart mid print has left of them. The md5 is in the command only.
-    if (ACTIVE_STATES.has(newState)) {
+    //
+    // Only while the printer says the print is a cloud print. A P2S started a
+    // job from its own screen on 2026-09-26 right after a cloud print and went
+    // on reporting that print's model_id with print_type "local", and taking it
+    // proved the previous print's file for a job whose file was not on the
+    // stick at all.
+    if (ACTIVE_STATES.has(newState) && print.print_type === "cloud") {
         const reported = printIdentity({ model_id: print.model_id, profile_id: print.profile_id });
         if (reported) {
             const known = printer.currentIdentity || {};

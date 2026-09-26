@@ -157,8 +157,18 @@ test("the previous job's layer count is ignored until the printer names the new 
 test("the ids of a cloud print come from its command, and from the reports after a restart", async () => {
     const p = printer();
     p.pendingIdentity = { jobName: "PenroseTriangle", md5: "0d1b4dabe3b479109f4e64cd875daff7", modelId: null, profileId: null, plate: 1 };
-    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "PenroseTriangle", model_id: "US911eafb6a009f0", profile_id: "801288487" });
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "PenroseTriangle", model_id: "US911eafb6a009f0", profile_id: "801288487", print_type: "cloud" });
     assert.deepEqual(runningPrint(p).identity, { jobName: "PenroseTriangle", md5: "0d1b4dabe3b479109f4e64cd875daff7", modelId: "US911eafb6a009f0", profileId: "801288487", plate: 1 });
+    forgetPrintStart("SERIAL");
+});
+
+test("a print started on the screen does not take the ids the last cloud print left in the reports", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Swatch Board", model_id: "US910fc6c0b4f723", profile_id: "728244489", print_type: "cloud" });
+    // Seen on a P2S on 2026-09-26: the next job, started on the screen, went on
+    // reporting the swatch board's model_id
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "Honeycomb Organizer by Craftop", model_id: "US910fc6c0b4f723", profile_id: "", print_type: "local" });
+    assert.equal(runningPrint(p).identity, null);
     forgetPrintStart("SERIAL");
 });
 
