@@ -6,7 +6,7 @@ import path from "path";
 
 // The module reads its path from config.js at import time, so DATA_DIR has to
 // point at a throwaway directory before the first import.
-let dir, printStatePath, rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests, handlePrintStateChange, deltaAsReport;
+let dir, printStatePath, rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests, handlePrintStateChange, deltaAsReport, runningPrint;
 
 before(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "ams-printstate-"));
@@ -17,7 +17,7 @@ before(async () => {
 
     ({ printStatePath } = await import("../src/config.js"));
     ({ rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests } = await import("../src/printstate.js"));
-    ({ handlePrintStateChange, deltaAsReport } = await import("../src/mqtt.js"));
+    ({ handlePrintStateChange, deltaAsReport, runningPrint } = await import("../src/mqtt.js"));
 });
 
 after(() => { fs.removeSync(dir); });
@@ -137,6 +137,38 @@ test("the previous job's layer is ignored while the printer keeps repeating it a
     assert.equal(p.currentLayerNum, 37);
     await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Zylinder", layer_num: 70 });
     assert.equal(p.currentLayerNum, 70);
+    forgetPrintStart("SERIAL");
+});
+
+test("the previous job's layer count is ignored until the printer names the new one", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "PenroseTriangle", total_layer_num: 248 });
+    // Seen on a P2S on 2026-09-26: the 248 of the last print went on through
+    // PREPARE and the new job's 7 came with RUNNING only
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "Swatch Board", total_layer_num: 248 });
+    assert.equal(runningPrint(p).totalLayers, null);
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "Swatch Board", total_layer_num: 248 });
+    assert.equal(runningPrint(p).totalLayers, null);
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "Swatch Board", total_layer_num: 7 });
+    assert.equal(runningPrint(p).totalLayers, 7);
+    forgetPrintStart("SERIAL");
+});
+
+test("the ids of a cloud print come from its command, and from the reports after a restart", async () => {
+    const p = printer();
+    p.pendingIdentity = { jobName: "PenroseTriangle", md5: "0d1b4dabe3b479109f4e64cd875daff7", modelId: null, profileId: null, plate: 1 };
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "PenroseTriangle", model_id: "US911eafb6a009f0", profile_id: "801288487", print_type: "cloud" });
+    assert.deepEqual(runningPrint(p).identity, { jobName: "PenroseTriangle", md5: "0d1b4dabe3b479109f4e64cd875daff7", modelId: "US911eafb6a009f0", profileId: "801288487", plate: 1 });
+    forgetPrintStart("SERIAL");
+});
+
+test("a print started on the screen does not take the ids the last cloud print left in the reports", async () => {
+    const p = printer();
+    await handlePrintStateChange(p, { gcode_state: "FINISH", subtask_name: "Swatch Board", model_id: "US910fc6c0b4f723", profile_id: "728244489", print_type: "cloud" });
+    // Seen on a P2S on 2026-09-26: the next job, started on the screen, went on
+    // reporting the swatch board's model_id
+    await handlePrintStateChange(p, { gcode_state: "PREPARE", subtask_name: "Honeycomb Organizer by Craftop", model_id: "US910fc6c0b4f723", profile_id: "", print_type: "local" });
+    assert.equal(runningPrint(p).identity, null);
     forgetPrintStart("SERIAL");
 });
 

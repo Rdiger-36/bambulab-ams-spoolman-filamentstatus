@@ -46,7 +46,12 @@ const BRACKETED_TAG = /\[\[ ([^\]]*?) \]\]/g;
 const JSON_TAG = /("(?:tray_uuid|tag)"\s*:\s*")((?:\\"|[^"])*)(")/g;
 // A tag of a current AMS is 32 hex characters, which nothing else in a log is,
 // so this catches one wherever it turns up without an anchor to hold on to.
-const LONG_TAG = /\b[0-9A-F]{32}\b/g;
+//
+// Except the md5 in the project_file command, which has the same shape when
+// Bambu Studio sends it. It is the md5 of the sliced file, says nothing about
+// the user, and is what ties the print to its file on the USB stick, so a
+// report about a file that was not found needs it (issue #179).
+const LONG_TAG = /(?<!"md5"\s*:\s*")\b[0-9A-F]{32}\b/g;
 // The address a cloud print is fetched from, echoed by the printer in the
 // project_file command Bambu Studio sent and so written into the MQTT trace: a
 // signed link into Bambu's upload bucket whose path carries the user's cloud

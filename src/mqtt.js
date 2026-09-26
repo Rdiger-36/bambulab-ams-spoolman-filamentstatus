@@ -120,10 +120,11 @@ function broadcastAmsEnvironment(printer, amsUnits, now) {
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
  * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
+ * @param {object|null} [running] - the running print as `runningPrint()` describes it, for finding the file by its time
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
-    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName);
+export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null, running = null) {
+    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName, running);
     if (!sliceInfo) return null;
 
     for (const preset of learnPresets(sliceInfo, jobName)) {
@@ -151,13 +152,14 @@ export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
  * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
+ * @param {object|null} [running] - the running print as `runningPrint()` describes it, for finding the file by its time
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
+export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null, running = null) {
     if (printer.currentSliceInfo) return Promise.resolve(printer.currentSliceInfo);
     if (printer.sliceFetchInFlight?.jobName === jobName) return printer.sliceFetchInFlight.promise;
 
-    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName)
+    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName, running)
         .then(sliceInfo => {
             if (sliceInfo) printer.currentSliceInfo = sliceInfo;
             return sliceInfo;
@@ -167,6 +169,21 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = n
         });
     printer.sliceFetchInFlight = { jobName, promise };
     return promise;
+}
+
+/**
+ * What the printer reports about its running print that a sliced file found
+ * by listing is checked against, see `findSlicedFileByTime()` in gcode.js.
+ *
+ * @param {object} printer - the printer runtime object
+ * @returns {{startedAt: number|null, totalLayers: number|null, identity: object|null}}
+ */
+export function runningPrint(printer) {
+    return {
+        startedAt: printer.printStartedAt ?? null,
+        totalLayers: printer.currentTotalLayers ?? null,
+        identity: printer.currentIdentity ?? null,
+    };
 }
 
 /**
@@ -195,7 +212,7 @@ function describeSliceInfo(sliceInfo) {
  */
 async function fetchSliceInfoForPrint(printer, jobName) {
     try {
-        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName);
+        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, runningPrint(printer));
         if (sliceInfo) {
             console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
             return;
@@ -238,7 +255,11 @@ export function sliceFetchFailure(record) {
         // opened used to read the same, and telling them apart took a debug log
         const reasons = record.reasons || {};
         const tried = record.tried.map(path => (reasons[path] ? `${path} (${reasons[path]})` : path));
-        return `No sliced file on the printer under ${tried.join(", ")}`;
+        // Only when the storage was listed at all, which needs the print's start
+        const listed = typeof record.listed === "number"
+            ? `. Listed ${record.listed} 3MF files on the printer: ${record.settled || "no 3MF was written at the start"}`
+            : "";
+        return `No sliced file on the printer under ${tried.join(", ")}${listed}`;
     }
     return `${record.path} carries no Metadata/slice_info.config`;
 }
@@ -349,6 +370,8 @@ export function notePrintCommand(printer, message) {
         && JSON.stringify(pending.slots) === JSON.stringify(slots);
     printer.pendingMapping = slots ? { jobName, slots, at: Date.now() } : null;
     printer.pendingFileName = fileName ? { jobName, fileName } : null;
+    const identity = printIdentity(command);
+    printer.pendingIdentity = identity ? { jobName, ...identity } : null;
 
     // A file:// url means the printer sent this command to itself, for a job
     // started on its screen from its storage. Bambu Studio's are https:// for
@@ -363,6 +386,31 @@ export function notePrintCommand(printer, message) {
         debug("print", printer.name, printer.logFilePath, `[Print] ${sender} without a slot mapping`);
     }
     return true;
+}
+
+/**
+ * What a `project_file` command says about the file it sends, for telling that
+ * file apart from the others on the stick. See `judgeSlicedFile()` in gcode.js.
+ *
+ * `md5` is the md5 of the whole 3MF, `model_id` and `profile_id` are
+ * MakerWorld's ids of a print from MakerWorld, and `plate_idx` the plate.
+ * Measured on a P2S printing from Bambu Handy on 2026-09-26, where all of them
+ * matched the file on the stick. A "0" or an empty string is what a print
+ * without a cloud project sends, and counts as nothing.
+ *
+ * @param {object} command - the `print` block of the command
+ * @returns {{md5: string|null, modelId: string|null, profileId: string|null, plate: number|null}|null}
+ */
+export function printIdentity(command) {
+    const text = value => (value == null || value === "" || String(value) === "0" ? null : String(value));
+    const plate = Number(command?.plate_idx);
+    const identity = {
+        md5: text(command?.md5),
+        modelId: text(command?.model_id),
+        profileId: text(command?.profile_id),
+        plate: Number.isInteger(plate) && plate > 0 ? plate : null,
+    };
+    return Object.values(identity).some(v => v != null) ? identity : null;
 }
 
 /**
@@ -543,6 +591,8 @@ export async function handlePrintStateChange(printer, print) {
     if (freshStart) {
         printer.currentLayerNum = firstSinceStart ? (print.layer_num ?? 0) : 0;
         printer.staleLayerNum = firstSinceStart ? null : (print.layer_num ?? null);
+        printer.currentTotalLayers = null;
+        printer.staleTotalLayers = firstSinceStart ? null : (print.total_layer_num ?? null);
     } else if (print.layer_num != null) {
         const stale = ACTIVE_STATES.has(prevState)
             && printer.staleLayerNum != null
@@ -562,6 +612,17 @@ export async function handlePrintStateChange(printer, print) {
     // progress.
     if (print.stg_cur != null)          printer.currentStage = Number(print.stg_cur);
     if (print.mc_remaining_time != null) printer.currentRemainingMinutes = Number(print.mc_remaining_time);
+    // Only what a sliced file found by listing is checked against. Like
+    // layer_num above, it goes on naming the previous job after a start: a P2S
+    // on 2026-09-26 reported the 248 of the last print through SLICING and
+    // PREPARE and switched to the new 7 only with RUNNING, and a check against
+    // the 248 rules out the right file. The number the start report carried is
+    // ignored until the printer reports another one. A job with the same count
+    // as the last is then not checked at all, which costs nothing.
+    if (print.total_layer_num != null && (printer.staleTotalLayers == null || print.total_layer_num !== printer.staleTotalLayers)) {
+        printer.staleTotalLayers = null;
+        printer.currentTotalLayers = Number(print.total_layer_num);
+    }
 
     // A fresh print starts when we transition from a non-active state into an
     // active one. Reset tracking here (even on a reprint of the same file) so
@@ -593,6 +654,13 @@ export async function handlePrintStateChange(printer, print) {
         printer.pendingFileName = null;
         printer.currentFileName = pendingFile && (!pendingFile.jobName || !jobName || pendingFile.jobName === jobName)
             ? pendingFile.fileName
+            : null;
+
+        // What Bambu Studio's command says about the file, taken the same way
+        const pendingIdentity = printer.pendingIdentity;
+        printer.pendingIdentity = null;
+        printer.currentIdentity = pendingIdentity && (!pendingIdentity.jobName || !jobName || pendingIdentity.jobName === jobName)
+            ? pendingIdentity
             : null;
 
         const pending = printer.pendingMapping;
@@ -679,6 +747,22 @@ export async function handlePrintStateChange(printer, print) {
     // sliced file is a .3mf (cloud) or a .gcode.3mf (LAN). Read on every report
     // like the job name: it can arrive a report or two after the state does.
     if (print.gcode_file) printer.currentGcodeFile = print.gcode_file;
+
+    // A cloud print repeats the ids of its command in every report, which is
+    // all a restart mid print has left of them. The md5 is in the command only.
+    //
+    // Only while the printer says the print is a cloud print. A P2S started a
+    // job from its own screen on 2026-09-26 right after a cloud print and went
+    // on reporting that print's model_id with print_type "local", and taking it
+    // proved the previous print's file for a job whose file was not on the
+    // stick at all.
+    if (ACTIVE_STATES.has(newState) && print.print_type === "cloud") {
+        const reported = printIdentity({ model_id: print.model_id, profile_id: print.profile_id });
+        if (reported) {
+            const known = printer.currentIdentity || {};
+            printer.currentIdentity = { ...known, modelId: known.modelId ?? reported.modelId, profileId: known.profileId ?? reported.profileId };
+        }
+    }
 
     // Fetch slice info once we reach RUNNING (the sliced file is reliably present
     // in /cache by then). Guarded so we only attempt it once per print.

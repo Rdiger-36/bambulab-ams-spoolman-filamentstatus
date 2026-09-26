@@ -1,6 +1,7 @@
 import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
+import { createHash } from "crypto";
 
 import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot, describeConnectionError } from "./utils.js";
 import { debug, trace } from "./logger.js";
@@ -54,13 +55,18 @@ function ftpsAccess(client, printer) {
  * not a sliced one. The callers log from that record, and `/api/print` reads
  * it to not try the same names again every few seconds for the whole print.
  *
+ * When none of the names holds the file and the print's start is known, the
+ * printer's storage is listed and the file of the running print is picked by
+ * its time and confirmed by its content, see `findSlicedFileByTime()`.
+ *
  * @param {object} printer  - printer object with .ip and .code
  * @param {string} jobName  - subtask_name from MQTT
  * @param {string|null} [gcodeFile] - gcode_file from MQTT, when the report carries one
  * @param {string|null} [fileName] - the file name from the printer's own project_file command, see resolveRemotePaths()
+ * @param {object|null} [running] - what the printer reports about the running print: `startedAt` in epoch milliseconds, `gcodeFile` and `totalLayers`; null leaves the listing out
  * @returns {object|null} parsed slice info or null if not found
  */
-export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
+export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileName = null, running = null) {
     const client = new ftp.Client(20000); // 20 s timeout
     client.ftp.verbose = false;
 
@@ -113,6 +119,16 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
             }
         }
 
+        if (!buf && running?.startedAt) {
+            const found = await findSlicedFileByTime(client, printer, candidates, { gcodeFile, ...running }, record);
+            if (found) {
+                buf = found.buf;
+                record.path = found.path;
+                console.log(printer.name, printer.logFilePath,
+                    `[Print] Found the sliced file by its time instead of its name: ${found.path}, written ${describeOffset(found.modifiedAt - running.startedAt)} the print started, ${found.reason}`);
+            }
+        }
+
         if (!buf) {
             debug("gcode", printer.name, printer.logFilePath,
                 "[Print] None of the candidate paths held the sliced file");
@@ -157,6 +173,369 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
     } finally {
         client.close();
     }
+}
+
+/**
+ * Where the sliced file is looked for when its name cannot be worked out.
+ * The root and `/cache` are the two places a printer has been seen to keep it.
+ */
+const LISTED_DIRECTORIES = ["/", "/cache"];
+
+/**
+ * How far the time a 3MF was written may lie from the print's start for it to
+ * count as that print's file, either way. Wide enough for a slow upload over
+ * the cloud and for a printer clock that is a few minutes off, narrow enough
+ * that yesterday's print on the same stick is never taken.
+ */
+export const SLICED_FILE_TIME_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Lists the printer's storage and downloads the 3MF of the running print, for
+ * a job whose name does not lead to its file.
+ *
+ * Seen on an X2D with a USB stick on 2026-09-26 (issue #179): a MakerWorld
+ * model opened in Bambu Studio, changed and sent through the cloud is named
+ * after the print profile, "0.2mm layer, 3 walls, 15% infill", in every
+ * report, while the file on the stick is `/CartPicker.gcode.3mf`, named after
+ * the project and in the root. Nothing the printer reports carries the project
+ * name, and the cloud url in the project_file echo names an upload object, not
+ * the file.
+ *
+ * The time a file was written only picks the candidates, see
+ * `slicedFileCandidates()`. Each is then downloaded, closest to the start
+ * first, and its content decides, see `judgeSlicedFile()` and
+ * `settleSlicedFile()`: a stick keeps the files of earlier prints, and two
+ * sent a minute apart are both close to the start.
+ *
+ * `LIST` on the printer's vsftpd gives the time to the minute only, and in the
+ * printer's local notation, so every 3MF is asked for its time with `MDTM`,
+ * which answers in UTC to the second. A directory or a file that cannot be
+ * read is skipped: this is a last resort after the names, never a reason to
+ * fail a fetch that would otherwise have failed anyway.
+ *
+ * @param {object} client - the logged in basic-ftp client
+ * @param {object} printer - the printer, for the log
+ * @param {string[]} tried - the paths already tried by name, left out here
+ * @param {object} running - what the printer reports about the print, see `fetchSliceInfo()`
+ * @param {object} record - `printer.lastSliceFetch`, which gets `listed` and `judged`
+ * @returns {Promise<{path: string, modifiedAt: number, buf: Buffer, reason: string}|null>}
+ */
+async function findSlicedFileByTime(client, printer, tried, running, record) {
+    const files = [];
+    for (const dir of LISTED_DIRECTORIES) {
+        let entries;
+        try {
+            entries = await client.list(dir);
+        } catch (err) {
+            debug("gcode", printer.name, printer.logFilePath, `[Print] Could not list ${dir}: ${err.message}`);
+            continue;
+        }
+        for (const entry of entries) {
+            if (!entry.isFile || !/\.3mf$/i.test(entry.name)) continue;
+            const path = dir === "/" ? `/${entry.name}` : `${dir}/${entry.name}`;
+            if (tried.includes(path)) continue;
+            try {
+                files.push({ path, modifiedAt: (await client.lastMod(path)).getTime() });
+            } catch (err) {
+                debug("gcode", printer.name, printer.logFilePath, `[Print] No time for ${path}: ${err.message}`);
+            }
+        }
+    }
+
+    record.listed = files.length;
+    debug("gcode", printer.name, printer.logFilePath,
+        `[Print] 3MF files on the printer: ${files.length ? files.map(f => `${f.path} (${new Date(f.modifiedAt).toISOString()})`).join(", ") : "none"}`);
+
+    const identity = running.identity || {};
+    const expected = {
+        jobName: record.jobName,
+        plate: reportedPlate(running.gcodeFile) ?? identity.plate ?? null,
+        layers: Number(running.totalLayers) > 0 ? Number(running.totalLayers) : null,
+        md5: identity.md5 ?? null,
+        modelId: identity.modelId ?? null,
+        profileId: identity.profileId ?? null,
+    };
+
+    const judged = [];
+    const buffers = new Map();
+    for (const file of slicedFileCandidates(files, running.startedAt)) {
+        let buf;
+        try {
+            const chunks = [];
+            const writable = new Writable({
+                write(chunk, _, cb) { chunks.push(chunk); cb(); },
+            });
+            await client.downloadTo(writable, file.path);
+            buf = Buffer.concat(chunks);
+        } catch (err) {
+            record.reasons[file.path] = err.message;
+            debug("gcode", printer.name, printer.logFilePath, `[Print] Not at ${file.path}: ${err.message}`);
+            continue;
+        }
+
+        let facts;
+        try {
+            facts = { ...readSlicedFileFacts(new AdmZip(buf)), fileMd5: createHash("md5").update(buf).digest("hex") };
+        } catch (err) {
+            debug("gcode", printer.name, printer.logFilePath, `[Print] ${file.path} is not a readable archive: ${err.message}`);
+            continue;
+        }
+
+        const verdict = judgeSlicedFile(facts, expected);
+        judged.push({ ...file, ...verdict });
+        buffers.set(file.path, buf);
+        debug("gcode", printer.name, printer.logFilePath,
+            `[Print] ${file.path}, written ${describeOffset(file.modifiedAt - running.startedAt)} the start: ${verdict.verdict}, ${verdict.reason}`);
+        // A confirmed file is the answer, the rest need not be downloaded
+        if (verdict.verdict === "confirmed") break;
+    }
+
+    record.judged = judged.map(({ path, verdict, reason }) => ({ path, verdict, reason }));
+    const settled = settleSlicedFile(judged);
+    record.settled = settled.reason;
+    if (!settled.file) return null;
+    return { ...settled.file, buf: buffers.get(settled.file.path), reason: settled.reason };
+}
+
+/**
+ * The 3MF files written close enough to the print's start to be its file,
+ * closest first.
+ *
+ * Closest rather than latest, because a stick keeps the files of earlier
+ * prints and a file sent after this one started belongs to the next.
+ *
+ * @param {{path: string, modifiedAt: number}[]} files - the 3MF files and when each was written
+ * @param {number|null} startedAt - when the print started, epoch milliseconds
+ * @param {number} [windowMs] - how far either way still counts
+ * @returns {{path: string, modifiedAt: number}[]}
+ */
+export function slicedFileCandidates(files, startedAt, windowMs = SLICED_FILE_TIME_WINDOW_MS) {
+    if (!startedAt) return [];
+    return files
+        .filter(file => Number.isFinite(file.modifiedAt) && Math.abs(file.modifiedAt - startedAt) <= windowMs)
+        .sort((a, b) => Math.abs(a.modifiedAt - startedAt) - Math.abs(b.modifiedAt - startedAt));
+}
+
+/**
+ * The plate number the printer names in `gcode_file`, "/data/Metadata/plate_2.gcode"
+ * being 2, or null when it names none.
+ *
+ * @param {string|null|undefined} gcodeFile - `gcode_file` from the report
+ * @returns {number|null}
+ */
+export function reportedPlate(gcodeFile) {
+    const match = typeof gcodeFile === "string" ? /plate_(\d+)\.gcode$/i.exec(gcodeFile) : null;
+    return match ? Number(match[1]) : null;
+}
+
+/**
+ * What a sliced 3MF says about itself, for telling it apart from the other
+ * files on the stick.
+ *
+ * `3D/3dmodel.model` carries MakerWorld's metadata at its top: `Title`, the
+ * model's title, and `ProfileTitle`, the print profile's. A job is named after
+ * one of them in exactly the cases the fallback exists for. Read off the P2S
+ * on 2026-09-26: "CLIPPY - Filament clip" (Handy) carries ProfileTitle
+ * "0.2mm layer - 10 clips", and the plate started on the screen as "Perfectly
+ * clean bed for perfect prints!" carries that as its Title. A project of one's
+ * own leaves both empty. Only the head of the entry is read, the metadata
+ * comes before the meshes.
+ *
+ * Next to the titles it carries `DesignModelId` and `DesignProfileId`, the
+ * `model_id` and `profile_id` of a print from MakerWorld.
+ *
+ * The layer count is counted over the layer lists that name a filament only.
+ * A P2S plate sliced by MakerWorld on 2026-09-26 listed its 248 layers as
+ * "0 247" plus an empty list over "248 249", and its G-code header and the
+ * printer's `total_layer_num` both said 248.
+ *
+ * @param {object} zip - the opened archive, an AdmZip
+ * @returns {{titles: string[], plates: number[], layers: number|null, modelId: string|null, profileId: string|null}}
+ */
+export function readSlicedFileFacts(zip) {
+    const model = zip.getEntry("3D/3dmodel.model");
+    const head = model ? model.getData().subarray(0, 65536).toString("utf8") : "";
+    const sliceInfo = zip.getEntry("Metadata/slice_info.config");
+    const xml = sliceInfo ? sliceInfo.getData().toString("utf8") : "";
+    const ids = parseModelIds(head);
+    return {
+        titles: parseModelTitles(head),
+        plates: parsePlateIndices(xml),
+        layers: countPrintedLayers(xml),
+        modelId: ids.modelId,
+        profileId: ids.profileId,
+    };
+}
+
+/**
+ * The number of layers a `slice_info.config` prints filament on, null when
+ * it lists none. See `readSlicedFileFacts()` for why an empty list is skipped.
+ *
+ * @param {string} xml - the raw slice_info.config
+ * @returns {number|null}
+ */
+export function countPrintedLayers(xml) {
+    let last = -1;
+    const re = /<layer_filament_list\s+([^>]+?)\/>/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+        const a = parseAttrs(m[1]);
+        if (!(a.filament_list || "").trim()) continue;
+        for (const [, end] of parseLayerRanges(a.layer_ranges || "")) {
+            if (end > last) last = end;
+        }
+    }
+    return last >= 0 ? last + 1 : null;
+}
+
+/**
+ * MakerWorld's `DesignModelId` and `DesignProfileId` of a `3dmodel.model`,
+ * null where the file carries none.
+ *
+ * @param {string} xml - the entry, or its head
+ * @returns {{modelId: string|null, profileId: string|null}}
+ */
+export function parseModelIds(xml) {
+    const read = name => {
+        const m = new RegExp(`<metadata\\s+name="${name}"\\s*>([^<]*)</metadata>`).exec(xml);
+        const value = m ? unescapeXml(m[1]).trim() : "";
+        return value && value !== "0" ? value : null;
+    };
+    return { modelId: read("DesignModelId"), profileId: read("DesignProfileId") };
+}
+
+/**
+ * The non empty `Title` and `ProfileTitle` of a `3dmodel.model`, unescaped.
+ *
+ * @param {string} xml - the entry, or its head
+ * @returns {string[]}
+ */
+export function parseModelTitles(xml) {
+    const titles = [];
+    const re = /<metadata\s+name="(Title|ProfileTitle)"\s*>([^<]*)<\/metadata>/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+        const value = unescapeXml(m[2]).trim();
+        if (value) titles.push(value);
+    }
+    return titles;
+}
+
+/**
+ * The plate numbers a `slice_info.config` holds sliced G-code for.
+ *
+ * @param {string} xml - the raw slice_info.config
+ * @returns {number[]}
+ */
+export function parsePlateIndices(xml) {
+    const plates = [];
+    const re = /<plate>\s*<metadata\s+key="index"\s+value="(\d+)"/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) plates.push(Number(m[1]));
+    return plates;
+}
+
+/**
+ * The five entities XML escapes with, for a title written by Bambu Studio.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function unescapeXml(text) {
+    return text
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/&quot;/g, "\"").replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&");
+}
+
+/**
+ * Whether a candidate file belongs to the running print, as far as its
+ * content can tell.
+ *
+ * Two kinds of evidence, in this order:
+ *
+ *   - exclusion, which is always available and can only rule a file out: the
+ *     plate the printer reports has to be in the file, and the layer count
+ *     has to match `total_layer_num`. The count is the last layer's 0-based
+ *     index plus one, see `completedLayerIndex()`
+ *   - identity, where the first piece both sides carry decides: the md5 of the
+ *     whole file against the one in Bambu Studio's command, then the
+ *     MakerWorld profile id, then the model id, then the job name against the
+ *     file's titles. A project of one's own carries no ids and no titles
+ *
+ * Measured on a P2S printing a MakerWorld model from Bambu Handy on
+ * 2026-09-26: the command's `md5` was the md5 of the whole 3MF on the stick,
+ * lowercase, and its `model_id` and `profile_id` were the file's
+ * `DesignModelId` and `DesignProfileId`. The md5 therefore decides both ways.
+ * The ids only confirm: an X2D printing a MakerWorld model that was changed in
+ * Bambu Studio sent ids of the user's own cloud copy, which the file does not
+ * carry, so a mismatch there proves nothing and the next piece decides. The
+ * title decides both ways, ProfileTitle being the job name on that X2D.
+ *
+ * @param {object} facts - see `readSlicedFileFacts()`
+ * @param {{jobName: string|null, plate: number|null, layers: number|null, md5?: string|null, modelId?: string|null, profileId?: string|null}} expected - what the printer reports
+ * @returns {{verdict: "confirmed"|"rejected"|"possible", reason: string}}
+ */
+export function judgeSlicedFile(facts, expected) {
+    if (expected.plate != null && facts.plates.length && !facts.plates.includes(expected.plate)) {
+        return { verdict: "rejected", reason: `plate ${expected.plate} is not in it` };
+    }
+    if (expected.layers != null && facts.layers != null && facts.layers !== expected.layers) {
+        return { verdict: "rejected", reason: `${facts.layers} layers where the printer reports ${expected.layers}` };
+    }
+    const unproven = [];
+    if (expected.md5 && facts.fileMd5) {
+        return facts.fileMd5.toLowerCase() === expected.md5.toLowerCase()
+            ? { verdict: "confirmed", reason: "its md5 is the one Bambu Studio sent" }
+            : { verdict: "rejected", reason: "its md5 is not the one Bambu Studio sent" };
+    }
+    for (const [key, label] of [["profileId", "MakerWorld profile id"], ["modelId", "MakerWorld model id"]]) {
+        if (expected[key] && facts[key]) {
+            if (facts[key] === expected[key]) return { verdict: "confirmed", reason: `its ${label} is the print's` };
+            unproven.push(`its ${label} ${facts[key]} differs from ${expected[key]}`);
+        }
+    }
+    const note = unproven.length ? `, although ${unproven.join(" and ")}` : "";
+
+    const jobName = (expected.jobName || "").trim();
+    if (facts.titles?.length && jobName) {
+        return facts.titles.includes(jobName)
+            ? { verdict: "confirmed", reason: `its title is the job name${note}` }
+            : { verdict: "rejected", reason: `its titles ${facts.titles.map(t => `"${t}"`).join(" and ")} are not the job name${note ? `, and ${unproven.join(" and ")}` : ""}` };
+    }
+    return { verdict: "possible", reason: `nothing in it names the job, and nothing rules it out${note}` };
+}
+
+/**
+ * The one file to take out of the judged candidates, or why none is taken.
+ *
+ * A confirmed file wins. Without one, a file nothing ruled out is taken only
+ * when it is the only one: two possible files close to the start would be a
+ * guess, and a booking on the wrong file is worse than no booking.
+ *
+ * @param {{path: string, verdict: string}[]} judged - in the order they were tried
+ * @returns {{file: object|null, reason: string}}
+ */
+export function settleSlicedFile(judged) {
+    const confirmed = judged.find(file => file.verdict === "confirmed");
+    if (confirmed) return { file: confirmed, reason: confirmed.reason };
+    const possible = judged.filter(file => file.verdict === "possible");
+    if (possible.length === 1) return { file: possible[0], reason: "the only file written at the start that nothing rules out" };
+    if (possible.length > 1) return { file: null, reason: `${possible.length} files written at the start could be it, so none is taken` };
+    return { file: null, reason: judged.length ? "every file written at the start was ruled out" : "no 3MF was written at the start" };
+}
+
+/**
+ * A time difference in words, for "written ... the print started":
+ * "12 seconds before", "3 minutes after".
+ *
+ * @param {number} ms - the file's time minus the start
+ * @returns {string}
+ */
+function describeOffset(ms) {
+    const seconds = Math.round(Math.abs(ms) / 1000);
+    const amount = seconds < 120 ? `${seconds} seconds` : `${Math.round(seconds / 60)} minutes`;
+    return `${amount} ${ms < 0 ? "before" : "after"}`;
 }
 
 /**
@@ -645,6 +1024,11 @@ export function parseSliceInfo(xml, projectSettings = null) {
             .trim().split(/\s+/).filter(s => s !== "").map(Number);
         const ranges = parseLayerRanges(a.layer_ranges || "");
 
+        // A list without a filament prints nothing and does not count. A P2S
+        // plate sliced by MakerWorld on 2026-09-26 carried one over "248 249"
+        // after its 248 layers, which made the log say 250 and the partial
+        // booking of a cancelled print divide by 250.
+        if (!indices.length) continue;
         for (const [, end] of ranges) {
             if (end > totalLayers) totalLayers = end;
         }

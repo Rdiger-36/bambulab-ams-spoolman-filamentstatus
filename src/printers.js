@@ -175,8 +175,18 @@ function createRuntimePrinter(entry) {
         // The file name from that same command, taken by the print of that
         // name the way pendingMapping is.
         pendingFileName: null,
+        // What that same command says about the file: md5, MakerWorld ids and
+        // plate. See printIdentity() in mqtt.js.
+        pendingIdentity: null,
+        currentIdentity: null,
         currentLayerNum: 0,
         staleLayerNum: null,
+        // total_layer_num as last reported, which a sliced file found by
+        // listing has to match. See findSlicedFileByTime() in gcode.js.
+        currentTotalLayers: null,
+        // The previous job's total_layer_num, repeated after a start and
+        // ignored until the printer reports another, like staleLayerNum.
+        staleTotalLayers: null,
         consumptionBooked: false,
         sliceFetchDone: false,
         // When the running print became active, in epoch milliseconds. Measured

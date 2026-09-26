@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS } from "../src/gcode.js";
-import { sliceFetchFailure, localFileName } from "../src/mqtt.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers, parseSliceInfo } from "../src/gcode.js";
+import { sliceFetchFailure, localFileName, printIdentity } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
 // the printer says which in gcode_file. Every name below is one a real printer
@@ -122,4 +122,130 @@ test("a fetch that found nothing is tried again, a few times, after a wait", () 
     // A record without an attempt count is the first attempt
     assert.equal(sliceFetchRetryDue({ jobName: "x", tried: [], path: null, at }, at + SLICE_FETCH_RETRY_MS), true);
     assert.equal(sliceFetchRetryDue(null, at), false);
+});
+
+test("the time only picks the candidates, closest to the start first", () => {
+    // The X2D of issue #179 on 2026-09-26: the job was named after the print
+    // profile, the file on the USB stick after the project, written at the start
+    const startedAt = Date.parse("2026-09-26T13:44:17Z");
+    const cartPicker = { path: "/CartPicker.gcode.3mf", modifiedAt: Date.parse("2026-09-26T13:44:05Z") };
+    const yesterday = { path: "/cache/Benchy.gcode.3mf", modifiedAt: Date.parse("2026-09-25T18:02:00Z") };
+    // Closest rather than newest: a file sent after the start belongs to the next print
+    const next = { path: "/Next.gcode.3mf", modifiedAt: startedAt + 5 * 60 * 1000 };
+    assert.deepEqual(slicedFileCandidates([yesterday, next, cartPicker], startedAt), [cartPicker, next]);
+
+    assert.deepEqual(slicedFileCandidates([yesterday], startedAt), []);
+    assert.deepEqual(slicedFileCandidates([{ path: "/x.3mf", modifiedAt: startedAt - SLICED_FILE_TIME_WINDOW_MS - 1 }], startedAt), []);
+    assert.deepEqual(slicedFileCandidates([{ path: "/x.3mf", modifiedAt: NaN }], startedAt), []);
+    assert.deepEqual(slicedFileCandidates([cartPicker], null), []);
+});
+
+test("the plate comes off gcode_file", () => {
+    assert.equal(reportedPlate("/data/Metadata/plate_1.gcode"), 1);
+    assert.equal(reportedPlate("Metadata/plate_12.gcode"), 12);
+    assert.equal(reportedPlate("Würfel.gcode.3mf"), null);
+    assert.equal(reportedPlate(undefined), null);
+});
+
+test("a file names itself through MakerWorld's titles", () => {
+    // Heads of 3D/3dmodel.model as Bambu Studio 2.8 writes them, read off the P2S stick
+    const clippy = `<model>
+ <metadata name="Designer">iLab 3D</metadata>
+ <metadata name="ProfileTitle">0.2mm layer - 10 clips</metadata>
+ <metadata name="Title">CLIPPY - Filament clip</metadata>
+ <resources>`;
+    assert.deepEqual(parseModelTitles(clippy), ["0.2mm layer - 10 clips", "CLIPPY - Filament clip"]);
+    // A project of one's own leaves both empty
+    assert.deepEqual(parseModelTitles(`<metadata name="ProfileTitle"></metadata>\n <metadata name="Title"></metadata>`), []);
+    assert.deepEqual(parseModelTitles(`<metadata name="Title">Tom &amp; Jerry &quot;v2&quot;</metadata>`), ['Tom & Jerry "v2"']);
+
+    assert.deepEqual(parsePlateIndices(`<config>\n  <plate>\n    <metadata key="index" value="1"/>\n  </plate>\n  <plate>\n    <metadata key="index" value="3"/>`), [1, 3]);
+});
+
+test("the content of a candidate proves it, rules it out or leaves it open", () => {
+    const x2d = { jobName: "0.2mm layer, 3 walls, 15% infill", plate: 1, layers: 15 };
+    const makerWorld = { titles: ["0.2mm layer, 3 walls, 15% infill", "CartPicker"], plates: [1], layers: 15 };
+
+    assert.equal(judgeSlicedFile(makerWorld, x2d).verdict, "confirmed");
+    // The exclusions come first, a matching title does not outweigh them
+    assert.equal(judgeSlicedFile({ ...makerWorld, plates: [2] }, x2d).verdict, "rejected");
+    assert.equal(judgeSlicedFile({ ...makerWorld, layers: 16 }, x2d).verdict, "rejected");
+    // A title that is not the job name rules the file out
+    assert.equal(judgeSlicedFile({ ...makerWorld, titles: ["0.2mm layer - 10 clips"] }, x2d).verdict, "rejected");
+    // A project of one's own carries no title and is left open
+    assert.equal(judgeSlicedFile({ titles: [], plates: [1], layers: 15 }, x2d).verdict, "possible");
+    // What the printer has not reported checks nothing
+    assert.equal(judgeSlicedFile({ titles: [], plates: [2], layers: 99 }, { jobName: "x", plate: null, layers: null }).verdict, "possible");
+});
+
+test("a guess between two files books nothing", () => {
+    const confirmed = { path: "/a.3mf", verdict: "confirmed" };
+    const possible = { path: "/b.3mf", verdict: "possible" };
+    const other = { path: "/c.3mf", verdict: "possible" };
+    const rejected = { path: "/d.3mf", verdict: "rejected" };
+
+    assert.equal(settleSlicedFile([possible, confirmed]).file, confirmed);
+    assert.equal(settleSlicedFile([rejected, possible]).file, possible);
+    assert.equal(settleSlicedFile([possible, other]).file, null);
+    assert.match(settleSlicedFile([possible, other]).reason, /2 files/);
+    assert.equal(settleSlicedFile([rejected]).file, null);
+    assert.equal(settleSlicedFile([]).file, null);
+});
+
+test("the log says when the listing found nothing either", () => {
+    assert.equal(
+        sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, listed: 2, settled: "2 files written at the start could be it, so none is taken" }),
+        "No sliced file on the printer under /cache/Würfel.3mf. Listed 2 3MF files on the printer: 2 files written at the start could be it, so none is taken",
+    );
+});
+
+test("Bambu Studio's command and the file carry md5 and MakerWorld ids", () => {
+    // The X2D's project_file echo of 2026-09-22, md5 anonymised
+    assert.deepEqual(printIdentity({
+        command: "project_file", md5: "774F0000000000000000000000000000", model_id: "USac90b077599b7c",
+        profile_id: "1017501024", plate_idx: "1", design_id: "3071033",
+    }), { md5: "774F0000000000000000000000000000", modelId: "USac90b077599b7c", profileId: "1017501024", plate: 1 });
+    // A print without a cloud project sends zeros and empty strings
+    assert.equal(printIdentity({ model_id: "", profile_id: "0", project_id: "0" }), null);
+
+    assert.deepEqual(parseModelIds(`<metadata name="DesignModelId">USc2c7ad817530fc</metadata>
+ <metadata name="DesignProfileId">167787430</metadata>`), { modelId: "USc2c7ad817530fc", profileId: "167787430" });
+    assert.deepEqual(parseModelIds(`<metadata name="Title"></metadata>`), { modelId: null, profileId: null });
+});
+
+test("the md5 decides both ways, a MakerWorld id only confirms", () => {
+    // A P2S printing PenroseTriangle from Bambu Handy on 2026-09-26: the
+    // command's md5 was the whole file's, its ids the file's Design ids
+    const file = { titles: ["Fast print and less filament - 0.2mm layer, 2 walls", "PenroseTriangle"], plates: [1], layers: 248,
+        modelId: "US911eafb6a009f0", profileId: "801288487", fileMd5: "0d1b4dabe3b479109f4e64cd875daff7" };
+    const base = { jobName: "PenroseTriangle", plate: 1, layers: 248 };
+
+    assert.equal(judgeSlicedFile(file, { ...base, md5: "0D1B4DABE3B479109F4E64CD875DAFF7" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, md5: "774f0000000000000000000000000000" }).verdict, "rejected");
+    // After a restart mid print only the ids are left, which every report repeats
+    assert.equal(judgeSlicedFile(file, { ...base, profileId: "801288487" }).verdict, "confirmed");
+    assert.equal(judgeSlicedFile(file, { ...base, modelId: "US911eafb6a009f0" }).verdict, "confirmed");
+
+    // An X2D printing a changed MakerWorld model sent ids of the user's own
+    // cloud copy, so differing ids hand on to the title
+    const cloudCopy = { ...base, jobName: "0.2mm layer, 3 walls, 15% infill", modelId: "USac90b077599b7c", profileId: "1017501024" };
+    const cartPicker = { ...file, titles: ["0.2mm layer, 3 walls, 15% infill", "CartPicker"], modelId: "US59c38024b82730", profileId: "885007612", fileMd5: null };
+    assert.equal(judgeSlicedFile(cartPicker, cloudCopy).verdict, "confirmed");
+    assert.match(judgeSlicedFile(cartPicker, cloudCopy).reason, /profile id 885007612 differs/);
+    assert.equal(judgeSlicedFile({ ...cartPicker, titles: [] }, cloudCopy).verdict, "possible");
+    // The exclusions still come first
+    assert.equal(judgeSlicedFile({ ...file, layers: 250 }, { ...base, md5: "0d1b4dabe3b479109f4e64cd875daff7" }).verdict, "rejected");
+});
+
+test("only the layers that print filament are counted", () => {
+    // PenroseTriangle again: 248 layers in the G-code header and in total_layer_num
+    const xml = `<layer_filament_lists>
+      <layer_filament_list filament_list="" layer_ranges="248 249" />
+      <layer_filament_list filament_list="0" layer_ranges="0 247" />
+    </layer_filament_lists>`;
+    assert.equal(countPrintedLayers(xml), 248);
+    assert.equal(countPrintedLayers(""), null);
+    // The booking maths counts the same way, as a 0-based last index
+    assert.equal(parseSliceInfo(xml).totalLayers, 247);
+    assert.deepEqual(parseSliceInfo(xml).rangesByFilamentIdx, { 0: [[0, 247]] });
 });
