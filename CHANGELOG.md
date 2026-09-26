@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Fixes:
+      - A sliced file whose name cannot be worked out from the job is found by the time it was written. A MakerWorld model opened in Bambu Studio, changed and sent through the cloud is named after its print profile, "0.2mm layer, 3 walls, 15% infill", in every report, while the file on the USB stick is named after the project, /CartPicker.gcode.3mf, and sits in the root; nothing the printer reports carries that name. When none of the names holds the file, the root and /cache of the stick are listed and the 3MF written closest to the start of the print is taken, if it was written within ten minutes of it. The log names the file and how far from the start it was written, or says how many 3MF files it looked at when none fits. Seen on an X2D on 2026-09-26 (issue #179)
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.26
    Release candidate for 1.3.0. This build carries the code 1.3.0 ships; only the version differs. What is found on it goes into 1.3.0, and nothing else is planned before the release
    - Fixes:

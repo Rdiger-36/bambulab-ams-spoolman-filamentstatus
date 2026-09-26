@@ -120,10 +120,11 @@ function broadcastAmsEnvironment(printer, amsUnits, now) {
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
  * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
+ * @param {number|null} [startedAt] - when the print started, for finding the file by its time
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
-    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName);
+export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName = null, startedAt = null) {
+    const sliceInfo = await fetchSliceInfo(printer, jobName, gcodeFile, fileName, startedAt);
     if (!sliceInfo) return null;
 
     for (const preset of learnPresets(sliceInfo, jobName)) {
@@ -151,13 +152,14 @@ export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName
  * @param {string} jobName - `subtask_name` of the job
  * @param {string|null} [gcodeFile] - `gcode_file` of the job, when reported
  * @param {string|null} [fileName] - the file name the printer itself gave the job, when it did
+ * @param {number|null} [startedAt] - when the print started, for finding the file by its time
  * @returns {Promise<object|null>} what `fetchSliceInfo()` returned
  */
-export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
+export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = null, startedAt = null) {
     if (printer.currentSliceInfo) return Promise.resolve(printer.currentSliceInfo);
     if (printer.sliceFetchInFlight?.jobName === jobName) return printer.sliceFetchInFlight.promise;
 
-    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName)
+    const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName, startedAt)
         .then(sliceInfo => {
             if (sliceInfo) printer.currentSliceInfo = sliceInfo;
             return sliceInfo;
@@ -195,7 +197,7 @@ function describeSliceInfo(sliceInfo) {
  */
 async function fetchSliceInfoForPrint(printer, jobName) {
     try {
-        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName);
+        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, printer.printStartedAt);
         if (sliceInfo) {
             console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
             return;
@@ -238,7 +240,11 @@ export function sliceFetchFailure(record) {
         // opened used to read the same, and telling them apart took a debug log
         const reasons = record.reasons || {};
         const tried = record.tried.map(path => (reasons[path] ? `${path} (${reasons[path]})` : path));
-        return `No sliced file on the printer under ${tried.join(", ")}`;
+        // Only when the storage was listed at all, which needs the print's start
+        const listed = typeof record.listed === "number"
+            ? `, and none of the ${record.listed} 3MF files on the printer was written when the print started`
+            : "";
+        return `No sliced file on the printer under ${tried.join(", ")}${listed}`;
     }
     return `${record.path} carries no Metadata/slice_info.config`;
 }

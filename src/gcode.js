@@ -54,13 +54,18 @@ function ftpsAccess(client, printer) {
  * not a sliced one. The callers log from that record, and `/api/print` reads
  * it to not try the same names again every few seconds for the whole print.
  *
+ * When none of the names holds the file and the print's start is known, the
+ * printer's storage is listed and the 3MF written when the print started is
+ * taken instead, see `pickSlicedFileByTime()`.
+ *
  * @param {object} printer  - printer object with .ip and .code
  * @param {string} jobName  - subtask_name from MQTT
  * @param {string|null} [gcodeFile] - gcode_file from MQTT, when the report carries one
  * @param {string|null} [fileName] - the file name from the printer's own project_file command, see resolveRemotePaths()
+ * @param {number|null} [startedAt] - when the print started, epoch milliseconds; null leaves the listing out
  * @returns {object|null} parsed slice info or null if not found
  */
-export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileName = null) {
+export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileName = null, startedAt = null) {
     const client = new ftp.Client(20000); // 20 s timeout
     client.ftp.verbose = false;
 
@@ -113,6 +118,16 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
             }
         }
 
+        if (!buf && startedAt) {
+            const found = await findSlicedFileByTime(client, printer, candidates, startedAt, record);
+            if (found) {
+                buf = found.buf;
+                record.path = found.path;
+                console.log(printer.name, printer.logFilePath,
+                    `[Print] Found the sliced file by its time instead of its name: ${found.path}, written ${describeOffset(found.modifiedAt - startedAt)} the print started`);
+            }
+        }
+
         if (!buf) {
             debug("gcode", printer.name, printer.logFilePath,
                 "[Print] None of the candidate paths held the sliced file");
@@ -157,6 +172,126 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
     } finally {
         client.close();
     }
+}
+
+/**
+ * Where the sliced file is looked for when its name cannot be worked out.
+ * The root and `/cache` are the two places a printer has been seen to keep it.
+ */
+const LISTED_DIRECTORIES = ["/", "/cache"];
+
+/**
+ * How far the time a 3MF was written may lie from the print's start for it to
+ * count as that print's file, either way. Wide enough for a slow upload over
+ * the cloud and for a printer clock that is a few minutes off, narrow enough
+ * that yesterday's print on the same stick is never taken.
+ */
+export const SLICED_FILE_TIME_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Lists the printer's storage and downloads the 3MF written when the print
+ * started, for a job whose name does not lead to its file.
+ *
+ * Seen on an X2D with a USB stick on 2026-09-26 (issue #179): a MakerWorld
+ * model opened in Bambu Studio, changed and sent through the cloud is named
+ * after the print profile, "0.2mm layer, 3 walls, 15% infill", in every
+ * report, while the file on the stick is `/CartPicker.gcode.3mf`, named after
+ * the project and in the root. Nothing the printer reports carries the project
+ * name, and the cloud url in the project_file echo names an upload object, not
+ * the file. The time the file was written is the one thing left that ties it
+ * to the print.
+ *
+ * `LIST` on the printer's vsftpd gives the time to the minute only, and in the
+ * printer's local notation, so every 3MF is asked for its time with `MDTM`,
+ * which answers in UTC to the second. A directory or a file that cannot be
+ * read is skipped: this is a last resort after the names, never a reason to
+ * fail a fetch that would otherwise have failed anyway.
+ *
+ * @param {object} client - the logged in basic-ftp client
+ * @param {object} printer - the printer, for the log
+ * @param {string[]} tried - the paths already tried by name, left out here
+ * @param {number} startedAt - when the print started, epoch milliseconds
+ * @param {object} record - `printer.lastSliceFetch`, which gets `listed`
+ * @returns {Promise<{path: string, modifiedAt: number, buf: Buffer}|null>}
+ */
+async function findSlicedFileByTime(client, printer, tried, startedAt, record) {
+    const files = [];
+    for (const dir of LISTED_DIRECTORIES) {
+        let entries;
+        try {
+            entries = await client.list(dir);
+        } catch (err) {
+            debug("gcode", printer.name, printer.logFilePath, `[Print] Could not list ${dir}: ${err.message}`);
+            continue;
+        }
+        for (const entry of entries) {
+            if (!entry.isFile || !/\.3mf$/i.test(entry.name)) continue;
+            const path = dir === "/" ? `/${entry.name}` : `${dir}/${entry.name}`;
+            if (tried.includes(path)) continue;
+            try {
+                files.push({ path, modifiedAt: (await client.lastMod(path)).getTime() });
+            } catch (err) {
+                debug("gcode", printer.name, printer.logFilePath, `[Print] No time for ${path}: ${err.message}`);
+            }
+        }
+    }
+
+    record.listed = files.length;
+    debug("gcode", printer.name, printer.logFilePath,
+        `[Print] 3MF files on the printer: ${files.length ? files.map(f => `${f.path} (${new Date(f.modifiedAt).toISOString()})`).join(", ") : "none"}`);
+
+    const picked = pickSlicedFileByTime(files, startedAt);
+    if (!picked) return null;
+
+    try {
+        const chunks = [];
+        const writable = new Writable({
+            write(chunk, _, cb) { chunks.push(chunk); cb(); },
+        });
+        await client.downloadTo(writable, picked.path);
+        return { ...picked, buf: Buffer.concat(chunks) };
+    } catch (err) {
+        record.reasons[picked.path] = err.message;
+        debug("gcode", printer.name, printer.logFilePath, `[Print] Not at ${picked.path}: ${err.message}`);
+        return null;
+    }
+}
+
+/**
+ * The 3MF written closest to the print's start, if one was written close
+ * enough to it to belong to that print.
+ *
+ * Closest rather than latest, because a stick keeps the files of earlier
+ * prints and a file sent after this one started belongs to the next.
+ *
+ * @param {{path: string, modifiedAt: number}[]} files - the 3MF files and when each was written
+ * @param {number} startedAt - when the print started, epoch milliseconds
+ * @param {number} [windowMs] - how far either way still counts
+ * @returns {{path: string, modifiedAt: number}|null}
+ */
+export function pickSlicedFileByTime(files, startedAt, windowMs = SLICED_FILE_TIME_WINDOW_MS) {
+    if (!startedAt) return null;
+    let best = null;
+    for (const file of files) {
+        if (!Number.isFinite(file.modifiedAt)) continue;
+        const distance = Math.abs(file.modifiedAt - startedAt);
+        if (distance > windowMs) continue;
+        if (!best || distance < Math.abs(best.modifiedAt - startedAt)) best = file;
+    }
+    return best;
+}
+
+/**
+ * A time difference in words, for "written ... the print started":
+ * "12 seconds before", "3 minutes after".
+ *
+ * @param {number} ms - the file's time minus the start
+ * @returns {string}
+ */
+function describeOffset(ms) {
+    const seconds = Math.round(Math.abs(ms) / 1000);
+    const amount = seconds < 120 ? `${seconds} seconds` : `${Math.round(seconds / 60)} minutes`;
+    return `${amount} ${ms < 0 ? "before" : "after"}`;
 }
 
 /**

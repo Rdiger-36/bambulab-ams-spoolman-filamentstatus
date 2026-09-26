@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, pickSlicedFileByTime, SLICED_FILE_TIME_WINDOW_MS } from "../src/gcode.js";
 import { sliceFetchFailure, localFileName } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -122,4 +122,32 @@ test("a fetch that found nothing is tried again, a few times, after a wait", () 
     // A record without an attempt count is the first attempt
     assert.equal(sliceFetchRetryDue({ jobName: "x", tried: [], path: null, at }, at + SLICE_FETCH_RETRY_MS), true);
     assert.equal(sliceFetchRetryDue(null, at), false);
+});
+
+test("a file whose name is unknown is taken by the time it was written", () => {
+    // The X2D of issue #179 on 2026-09-26: the job was named after the print
+    // profile, the file on the USB stick after the project, written at the start
+    const startedAt = Date.parse("2026-09-26T13:44:17Z");
+    const cartPicker = { path: "/CartPicker.gcode.3mf", modifiedAt: Date.parse("2026-09-26T13:44:05Z") };
+    const yesterday = { path: "/cache/Benchy.gcode.3mf", modifiedAt: Date.parse("2026-09-25T18:02:00Z") };
+    assert.deepEqual(pickSlicedFileByTime([yesterday, cartPicker], startedAt), cartPicker);
+
+    // The one closest to the start, not the newest: a file sent after the
+    // start belongs to the next print
+    const next = { path: "/Next.gcode.3mf", modifiedAt: startedAt + 5 * 60 * 1000 };
+    assert.deepEqual(pickSlicedFileByTime([next, cartPicker], startedAt), cartPicker);
+
+    // Nothing near the start is nothing, rather than the least wrong file
+    assert.equal(pickSlicedFileByTime([yesterday], startedAt), null);
+    assert.equal(pickSlicedFileByTime([{ path: "/x.3mf", modifiedAt: startedAt - SLICED_FILE_TIME_WINDOW_MS - 1 }], startedAt), null);
+    assert.equal(pickSlicedFileByTime([{ path: "/x.3mf", modifiedAt: NaN }], startedAt), null);
+    assert.equal(pickSlicedFileByTime([cartPicker], null), null);
+    assert.equal(pickSlicedFileByTime([], startedAt), null);
+});
+
+test("the log says when the listing found nothing either", () => {
+    assert.equal(
+        sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, listed: 2 }),
+        "No sliced file on the printer under /cache/Würfel.3mf, and none of the 2 3MF files on the printer was written when the print started",
+    );
 });
