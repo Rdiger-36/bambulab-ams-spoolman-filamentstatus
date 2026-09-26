@@ -74,18 +74,26 @@ The trace is readable in the Web UI like any other log: pick the printer under *
 
 ## No sliced file on a P2S, H2 or X2D
 
-The P2S, the H2 series and the X2D keep the file of a print in internal storage, and their FTPS server shows only a USB stick. Without a stick in the printer, every print starts like this, looks twice more with 30 seconds in between, and nothing is booked. The printer's answer for each path is in parentheses; a 550 on every one of them is what a missing stick looks like:
+The P2S, the H2 series and the X2D keep the file of a print in internal storage, and their FTPS server shows only a USB stick. Without a stick in the printer, every print starts like this, looks twice more with 30 seconds in between, and nothing is booked. The printer's answer for each path is in parentheses, and the listing of the stick comes after it. A 550 on every path and no 3MF on the printer at all is what a missing stick looks like:
 
 ```bash
 [LOG] Bambu Lab P2S - [Print] Print running: "bracket", fetching slice info via FTPS...
-[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.), trying again in 30 seconds
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.). Listed 0 3MF files on the printer: no 3MF was written at the start, trying again in 30 seconds
 [LOG] Bambu Lab P2S - [Print] Looking for the sliced file again, attempt 2 of 3...
-[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.), trying again in 30 seconds
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.). Listed 0 3MF files on the printer: no 3MF was written at the start, trying again in 30 seconds
 [LOG] Bambu Lab P2S - [Print] Looking for the sliced file again, attempt 3 of 3...
-[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.), consumption tracking unavailable for this print
+[LOG] Bambu Lab P2S - [Print] No sliced file on the printer under /cache/bracket.gcode.3mf (550 Failed to open file.), /cache/bracket.3mf (550 Failed to open file.), /bracket.gcode.3mf (550 Failed to open file.), /bracket.3mf (550 Failed to open file.). Listed 0 3MF files on the printer: no 3MF was written at the start, consumption tracking unavailable for this print
 ```
 
-The printer reports whether a stick is in, and the print card on the dashboard says "No USB stick or SD card in the printer, nothing will be booked" for as long as none is, while idle as well; the log says the same once when the stick goes missing. Put a USB stick into the printer. From then on the printer copies every job to `/cache` on the stick by itself, whether it was sent from Bambu Studio, through the cloud or from the Handy app, and the next print is tracked. Nothing has to change in Bambu Studio. The file listing of the [Debug-Printers CLI](#debug-printers-cli) below shows what the printer exposes: an empty listing means no stick.
+The printer reports whether a stick is in, and the print card on the dashboard says "No USB stick or SD card in the printer, nothing will be booked" for as long as none is, while idle as well; the log says the same once when the stick goes missing. Put a USB stick into the printer. From then on the printer writes every job it receives onto the stick by itself, whether it was sent from Bambu Studio, through the cloud or from the Handy app, and the next print is tracked. Nothing has to change in Bambu Studio. The file listing of the [Debug-Printers CLI](#debug-printers-cli) below shows what the printer exposes: an empty listing means no stick.
+
+Where on the stick the file lands and what it is called differs. A P2S writes `/cache/<job>.gcode.3mf`. An X2D sending a MakerWorld model that was changed in Bambu Studio writes it to the root under the project's name, `/CartPicker.gcode.3mf`, while the job is named after the print profile, "0.2mm layer, 3 walls, 15% infill". When no file is found under the job's name, the service lists the root and `/cache` and checks the 3MF files written within ten minutes of the print's start. A file is taken when it is proven to be the print's, by the md5 Bambu Studio sent, by the MakerWorld ids or by its profile or model title being the job name, or when it is the only candidate that nothing rules out. The log says which file it took and why:
+
+```bash
+[LOG] Bambu Lab X2D - [Print] Found the sliced file by its time instead of its name: /CartPicker.gcode.3mf, written 2 seconds after the print started, its md5 is the one Bambu Studio sent
+```
+
+A print started on the printer's screen from its internal storage, such as the sample models it ships with, is never on the stick and cannot be tracked.
 
 ## Debug-Printers CLI
 
