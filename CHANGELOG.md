@@ -1,5 +1,6 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.27
+   Second release candidate for 1.3.0. It adds what dev.26 was missing for issue #179, the sliced file of a print is found on the USB stick when the job's name does not lead to it, and the tray details and the active slot the Home Assistant integration reads. Like dev.26, what is found on it goes into 1.3.0
    - Changes:
       - The API carries what the tag and the printer's filament table say about a spool, and the slot that is feeding. Every slot on /api/spools/{printerId}, /api/print/{printerId} and the live updates has tag_uid, tray_diameter, nozzle_temp_min, nozzle_temp_max, bed_temp, drying_temp, drying_time and k, as numbers, null where the printer reports 0 or nothing. /api/status/{printerId} has activeSlot, the slot whose filament is in the nozzle that prints (A1, HT-A, External and so on), null while none is loaded; it is read off the per nozzle snow where the printer reports it, which on an H2D is the only place that names the unit, and off ams.tray_now on the others, and a report that says neither leaves it as it was. For the Home Assistant integration, which shows a slot the way ha-bambulab does; the dashboard shows neither
    - Fixes:
