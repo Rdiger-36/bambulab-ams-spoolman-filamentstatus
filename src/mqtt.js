@@ -592,6 +592,7 @@ export async function handlePrintStateChange(printer, print) {
         printer.currentLayerNum = firstSinceStart ? (print.layer_num ?? 0) : 0;
         printer.staleLayerNum = firstSinceStart ? null : (print.layer_num ?? null);
         printer.currentTotalLayers = null;
+        printer.staleTotalLayers = firstSinceStart ? null : (print.total_layer_num ?? null);
     } else if (print.layer_num != null) {
         const stale = ACTIVE_STATES.has(prevState)
             && printer.staleLayerNum != null
@@ -611,10 +612,17 @@ export async function handlePrintStateChange(printer, print) {
     // progress.
     if (print.stg_cur != null)          printer.currentStage = Number(print.stg_cur);
     if (print.mc_remaining_time != null) printer.currentRemainingMinutes = Number(print.mc_remaining_time);
-    // Only what a sliced file found by listing is checked against. It may still
-    // be the previous job's in the first report of a new one, like layer_num
-    // above, and a file rejected for that is looked at again on the next retry.
-    if (print.total_layer_num != null) printer.currentTotalLayers = Number(print.total_layer_num);
+    // Only what a sliced file found by listing is checked against. Like
+    // layer_num above, it goes on naming the previous job after a start: a P2S
+    // on 2026-09-26 reported the 248 of the last print through SLICING and
+    // PREPARE and switched to the new 7 only with RUNNING, and a check against
+    // the 248 rules out the right file. The number the start report carried is
+    // ignored until the printer reports another one. A job with the same count
+    // as the last is then not checked at all, which costs nothing.
+    if (print.total_layer_num != null && (printer.staleTotalLayers == null || print.total_layer_num !== printer.staleTotalLayers)) {
+        printer.staleTotalLayers = null;
+        printer.currentTotalLayers = Number(print.total_layer_num);
+    }
 
     // A fresh print starts when we transition from a non-active state into an
     // active one. Reset tracking here (even on a reprint of the same file) so

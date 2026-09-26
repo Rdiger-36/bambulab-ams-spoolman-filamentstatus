@@ -184,6 +184,9 @@ function createRuntimePrinter(entry) {
         // total_layer_num as last reported, which a sliced file found by
         // listing has to match. See findSlicedFileByTime() in gcode.js.
         currentTotalLayers: null,
+        // The previous job's total_layer_num, repeated after a start and
+        // ignored until the printer reports another, like staleLayerNum.
+        staleTotalLayers: null,
         consumptionBooked: false,
         sliceFetchDone: false,
         // When the running print became active, in epoch milliseconds. Measured
