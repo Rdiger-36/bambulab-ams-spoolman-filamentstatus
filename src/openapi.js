@@ -348,6 +348,7 @@ const schemas = {
         remainingMinutes: t.nullable(t.integer("What the printer says the job still needs.")),
         estimatedEndAt: t.nullable(t.number("Epoch milliseconds, cut to the whole minute the printer's estimate has. Null while paused.")),
         stage: t.nullable(t.string("The printer's current stage in words.")),
+        stageCode: t.nullable(t.integer("The number the printer reports for that stage, `stg_cur`. Null whenever `stage` is.")),
         preparing: t.boolean("Whether the printer is still calibrating or heating."),
         error: t.string("Set instead of `sliceInfo` when the sliced file could not be fetched. That answer is a short one: only `gcodeState`, `jobName`, `layerNum`, `error`, a null `sliceInfo`, an empty `loadedSpools` and a null `consumption`, none of the other fields."),
     }),

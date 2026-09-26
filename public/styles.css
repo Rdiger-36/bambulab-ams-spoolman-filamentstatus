@@ -1129,6 +1129,28 @@ body.logs-page .log-page { width: 100%; }
   background: #8881;
 }
 
+/* The language switch next to it: as quiet as the button, a native select so
+   the choice stays usable with a keyboard and on a phone. */
+.menu-language {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.menu-language:hover,
+.menu-language:focus-visible {
+  background: #8881;
+}
+
+.menu-language option {
+  color: initial;
+}
+
 #dark-mode-icon {
   display: inline-block;
   width: 22px;

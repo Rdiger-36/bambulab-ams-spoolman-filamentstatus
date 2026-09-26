@@ -88,7 +88,7 @@ function wholeMinute(ms) {
 
 function liveProgress(printer, state) {
     if (!ACTIVE_STATES.has(state)) {
-        return { startedAt: null, elapsedMs: null, remainingMinutes: null, estimatedEndAt: null, stage: null, preparing: false };
+        return { startedAt: null, elapsedMs: null, remainingMinutes: null, estimatedEndAt: null, stage: null, stageCode: null, preparing: false };
     }
 
     const remaining = printer.currentRemainingMinutes;
@@ -110,6 +110,9 @@ function liveProgress(printer, state) {
         // different on every refresh for one and the same estimate.
         estimatedEndAt: !paused && remaining != null ? wholeMinute(Date.now() + remaining * 60_000) : null,
         stage: printStageName(printer.currentStage),
+        // The number behind the words, so the Web UI can show the stage in the
+        // viewer's language; the words stay English for every other caller.
+        stageCode: printStageName(printer.currentStage) != null ? Number(printer.currentStage) : null,
         preparing: isPreparingStage(printer.currentStage),
     };
 }
