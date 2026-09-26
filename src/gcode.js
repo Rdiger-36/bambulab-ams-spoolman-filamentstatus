@@ -1024,6 +1024,11 @@ export function parseSliceInfo(xml, projectSettings = null) {
             .trim().split(/\s+/).filter(s => s !== "").map(Number);
         const ranges = parseLayerRanges(a.layer_ranges || "");
 
+        // A list without a filament prints nothing and does not count. A P2S
+        // plate sliced by MakerWorld on 2026-09-26 carried one over "248 249"
+        // after its 248 layers, which made the log say 250 and the partial
+        // booking of a cancelled print divide by 250.
+        if (!indices.length) continue;
         for (const [, end] of ranges) {
             if (end > totalLayers) totalLayers = end;
         }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers, parseSliceInfo } from "../src/gcode.js";
 import { sliceFetchFailure, localFileName, printIdentity } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -245,4 +245,7 @@ test("only the layers that print filament are counted", () => {
     </layer_filament_lists>`;
     assert.equal(countPrintedLayers(xml), 248);
     assert.equal(countPrintedLayers(""), null);
+    // The booking maths counts the same way, as a 0-based last index
+    assert.equal(parseSliceInfo(xml).totalLayers, 247);
+    assert.deepEqual(parseSliceInfo(xml).rangesByFilamentIdx, { 0: [[0, 247]] });
 });
