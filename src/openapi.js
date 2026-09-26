@@ -229,6 +229,7 @@ const schemas = {
         monitoringEnabled: t.boolean(),
         amsEnv: t.array(t.ref("AmsEnvironment"), "Humidity, temperature and drying state per AMS unit."),
         gcodeState: t.string("What the printer says it is doing: `IDLE`, `PREPARE`, `RUNNING`, `PAUSE`, `FINISH`, `FAILED` or `CANCEL`."),
+        activeSlot: t.nullable(t.string("The slot label whose filament is in the nozzle that prints, `A1`, `HT-A`, `External` and so on. Null while none is loaded or no report has said.")),
     }),
 
     Slot: t.object({
@@ -246,6 +247,14 @@ const schemas = {
             description: "The spool weight the tag reports, in grams. Passed through as the printer sends it, which is a string such as `\"1000\"`; an empty slot carries the number 0, which the normalisation fills in. Null when the field is missing.",
         },
         remain: t.nullable(t.integer("The RFID remain percentage. Null means not reported, never empty.")),
+        tag_uid: t.nullable(t.string("The chip id of the RFID tag, which differs from `tray_uuid`. Null for a spool without a tag.")),
+        tray_diameter: t.nullable(t.number("The filament diameter in millimetres.")),
+        nozzle_temp_min: t.nullable(t.number("The lowest nozzle temperature the filament profile allows, in degrees Celsius.")),
+        nozzle_temp_max: t.nullable(t.number("The highest nozzle temperature the filament profile allows, in degrees Celsius.")),
+        bed_temp: t.nullable(t.number("The bed temperature the filament profile names, in degrees Celsius.")),
+        drying_temp: t.nullable(t.number("The drying temperature the filament profile names, in degrees Celsius.")),
+        drying_time: t.nullable(t.number("The drying time the filament profile names, in hours.")),
+        k: t.nullable(t.number("The pressure advance factor the printer holds for this slot.")),
     }),
 
     SpoolRef: t.object({

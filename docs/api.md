@@ -99,8 +99,8 @@ What the dashboard shows: connection state, slots, the running print, and the li
 
 | Route | Does |
 | :---- | :---- |
-| `GET /api/status/{printerId}` | The connection state of a printer and of Spoolman |
-| `GET /api/spools/{printerId}` | Every slot of a printer, with what is in it and what Spoolman holds for it |
+| `GET /api/status/{printerId}` | The connection state of a printer and of Spoolman, and the slot whose filament is in the printing nozzle |
+| `GET /api/spools/{printerId}` | Every slot of a printer, with what is in it, what the tag and the printer's filament table say about it, and what Spoolman holds for it |
 | `GET /api/print/{printerId}` | The running or last print: state, progress and consumption per slot |
 | `POST /api/print/{printerId}/clear` | Clear the finished print from the dashboard now |
 | `GET /api/events` | Live updates as Server-Sent Events (SSE stream) |

@@ -84,6 +84,50 @@ export function convertAMSandSlot(amsID, slotID) {
 }
 
 /**
+ * The slot whose filament sits in the nozzle that prints, read off one report.
+ *
+ * Two encodings are in the wild. A printer with `device.extruder.info` names
+ * the loaded slot per nozzle in `snow`: the unit id in the high byte and the
+ * slot in the low one, 0xFF in the low byte for an empty nozzle. Which nozzle
+ * prints is bits 4 to 7 of `device.extruder.state`, which is how an H2D with
+ * a spool in either nozzle tells the two apart. `ams.tray_now` is the older
+ * field and the only one an A1, a P1 or an X1 sends: four slots per unit
+ * packed into one number, 128 and up for an AMS HT, 254 for the external
+ * holder and 255 for nothing. On a dual nozzle printer it loses the unit, so
+ * `snow` wins wherever it is present. Both decodings follow ha-bambulab, which
+ * has seen the most hardware.
+ *
+ * A report that carries neither, which is what a delta report mostly is, says
+ * nothing: `undefined` rather than null, so the caller keeps what it had.
+ *
+ * @param {object} print - the `print` block of a report
+ * @param {number} lastNozzle - the printing nozzle the last report named
+ * @returns {{slot: string|null, nozzle: number}|undefined}
+ */
+export function activeSlotFromReport(print, lastNozzle = 0) {
+    const extruder = print?.device?.extruder;
+    const state = Number(extruder?.state);
+    const nozzle = Number.isFinite(state) && extruder?.state != null ? (state >> 4) & 0xF : lastNozzle;
+
+    if (Array.isArray(extruder?.info) && extruder.info.length) {
+        const entry = extruder.info.find(info => Number(info?.id) === nozzle);
+        const snow = Number(entry?.snow);
+        if (!entry || !Number.isFinite(snow)) return { slot: null, nozzle };
+        const unit = snow >> 8;
+        const slot = snow & 0xFF;
+        if (slot === 0xFF) return { slot: null, nozzle };
+        return { slot: convertAMSandSlot(unit, unit <= 3 ? slot & 0x3 : null), nozzle };
+    }
+
+    if (print?.ams?.tray_now == null) return undefined;
+    const trayNow = Number(print.ams.tray_now);
+    if (!Number.isFinite(trayNow) || trayNow === 255) return { slot: null, nozzle };
+    if (trayNow === 254) return { slot: convertAMSandSlot(EXTERNAL_SPOOL_ID, null), nozzle };
+    if (trayNow >= 128) return { slot: convertAMSandSlot(trayNow, null), nozzle };
+    return { slot: convertAMSandSlot(trayNow >> 2, trayNow & 0x3), nozzle };
+}
+
+/**
  * The unit id the external spool holder is addressed under, and the label it
  * produces.
  *

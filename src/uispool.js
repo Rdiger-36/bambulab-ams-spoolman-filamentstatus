@@ -43,7 +43,36 @@ function pickSlot(slot) {
         tray_info_idx: orNull(slot.tray_info_idx),
         tray_weight: slot.tray_weight ?? null,
         remain: slot.remain ?? null,
+        // What the tag and the printer's own filament table say about the spool,
+        // for a client that shows a slot the way the printer does. None of them
+        // ticks between reports, so carrying them does not make every report
+        // look like a change to `hasSpoolUiChanged()`.
+        // A slot without a tag reports sixteen zeros rather than nothing.
+        tag_uid: /^0*$/.test(slot.tag_uid ?? "") ? null : orNull(slot.tag_uid),
+        tray_diameter: positiveNumber(slot.tray_diameter),
+        nozzle_temp_min: positiveNumber(slot.nozzle_temp_min),
+        nozzle_temp_max: positiveNumber(slot.nozzle_temp_max),
+        bed_temp: positiveNumber(slot.bed_temp),
+        drying_temp: positiveNumber(slot.drying_temp),
+        drying_time: positiveNumber(slot.drying_time),
+        k: positiveNumber(slot.k),
     };
+}
+
+/**
+ * Reads one of the numeric tray fields, which the printer sends as strings.
+ *
+ * An empty slot and a spool without a tag report 0 for every one of them, which
+ * is not a temperature, a diameter or a pressure advance value, so it becomes
+ * null rather than a zero a client would show.
+ *
+ * @param {string|number|undefined} value - the field as reported
+ * @returns {number|null}
+ */
+function positiveNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 /**

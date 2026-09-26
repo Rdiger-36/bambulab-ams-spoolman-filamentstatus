@@ -4,7 +4,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError, decodePrintMapping } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, activeSlotFromReport, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError, decodePrintMapping } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -518,6 +518,28 @@ export function noteStorage(printer, print) {
         }
     }
 
+    return true;
+}
+
+/**
+ * Keeps the slot whose filament is in the printing nozzle, for `/api/status`.
+ *
+ * Nothing in this service decides anything by it: the booking reads the slots
+ * a print reports in `print.mapping`. It is carried for a client that shows
+ * which spool is feeding right now, the Home Assistant integration first. A
+ * report that says nothing about it leaves the last value alone, see
+ * `activeSlotFromReport()`.
+ *
+ * @param {object} printer - the printer runtime object
+ * @param {object} print - the `print` block of the report
+ * @returns {boolean} whether the slot changed
+ */
+export function noteActiveSlot(printer, print) {
+    const found = activeSlotFromReport(print, printer.activeNozzle ?? 0);
+    if (!found) return false;
+    printer.activeNozzle = found.nozzle;
+    if (printer.activeSlot === found.slot) return false;
+    printer.activeSlot = found.slot;
     return true;
 }
 
@@ -1365,6 +1387,7 @@ async function handleMqttMessage(printer, topic, message) {
             }
 
             noteStorage(printer, data?.print);
+            noteActiveSlot(printer, data?.print);
 
             // Legacy mode derives the weight from the RFID remain percentage, so
             // the G-code tracking must stay out of it entirely. Running both

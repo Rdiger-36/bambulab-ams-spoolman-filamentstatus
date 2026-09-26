@@ -308,6 +308,7 @@ export function registerRoutes(app, printers) {
             // the spool detail dialog has to know in either whether a print is
             // running before it offers to correct a remaining weight.
             gcodeState: printer.currentGcodeState || "IDLE",
+            activeSlot: printer.activeSlot ?? null,
         });
     });
 

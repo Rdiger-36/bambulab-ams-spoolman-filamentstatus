@@ -160,6 +160,11 @@ function createRuntimePrinter(entry) {
         // what FTPS shows, so without it no sliced file can be read. See
         // noteStorage() in mqtt.js.
         storagePresent: null,
+        // The slot whose filament is in the printing nozzle, and which nozzle
+        // that is on a printer with two. Null until a report says. See
+        // noteActiveSlot() in mqtt.js.
+        activeSlot: null,
+        activeNozzle: 0,
         // What the last slice info fetch tried and found. See fetchSliceInfo().
         lastSliceFetch: null,
         // The slots the printer says the running print is taking its filaments
