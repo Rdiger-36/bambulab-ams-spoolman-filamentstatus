@@ -148,6 +148,24 @@
         return tables[language()]?.[key] != null || tables[FALLBACK]?.[key] != null;
     }
 
+    /**
+     * The message of a failed API answer in the viewer's language.
+     *
+     * The API answers `{ ok: false, error, code, params }`: `error` is English
+     * and stays so for every other caller, `code` names the same failure as a
+     * word. A code with a text under `error.<code>` is shown translated, any
+     * other answer as the server worded it.
+     *
+     * @param {object} body - the parsed answer
+     * @param {number} [status] - the HTTP status, for an answer without a body
+     * @returns {string}
+     */
+    function errorText(body, status) {
+        const key = body?.code ? `error.${body.code}` : null;
+        if (key && has(key)) return t(key, body.params || {});
+        return body?.error || (status ? `HTTP ${status}` : "");
+    }
+
     /** Every registered language as `[code, name]`, for the switch. */
     function languages() {
         return Object.entries(names);
@@ -158,7 +176,7 @@
         return tables[code] || {};
     }
 
-    global.I18N = { register, t, has, language, languages, setLanguage, apply, table, FALLBACK };
+    global.I18N = { register, t, has, errorText, language, languages, setLanguage, apply, table, FALLBACK };
     // `t` on its own as well, because the classic scripts share one global
     // scope and a `const { t }` in each of them would be declared twice.
     global.t = t;

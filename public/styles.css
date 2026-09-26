@@ -832,7 +832,7 @@ table td.color-cell {
    a centred button would sit away from the label that names it. */
 @media (min-width: 761px) {
   .spool-table th:last-child,
-  .spool-table td[data-label="Action"] {
+  .spool-table td.action-cell {
     text-align: center;
   }
 }
@@ -2668,7 +2668,7 @@ body.logs-page .log-page { width: 100%; }
 
 
   /* Make the action button comfortably tappable */
-  .spool-table td[data-label="Action"] button {
+  .spool-table td.action-cell button {
     min-height: 38px;
     padding: 6px 14px;
   }

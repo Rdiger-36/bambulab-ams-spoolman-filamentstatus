@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const isServer = name === "server";
 
   if (!isServer && !printerSerial) {
-    logContainer.innerHTML = '<p>Error: No printer serial provided in the URL.</p>';
+    showMessage(t("logs.noSerial"));
     return;
   }
 
@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function streamLabel() {
-    return stream === "mqtt" ? "Raw MQTT trace" : "Log";
+    return stream === "mqtt" ? t("logs.stream.mqtt") : t("logs.stream.log");
   }
 
   /** Puts the switch, the address and the title into the state of `stream`. */
@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
     else url.searchParams.delete("stream");
     history.replaceState(null, "", url);
 
-    titleEl.textContent = isServer ? "Server log" : `${name} · ${streamLabel()}`;
+    titleEl.textContent = isServer ? t("logs.serverLog") : `${name} · ${streamLabel()}`;
     fileEl.textContent = "";
     metaEl.textContent = "";
     updateDownloadLabel(null);
@@ -85,12 +85,12 @@ document.addEventListener("DOMContentLoaded", () => {
       // the printer reports, so the same choice matters more here.
       downloadWithExportMode({
         url: downloadUrl,
-        title: stream === "mqtt" ? "Download the raw MQTT trace" : "Download the log",
+        title: stream === "mqtt" ? t("logs.download.titleTrace") : t("logs.download.titleLog"),
         what: isServer
-          ? "The server log, including its rotated history."
+          ? t("logs.download.whatServer")
           : stream === "mqtt"
-            ? `Every MQTT report captured from ${name}, including the rotated history.`
-            : `The log of ${name}, including its rotated history.`,
+            ? t("logs.download.whatTrace", { name })
+            : t("logs.download.whatLog", { name }),
       });
     });
   }
@@ -99,26 +99,30 @@ document.addEventListener("DOMContentLoaded", () => {
   // has to say which of the two it is rather than promising the wrong one.
   function updateDownloadLabel(fileCount) {
     if (!downloadBtn) return;
-    const kind = stream === "mqtt" ? "trace" : "log";
+    const kind = stream === "mqtt" ? "Trace" : "Log";
     if (fileCount === null) {
-      downloadBtn.textContent = "Download...";
+      downloadBtn.textContent = t("logs.download.button");
       downloadBtn.disabled = true;
       return;
     }
     downloadBtn.disabled = fileCount === 0;
     downloadBtn.textContent = fileCount > 1
-      ? `Download all ${fileCount} ${kind} files...`
-      : `Download this ${kind} file...`;
+      ? t(`logs.download.all${kind}`, { count: fileCount })
+      : t(`logs.download.one${kind}`);
   }
 
-  /** 41 MB, 1.3 MB, 120 KB: the size of a file set, as a download dialog says it. */
+  /**
+   * 41 MB, 1.3 MB, 120 KB: the size of a file set, as a download dialog says it.
+   * The decimal separator is the viewer's language's, "1,3 MB" in German.
+   */
   function formatBytes(bytes) {
+    const oneDecimal = value => value.toLocaleString(window.I18N.language(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
     const mb = bytes / (1024 * 1024);
-    if (mb < 10) return `${mb.toFixed(1)} MB`;
+    if (mb < 10) return `${oneDecimal(mb)} MB`;
     if (mb < 1024) return `${Math.round(mb)} MB`;
-    return `${(mb / 1024).toFixed(1)} GB`;
+    return `${oneDecimal(mb / 1024)} GB`;
   }
 
   /**
@@ -129,24 +133,31 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function describe(answer) {
     const parts = [];
-    if (stream === "mqtt" && answer.capturing === false) parts.push("capture disabled");
-    if (stream === "mqtt") parts.push(`last ${limitFor(stream)} reports`);
-    parts.push(`refreshes every ${REFRESH_MS / 1000} s`);
+    if (stream === "mqtt" && answer.capturing === false) parts.push(t("logs.meta.captureDisabled"));
+    if (stream === "mqtt") parts.push(t("logs.meta.lastReports", { count: limitFor(stream) }));
+    parts.push(t("logs.meta.refresh", { seconds: REFRESH_MS / 1000 }));
 
     const files = answer.files ?? 1;
-    if (files === 0) parts.push("no file yet");
-    else if (typeof answer.bytes === "number") parts.push(`${files} ${files === 1 ? "file" : "files"}, ${formatBytes(answer.bytes)}`);
-    else parts.push(`${files} ${files === 1 ? "file" : "files"}`);
+    if (files === 0) parts.push(t("logs.meta.noFile"));
+    else if (typeof answer.bytes === "number") parts.push(`${t("logs.meta.files", { count: files })}, ${formatBytes(answer.bytes)}`);
+    else parts.push(t("logs.meta.files", { count: files }));
     return parts.join(" · ");
   }
 
   /** What the box says when there is nothing to show, and why. */
   function emptyMessage(answer) {
     if (stream === "mqtt" && answer.capturing === false) {
-      return "Raw MQTT capture is disabled for this printer. Enable it under Settings › Printers › Log.";
+      return t("logs.empty.captureDisabled");
     }
-    if (stream === "mqtt") return "No reports captured yet.";
-    return "No log files found.";
+    if (stream === "mqtt") return t("logs.empty.noReports");
+    return t("logs.empty.noLogs");
+  }
+
+  /** Replaces the box's content with one line of text: an empty or an error state. */
+  function showMessage(text) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    logContainer.replaceChildren(p);
   }
 
   // Detect if the user is scrolling manually
@@ -172,7 +183,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fileEl.textContent = logData.file ?? "";
 
       if (!logData.logs || logData.logs.length === 0) {
-        logContainer.innerHTML = `<p>${emptyMessage(logData)}</p>`;
+        showMessage(emptyMessage(logData));
         return;
       }
 
@@ -195,7 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       if (requested !== stream) return;
       console.error("Error loading logs:", error);
-      logContainer.innerHTML = "<p>Error loading logs. Please try again later.</p>";
+      showMessage(t("logs.loadError"));
     }
   }
 

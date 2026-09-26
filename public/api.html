@@ -30,7 +30,7 @@
             <!-- The page is reached from the API keys on the settings page and
                  has no entry in the bar, so the way back sits where the page
                  was opened from: at the top. -->
-            <a class="btn btn-small api-back" href="settings.html#apikey-table">← Back to the settings</a>
+            <a class="btn btn-small api-back" href="settings.html#apikey-table" data-i18n="api.back">← Back to the settings</a>
         </div>
 
         <!-- Filled by api.js from /api/openapi.json: the introduction of the
@@ -45,20 +45,20 @@
              filter is what finds a route in a list this long. -->
         <div class="set-card api-toolbar">
             <label class="api-tool api-tool-grow">
-                <span class="set-field-label"><span>Filter</span></span>
-                <input type="search" id="api-filter" placeholder="Path or description" autocomplete="off">
+                <span class="set-field-label"><span data-i18n="api.filter">Filter</span></span>
+                <input type="search" id="api-filter" placeholder="Path or description" data-i18n-placeholder="api.filterPlaceholder" autocomplete="off">
             </label>
             <label class="api-tool api-tool-grow">
-                <span class="set-field-label"><span>API key for the curl lines
+                <span class="set-field-label"><span><span data-i18n="api.keyLabel">API key for the curl lines</span>
                     <span class="set-info" tabindex="0" role="note"
                           data-tip="This page is the Web UI and may call the API as it is. The key is only written into the curl line under each request, so the line can be copied into a script as it will be run there.">i</span>
                 </span></span>
                 <input type="text" id="api-key" class="set-mono" placeholder="ams_..." autocomplete="off" spellcheck="false">
             </label>
             <div class="api-tool-buttons">
-                <button class="btn" type="button" id="api-expand">Expand all</button>
-                <button class="btn" type="button" id="api-collapse">Collapse all</button>
-                <a class="btn" href="api/openapi.json" target="_blank" rel="noopener" title="The OpenAPI 3.0 document, for Swagger UI, Postman or a client generator">openapi.json</a>
+                <button class="btn" type="button" id="api-expand" data-i18n="api.expandAll">Expand all</button>
+                <button class="btn" type="button" id="api-collapse" data-i18n="api.collapseAll">Collapse all</button>
+                <a class="btn" href="api/openapi.json" target="_blank" rel="noopener" title="The OpenAPI 3.0 document, for Swagger UI, Postman or a client generator" data-i18n-title="api.openapiTitle">openapi.json</a>
             </div>
         </div>
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AMS Dashboard</title>
+  <title data-i18n="dashboard.pageTitle">AMS Dashboard</title>
   <link rel="stylesheet" href="styles.css">
   <script>
     // Applies the stored theme before the first paint so page changes do not flash.
@@ -33,10 +33,10 @@
         <div class="status-head-side">
           <span id="tracking-mode" class="pill"></span>
         </div>
-        <h1 class="status-title">Loaded Spools on <span id="printer-name"></span></h1>
+        <h1 class="status-title"><span data-i18n="dashboard.status.headline">Loaded Spools on</span> <span id="printer-name"></span></h1>
         <div class="status-head-side status-head-side-end">
-          <label class="status-toggle" title="Reads this printer over MQTT and writes what it finds to Spoolman">
-            <span>Monitoring</span>
+          <label class="status-toggle" title="Reads this printer over MQTT and writes what it finds to Spoolman" data-i18n-title="dashboard.status.monitoringTitle">
+            <span data-i18n="dashboard.status.monitoring">Monitoring</span>
             <span class="set-switch set-switch-alarm">
               <input type="checkbox" id="monitoring-toggle">
               <span class="set-switch-track"></span>
@@ -50,23 +50,23 @@
           <span id="spoolman-status" class="status-value"></span>
         </div>
         <div class="status-item">
-          <span class="status-label">Printer (MQTT)</span>
+          <span class="status-label" data-i18n="dashboard.status.printerMqtt">Printer (MQTT)</span>
           <span id="mqtt-status" class="status-value"></span>
         </div>
         <div class="status-item">
-          <span class="status-label">Serial number</span>
+          <span class="status-label" data-i18n="dashboard.status.serialNumber">Serial number</span>
           <span id="printer-serial" class="status-value"></span>
         </div>
         <div class="status-item">
-          <span class="status-label">Operation mode</span>
+          <span class="status-label" data-i18n="dashboard.status.operationMode">Operation mode</span>
           <span id="mode" class="status-value"></span>
         </div>
         <div class="status-item">
-          <span class="status-label">Last update</span>
+          <span class="status-label" data-i18n="dashboard.status.lastUpdate">Last update</span>
           <span id="last-mqtt-update" class="status-value"></span>
         </div>
         <div class="status-item">
-          <span class="status-label">Last slot update</span>
+          <span class="status-label" data-i18n="dashboard.status.lastSlotUpdate">Last slot update</span>
           <span id="last-mqtt-ams-update" class="status-value"></span>
         </div>
       </div>
@@ -90,8 +90,8 @@
     <h3 id="notice-dialog-title"></h3>
     <div id="notice-dialog-content"></div>
     <div class="button-container">
-      <button class="btn" id="notice-dialog-close">Got it</button>
-      <button class="btn btn-primary" id="notice-dialog-open">Open the settings</button>
+      <button class="btn" id="notice-dialog-close" data-i18n="dashboard.notice.gotIt">Got it</button>
+      <button class="btn btn-primary" id="notice-dialog-open" data-i18n="dashboard.notice.openSettings">Open the settings</button>
     </div>
   </dialog>
 
@@ -102,7 +102,7 @@
     <h3 id="spool-detail-title"></h3>
     <div id="spool-detail-content"></div>
     <div class="button-container">
-      <button class="btn" id="spool-detail-close">Close</button>
+      <button class="btn" id="spool-detail-close" data-i18n="dashboard.dialog.close">Close</button>
     </div>
   </dialog>
 
@@ -113,7 +113,7 @@
     <h3 id="print-summary-title"></h3>
     <div id="print-summary-content"></div>
     <div class="button-container">
-      <button class="btn" id="print-summary-close">Close</button>
+      <button class="btn" id="print-summary-close" data-i18n="dashboard.dialog.close">Close</button>
     </div>
   </dialog>
 
@@ -121,7 +121,7 @@
     <h3><span id="button-header" style="display: block; text-align: center;"></span></h3>
     <div id="dialog-content"></div>
     <div class="button-container">
-      <button class="btn" id="close-dialog">Close</button>
+      <button class="btn" id="close-dialog" data-i18n="dashboard.dialog.close">Close</button>
       <button class="btn btn-primary" id="action-button"><span id="action-button"></span></button>
     </div>
   </dialog>

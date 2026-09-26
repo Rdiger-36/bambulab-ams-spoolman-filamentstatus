@@ -129,10 +129,10 @@ export function apiKeyCount() {
  */
 export function createApiKey(name) {
     const trimmed = String(name ?? "").trim();
-    if (!trimmed) return { ok: false, error: "The key needs a name" };
-    if (trimmed.length > MAX_NAME_LENGTH) return { ok: false, error: `The name may be at most ${MAX_NAME_LENGTH} characters long` };
+    if (!trimmed) return { ok: false, error: "The key needs a name", code: "apiKeyNameMissing" };
+    if (trimmed.length > MAX_NAME_LENGTH) return { ok: false, error: `The name may be at most ${MAX_NAME_LENGTH} characters long`, code: "apiKeyNameTooLong", params: { max: MAX_NAME_LENGTH } };
     if (load().some(entry => entry.name.toLowerCase() === trimmed.toLowerCase())) {
-        return { ok: false, error: `There is already a key called "${trimmed}"` };
+        return { ok: false, error: `There is already a key called "${trimmed}"`, code: "apiKeyNameTaken", params: { name: trimmed } };
     }
 
     const key = generateApiKey();

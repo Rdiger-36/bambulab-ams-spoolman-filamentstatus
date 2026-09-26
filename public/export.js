@@ -8,17 +8,24 @@
 
 const EXPORT_DIALOG_ID = "export-mode-dialog";
 
-// Kept in one place: this is a promise to the user about what leaves the
-// machine, and it has to match what src/anonymize.js actually does.
-const ANONYMIZED_NOTE = `
+/**
+ * What the anonymised variant changes, in the viewer's language.
+ *
+ * Kept in one place: this is a promise to the user about what leaves the
+ * machine, and it has to match what src/anonymize.js actually does. The
+ * examples are markup put into the translated sentence, so a table carries
+ * plain text only.
+ */
+function anonymizedNote() {
+    return `
     <ul class="set-list">
-        <li>IP addresses lose their last octet, <code>192.168.1.42</code> becomes <code>192.168.1.XXX</code></li>
-        <li>Serial numbers keep their first five characters, the rest becomes <code>X</code></li>
-        <li>Access codes are replaced entirely</li>
-        <li>The Spoolman host name is replaced, the scheme, port and path are kept</li>
+        <li>${t("export.note.ip", { from: "<code>192.168.1.42</code>", to: "<code>192.168.1.XXX</code>" })}</li>
+        <li>${t("export.note.serial", { mask: "<code>X</code>" })}</li>
+        <li>${t("export.note.accessCode")}</li>
+        <li>${t("export.note.spoolmanHost")}</li>
     </ul>
-    <p class="set-note">Printer names and spool data are kept. They are what makes a log readable, and
-       they say nothing about the network. Rename a printer before exporting if its name identifies you.</p>`;
+    <p class="set-note">${t("export.note.kept")}</p>`;
+}
 
 function ensureExportDialog() {
     let dialog = document.getElementById(EXPORT_DIALOG_ID);
@@ -31,9 +38,9 @@ function ensureExportDialog() {
         <div id="export-mode-text"></div>
         <div id="export-mode-choices"></div>
         <div class="button-container">
-            <button class="btn" type="button" id="export-mode-cancel">Cancel</button>
-            <button class="btn" type="button" id="export-mode-full">Full</button>
-            <button class="btn btn-primary" type="button" id="export-mode-anon">Anonymised</button>
+            <button class="btn" type="button" id="export-mode-cancel">${t("export.cancel")}</button>
+            <button class="btn" type="button" id="export-mode-full">${t("export.full")}</button>
+            <button class="btn btn-primary" type="button" id="export-mode-anon">${t("export.anonymized")}</button>
         </div>`;
     document.body.appendChild(dialog);
     return dialog;
@@ -58,10 +65,9 @@ function askExportMode({ title, what, choices = null }) {
     const text = document.getElementById("export-mode-text");
     text.innerHTML = `
         <p class="export-what"></p>
-        <p><strong>Anonymised</strong> is safe to attach to a bug report:</p>
-        ${ANONYMIZED_NOTE}
-        <p><strong>Full</strong> hands out everything as it is on disk, except the access codes, which are
-           never part of an export. Share it only with someone you trust.</p>`;
+        <p>${t("export.anonymizedIntro", { mode: `<strong>${t("export.anonymized")}</strong>` })}</p>
+        ${anonymizedNote()}
+        <p>${t("export.fullIntro", { mode: `<strong>${t("export.full")}</strong>` })}</p>`;
     text.querySelector(".export-what").textContent = what;
 
     const choiceBox = document.getElementById("export-mode-choices");

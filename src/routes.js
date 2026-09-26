@@ -63,7 +63,7 @@ import {
  */
 function resolvePrinter(printerId, printers, res) {
     const printer = printers.find(p => p.id === printerId);
-    if (!printer) { res.status(404).json({ ok: false, error: "Printer not found" }); return null; }
+    if (!printer) { res.status(404).json({ ok: false, error: "Printer not found", code: "printerNotFound" }); return null; }
     return printer;
 }
 
@@ -192,7 +192,7 @@ function nameMatchedSlots(consumption, loadedSpools) {
  */
 function rejectInLegacyMode(res) {
     if (!legacyMode()) return false;
-    res.status(409).json({ ok: false, error: "Manual spool assignment is not available in legacy mode" });
+    res.status(409).json({ ok: false, error: "Manual spool assignment is not available in legacy mode", code: "legacyNoAssignment" });
     return true;
 }
 
@@ -211,6 +211,7 @@ function rejectSpoolEditInLegacyMode(res) {
     res.status(409).json({
         ok: false,
         error: "Legacy mode writes the remaining weight from the AMS RFID reading, so an edit here would be overwritten",
+        code: "legacyNoWeightEdit",
     });
     return true;
 }
@@ -272,6 +273,8 @@ export function registerRoutes(app, printers) {
                 error: result.retryAfter
                     ? `Too many attempts. Try again in ${result.retryAfter} seconds.`
                     : "Wrong password",
+                code: result.retryAfter ? "tooManyAttempts" : "wrongPassword",
+                params: result.retryAfter ? { count: result.retryAfter } : undefined,
                 retryAfter: result.retryAfter,
             });
         }
@@ -398,7 +401,7 @@ export function registerRoutes(app, printers) {
                 if (wantsTrace) capturing = traceEnabled(printer);
             } else if (wantsTrace) {
                 // There is no server trace: the raw messages belong to a printer
-                return res.status(404).json({ ok: false, error: "The server has no MQTT trace" });
+                return res.status(404).json({ ok: false, error: "The server has no MQTT trace", code: "noServerTrace" });
             }
 
             const [lines, files] = await Promise.all([
@@ -415,7 +418,7 @@ export function registerRoutes(app, printers) {
             });
         } catch (err) {
             console.error("Server", serverLogFilePath, `Failed to read log file: ${err.message}`);
-            return res.status(500).json({ ok: false, error: "Failed to read log file" });
+            return res.status(500).json({ ok: false, error: "Failed to read log file", code: "logReadFailed" });
         }
     });
 
@@ -448,7 +451,7 @@ export function registerRoutes(app, printers) {
             let filePath, baseName;
 
             if (printerId === "server") {
-                if (wantsTrace) return res.status(404).json({ ok: false, error: "The server has no MQTT trace" });
+                if (wantsTrace) return res.status(404).json({ ok: false, error: "The server has no MQTT trace", code: "noServerTrace" });
                 filePath = serverLogFilePath;
                 baseName = "server";
             } else {
@@ -464,7 +467,7 @@ export function registerRoutes(app, printers) {
             const suffixed = anonymize ? baseName : `${baseName}_full`;
 
             const files = await logFileSet(filePath);
-            if (files.length === 0) return res.status(404).json({ ok: false, error: "No log file found" });
+            if (files.length === 0) return res.status(404).json({ ok: false, error: "No log file found", code: "noLogFile" });
 
             if (files.length === 1) {
                 res.setHeader("Content-Type", mime.lookup("log") || "text/plain; charset=utf-8");
@@ -498,7 +501,7 @@ export function registerRoutes(app, printers) {
             return res.end(buffer);
         } catch (err) {
             console.error("Server", serverLogFilePath, `Download error: ${err.message}`);
-            res.status(500).json({ ok: false, error: "Download failed" });
+            res.status(500).json({ ok: false, error: "Download failed", code: "downloadFailed" });
         }
     });
 
@@ -754,6 +757,8 @@ export function registerRoutes(app, printers) {
             return res.status(409).json({
                 ok: false,
                 error: `${printer.name} is printing (${printer.currentGcodeState}). The result can be cleared once the job has ended.`,
+                code: "clearWhilePrinting",
+                params: { printer: printer.name, state: printer.currentGcodeState },
             });
         }
 
@@ -791,7 +796,7 @@ export function registerRoutes(app, printers) {
     // onto every slot of every SSE update.
     app.get("/api/spoolman/spool/:id", async (req, res) => {
         const spoolId = positiveInteger(req.params.id);
-        if (!spoolId) return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
+        if (!spoolId) return res.status(400).json({ ok: false, error: "The spool id must be a positive integer", code: "spoolIdInvalid" });
 
         try {
             res.json(await getSpoolmanSpool(spoolId));
@@ -812,14 +817,14 @@ export function registerRoutes(app, printers) {
         if (rejectSpoolEditInLegacyMode(res)) return;
 
         const spoolId = positiveInteger(req.params.id);
-        if (!spoolId) return res.status(400).json({ ok: false, error: "The spool id must be a positive integer" });
+        if (!spoolId) return res.status(400).json({ ok: false, error: "The spool id must be a positive integer", code: "spoolIdInvalid" });
 
         const payload = {};
 
         if (req.body?.remainingWeight !== undefined) {
             const weight = Number(req.body.remainingWeight);
             if (!Number.isFinite(weight) || weight < 0) {
-                return res.status(400).json({ ok: false, error: "The remaining weight must be a number of grams, zero or more" });
+                return res.status(400).json({ ok: false, error: "The remaining weight must be a number of grams, zero or more", code: "weightInvalid" });
             }
 
             // A running job books its consumption onto the spool when it ends,
@@ -831,6 +836,8 @@ export function registerRoutes(app, printers) {
                     ok: false,
                     printInFlight: true,
                     error: `${printing.name} is printing (${printing.currentGcodeState}) with this spool. Its consumption is booked when the job ends and would overwrite the corrected weight, so this can be changed once the print is done.`,
+                    code: "weightWhilePrinting",
+                    params: { printer: printing.name, state: printing.currentGcodeState },
                 });
             }
 
@@ -846,13 +853,13 @@ export function registerRoutes(app, printers) {
         // archive a spool.
         if (req.body?.archived !== undefined) {
             if (typeof req.body.archived !== "boolean") {
-                return res.status(400).json({ ok: false, error: "The archived flag must be true or false" });
+                return res.status(400).json({ ok: false, error: "The archived flag must be true or false", code: "archivedInvalid" });
             }
             payload.archived = req.body.archived;
         }
 
         if (!Object.keys(payload).length) {
-            return res.status(400).json({ ok: false, error: "Nothing to change" });
+            return res.status(400).json({ ok: false, error: "Nothing to change", code: "nothingToChange" });
         }
 
         try {
@@ -865,6 +872,8 @@ export function registerRoutes(app, printers) {
                     return res.status(400).json({
                         ok: false,
                         error: `This spool holds at most ${Math.round(limit)} g, so it cannot have ${Math.round(payload.remaining_weight)} g left`,
+                        code: "weightAboveLimit",
+                        params: { limit: Math.round(limit), weight: Math.round(payload.remaining_weight) },
                     });
                 }
             }
@@ -895,7 +904,7 @@ export function registerRoutes(app, printers) {
         if (!printer) return;
 
         const spoolId = positiveInteger(req.body?.spoolId);
-        if (!spoolId) return res.status(400).json({ ok: false, error: "spoolId must be a positive integer" });
+        if (!spoolId) return res.status(400).json({ ok: false, error: "spoolId must be a positive integer", code: "spoolIdInvalid" });
 
         const uiSpool = resolveUiSpool(printer, amsId, res);
         if (!uiSpool) return;
@@ -903,7 +912,7 @@ export function registerRoutes(app, printers) {
         try {
             const spools = await getSpoolmanSpools();
             const spool = spools.find(s => s.id === spoolId);
-            if (!spool) return res.status(404).json({ ok: false, error: `Spool ${spoolId} not found in Spoolman` });
+            if (!spool) return res.status(404).json({ ok: false, error: `Spool ${spoolId} not found in Spoolman`, code: "spoolNotFound", params: { id: spoolId } });
 
             const mapping = setMapping(printerId, amsId, spoolId, uiSpool.slot);
 
@@ -1186,7 +1195,7 @@ export function registerRoutes(app, printers) {
             return res.status(500).json({ ok: false, error: err?.message || "Could not save the key" });
         }
 
-        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error, code: result.code, params: result.params });
 
         // The one time the key exists outside the caller. Everything after this
         // sees the hash, so a client that loses it has to create a new one.
@@ -1202,7 +1211,7 @@ export function registerRoutes(app, printers) {
             return res.status(500).json({ ok: false, error: err?.message || "Could not remove the key" });
         }
 
-        if (!removed) return res.status(404).json({ ok: false, error: "No key with this id" });
+        if (!removed) return res.status(404).json({ ok: false, error: "No key with this id", code: "apiKeyNotFound" });
         res.json({ ok: true, removed, keys: listApiKeys() });
     });
 
@@ -1245,7 +1254,7 @@ export function registerRoutes(app, printers) {
             res.end(buffer);
         } catch (err) {
             console.error("Server", serverLogFilePath, `Diagnostics bundle failed: ${err.message}`);
-            res.status(500).json({ ok: false, error: "The bundle could not be built" });
+            res.status(500).json({ ok: false, error: "The bundle could not be built", code: "bundleFailed" });
         }
     });
 
@@ -1276,7 +1285,7 @@ export function registerRoutes(app, printers) {
 
     app.post("/api/notices/:id/ack", (req, res) => {
         if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE].includes(req.params.id)) {
-            return res.status(404).json({ ok: false, error: "Unknown notice" });
+            return res.status(404).json({ ok: false, error: "Unknown notice", code: "unknownNotice" });
         }
 
         try {
@@ -1327,7 +1336,7 @@ export function registerRoutes(app, printers) {
         const changesConnection = (req.body?.ip?.trim() && req.body.ip.trim() !== printer.ip)
             || !!req.body?.code?.trim();
         if (changesConnection && printBlocks(printer, req.body)) {
-            return respondPrintInFlight(res, printer, "Changing the address or the access code reconnects the printer");
+            return respondPrintInFlight(res, printer, "Changing the address or the access code reconnects the printer", "reconnect");
         }
 
         const result = updatePrinter(req.params.printerId, req.body);
@@ -1379,7 +1388,7 @@ export function registerRoutes(app, printers) {
         if (!printer) return;
 
         if (printBlocks(printer, req.body)) {
-            return respondPrintInFlight(res, printer, "Removing the printer disconnects it");
+            return respondPrintInFlight(res, printer, "Removing the printer disconnects it", "remove");
         }
 
         printer.monitoringEnabled = false;
@@ -1408,7 +1417,7 @@ export function registerRoutes(app, printers) {
     app.post("/api/restart", (req, res) => {
         const printing = printers.find(printer => printBlocks(printer, req.body));
         if (printing) {
-            return respondPrintInFlight(res, printing, "Restarting ends the process");
+            return respondPrintInFlight(res, printing, "Restarting ends the process", "restart");
         }
 
         res.json({ ok: true });
@@ -1444,9 +1453,9 @@ export function registerRoutes(app, printers) {
         const known = printers.find(p => p.id === id);
         const code = String(req.body?.code || "").trim() || known?.code || "";
 
-        if (!id) return res.status(400).json({ ok: false, error: "Serial number is required" });
-        if (!ip) return res.status(400).json({ ok: false, error: "Address is required" });
-        if (!code) return res.status(400).json({ ok: false, error: "Access code is required" });
+        if (!id) return res.status(400).json({ ok: false, error: "Serial number is required", code: "serialRequired" });
+        if (!ip) return res.status(400).json({ ok: false, error: "Address is required", code: "addressRequired" });
+        if (!code) return res.status(400).json({ ok: false, error: "Access code is required", code: "accessCodeRequired" });
 
         // Both checks are independent, and a printer that fails one usually
         // fails the other, so waiting for them one after another only doubles
@@ -1481,12 +1490,21 @@ function printBlocks(printer, body) {
     return ACTIVE_STATES.has(printer.currentGcodeState);
 }
 
-/** Answers a request that would interrupt a running print. */
-function respondPrintInFlight(res, printer, what) {
+/**
+ * Answers a request that would interrupt a running print.
+ *
+ * @param {object} res - the response
+ * @param {object} printer - the printer that is printing
+ * @param {string} what - the consequence in English, for the `error` text
+ * @param {string} action - the same as a word the Web UI translates: reconnect, remove, restart
+ */
+function respondPrintInFlight(res, printer, what, action) {
     res.status(409).json({
         ok: false,
         printInFlight: true,
         error: `${printer.name} is printing (${printer.currentGcodeState}). ${what}. The job is booked when it ends if the service is back by then, with its start time; on a P1 or an A1 the slots Bambu Studio sent it to are lost.`,
+        code: `printInFlight.${action}`,
+        params: { printer: printer.name, state: printer.currentGcodeState },
     });
 }
 

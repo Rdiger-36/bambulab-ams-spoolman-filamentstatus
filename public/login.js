@@ -1,5 +1,7 @@
 // The login page. Deliberately standalone: it is one of the few files served
 // before anybody is logged in, so it imports nothing from the rest of the UI.
+// The translation layer is the exception: the page loads it in its head like
+// every other page, and `t` is read off the global scope.
 
 document.addEventListener("DOMContentLoaded", () => {
     const form = document.getElementById("login-form");
@@ -41,14 +43,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const body = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                showError(body.error || `HTTP ${res.status}`);
+                showError(I18N.errorText(body, res.status));
                 password.select();
                 return;
             }
 
             window.location.href = destination();
-        } catch (err) {
-            showError(err.message || "The service did not answer");
+        } catch {
+            // Only a request that never got an answer lands here, and the
+            // browser's own message for that says less than this one
+            showError(t("login.noAnswer"));
         } finally {
             submit.disabled = false;
         }

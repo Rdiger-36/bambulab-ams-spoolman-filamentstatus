@@ -301,7 +301,7 @@ export function requireAuth() {
         if (isAuthenticated(req)) return next();
 
         if (req.path.startsWith("/api/")) {
-            return res.status(401).json({ ok: false, error: "Not logged in", authRequired: true });
+            return res.status(401).json({ ok: false, error: "Not logged in", code: "notLoggedIn", authRequired: true });
         }
 
         // Carries where they were going, so the login page can put them back

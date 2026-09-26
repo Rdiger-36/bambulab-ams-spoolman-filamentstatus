@@ -1,4 +1,10 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - New Features:
+      - The Web UI speaks English and German. It follows the browser's language, and a switch in the menu bar next to the dark mode button picks another one; the choice is kept per browser. Every page is translated, the dashboard with its dialogs, the settings with every field the settings schema describes, the log viewer, the download dialog and the login. Log lines, the API reference page's content and every value the API hands out stay English, so scripts, the Home Assistant integration and bug reports read the same as before. Another language is one table under public/i18n/ and one script tag per page
+      - A failed API answer carries a code next to its English error, printerNotFound, weightAboveLimit and so on, with params for the values the sentence names, so a client can word it in its own language; the Web UI does. The print on /api/print/{printerId} carries stageCode next to stage, and the closing report of a print carries printErrorDetails next to printError, with Bambu Lab's sentence for the code in every shipped language. Bambu's error catalogue is shipped in German as well, fetched by scripts/fetch-print-errors.js de
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.27
    Second release candidate for 1.3.0. It adds what dev.26 was missing for issue #179, the sliced file of a print is found on the USB stick when the job's name does not lead to it, and the tray details and the active slot the Home Assistant integration reads. Like dev.26, what is found on it goes into 1.3.0
    - Changes:

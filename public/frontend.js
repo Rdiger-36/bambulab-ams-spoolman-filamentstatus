@@ -37,8 +37,67 @@ let printerGcodeState = "IDLE";
 // Why a slot without an RFID tag is not a fault. Shown in both views: on the
 // identity line of the row and on the warning triangle in the State column,
 // which names no reason by itself.
-const THIRD_PARTY_HINT = "3rd party spool: no RFID tag, so the printer cannot identify it. The profile shown is the preset chosen for the slot, not read from the spool. Assign a Spoolman spool to track it.";
-const ARCHIVED_HINT = "This spool is archived in Spoolman because it ran empty. Take it out of the slot, or restore it in the spool details.";
+// Read once at load, which is late enough: the language tables are loaded by
+// plain script tags in the head, before any module runs.
+const THIRD_PARTY_HINT = t("dashboard.hint.thirdParty");
+const ARCHIVED_HINT = t("dashboard.hint.archived");
+
+/**
+ * What a slot action button shows for an option.
+ *
+ * The option itself is a contract with the server and the Home Assistant
+ * integration and stays English: it is what the code compares, and it travels
+ * on the button as `data-option`. Only the words on the button are translated.
+ * An option this page has no key for, one a newer server learned, shows as it
+ * arrives.
+ */
+function optionLabel(option) {
+    const name = Object.keys(SLOT_OPTIONS).find(key => SLOT_OPTIONS[key] === option);
+    return name && I18N.has(`dashboard.slotOption.${name}`) ? t(`dashboard.slotOption.${name}`) : option;
+}
+
+/**
+ * The error a print ended with, in the viewer's language: the server's parts
+ * put into words from the table, with Bambu Lab's sentence in that language
+ * where its catalogue has one. A summary from before the parts existed shows
+ * the English line it carries.
+ */
+function printErrorLine(summary) {
+    const parts = summary.printErrorDetails;
+    if (!Array.isArray(parts) || !parts.length) return summary.printError;
+    const lang = I18N.language();
+    return parts.map(part => {
+        const text = part.texts?.[lang] ?? part.texts?.en;
+        const key = part.kind === "fail" ? "print.error.fail" : "print.error.printer";
+        return text ? t(`${key}Text`, { code: part.code, text }) : t(key, { code: part.code });
+    }).join(", ");
+}
+
+// The slot states the server compares and hands out, by the key their words
+// are looked up under.
+const SLOT_STATE_KEYS = {
+    "Empty": "empty",
+    "Loaded (Bambu Lab)": "loadedBambuLab",
+    "Loaded (3rd party)": "loadedThirdParty",
+    "Loaded (archived)": "loadedArchived",
+};
+
+/** A slot state in the viewer's language, or as the server sent it where there is no key for it. */
+function slotStateLabel(state) {
+    const key = SLOT_STATE_KEYS[state];
+    return key ? t(`dashboard.slotState.${key}`) : state;
+}
+
+/** Spoolman's multi_color_direction in words, the value itself where there is no key for it. */
+function directionLabel(direction) {
+    return I18N.has(`dashboard.direction.${direction}`) ? t(`dashboard.direction.${direction}`) : direction;
+}
+
+/** A value the server reports in English, in the viewer's language where a key for it exists. */
+function serverWord(group, value) {
+    const key = `dashboard.${group}.${value}`;
+    return value != null && I18N.has(key) ? t(key) : value;
+}
 
 // Humidity, temperature and drying state per AMS unit, keyed by the unit part
 // of a slot label ("A" for A1 to A4, "HT-A" for a single slot unit). Mirrored
@@ -193,17 +252,21 @@ document.addEventListener("DOMContentLoaded", () => {
     async function showUpgradeNotice(notice) {
         if (!notice || !notice.active || notice.acknowledged) return;
 
+        // The table texts carry the little markup these paragraphs need, <b>
+        // and <code>; they come from this repository, not from a request.
         const docsLink = notice.docs
-            ? `<p>Everything else that changed, with what to do about it: <a href="${escapeHtml(notice.docs)}" target="_blank" rel="noopener">Updating from 1.2.x</a>.</p>`
+            ? `<p>${t("dashboard.notice.upgrade.docs", {
+                link: `<a href="${escapeHtml(notice.docs)}" target="_blank" rel="noopener">${escapeHtml(t("dashboard.notice.upgrade.docsLink"))}</a>`,
+            })}</p>`
             : "";
 
-        await showNoticeDialog("upgrade-1.3.0", "Updated from 1.2.x", [
-            "<p>This installation was set up with <b>version 1.2.x</b>. Four things changed in 1.3.0 that may need you:</p>",
+        await showNoticeDialog("upgrade-1.3.0", t("dashboard.notice.upgrade.title"), [
+            `<p>${t("dashboard.notice.upgrade.intro")}</p>`,
             "<ul>",
-            "<li><b>AMS slots are numbered from 1</b>, the way the printer numbers them: the first slot of the first unit is <code>A1</code>, so every slot label moved up by one, in the Web UI, in the logs, in the API and in the Spoolman location of a spool. Nothing to do here unless a script or a home automation reads slot labels from the API.</li>",
-            "<li><b>The API needs a key.</b> It answers only this Web UI and a caller with an API key. A script or an integration that called it without one, the Home Assistant integration among them, needs a key from <b>Network access</b> on the settings page.</li>",
-            "<li><b>A host name has to be allowed.</b> Reaching the service under a domain name or through a reverse proxy needs that name under <b>Allowed host names</b> in the same card. An IP address, <code>localhost</code> and a <code>.local</code> name work as before.</li>",
-            "<li><b>Consumption comes from the sliced file</b> of a print now, not from the RFID remain percentage, which covers 3rd party spools as well. A P2S, an H2 series printer or an X2D needs a USB stick in the printer for it. <code>LEGACY_MODE=true</code> keeps the old behaviour.</li>",
+            `<li>${t("dashboard.notice.upgrade.slots")}</li>`,
+            `<li>${t("dashboard.notice.upgrade.apiKey")}</li>`,
+            `<li>${t("dashboard.notice.upgrade.hostName")}</li>`,
+            `<li>${t("dashboard.notice.upgrade.consumption")}</li>`,
             "</ul>",
             docsLink,
         ]);
@@ -220,23 +283,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const code = list => `<code>${list.map(escapeHtml).join("</code>, <code>")}</code>`;
         const parts = [
-            "<p>This installation is still configured through environment variables. That is <b>deprecated since 1.3.0</b>.</p>",
-            "<p>They keep working, so nothing has to change today. The settings page is the supported place for them now, and the printer list is edited there as well instead of by hand in <code>printers.json</code>.</p>",
+            `<p>${t("dashboard.notice.env.intro")}</p>`,
+            `<p>${t("dashboard.notice.env.keepWorking")}</p>`,
         ];
 
         if (notice.variables && notice.variables.length) {
-            parts.push(`<p>Still taken from the environment: ${code(notice.variables)}</p>`);
+            parts.push(`<p>${t("dashboard.notice.env.fromEnvironment", { list: code(notice.variables) })}</p>`);
         }
 
         if (notice.printerVariables && notice.printerVariables.length) {
+            const list = code(notice.printerVariables);
             parts.push(notice.printerVariablesIgnored
-                ? `<p>${code(notice.printerVariables)} are set but no longer have an effect: <code>printers.json</code> exists and owns the printer list.</p>`
-                : `<p>The printer list was seeded from ${code(notice.printerVariables)} and written to <code>printers.json</code>, which owns it from now on.</p>`);
+                ? `<p>${t("dashboard.notice.env.printerVariablesIgnored", { list })}</p>`
+                : `<p>${t("dashboard.notice.env.printerVariablesSeeded", { list })}</p>`);
         }
 
-        parts.push("<p>One thing to know before editing your compose file again: once a setting has been saved here, the settings file owns it and the matching variable stops changing anything.</p>");
+        parts.push(`<p>${t("dashboard.notice.env.compose")}</p>`);
 
-        await showNoticeDialog("env-config", "Configuration has moved into the Web UI", parts, true);
+        await showNoticeDialog("env-config", t("dashboard.notice.env.title"), parts, true);
     }
 
     // One dialog at a time, the update notice first: an installation updated
@@ -274,7 +338,8 @@ document.addEventListener("DOMContentLoaded", () => {
             // add one instead of showing an empty dashboard.
             document.getElementById("status").style.display = "none";
             document.getElementById("spool-list").innerHTML =
-                '<p style="text-align:center">No printers configured yet. Add one on the <a href="settings.html">settings page</a>.</p>';
+                `<p style="text-align:center">${escapeHtml(t("dashboard.noPrinters.text", { link: "{link}" }))
+                    .replace("{link}", `<a href="settings.html">${escapeHtml(t("dashboard.noPrinters.link"))}</a>`)}</p>`;
             currentPrinterId = null;
             return;
         }
@@ -413,21 +478,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const parts = [];
         if (env.humidityPercent !== null && env.humidityPercent !== undefined) {
-            const level = env.humidity ? ` (level ${env.humidity}/5)` : "";
-            parts.push(`<span title="Relative humidity inside the unit${level ? ", 1 is driest" : ""}">💧 ${env.humidityPercent} %${escapeHtml(level)}</span>`);
+            const level = env.humidity ? ` (${t("dashboard.env.level", { level: env.humidity })})` : "";
+            const title = t(level ? "dashboard.env.humidityTitleLevel" : "dashboard.env.humidityTitle");
+            parts.push(`<span title="${escapeHtml(title)}">💧 ${env.humidityPercent} %${escapeHtml(level)}</span>`);
         } else if (env.humidity !== null && env.humidity !== undefined) {
             // The original AMS has no percentage, only the five step level the
             // printer shows as a bar. Spelled out rather than drawn, because
             // there is no percentage to put next to it.
-            parts.push(`<span title="Humidity level reported by the AMS, 1 is driest. This unit reports no percentage. An AMS Lite has no sensor at all and always reports 5.">💧 level ${env.humidity}/5</span>`);
+            parts.push(`<span title="${escapeHtml(t("dashboard.env.levelOnlyTitle"))}">💧 ${escapeHtml(t("dashboard.env.level", { level: env.humidity }))}</span>`);
         }
         if (env.temperature !== null && env.temperature !== undefined) {
-            parts.push(`<span title="Temperature inside the unit">🌡️ ${env.temperature} °C</span>`);
+            parts.push(`<span title="${escapeHtml(t("dashboard.env.temperatureTitle"))}">🌡️ ${env.temperature} °C</span>`);
         }
         if (env.drying?.active) {
-            const target = env.drying.targetTemp ? ` at ${env.drying.targetTemp} °C` : "";
-            const left = env.drying.remainingMinutes ? `, ${env.drying.remainingMinutes} min left` : "";
-            parts.push(`<span class="ams-env-drying" title="This unit is running its drying cycle">♨️ Drying${escapeHtml(target)}${escapeHtml(left)}</span>`);
+            const target = env.drying.targetTemp ? ` ${t("dashboard.env.dryingAt", { temp: env.drying.targetTemp })}` : "";
+            const left = env.drying.remainingMinutes ? `, ${t("dashboard.env.dryingLeft", { minutes: env.drying.remainingMinutes })}` : "";
+            parts.push(`<span class="ams-env-drying" title="${escapeHtml(t("dashboard.env.dryingTitle"))}">♨️ ${escapeHtml(t("dashboard.env.drying"))}${escapeHtml(target)}${escapeHtml(left)}</span>`);
         }
 
         if (!parts.length) return "";
@@ -448,16 +514,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // everything else is plainly "AMS".
     function amsUnitLabel(unitKey, env) {
         if (env?.model) {
-            return { label: `${env.model} ${unitKey.startsWith("HT-") ? unitKey.slice(3) : unitKey}`, title: "As the printer names this unit" };
+            return { label: `${env.model} ${unitKey.startsWith("HT-") ? unitKey.slice(3) : unitKey}`, title: t("dashboard.env.unitTitleModel") };
         }
 
         if (unitKey.startsWith("HT-")) {
-            return { label: `AMS HT ${unitKey.slice(3)}`, title: "Single slot unit, which only the AMS HT is" };
+            return { label: `AMS HT ${unitKey.slice(3)}`, title: t("dashboard.env.unitTitleHt") };
         }
 
         return {
             label: `AMS ${unitKey}`,
-            title: "The printer has not said yet which AMS this is",
+            title: t("dashboard.env.unitTitleUnknown"),
         };
     }
 
@@ -500,8 +566,8 @@ document.addEventListener("DOMContentLoaded", () => {
         spoolListElement.innerHTML = "";
 
         const columns = [
-            ["Spool"], ["Remaining (estimated)"],
-            ["Serialnumber"], ["State"], ["Action"],
+            [t("dashboard.table.spool")], [t("dashboard.table.remainingEstimated")],
+            [t("dashboard.table.serial")], [t("dashboard.table.state")], [t("dashboard.table.action")],
         ];
 
         const ctx = { keyCount: countSpoolKeys(spools) };
@@ -609,19 +675,22 @@ document.addEventListener("DOMContentLoaded", () => {
         button.addEventListener("click", () => {
             // Spool assignment has its own flow: it needs a picker populated from
             // Spoolman rather than a fixed confirmation text.
-            if (button.textContent === SLOT_OPTIONS.ASSIGN)   return showAssignDialog(button, amsSpool);
-            if (button.textContent === SLOT_OPTIONS.UNASSIGN) return showUnassignDialog(button, amsSpool);
+            // Compared by the option on the button, never by its text: the
+            // text is translated, the option is what the server sent.
+            const option = button.dataset.option;
+            if (option === SLOT_OPTIONS.ASSIGN)   return showAssignDialog(button, amsSpool);
+            if (option === SLOT_OPTIONS.UNASSIGN) return showUnassignDialog(button, amsSpool);
 
             const content = generateDialogContent(button, amsSpool);
             const actionMap = {
-                [SLOT_OPTIONS.CREATE]: "Create",
-                [SLOT_OPTIONS.MERGE]: "Merge",
-                [SLOT_OPTIONS.CREATE_WITH_FILAMENT]: SLOT_OPTIONS.CREATE_WITH_FILAMENT,
-                [SLOT_OPTIONS.SHOW_INFO]: "Go to Spoolman"
+                [SLOT_OPTIONS.CREATE]: t("dashboard.dialog.create"),
+                [SLOT_OPTIONS.MERGE]: t("dashboard.dialog.merge"),
+                [SLOT_OPTIONS.CREATE_WITH_FILAMENT]: optionLabel(SLOT_OPTIONS.CREATE_WITH_FILAMENT),
+                [SLOT_OPTIONS.SHOW_INFO]: t("dashboard.dialog.goToSpoolman"),
             };
-            const actionText = actionMap[button.textContent] || SLOT_OPTIONS.NONE;
+            const actionText = actionMap[option] || optionLabel(SLOT_OPTIONS.NONE);
             const actionCallback = () => performAction(button, amsSpool);
-            showDialog(button, content, actionText, actionCallback);
+            showDialog(button, content, actionText, actionCallback, option === SLOT_OPTIONS.SHOW_INFO);
         });
 
         return button;
@@ -673,15 +742,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const fil   = sp.filament || {};
         const parts = [fil.vendor?.name, fil.material, fil.name].filter(Boolean);
         const swatch = swatchHtml(filamentColors(fil), fil.multi_color_direction);
-        return `${swatch}#${sp.id} ${escapeHtml(parts.join(" · ") || "Unknown filament")}`;
+        return `${swatch}#${sp.id} ${escapeHtml(parts.join(" · ") || t("dashboard.unknownFilament"))}`;
     }
 
     function spoolPickerWeight(sp) {
-        return sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)}g left` : "unknown weight";
+        return sp.remaining_weight != null
+            ? t("dashboard.assign.gramsLeft", { grams: Math.round(sp.remaining_weight) })
+            : t("dashboard.assign.unknownWeight");
     }
 
     async function showAssignDialog(button, amsSpool) {
-        showDialog(button, `<p>Loading data from Spoolman…</p>`, "Assign", () => {});
+        showDialog(button, `<p>${escapeHtml(t("dashboard.loadingSpoolman"))}</p>`, t("dashboard.assign.assign"), () => {});
         const dialogContent = document.getElementById("dialog-content");
         const actionButton  = document.getElementById("action-button");
         actionButton.disabled = true;
@@ -693,18 +764,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 fetchJson("./api/spoolman/lookups"),
             ]);
         } catch (err) {
-            dialogContent.innerHTML = `<p class="gc-bad">Could not load data from Spoolman: ${escapeHtml(err.message)}</p>`;
+            dialogContent.innerHTML = `<p class="gc-bad">${escapeHtml(t("dashboard.loadSpoolmanFailed", { error: err.message }))}</p>`;
             return;
         }
 
         const slot = amsSpool.slot || {};
         dialogContent.innerHTML = `
-            <p style="margin-top:0">Slot <strong>${escapeHtml(amsSpool.amsId)}</strong> holds a spool the printer cannot identify
-               (${escapeHtml([slot.tray_type, slot.tray_sub_brands].filter(Boolean).join(" · ") || "unknown filament")}).
-               Link it to a Spoolman spool so its consumption can be booked.</p>
+            <p style="margin-top:0">${escapeHtml(t("dashboard.assign.intro", {
+                slot: "{slot}",
+                filament: [slot.tray_type, slot.tray_sub_brands].filter(Boolean).join(" · ") || t("dashboard.assign.unknownFilament"),
+            })).replace("{slot}", `<strong>${escapeHtml(amsSpool.amsId)}</strong>`)}</p>
             <div class="sp-tabs">
-                <button type="button" class="sp-tab sp-tab-active" data-mode="assign">Use existing spool</button>
-                <button type="button" class="sp-tab" data-mode="create">Create new spool</button>
+                <button type="button" class="sp-tab sp-tab-active" data-mode="assign">${escapeHtml(t("dashboard.assign.useExisting"))}</button>
+                <button type="button" class="sp-tab" data-mode="create">${escapeHtml(t("dashboard.assign.createNew"))}</button>
             </div>
             <div id="sp-pane"></div>`;
 
@@ -712,11 +784,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const tabs = [...dialogContent.querySelectorAll(".sp-tab")];
 
         const selectMode = (mode) => {
-            for (const t of tabs) t.classList.toggle("sp-tab-active", t.dataset.mode === mode);
+            for (const tab of tabs) tab.classList.toggle("sp-tab-active", tab.dataset.mode === mode);
             if (mode === "assign") renderAssignPane(pane, actionButton, button, amsSpool, spools);
             else renderCreatePane(pane, actionButton, button, amsSpool, lookups);
         };
-        for (const t of tabs) t.addEventListener("click", () => selectMode(t.dataset.mode));
+        for (const tab of tabs) tab.addEventListener("click", () => selectMode(tab.dataset.mode));
 
         // Nothing to assign yet on a fresh Spoolman, so start on the form instead of
         // an empty picker.
@@ -729,11 +801,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const ASSIGN_SUGGESTIONS = 6;
 
     function renderAssignPane(pane, actionButton, button, amsSpool, spools) {
-        actionButton.textContent = "Assign";
+        actionButton.textContent = t("dashboard.assign.assign");
         actionButton.disabled = true;
 
         if (!spools.length) {
-            pane.innerHTML = `<p class="gc-muted">No spools in Spoolman yet. Use "Create new spool".</p>`;
+            pane.innerHTML = `<p class="gc-muted">${escapeHtml(t("dashboard.assign.noSpools", { create: t("dashboard.assign.createNew") }))}</p>`;
             return;
         }
 
@@ -771,9 +843,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     <span class="sp-pick-name">${spoolPickerLabel(entry.sp)}</span>
                     <span class="sp-pick-meta">
                         <span class="gc-muted">(${escapeHtml(spoolPickerWeight(entry.sp))})</span>${entry.rank === 0
-                        ? `<span class="gc-ok" title="Same material and the same colours as the slot reports">● same colour</span>`
+                        ? `<span class="gc-ok" title="${escapeHtml(t("dashboard.assign.sameColourTitle"))}">● ${escapeHtml(t("dashboard.assign.sameColour"))}</span>`
                         : ""}${mismatched.has(entry.sp.id)
-                        ? `<span class="gc-warn" title="The printer reports ${escapeHtml(reported)} in this slot">⚠ ${escapeHtml(entry.sp.filament?.material ?? "other material")}</span>`
+                        ? `<span class="gc-warn" title="${escapeHtml(t("dashboard.assign.reportsTitle", { material: reported }))}">⚠ ${escapeHtml(entry.sp.filament?.material ?? t("dashboard.assign.otherMaterial"))}</span>`
                         : ""}
                     </span>
                 </span>
@@ -793,7 +865,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         pane.innerHTML = `
             <label class="sp-search">
-                <input id="sp-search" type="search" autocomplete="off" placeholder="Search by name, material, vendor or location">
+                <input id="sp-search" type="search" autocomplete="off" placeholder="${escapeHtml(t("dashboard.assign.searchPlaceholder"))}">
             </label>
             <div class="sp-scroll" id="sp-list"></div>
             <p class="sp-note gc-warn" id="sp-material-warning"></p>`;
@@ -807,7 +879,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let selectedId = preselected?.id ?? null;
         if (preselected) {
             warning.className = "sp-note gc-muted";
-            warning.textContent = `Spool #${preselected.id} is preselected: it is the only spool in Spoolman of this material and colour without a tag.`;
+            warning.textContent = t("dashboard.assign.preselected", { id: preselected.id });
         }
 
         const render = () => {
@@ -815,7 +887,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const matches = term ? ranked.filter(entry => haystack(entry.sp).includes(term)) : ranked;
 
             if (!matches.length) {
-                list.innerHTML = `<p class="gc-muted sp-wide">No spool matches "${escapeHtml(search.value.trim())}".</p>`;
+                list.innerHTML = `<p class="gc-muted sp-wide">${escapeHtml(t("dashboard.assign.noMatch", { term: search.value.trim() }))}</p>`;
                 return;
             }
 
@@ -824,16 +896,16 @@ document.addEventListener("DOMContentLoaded", () => {
             // the closest first.
             if (term) {
                 list.innerHTML = `
-                    <div class="sp-section">${matches.length} of ${ranked.length} spools</div>
+                    <div class="sp-section">${escapeHtml(t("dashboard.assign.matchCount", { found: matches.length, count: ranked.length }))}</div>
                     ${matches.map(pick).join("")}`;
             } else {
                 const rest = ranked.filter(entry => !suggestedIds.has(entry.sp.id));
                 list.innerHTML = `
                     ${suggested.length ? `
-                        <div class="sp-section" title="Same material as the slot reports, closest colour first">Suggested for this slot</div>
+                        <div class="sp-section" title="${escapeHtml(t("dashboard.assign.suggestedTitle"))}">${escapeHtml(t("dashboard.assign.suggested"))}</div>
                         ${suggested.map(pick).join("")}` : ""}
                     ${rest.length ? `
-                        <div class="sp-section">${suggested.length ? "Other spools" : "All spools"} (${rest.length})</div>
+                        <div class="sp-section">${escapeHtml(t(suggested.length ? "dashboard.assign.otherSpools" : "dashboard.assign.allSpools"))} (${rest.length})</div>
                         ${rest.map(pick).join("")}` : ""}`;
             }
 
@@ -852,7 +924,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const spool = spools.find(sp => sp.id === selectedId);
             warning.className = "sp-note gc-warn";
             warning.textContent = spool && mismatched.has(spool.id)
-                ? `The printer reports ${reported} in this slot, spool #${spool.id} is ${spool.filament?.material ?? "of another material"}. It can still be assigned, and this slot's consumption is then booked onto that spool.`
+                ? t("dashboard.assign.mismatch", {
+                    reported,
+                    id: spool.id,
+                    material: spool.filament?.material ?? t("dashboard.assign.anotherMaterial"),
+                })
                 : "";
         });
 
@@ -959,7 +1035,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderCreatePane(pane, actionButton, button, amsSpool, lookups) {
-        actionButton.textContent = "Create";
+        actionButton.textContent = t("dashboard.dialog.create");
         actionButton.disabled = false;
 
         const slot = amsSpool.slot || {};
@@ -991,120 +1067,119 @@ document.addEventListener("DOMContentLoaded", () => {
 
         pane.innerHTML = `
             <div class="sp-scroll">
-                <div class="sp-section">Filament</div>
+                <div class="sp-section">${escapeHtml(t("dashboard.create.filament"))}</div>
                 <label class="sp-field sp-wide">
-                    <span>Use a filament you already have</span>
+                    <span>${escapeHtml(t("dashboard.create.useExistingFilament"))}</span>
                     <select id="sp-filament">
-                        <option value="">+ Create a new filament</option>
+                        <option value="">+ ${escapeHtml(t("dashboard.create.newFilament"))}</option>
                         ${filamentOptions}
                     </select>
                 </label>
 
                 <div id="sp-filament-fields">
                     <div class="sp-wide sp-catalogue">
-                        <div class="sp-catalogue-title">Fill the new filament in from the catalogue</div>
+                        <div class="sp-catalogue-title">${escapeHtml(t("dashboard.create.catalogueTitle"))}</div>
                         <div class="sp-catalogue-steps">
                             <label class="sp-field">
-                                <span>1. Manufacturer</span>
-                                <input id="sp-cat-vendor" list="sp-cat-vendors" autocomplete="off" placeholder="all manufacturers"
+                                <span>1. ${escapeHtml(t("dashboard.create.manufacturer"))}</span>
+                                <input id="sp-cat-vendor" list="sp-cat-vendors" autocomplete="off" placeholder="${escapeHtml(t("dashboard.create.allManufacturers"))}"
                                     value="${escapeHtml(vendorSpelling)}">
                                 <datalist id="sp-cat-vendors">${(lookups.externalVendors || []).map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
                             </label>
                             <label class="sp-field">
-                                <span>2. Material</span>
-                                <input id="sp-cat-material" list="sp-cat-materials" autocomplete="off" placeholder="all materials"
+                                <span>2. ${escapeHtml(t("dashboard.create.material"))}</span>
+                                <input id="sp-cat-material" list="sp-cat-materials" autocomplete="off" placeholder="${escapeHtml(t("dashboard.create.allMaterials"))}"
                                     value="${escapeHtml(defaults.material)}">
                                 <datalist id="sp-cat-materials"></datalist>
                             </label>
                             <label class="sp-field">
-                                <span>3. Filament</span>
-                                <input id="sp-cat-filament" list="sp-cat-filaments" autocomplete="off" placeholder="pick one to fill the form">
+                                <span>3. ${escapeHtml(t("dashboard.create.filament"))}</span>
+                                <input id="sp-cat-filament" list="sp-cat-filaments" autocomplete="off" placeholder="${escapeHtml(t("dashboard.create.pickToFill"))}">
                                 <datalist id="sp-cat-filaments"></datalist>
                             </label>
                         </div>
                         <small class="gc-muted" id="sp-catalogue-hint"></small>
                     </div>
 
-                    <div class="sp-subsection">Filament data</div>
+                    <div class="sp-subsection">${escapeHtml(t("dashboard.create.filamentData"))}</div>
                     <label class="sp-field">
-                        <span>Manufacturer</span>
-                        <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="e.g. Sunlu" value="${escapeHtml(vendorSpelling)}">
+                        <span>${escapeHtml(t("dashboard.create.manufacturer"))}</span>
+                        <input id="sp-vendor" list="sp-vendors" autocomplete="off" placeholder="${escapeHtml(t("dashboard.create.vendorPlaceholder"))}" value="${escapeHtml(vendorSpelling)}">
                         <datalist id="sp-vendors">${vendors.map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
                         <small class="gc-muted" id="sp-vendor-hint"></small>
                     </label>
                     <label class="sp-field">
-                        <span>Material *</span>
+                        <span>${escapeHtml(t("dashboard.create.material"))} *</span>
                         <input id="sp-material" list="sp-materials" autocomplete="off" value="${escapeHtml(defaults.material)}">
                         <datalist id="sp-materials">${materials.map(m => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
                         <small class="gc-muted" id="sp-material-hint"></small>
                     </label>
                     <label class="sp-field">
-                        <span>Name</span>
-                        <input id="sp-name" placeholder="e.g. Galaxy Black">
+                        <span>${escapeHtml(t("dashboard.create.name"))}</span>
+                        <input id="sp-name" placeholder="${escapeHtml(t("dashboard.create.namePlaceholder"))}">
                     </label>
 
-                    <div class="sp-subsection">Colour</div>
+                    <div class="sp-subsection">${escapeHtml(t("dashboard.create.colour"))}</div>
                     <div class="sp-wide">
                         <div id="sp-colours" class="sp-colours"></div>
                         <div class="sp-colour-actions">
-                            <button type="button" class="btn btn-small" id="sp-colour-add">Add a colour</button>
-                            <select id="sp-direction" title="How the colours run along the filament">
-                                <option value="coaxial">coaxial</option>
-                                <option value="longitudinal">longitudinal</option>
+                            <button type="button" class="btn btn-small" id="sp-colour-add">${escapeHtml(t("dashboard.create.addColour"))}</button>
+                            <select id="sp-direction" title="${escapeHtml(t("dashboard.create.directionTitle"))}">
+                                <option value="coaxial">${escapeHtml(t("dashboard.direction.coaxial"))}</option>
+                                <option value="longitudinal">${escapeHtml(t("dashboard.direction.longitudinal"))}</option>
                             </select>
                         </div>
                         <small class="gc-muted" id="sp-colour-hint"></small>
                     </div>
 
-                    <div class="sp-subsection">Specifications</div>
+                    <div class="sp-subsection">${escapeHtml(t("dashboard.create.specifications"))}</div>
                     <label class="sp-field">
-                        <span>Density * (g/cm³)</span>
+                        <span>${escapeHtml(t("dashboard.create.density"))} * (g/cm³)</span>
                         <input type="number" id="sp-density" step="0.01" min="0.01">
                     </label>
                     <label class="sp-field">
-                        <span>Diameter * (mm)</span>
+                        <span>${escapeHtml(t("dashboard.create.diameter"))} * (mm)</span>
                         <input type="number" id="sp-diameter" step="0.01" min="0.01" value="1.75">
                     </label>
                     <label class="sp-field">
-                        <span>Nozzle temp (°C)</span>
+                        <span>${escapeHtml(t("dashboard.create.nozzleTemp"))} (°C)</span>
                         <input type="number" id="sp-extruder-temp">
                     </label>
                     <label class="sp-field">
-                        <span>Bed temp (°C)</span>
+                        <span>${escapeHtml(t("dashboard.create.bedTemp"))} (°C)</span>
                         <input type="number" id="sp-bed-temp">
                     </label>
 
-                    <div class="sp-subsection">Weights</div>
+                    <div class="sp-subsection">${escapeHtml(t("dashboard.create.weights"))}</div>
                     <label class="sp-field">
-                        <span>Full weight (g)</span>
+                        <span>${escapeHtml(t("dashboard.create.fullWeight"))} (g)</span>
                         <input type="number" id="sp-weight" min="0" value="1000">
                     </label>
                     <label class="sp-field">
-                        <span>Empty spool (g)</span>
+                        <span>${escapeHtml(t("dashboard.create.emptySpool"))} (g)</span>
                         <input type="number" id="sp-spool-weight" min="0" value="250">
                     </label>
                 </div>
 
-                <div class="sp-section">Spool</div>
+                <div class="sp-section">${escapeHtml(t("dashboard.create.spool"))}</div>
                 <label class="sp-field">
-                    <span>Initial weight (g)</span>
+                    <span>${escapeHtml(t("dashboard.create.initialWeight"))} (g)</span>
                     <input type="number" id="sp-initial-weight" min="0" value="1000">
                 </label>
                 <label class="sp-field">
-                    <span>Remaining (g)</span>
-                    <input type="number" id="sp-remaining-weight" min="0" placeholder="leave empty if full">
+                    <span>${escapeHtml(t("dashboard.create.remaining"))} (g)</span>
+                    <input type="number" id="sp-remaining-weight" min="0" placeholder="${escapeHtml(t("dashboard.create.remainingPlaceholder"))}">
                 </label>
                 <label class="sp-field">
-                    <span>Location</span>
+                    <span>${escapeHtml(t("dashboard.create.location"))}</span>
                     <input id="sp-location" list="sp-locations" autocomplete="off" value="${escapeHtml(currentPrinterName ? `${currentPrinterName} - ${amsSpool.amsId}` : "")}">
                     <datalist id="sp-locations">${(lookups.locations || []).map(l => `<option value="${escapeHtml(l)}">`).join("")}</datalist>
                 </label>
                 <label class="sp-field sp-wide">
-                    <span>Comment</span>
-                    <input id="sp-comment" placeholder="optional">
+                    <span>${escapeHtml(t("dashboard.create.comment"))}</span>
+                    <input id="sp-comment" placeholder="${escapeHtml(t("dashboard.create.optional"))}">
                 </label>
-                <p class="gc-muted sp-note">The spool is linked to this slot right away. A chipless spool reports no weight,
-                   so full and remaining weight have to be entered by hand.</p>
+                <p class="gc-muted sp-note">${escapeHtml(t("dashboard.create.note"))}</p>
                 <p id="sp-error" class="gc-bad"></p>
             </div>`;
 
@@ -1146,7 +1221,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch {
                 // The form works without it, so a catalogue that cannot be reached
                 // costs the suggestions and nothing else.
-                $("sp-catalogue-hint").textContent = "The filament catalogue could not be loaded";
+                $("sp-catalogue-hint").textContent = t("dashboard.create.catalogueFailed");
                 return null;
             }
         };
@@ -1177,8 +1252,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             fillDatalist("sp-cat-filaments", [...catalogue.keys()]);
             $("sp-catalogue-hint").textContent = ordered.length
-                ? `${ordered.length}${ordered.length === 500 ? "+" : ""} entries, by name`
-                : "Nothing in the catalogue matches this manufacturer and material";
+                ? t("dashboard.create.catalogueEntries", { count: ordered.length, more: ordered.length === 500 ? "+" : "" })
+                : t("dashboard.create.catalogueNothing");
 
             suggestFromPreset();
         };
@@ -1210,8 +1285,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const slotColours = defaults.colors.join(", ");
             const catalogueColours = catalogueColors(best.entry).join(", ");
             $("sp-catalogue-hint").textContent = best.distance === 0
-                ? `Proposed from the slot's preset "${defaults.presetName}": ${best.entry.name}, the same colour. Pick another filament above if it is not this one`
-                : `Proposed from the slot's preset "${defaults.presetName}": ${best.entry.name}, the nearest colour in the catalogue (${catalogueColours} for the slot's ${slotColours}). Pick another filament above if it is not this one`;
+                ? t("dashboard.create.proposedSame", { preset: defaults.presetName, name: best.entry.name })
+                : t("dashboard.create.proposedNearest", {
+                    preset: defaults.presetName,
+                    name: best.entry.name,
+                    catalogueColours,
+                    slotColours,
+                });
         };
 
         // What the catalogue knows about the manufacturer of the picked entry.
@@ -1235,7 +1315,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (local) {
                 $("sp-filament").value = String(local.id);
                 $("sp-filament-fields").style.display = "none";
-                showNotification(`This filament already exists in Spoolman as #${local.id}, using it.`, "success");
+                showNotification(t("dashboard.create.filamentExists", { id: local.id }), "success");
                 return;
             }
 
@@ -1260,9 +1340,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (entry.multi_color_direction) $("sp-direction").value = entry.multi_color_direction;
             }
 
-            const notes = ["Filled in from the catalogue"];
+            const notes = [t("dashboard.create.filledIn")];
             if (sameVendorAndName.length) {
-                notes.push(`your Spoolman already holds #${sameVendorAndName[0].id} ${sameVendorAndName[0].material ?? ""} of this name`.trim());
+                notes.push(t("dashboard.create.alreadyHolds", {
+                    id: sameVendorAndName[0].id,
+                    material: sameVendorAndName[0].material ?? "",
+                }).replace(/\s+/g, " ").trim());
             }
             $("sp-catalogue-hint").textContent = notes.join(", ");
         };
@@ -1295,10 +1378,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const known = (lookups.externalMaterials || []).find(m => m.material.toLowerCase() === value);
             const hint = $("sp-material-hint");
             if (!known) {
-                hint.textContent = value ? "Not a known material, enter density yourself" : "";
+                hint.textContent = value ? t("dashboard.create.unknownMaterial") : "";
                 return;
             }
-            hint.textContent = `Defaults from ${known.material}`;
+            hint.textContent = t("dashboard.create.materialDefaults", { material: known.material });
             if (!$("sp-density").value) $("sp-density").value = known.density ?? "";
             if (!$("sp-extruder-temp").value && known.extruder_temp != null) $("sp-extruder-temp").value = known.extruder_temp;
             if (!$("sp-bed-temp").value && known.bed_temp != null) $("sp-bed-temp").value = known.bed_temp;
@@ -1311,7 +1394,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const noteNewVendor = () => {
             const value = $("sp-vendor").value.trim();
             $("sp-vendor-hint").textContent = value && !vendorNames.has(value.toLowerCase())
-                ? "New manufacturer, will be created"
+                ? t("dashboard.create.newManufacturer")
                 : "";
         };
         $("sp-vendor").addEventListener("input", noteNewVendor);
@@ -1327,7 +1410,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="sp-colour">
                 <input type="color" class="sp-colour-pick" value="#${hex}">
                 <input class="sp-colour-hex" value="${hex}" maxlength="6" autocomplete="off">
-                <button type="button" class="sp-colour-remove" title="Remove this colour">✕</button>
+                <button type="button" class="sp-colour-remove" title="${escapeHtml(t("dashboard.create.removeColour"))}">✕</button>
             </span>`;
 
         const currentColours = () => [...pane.querySelectorAll(".sp-colour-hex")]
@@ -1341,7 +1424,7 @@ document.addEventListener("DOMContentLoaded", () => {
             $("sp-direction").style.display = colours.length > 1 ? "" : "none";
             $("sp-colours").classList.toggle("sp-colours-single", colours.length < 2);
             $("sp-colour-hint").textContent = colours.length > 1
-                ? `${colours.length} colours, stored as a multi colour filament`
+                ? t("dashboard.create.multiColour", { count: colours.length })
                 : "";
         };
 
@@ -1419,14 +1502,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 payload.filament.vendorSpoolWeight = catalogueVendor.spoolWeight;
             }
 
-            if (!payload.filament.material.trim()) { error.textContent = "Material is required."; return; }
-            if (!(Number(payload.filament.density) > 0))  { error.textContent = "Density is required and must be greater than 0."; return; }
-            if (!(Number(payload.filament.diameter) > 0)) { error.textContent = "Diameter is required and must be greater than 0."; return; }
+            if (!payload.filament.material.trim()) { error.textContent = t("dashboard.create.materialRequired"); return; }
+            if (!(Number(payload.filament.density) > 0))  { error.textContent = t("dashboard.create.densityRequired"); return; }
+            if (!(Number(payload.filament.diameter) > 0)) { error.textContent = t("dashboard.create.diameterRequired"); return; }
         }
 
         const original = actionButton.textContent;
         actionButton.disabled = true;
-        actionButton.textContent = "Creating...";
+        actionButton.textContent = t("dashboard.create.creating");
 
         try {
             const res = await fetch(`./api/thirdparty/spool/${encodeURIComponent(currentPrinterId)}/${encodeURIComponent(amsSpool.amsId)}`, {
@@ -1437,18 +1520,18 @@ document.addEventListener("DOMContentLoaded", () => {
             const body = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                error.textContent = body.error || `Request failed (HTTP ${res.status})`;
+                error.textContent = body.error || t("dashboard.requestFailedStatus", { status: res.status });
                 actionButton.disabled = false;
                 actionButton.textContent = original;
                 return;
             }
 
             document.getElementById("info-dialog").close();
-            showNotification(`Spool #${body.spoolId} created and assigned to ${amsSpool.amsId}.`, "success");
+            showNotification(t("dashboard.create.created", { id: body.spoolId, slot: amsSpool.amsId }), "success");
             await loadPrinterData(currentPrinterId);
         } catch (err) {
             console.error("Spool creation failed:", err);
-            error.textContent = "Request failed. Please check your connection.";
+            error.textContent = t("dashboard.requestFailedConnection");
             actionButton.disabled = false;
             actionButton.textContent = original;
         }
@@ -1456,19 +1539,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function showUnassignDialog(button, amsSpool) {
         const sp = amsSpool.existingSpool;
+        // The placeholders are filled after escaping, because they carry markup
+        const question = escapeHtml(t(sp ? "dashboard.unassign.questionSpool" : "dashboard.unassign.question", {
+            slot: "{slot}",
+            spool: "{spool}",
+        }))
+            .replace("{slot}", `<strong>${escapeHtml(amsSpool.amsId)}</strong>`)
+            .replace("{spool}", sp ? `<strong>#${sp.id}</strong>` : "");
         const content = `
-            <p>Remove the assignment of slot <strong>${amsSpool.amsId}</strong>
-               ${sp ? `from Spoolman spool <strong>#${sp.id}</strong>` : ""}?</p>
-            <p class="gc-muted" style="font-size:0.85em">Consumption for this slot will no longer be booked until it is assigned again.
-               Already booked weight is not reverted.</p>`;
-        showDialog(button, content, "Unassign", () => sendMapping(button, amsSpool, null));
+            <p>${question}</p>
+            <p class="gc-muted" style="font-size:0.85em">${escapeHtml(t("dashboard.unassign.note"))}</p>`;
+        showDialog(button, content, t("dashboard.unassign.unassign"), () => sendMapping(button, amsSpool, null));
     }
 
     // null spoolId removes the assignment.
     async function sendMapping(button, amsSpool, spoolId) {
         const originalText = button.textContent;
         button.disabled = true;
-        button.textContent = "Sending...";
+        button.textContent = t("dashboard.sending");
 
         const url = `./api/mappings/${encodeURIComponent(currentPrinterId)}/${encodeURIComponent(amsSpool.amsId)}`;
 
@@ -1483,19 +1571,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                showNotification(`Error: ${err.error || "Assignment failed"}`, "error");
+                showNotification(t("dashboard.error", { error: err.error || t("dashboard.assign.failed") }), "error");
                 button.textContent = originalText;
                 button.disabled = false;
                 return;
             }
 
-            showNotification(spoolId == null ? "Assignment removed." : `Slot assigned to spool #${spoolId}.`, "success");
+            showNotification(spoolId == null
+                ? t("dashboard.assign.removed")
+                : t("dashboard.assign.assigned", { id: spoolId }), "success");
             // The backend also pushes a slot_update over SSE, but re-render right
             // away so the row never sits on "Sending..." if that event is missed.
             await loadPrinterData(currentPrinterId);
         } catch (err) {
             console.error("Assignment failed:", err);
-            showNotification("Request failed. Please check your connection.", "error");
+            showNotification(t("dashboard.requestFailedConnection"), "error");
             button.textContent = originalText;
             button.disabled = false;
         }
@@ -1516,7 +1606,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (amsSpool.slotState === "Empty") {
             // An empty slot the AMS is busy with is a spool going in or out, which
             // reports nothing the backend could tell from a truly empty slot.
-            return amsSpool.option === SLOT_OPTIONS.WAITING ? "Reading spool" : "Empty slot";
+            return amsSpool.option === SLOT_OPTIONS.WAITING ? t("dashboard.spool.reading") : t("dashboard.spool.emptySlot");
         }
 
         // A spool without a tag reports no name of its own, only the preset
@@ -1532,7 +1622,7 @@ document.addEventListener("DOMContentLoaded", () => {
             fil?.material     ?? slot.tray_type,
             fil?.name         ?? amsSpool.matchingExternalFilament?.name ?? slot.tray_sub_brands,
         ].filter(Boolean);
-        return parts.length ? parts.join(" · ") : "Unknown filament";
+        return parts.length ? parts.join(" · ") : t("dashboard.unknownFilament");
     }
 
     /**
@@ -1542,10 +1632,12 @@ document.addEventListener("DOMContentLoaded", () => {
      */
     function presetReadableName(slot) {
         const preset = slotPreset(slot);
-        if (preset?.name) return `${preset.name} preset`;
+        if (preset?.name) return t("dashboard.preset.named", { name: preset.name });
         const material = slot.tray_type || null;
-        if (preset?.kind === "custom") return material ? `${material} · custom preset` : "Custom preset";
-        return material ?? "Unknown filament";
+        if (preset?.kind === "custom") {
+            return material ? t("dashboard.preset.customWithMaterial", { material }) : t("dashboard.preset.custom");
+        }
+        return material ?? t("dashboard.unknownFilament");
     }
 
     // The em dash is this UI's "no value", so an absent field reads the same here
@@ -1567,13 +1659,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const withNote = (label, note) => `<span>${label}<br><span class="gc-muted">${note}</span></span>`;
         if (preset.kind === "custom") {
             if (preset.name) {
-                return withNote(`${escapeHtml(preset.name)} ${id}`, "A vendor or user preset from the slicer. Its name was learned from the sliced file of a print with it.");
+                return withNote(`${escapeHtml(preset.name)} ${id}`, escapeHtml(t("dashboard.preset.learnedNote")));
             }
-            return withNote(`Custom preset ${id}`, "A vendor or user preset from the slicer. Its name is not in what the printer reports; it is learned from the sliced file the first time a plate is printed with it.");
+            return withNote(`${escapeHtml(t("dashboard.preset.custom"))} ${id}`, escapeHtml(t("dashboard.preset.unlearnedNote")));
         }
         const label = preset.name ? `${escapeHtml(preset.name)} ${id}` : escapeHtml(preset.id);
         if (!chipless) return label;
-        return withNote(label, "Chosen for the slot on the printer or in the slicer, not read from the spool.");
+        return withNote(label, escapeHtml(t("dashboard.preset.chosenNote")));
     }
 
     // Nominal weights are whole grams; what a print books off a spool is not,
@@ -1668,13 +1760,15 @@ document.addEventListener("DOMContentLoaded", () => {
             .map(([label, value, field]) => `
                 <div class="sd-row"${field ? ` data-field="${field}"` : ""}>
                     <span class="sd-label">${escapeHtml(label)}</span>
-                    <span class="sd-value">${field ? editButtonHtml(field, label) : ""}${value}</span>
+                    <span class="sd-value">${field ? editButtonHtml(field) : ""}${value}</span>
                 </div>`)
             .join("")}</div>`;
     }
 
-    function editButtonHtml(field, label) {
-        const what = `Change ${label.toLowerCase()}`;
+    function editButtonHtml(field) {
+        // One key per field rather than "Change {field}": the English label
+        // was lowercased into the sentence, which a German noun must not be.
+        const what = t(`dashboard.detail.edit.${field}`);
         return `<button type="button" class="sd-edit" data-field="${field}" title="${escapeHtml(what)}" aria-label="${escapeHtml(what)}">✎</button>`;
     }
 
@@ -1697,13 +1791,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (legacyMode) {
             return {
                 everything: true,
-                reason: "Legacy mode writes the remaining weight from the AMS RFID reading, so a value entered here would be overwritten on the next update. Edit this spool in Spoolman instead.",
+                reason: t("dashboard.detail.blockedLegacy"),
             };
         }
         if (ACTIVE_PRINT_STATES.includes(printerGcodeState)) {
             return {
                 everything: false,
-                reason: `The printer is printing (${printerGcodeState}). The consumption of the running job is booked onto this spool when the job ends, which would overwrite a weight entered now. The other fields can still be changed.`,
+                reason: t("dashboard.detail.blockedPrinting", { state: printerGcodeState }),
             };
         }
         return null;
@@ -1715,7 +1809,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const close   = document.getElementById("spool-detail-close");
 
         updateElementText("spool-detail-title", `${amsSpool.amsId} · ${spoolReadableName(amsSpool)}`);
-        content.innerHTML = `<p>Loading data from Spoolman…</p>`;
+        content.innerHTML = `<p>${escapeHtml(t("dashboard.loadingSpoolman"))}</p>`;
         close.onclick = () => dialog.close();
         dialog.showModal();
         close.focus();
@@ -1725,7 +1819,7 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
                 spool = await fetchJson(`./api/spoolman/spool/${amsSpool.existingSpool.id}`);
             } catch (err) {
-                content.innerHTML = `<p class="gc-bad">Could not load the spool from Spoolman: ${escapeHtml(err.message)}</p>`;
+                content.innerHTML = `<p class="gc-bad">${escapeHtml(t("dashboard.detail.loadFailed", { error: err.message }))}</p>`;
                 return;
             }
         }
@@ -1740,8 +1834,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         content.innerHTML = `
             <div class="sp-tabs">
-                <button type="button" class="sp-tab sp-tab-active" data-tab="spool">Spool</button>
-                <button type="button" class="sp-tab" data-tab="filament">Filament</button>
+                <button type="button" class="sp-tab sp-tab-active" data-tab="spool">${escapeHtml(t("dashboard.detail.spool"))}</button>
+                <button type="button" class="sp-tab" data-tab="filament">${escapeHtml(t("dashboard.detail.filament"))}</button>
             </div>
             <div id="sd-pane"></div>`;
 
@@ -1749,11 +1843,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const tabs = [...content.querySelectorAll(".sp-tab")];
 
         const selectTab = (tab) => {
-            for (const t of tabs) t.classList.toggle("sp-tab-active", t.dataset.tab === tab);
+            for (const other of tabs) other.classList.toggle("sp-tab-active", other.dataset.tab === tab);
             if (tab === "spool") renderSpoolPane(pane, amsSpool, spool);
             else renderFilamentPane(pane, amsSpool, spool);
         };
-        for (const t of tabs) t.addEventListener("click", () => selectTab(t.dataset.tab));
+        for (const other of tabs) other.addEventListener("click", () => selectTab(other.dataset.tab));
 
         selectTab("spool");
     }
@@ -1768,10 +1862,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const swatch = isEmpty ? "" : bigSwatchHtml(colors, direction);
 
         const linkState = amsSpool.connectedViaMapping
-            ? `<span class="gc-ok">${amsSpool.assignedAutomatically ? "assigned automatically" : "assigned by hand"}</span>`
+            ? `<span class="gc-ok">${escapeHtml(t(amsSpool.assignedAutomatically ? "dashboard.detail.assignedAutomatically" : "dashboard.detail.assignedByHand"))}</span>`
             : amsSpool.connectedViaTag
-                ? `<span class="gc-ok">linked by RFID tag</span>`
-                : `<span class="gc-warn">not linked</span>`;
+                ? `<span class="gc-ok">${escapeHtml(t("dashboard.detail.linkedByTag"))}</span>`
+                : `<span class="gc-warn">${escapeHtml(t("dashboard.notLinked"))}</span>`;
 
         const profile = bambuProfile(slot.tray_info_idx);
         const preset = slotPreset(slot);
@@ -1780,38 +1874,38 @@ document.addEventListener("DOMContentLoaded", () => {
         // The two sides disagreeing about the material is what a spool assigned to
         // the wrong slot looks like, so it is marked where both are shown.
         const materialsDiffer = spool && !materialsAgree(slotMaterial(slot), spool.filament?.material)
-            ? ` <span class="gc-warn" title="Spoolman holds ${escapeHtml(spool.filament?.material ?? "another material")} for the spool linked to this slot">⚠</span>`
+            ? ` <span class="gc-warn" title="${escapeHtml(t("dashboard.detail.materialDiffers", { material: spool.filament?.material ?? t("dashboard.detail.anotherMaterial") }))}">⚠</span>`
             : "";
 
         const slotRows = detailRows([
-            ["Slot", detailText(amsSpool.amsId)],
-            ["State", detailText(amsSpool.slotState)],
+            [t("dashboard.detail.slot"), detailText(amsSpool.amsId)],
+            [t("dashboard.detail.state"), detailText(slotStateLabel(amsSpool.slotState))],
             // The id alone says nothing to read, so the filament Bambu Studio would
             // print it as leads and the id follows it. An id no profile is known
             // for stands on its own. On a spool without a tag the row is the
             // preset chosen for the slot, and says so, because the printer then
             // reports a Bambu id for a spool that is not one.
-            [chipless ? "Slot preset" : "Tray profile", presetDetail(preset, chipless)],
-            ["Material (printer)", `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
-            ["Colour (printer)", detailColors(slotColors(slot), direction)],
-            ["Serialnumber", detailText(slot.tray_uuid)],
+            [t(chipless ? "dashboard.detail.slotPreset" : "dashboard.detail.trayProfile"), presetDetail(preset, chipless)],
+            [t("dashboard.detail.materialPrinter"), `${detailText(profile?.material ?? slot.tray_type)}${materialsDiffer}`],
+            [t("dashboard.detail.colourPrinter"), detailColors(slotColors(slot), direction)],
+            [t("dashboard.table.serial"), detailText(slot.tray_uuid)],
             // An empty slot and a spool without a tag both report 0 rather than
             // nothing, and neither of them weighs nothing.
-            ["Tray weight", Number(slot.tray_weight) ? detailGrams(slot.tray_weight) : "—"],
+            [t("dashboard.detail.trayWeight"), Number(slot.tray_weight) ? detailGrams(slot.tray_weight) : "—"],
             // Without a tag there is nothing to read a percentage from, and the
             // printer reports 0 rather than nothing for such a slot.
-            ["RFID remain", slot.tray_uuid == null || slot.remain == null ? "—" : `${slot.remain}%`],
-            ["Spoolman link", linkState],
+            [t("dashboard.detail.rfidRemain"), slot.tray_uuid == null || slot.remain == null ? "—" : `${slot.remain}%`],
+            [t("dashboard.detail.spoolmanLink"), linkState],
         ]);
 
         if (!spool) {
             pane.innerHTML = `
                 <div class="sd-head">${swatch}<div>
                     <div class="sd-name">${escapeHtml(spoolReadableName(amsSpool))}</div>
-                    <div class="gc-muted sd-sub">No Spoolman spool is linked to this slot, so this is what the printer reports about it.</div>
+                    <div class="gc-muted sd-sub">${escapeHtml(t("dashboard.detail.noSpoolLinked"))}</div>
                 </div></div>
                 <div class="sd-scroll">
-                    <div class="sd-section">Printer</div>
+                    <div class="sd-section">${escapeHtml(t("dashboard.detail.printer"))}</div>
                     ${slotRows}
                 </div>`;
             return;
@@ -1826,31 +1920,31 @@ document.addEventListener("DOMContentLoaded", () => {
         pane.innerHTML = `
             <div class="sd-head">${swatch}<div>
                 <div class="sd-name">${escapeHtml(spoolReadableName(amsSpool))}</div>
-                <div class="gc-muted sd-sub">Spoolman spool #${spool.id}</div>
-                ${spoolmanLinkHtml(`/spool/show/${spool.id}`, "Open this spool in Spoolman")}
+                <div class="gc-muted sd-sub">${escapeHtml(t("dashboard.detail.spoolmanSpool", { id: spool.id }))}</div>
+                ${spoolmanLinkHtml(`/spool/show/${spool.id}`, t("dashboard.detail.openSpool"))}
             </div></div>
             <div class="sd-scroll">
-                <div class="sd-section">Spool</div>
+                <div class="sd-section">${escapeHtml(t("dashboard.detail.spool"))}</div>
                 ${blocked ? `<p class="sd-note gc-warn">${escapeHtml(blocked.reason)}</p>` : ""}
                 ${detailRows([
-                    ["Remaining", `${detailGrams(spool.remaining_weight, 2)}${spool.remaining_percentage == null ? "" : ` (${Math.round(spool.remaining_percentage)}%)`}`, weightField],
-                    ["Used", detailGrams(spool.used_weight, 2)],
-                    ["Initial weight", detailGrams(spool.initial_weight)],
-                    ["Empty spool", detailGrams(spool.spool_weight)],
-                    ["Material (Spoolman)", detailText(spool.filament?.material)],
-                    ["Colour (Spoolman)", detailColors(filamentColors(spool.filament || {}), spool.filament?.multi_color_direction)],
-                    ["Location", detailText(spool.location)],
-                    ["Price", spool.price == null ? "—" : detailText(spool.price)],
-                    ["Registered", detailDate(spool.registered)],
-                    ["First used", detailDate(spool.first_used)],
-                    ["Last used", detailDate(spool.last_used)],
-                    ["Archived", spool.archived ? "yes" : "no", textField("archived")],
-                    ["Lot number", detailText(spool.lot_nr), textField("lotNr")],
-                    ["Comment", detailText(spool.comment), textField("comment")],
-                    ["Tag", detailExtra(spool.extra?.tag)],
+                    [t("dashboard.detail.remaining"), `${detailGrams(spool.remaining_weight, 2)}${spool.remaining_percentage == null ? "" : ` (${Math.round(spool.remaining_percentage)}%)`}`, weightField],
+                    [t("dashboard.detail.used"), detailGrams(spool.used_weight, 2)],
+                    [t("dashboard.detail.initialWeight"), detailGrams(spool.initial_weight)],
+                    [t("dashboard.detail.emptySpool"), detailGrams(spool.spool_weight)],
+                    [t("dashboard.detail.materialSpoolman"), detailText(spool.filament?.material)],
+                    [t("dashboard.detail.colourSpoolman"), detailColors(filamentColors(spool.filament || {}), spool.filament?.multi_color_direction)],
+                    [t("dashboard.detail.location"), detailText(spool.location)],
+                    [t("dashboard.detail.price"), spool.price == null ? "—" : detailText(spool.price)],
+                    [t("dashboard.detail.registered"), detailDate(spool.registered)],
+                    [t("dashboard.detail.firstUsed"), detailDate(spool.first_used)],
+                    [t("dashboard.detail.lastUsed"), detailDate(spool.last_used)],
+                    [t("dashboard.detail.archived"), escapeHtml(t(spool.archived ? "dashboard.detail.yes" : "dashboard.detail.no")), textField("archived")],
+                    [t("dashboard.detail.lotNumber"), detailText(spool.lot_nr), textField("lotNr")],
+                    [t("dashboard.detail.comment"), detailText(spool.comment), textField("comment")],
+                    [t("dashboard.detail.tag"), detailExtra(spool.extra?.tag)],
                 ])}
 
-                <div class="sd-section">Printer</div>
+                <div class="sd-section">${escapeHtml(t("dashboard.detail.printer"))}</div>
                 ${slotRows}
             </div>`;
 
@@ -1870,11 +1964,11 @@ document.addEventListener("DOMContentLoaded", () => {
             value: spool => (spool.remaining_weight == null ? "" : String(Math.round(spool.remaining_weight))),
             check: (raw, spool) => {
                 const weight = Number(raw);
-                if (raw === "" || !Number.isFinite(weight)) return { error: "Enter the grams left on the spool." };
-                if (weight < 0) return { error: "A spool cannot hold less than nothing." };
+                if (raw === "" || !Number.isFinite(weight)) return { error: t("dashboard.detail.enterGrams") };
+                if (weight < 0) return { error: t("dashboard.detail.negativeWeight") };
 
                 const limit = spoolWeightLimit(spool);
-                if (limit != null && weight > limit) return { error: `This spool holds at most ${Math.round(limit)} g.` };
+                if (limit != null && weight > limit) return { error: t("dashboard.detail.weightLimit", { limit: Math.round(limit) }) };
 
                 return { value: Math.round(weight) };
             },
@@ -1894,7 +1988,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // was archived too early.
         archived: {
             type: "select",
-            options: [["false", "no"], ["true", "yes"]],
+            options: [["false", "dashboard.detail.no"], ["true", "dashboard.detail.yes"]],
             value: spool => (spool.archived ? "true" : "false"),
             check: raw => ({ value: raw === "true" }),
         },
@@ -1915,7 +2009,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // have to know which of the two they are driving.
         const control = spec.type === "select"
             ? `<select class="sd-input">${spec.options
-                .map(([option, label]) => `<option value="${option}"${spec.value(spool) === option ? " selected" : ""}>${label}</option>`)
+                .map(([option, label]) => `<option value="${option}"${spec.value(spool) === option ? " selected" : ""}>${escapeHtml(t(label))}</option>`)
                 .join("")}</select>`
             : `<input class="sd-input" type="${spec.type}" ${spec.type === "number" ? 'min="0" step="1"' : 'autocomplete="off"'}
                     value="${escapeHtml(spec.value(spool))}">`;
@@ -1924,8 +2018,8 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="sd-editing">
                 ${control}
                 ${spec.unit ? `<span class="gc-muted">${spec.unit}</span>` : ""}
-                <button type="button" class="sd-confirm" title="Save">✓</button>
-                <button type="button" class="sd-cancel" title="Cancel">✕</button>
+                <button type="button" class="sd-confirm" title="${escapeHtml(t("dashboard.detail.save"))}">✓</button>
+                <button type="button" class="sd-cancel" title="${escapeHtml(t("dashboard.detail.cancel"))}">✕</button>
             </span>
             <span class="sd-inline-error gc-bad"></span>`;
 
@@ -1974,7 +2068,7 @@ document.addEventListener("DOMContentLoaded", () => {
             body: JSON.stringify({ [field]: value }),
         });
 
-        showNotification(`Spool #${spool.id} updated.`, "success");
+        showNotification(t("dashboard.detail.updated", { id: spool.id }), "success");
         renderSpoolDetail(amsSpool, updated);
 
         // The table shows the remaining weight of this spool, so it has to be
@@ -1992,45 +2086,45 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? `
                     <div class="sd-head">${bigSwatchHtml(slotColors(amsSpool.slot || {}), external.multi_color_direction)}<div>
                         <div class="sd-name">${escapeHtml([external.manufacturer, external.material, external.name].filter(Boolean).join(" · "))}</div>
-                        <div class="gc-muted sd-sub">From the SpoolmanDB catalogue. No filament of this kind exists in your Spoolman yet.</div>
+                        <div class="gc-muted sd-sub">${escapeHtml(t("dashboard.detail.fromCatalogue"))}</div>
                     </div></div>
                     <div class="sd-scroll">
-                        <div class="sd-section">Catalogue entry</div>
+                        <div class="sd-section">${escapeHtml(t("dashboard.detail.catalogueEntry"))}</div>
                         ${detailRows([
-                            ["Manufacturer", detailText(external.manufacturer)],
-                            ["Material", detailText(external.material)],
-                            ["Name", detailText(external.name)],
-                            ["Density", external.density == null ? "—" : `${external.density} g/cm³`],
-                            ["Diameter", external.diameter == null ? "—" : `${external.diameter} mm`],
-                            ["External id", detailText(external.id)],
+                            [t("dashboard.detail.manufacturer"), detailText(external.manufacturer)],
+                            [t("dashboard.detail.material"), detailText(external.material)],
+                            [t("dashboard.detail.name"), detailText(external.name)],
+                            [t("dashboard.detail.density"), external.density == null ? "—" : `${external.density} g/cm³`],
+                            [t("dashboard.detail.diameter"), external.diameter == null ? "—" : `${external.diameter} mm`],
+                            [t("dashboard.detail.externalId"), detailText(external.id)],
                         ])}
                     </div>`
-                : `<p class="gc-muted">No filament is known for this slot. Link a Spoolman spool to it to see one here.</p>`;
+                : `<p class="gc-muted">${escapeHtml(t("dashboard.detail.noFilament"))}</p>`;
             return;
         }
 
         pane.innerHTML = `
             <div class="sd-head">${bigSwatchHtml(filamentColors(fil), fil.multi_color_direction)}<div>
-                <div class="sd-name">${escapeHtml([fil.vendor?.name, fil.material, fil.name].filter(Boolean).join(" · ") || "Unknown filament")}</div>
-                <div class="gc-muted sd-sub">Spoolman filament #${fil.id}. Shared by every spool of this kind, so it is edited in Spoolman itself.</div>
-                ${spoolmanLinkHtml(`/filament/show/${fil.id}`, "Open this filament in Spoolman")}
+                <div class="sd-name">${escapeHtml([fil.vendor?.name, fil.material, fil.name].filter(Boolean).join(" · ") || t("dashboard.unknownFilament"))}</div>
+                <div class="gc-muted sd-sub">${escapeHtml(t("dashboard.detail.spoolmanFilament", { id: fil.id }))}</div>
+                ${spoolmanLinkHtml(`/filament/show/${fil.id}`, t("dashboard.detail.openFilament"))}
             </div></div>
             <div class="sd-scroll">
-                <div class="sd-section">Filament</div>
+                <div class="sd-section">${escapeHtml(t("dashboard.detail.filament"))}</div>
                 ${detailRows([
-                    ["Manufacturer", detailText(fil.vendor?.name)],
-                    ["Material", detailText(fil.material)],
-                    ["Name", detailText(fil.name)],
-                    ["Colour", detailText((filamentColors(fil).map(c => `#${normColor(c)}`).join(" ")) || null)],
-                    ["Multi colour", detailText(fil.multi_color_direction)],
-                    ["Density", fil.density == null ? "—" : `${fil.density} g/cm³`],
-                    ["Diameter", fil.diameter == null ? "—" : `${fil.diameter} mm`],
-                    ["Full weight", detailGrams(fil.weight)],
-                    ["Empty spool", detailGrams(fil.spool_weight)],
-                    ["Nozzle temp", fil.settings_extruder_temp == null ? "—" : `${fil.settings_extruder_temp} °C`],
-                    ["Bed temp", fil.settings_bed_temp == null ? "—" : `${fil.settings_bed_temp} °C`],
-                    ["External id", detailText(fil.external_id)],
-                    ["Comment", detailText(fil.comment)],
+                    [t("dashboard.detail.manufacturer"), detailText(fil.vendor?.name)],
+                    [t("dashboard.detail.material"), detailText(fil.material)],
+                    [t("dashboard.detail.name"), detailText(fil.name)],
+                    [t("dashboard.detail.colour"), detailText((filamentColors(fil).map(c => `#${normColor(c)}`).join(" ")) || null)],
+                    [t("dashboard.detail.multiColour"), detailText(fil.multi_color_direction ? directionLabel(fil.multi_color_direction) : null)],
+                    [t("dashboard.detail.density"), fil.density == null ? "—" : `${fil.density} g/cm³`],
+                    [t("dashboard.detail.diameter"), fil.diameter == null ? "—" : `${fil.diameter} mm`],
+                    [t("dashboard.detail.fullWeight"), detailGrams(fil.weight)],
+                    [t("dashboard.detail.emptySpool"), detailGrams(fil.spool_weight)],
+                    [t("dashboard.detail.nozzleTemp"), fil.settings_extruder_temp == null ? "—" : `${fil.settings_extruder_temp} °C`],
+                    [t("dashboard.detail.bedTemp"), fil.settings_bed_temp == null ? "—" : `${fil.settings_bed_temp} °C`],
+                    [t("dashboard.detail.externalId"), detailText(fil.external_id)],
+                    [t("dashboard.detail.comment"), detailText(fil.comment)],
                 ])}
             </div>`;
     }
@@ -2057,43 +2151,43 @@ document.addEventListener("DOMContentLoaded", () => {
         // printer simply has not read yet. Both views show it, the classic table
         // only had the ⚠ in its State column, which names no reason.
         const thirdParty = amsSpool.slotState === "Loaded (3rd party)"
-            ? ` · <span class="gc-warn" title="${THIRD_PARTY_HINT}">3rd party</span>`
+            ? ` · <span class="gc-warn" title="${escapeHtml(THIRD_PARTY_HINT)}">${escapeHtml(t("dashboard.spool.thirdParty"))}</span>`
             : "";
 
         // The spool is still in the slot, so the row is not an empty one, but
         // nothing is offered for it until it is taken out or restored.
         const archived = amsSpool.archived
-            ? ` · <span class="gc-muted" title="${ARCHIVED_HINT}">archived</span>`
+            ? ` · <span class="gc-muted" title="${escapeHtml(ARCHIVED_HINT)}">${escapeHtml(t("dashboard.spool.archived"))}</span>`
             : "";
 
         const spoolman = amsSpool.existingSpool?.id
             ? `<a class="gc-link" href="${spoolmanBase()}/spool/show/${amsSpool.existingSpool.id}" target="_blank">Spoolman #${amsSpool.existingSpool.id}</a>`
-            : `<span class="gc-muted">not linked</span>`;
+            : `<span class="gc-muted">${escapeHtml(t("dashboard.notLinked"))}</span>`;
 
         // Tag/booking status is G-code-consumption semantics, so only shown there.
         let booking = "";
         if (!isEmpty && ctx?.showBooking) {
             if (amsSpool.connectedViaMapping && amsSpool.assignedAutomatically) {
-                booking = ` · <span class="gc-ok" title="Assigned automatically: the only spool in Spoolman of this material and colour without a tag. Consumption is booked onto it. Unassign and pick another if it is the wrong one">● auto-assigned</span>`;
+                booking = ` · <span class="gc-ok" title="${escapeHtml(t("dashboard.booking.autoAssignedTitle"))}">● ${escapeHtml(t("dashboard.booking.autoAssigned"))}</span>`;
             } else if (amsSpool.connectedViaMapping) {
-                booking = ` · <span class="gc-ok" title="Manually assigned to a Spoolman spool, consumption is booked onto it">● assigned</span>`;
+                booking = ` · <span class="gc-ok" title="${escapeHtml(t("dashboard.booking.assignedTitle"))}">● ${escapeHtml(t("dashboard.booking.assigned"))}</span>`;
             } else if (amsSpool.connectedViaTag) {
-                booking = ` · <span class="gc-ok" title="Physically connected via Spoolman extra.tag, consumption is booked automatically">● tag-linked</span>`;
+                booking = ` · <span class="gc-ok" title="${escapeHtml(t("dashboard.booking.tagLinkedTitle"))}">● ${escapeHtml(t("dashboard.booking.tagLinked"))}</span>`;
             } else {
-                booking = ` · <span class="gc-warn" title="No extra.tag link, consumption cannot be booked automatically; assign a Spoolman spool to track it">● not tracked</span>`;
+                booking = ` · <span class="gc-warn" title="${escapeHtml(t("dashboard.booking.notTrackedTitle"))}">● ${escapeHtml(t("dashboard.booking.notTracked"))}</span>`;
             }
         }
 
         // A manual assignment resolves the ambiguity for this slot, so the warning
         // only applies while the slot still relies on the automatic match.
         const ambiguous = (!isEmpty && !amsSpool.connectedViaMapping && ctx?.keyCount && ctx.keyCount[amsSpool.key] > 1)
-            ? ` <span class="gc-warn" title="Another loaded spool is identical in profile and colour. Consumption is still split correctly whenever the sliced file names the slot each filament was meant for. Where it does not, the whole amount goes to one of them; assign one to choose which.">⚠</span>`
+            ? ` <span class="gc-warn" title="${escapeHtml(t("dashboard.spool.ambiguousTitle"))}">⚠</span>`
             : "";
 
         // The name opens the detail dialog. A button rather than a styled span, so
         // it is reachable by keyboard and announced as the control it is.
         const name = `<button type="button" class="spool-name-link" data-amsid="${escapeHtml(amsSpool.amsId)}"
-            title="Show everything about this slot">${escapeHtml(readable)}</button>`;
+            title="${escapeHtml(t("dashboard.spool.showDetails"))}">${escapeHtml(readable)}</button>`;
 
         return `
             ${color}${name}${ambiguous}<br>
@@ -2130,13 +2224,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const button = createActionButton(amsSpool);
 
         tr.innerHTML = `
-            <td data-label="Spool" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
-            <td data-label="Remaining">${amsSpoolRemainingWeight == null ? "—" : `${amsSpoolRemainingWeight} g`} / ${totalWeight} g (${correctedRemain == null ? "—" : `${correctedRemain}%`})</td>
-            <td data-label="Serialnumber">${amsSpool.slot.tray_uuid ?? "—"}</td>
-            <td data-label="State">${setIcon(amsSpool.error, amsSpool.slotState)}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.spool"))}" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.remaining"))}">${amsSpoolRemainingWeight == null ? "—" : `${amsSpoolRemainingWeight} g`} / ${totalWeight} g (${correctedRemain == null ? "—" : `${correctedRemain}%`})</td>
+            <td data-label="${escapeHtml(t("dashboard.table.serial"))}">${amsSpool.slot.tray_uuid ?? "—"}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.state"))}">${setIcon(amsSpool.error, amsSpool.slotState)}</td>
         `;
         const tdBtn = document.createElement("td");
-        tdBtn.setAttribute("data-label", "Action");
+        // styles.css finds the cell by its class, the label is only shown text
+        tdBtn.className = "action-cell";
+        tdBtn.setAttribute("data-label", t("dashboard.table.action"));
         tdBtn.appendChild(button);
         tr.appendChild(tdBtn);
 
@@ -2216,7 +2312,11 @@ document.addEventListener("DOMContentLoaded", () => {
     function printStageBadge(printData) {
         if (!printData.stage) return "";
         const variant = printData.preparing ? "gc-state-prepare" : "";
-        return `<span class="gc-state gc-stage ${variant}">${escapeHtml(printData.stage)}</span>`;
+        // By its number, which every language has a name for; the English
+        // name the server sends is what a stage without a key shows.
+        const key = `print.stage.${printData.stageCode}`;
+        const stage = printData.stageCode != null && I18N.has(key) ? t(key) : printData.stage;
+        return `<span class="gc-state gc-stage ${variant}">${escapeHtml(stage)}</span>`;
     }
 
     async function loadGcodeView(printerId) {
@@ -2250,7 +2350,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const missing = buildGcodeMissing(printData);
             if (missing) el.appendChild(missing);
         } catch (err) {
-            el.innerHTML = `<p class="gc-required">Request failed: ${err.message}</p>`;
+            el.innerHTML = `<p class="gc-required">${escapeHtml(t("dashboard.requestFailed", { error: err.message }))}</p>`;
         }
     }
 
@@ -2278,13 +2378,13 @@ document.addEventListener("DOMContentLoaded", () => {
         let html = `<div class="gc-card-head">
             ${gcodeStateBadge(shownState)}
             ${printStageBadge(printData)}
-            <strong>${printData.jobName ? escapeHtml(printData.jobName) : "No active print"}</strong>
+            <strong>${escapeHtml(printData.jobName || t("dashboard.print.noActive"))}</strong>
             <span class="gc-card-note">${printResultControls(printData)}</span>
         </div>`;
         if (active && humanTotal) {
             html += `<div class="gc-progress">
                 <div class="gc-progress-labels">
-                    <span>Layer ${humanLayer} / ${humanTotal}</span><span>${progressPct}%</span>
+                    <span>${escapeHtml(t("dashboard.print.layer", { layer: humanLayer, total: humanTotal }))}</span><span>${progressPct}%</span>
                 </div>
                 <div class="gc-progress-track">
                     <div class="gc-progress-bar" style="width:${progressPct}%"></div>
@@ -2298,7 +2398,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // the lookup line below redundant: the file cannot be there.
         const noStorage = printData.storagePresent === false;
         if (noStorage) {
-            html += `<p class="gc-card-lookup gc-required">No USB stick or SD card in the printer, nothing will be booked${active ? " for this print" : ""}</p>`;
+            html += `<p class="gc-card-lookup gc-required">${escapeHtml(t(active ? "dashboard.print.noStorageActive" : "dashboard.print.noStorage"))}</p>`;
         }
         // The sliced file was not found. While attempts are left the card says
         // so quietly, after the last one in red: nothing will be booked, and a
@@ -2306,8 +2406,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (active && printData.sliceFetch && !noStorage) {
             const lookup = printData.sliceFetch;
             html += lookup.final
-                ? `<p class="gc-card-lookup gc-required" title="${escapeHtml(lookup.reason)}">No sliced file on the printer, nothing will be booked for this print</p>`
-                : `<p class="gc-card-lookup gc-card-lookup-open" title="${escapeHtml(lookup.reason)}">Sliced file not found yet, looking again (attempt ${lookup.attempt} of ${lookup.attempts})</p>`;
+                ? `<p class="gc-card-lookup gc-required" title="${escapeHtml(lookup.reason)}">${escapeHtml(t("dashboard.print.noSlicedFile"))}</p>`
+                : `<p class="gc-card-lookup gc-card-lookup-open" title="${escapeHtml(lookup.reason)}">${escapeHtml(t("dashboard.print.lookingAgain", { attempt: lookup.attempt, attempts: lookup.attempts }))}</p>`;
         }
         // The backend reports why consumption data is missing (e.g. the FTPS
         // download failed); without this the table would just show a placeholder with no
@@ -2333,7 +2433,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     await loadGcodeView(currentPrinterId);
                 } catch (err) {
                     clearButton.disabled = false;
-                    alert(`Could not clear the print result: ${err.message}`);
+                    alert(t("dashboard.print.clearFailed", { error: err.message }));
                 }
             };
         }
@@ -2359,7 +2459,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // "at" on every moment and a unit on every duration: a start at 19:14 and
         // a run of 14 min 50 s used to be "19:14" and "14:50" side by side.
-        if (printData.startedAt) facts.push(["Started at", formatMoment(printData.startedAt, withDate)]);
+        if (printData.startedAt) facts.push([t("dashboard.print.startedAt"), formatMoment(printData.startedAt, withDate)]);
         // Carries the start so the ticker can keep it moving between two SSE
         // events, which are up to a slot update interval apart.
         if (printData.startedAt != null) {
@@ -2367,7 +2467,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // second, so it is a counter and has to be rendered as one from the
             // first paint rather than changing shape on the first tick.
             facts.push([
-                "Running for",
+                t("dashboard.print.runningFor"),
                 formatCounter(printData.elapsedMs),
                 `class="gc-counter" data-elapsed-since="${printData.startedAt}"`,
             ]);
@@ -2381,9 +2481,9 @@ document.addEventListener("DOMContentLoaded", () => {
             // No end time while it is paused. What the printer still reports is
             // the work left, not a moment, and putting that on the clock would
             // name an end that moves further away the longer the pause lasts.
-            if (left) facts.push(["Left after resuming", left]);
+            if (left) facts.push([t("dashboard.print.leftAfterResuming"), left]);
         } else if (printData.estimatedEndAt) {
-            facts.push(["Expected to end at", `${formatMoment(printData.estimatedEndAt, withDate)} (${left})`]);
+            facts.push([t("dashboard.print.expectedEnd"), `${formatMoment(printData.estimatedEndAt, withDate)} (${left})`]);
         }
 
         return factsRow(facts);
@@ -2409,10 +2509,10 @@ document.addEventListener("DOMContentLoaded", () => {
             // ticker replaces only that and the word in front keeps its place.
             const countdown = printData.printResetAt
                 ? `<button class="btn btn-small" data-print-clear
-                        title="Clear the result now instead of waiting for the countdown">Clear <span
+                        title="${escapeHtml(t("dashboard.print.clearNowTitle"))}">${escapeHtml(t("dashboard.print.clear"))} <span
                         class="gc-counter" data-countdown>${formatCountdown(printData.printResetAt)}</span></button>`
                 : `<button class="btn btn-small" data-print-clear
-                        title="Clear the result from the dashboard">Clear</button>`;
+                        title="${escapeHtml(t("dashboard.print.clearTitle"))}">${escapeHtml(t("dashboard.print.clear"))}</button>`;
             // The flag says the booking ran, not that it booked anything: a
             // print from a slot nobody assigned ends with every row skipped, and
             // the card used to read "consumption booked" over it. The rows say
@@ -2428,20 +2528,21 @@ document.addEventListener("DOMContentLoaded", () => {
             // A summary with a note and no rows at all is a print that had no
             // sliced file: nothing was booked because nothing could be read
             const noFile = !!summary?.note && !summary.rows?.length;
+            // The note comes from the server and stays English
             const label = noFile
-                ? { text: "✖ no sliced file", className: "gc-card-unbooked", title: `${summary.note} Open the report of this print` }
+                ? { text: `✖ ${t("dashboard.result.noSlicedFile")}`, className: "gc-card-unbooked", title: `${summary.note} ${t("dashboard.result.openReport")}` }
                 : nothingUsed
-                    ? { text: "nothing to book", className: "gc-card-nothing", title: "The print ended before it used any filament. Open the report of this print" }
+                    ? { text: t("dashboard.result.nothingToBook"), className: "gc-card-nothing", title: t("dashboard.result.nothingToBookTitle") }
                     : !rows.length || booked === rows.length
-                    ? { text: "✔ consumption booked", className: "gc-card-booked", title: "Open the report of this print" }
+                    ? { text: `✔ ${t("dashboard.result.booked")}`, className: "gc-card-booked", title: t("dashboard.result.openReport") }
                     : booked === 0
-                        ? { text: "✖ nothing booked", className: "gc-card-unbooked", title: "No filament of this print could be booked. Open the report to see why" }
-                        : { text: `✔ ${booked} of ${rows.length} booked`, className: "gc-card-partly", title: "Not every filament of this print could be booked. Open the report to see why" };
-            return `<button class="gc-card-link ${label.className}" data-print-summary title="${label.title}">${label.text}</button>${countdown}`;
+                        ? { text: `✖ ${t("dashboard.result.nothingBooked")}`, className: "gc-card-unbooked", title: t("dashboard.result.nothingBookedTitle") }
+                        : { text: `✔ ${t("dashboard.result.partlyBooked", { booked, count: rows.length })}`, className: "gc-card-partly", title: t("dashboard.result.partlyBookedTitle") };
+            return `<button class="gc-card-link ${label.className}" data-print-summary title="${escapeHtml(label.title)}">${escapeHtml(label.text)}</button>${countdown}`;
         }
 
         if (hasSummary && printData.printResultCleared) {
-            return `<button class="gc-card-link" data-print-summary>Last print</button>`;
+            return `<button class="gc-card-link" data-print-summary>${escapeHtml(t("dashboard.summary.lastPrint"))}</button>`;
         }
 
         return "";
@@ -2519,7 +2620,7 @@ document.addEventListener("DOMContentLoaded", () => {
      * never saw the job start.
      */
     function formatDuration(ms) {
-        if (ms == null) return "unknown";
+        if (ms == null) return t("dashboard.summary.unknown");
         return formatCounter(ms);
     }
 
@@ -2553,16 +2654,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const named = [row.vendor, row.material, row.spoolName].filter(Boolean);
         if (named.length) return named.join(" · ");
 
-        return [row.type, row.color].filter(Boolean).join(" ") || "Unknown filament";
+        return [row.type, row.color].filter(Boolean).join(" ") || t("dashboard.unknownFilament");
     }
 
     // How each outcome of a filament is labelled and coloured in the dialog.
     const SUMMARY_STATUS = {
-        booked:    { label: "Booked",     className: "gc-ok" },
-        ambiguous: { label: "Booked",     className: "gc-warn" },
-        skipped:   { label: "Not booked", className: "gc-warn" },
-        unused:    { label: "Unused",     className: "" },
-        failed:    { label: "Failed",     className: "gc-bad" },
+        booked:    { label: "dashboard.summary.status.booked",    className: "gc-ok" },
+        ambiguous: { label: "dashboard.summary.status.booked",    className: "gc-warn" },
+        skipped:   { label: "dashboard.summary.status.notBooked", className: "gc-warn" },
+        unused:    { label: "dashboard.summary.status.unused",    className: "" },
+        failed:    { label: "dashboard.summary.status.failed",    className: "gc-bad" },
     };
 
     /**
@@ -2579,7 +2680,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const title = document.getElementById("print-summary-title");
         const content = document.getElementById("print-summary-content");
 
-        title.textContent = summary.jobName ? `Print: ${summary.jobName}` : "Last print";
+        title.textContent = summary.jobName
+            ? t("dashboard.summary.title", { job: summary.jobName })
+            : t("dashboard.summary.lastPrint");
 
         const { layer: humanLayer, total: humanTotal } = humanLayers(summary.layerNum, summary.totalLayers);
 
@@ -2590,17 +2693,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const sameDay = allToday(summary.startedAt, summary.endedAt);
 
         const facts = [
-            ["Result", summary.state],
-            ["Started at", summary.startedAt ? formatMoment(summary.startedAt, !sameDay) : "unknown"],
-            ["Ended at", summary.endedAt ? formatMoment(summary.endedAt, !sameDay) : "unknown"],
-            ["Duration", formatDuration(summary.durationMs)],
-            ["Layers", humanTotal ? `${humanLayer} / ${humanTotal}` : `${humanLayer}`],
+            // The state is the printer's own word, FINISH or FAILED, the same
+            // one the badge on the card shows, and stays as it is.
+            [t("dashboard.summary.result"), summary.state],
+            [t("dashboard.print.startedAt"), summary.startedAt ? formatMoment(summary.startedAt, !sameDay) : t("dashboard.summary.unknown")],
+            [t("dashboard.summary.endedAt"), summary.endedAt ? formatMoment(summary.endedAt, !sameDay) : t("dashboard.summary.unknown")],
+            [t("dashboard.summary.duration"), formatDuration(summary.durationMs)],
+            [t("dashboard.summary.layers"), humanTotal ? `${humanLayer} / ${humanTotal}` : `${humanLayer}`],
         ];
 
         let html = factsRow(facts);
 
         if (summary.printError) {
-            html += `<p class="gc-required">${escapeHtml(summary.printError)}</p>`;
+            html += `<p class="gc-required">${escapeHtml(printErrorLine(summary))}</p>`;
         }
         if (summary.note) {
             html += `<p class="gc-required">${escapeHtml(summary.note)}</p>`;
@@ -2608,7 +2713,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (summary.rows?.length) {
             const rows = summary.rows.map(row => {
-                const status = SUMMARY_STATUS[row.status] ?? { label: row.status, className: "" };
+                const known = SUMMARY_STATUS[row.status];
+                const status = known ? { ...known, label: t(known.label) } : { label: row.status, className: "" };
                 const spool = row.spoolId ? `#${row.spoolId}` : "—";
                 // The same square the slot tables draw, from the whole colour
                 // set when the slice named one. normColor takes both shapes
@@ -2618,11 +2724,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     .map(normColor)
                     .filter(Boolean);
                 return `<tr>
-                    <td data-label="Slot">${escapeHtml(row.amsId ?? "—")}</td>
-                    <td data-label="Filament">${swatchHtml(colors)}${escapeHtml(summaryFilamentName(row))}</td>
-                    <td data-label="Amount" style="text-align:right">${row.grams}g</td>
-                    <td data-label="Spool">${spool}</td>
-                    <td data-label="Result"><span class="${status.className}">${escapeHtml(status.label)}</span>${
+                    <td data-label="${escapeHtml(t("dashboard.summary.slot"))}">${escapeHtml(row.amsId ?? "—")}</td>
+                    <td data-label="${escapeHtml(t("dashboard.summary.filament"))}">${swatchHtml(colors)}${escapeHtml(summaryFilamentName(row))}</td>
+                    <td data-label="${escapeHtml(t("dashboard.summary.amount"))}" style="text-align:right">${row.grams}g</td>
+                    <td data-label="${escapeHtml(t("dashboard.summary.spool"))}">${spool}</td>
+                    <td data-label="${escapeHtml(t("dashboard.summary.result"))}"><span class="${status.className}">${escapeHtml(status.label)}</span>${
                         row.note ? `<div class="gc-summary-note">${escapeHtml(row.note)}</div>` : ""
                     }</td>
                 </tr>`;
@@ -2632,16 +2738,16 @@ document.addEventListener("DOMContentLoaded", () => {
             // line here is a filament of the sliced file, including the ones
             // that were never booked, and without that the table reads like a
             // list of bookings with gaps in it.
-            html += `<p class="gc-summary-lead">Every filament of the sliced file, and what became of it.</p>`;
+            html += `<p class="gc-summary-lead">${escapeHtml(t("dashboard.summary.lead"))}</p>`;
 
             // .spool-table as well, so the dialog inherits the card stacking
             // every other table on this page falls back to under 760px rather
             // than pushing five columns sideways inside a modal.
             html += `<table class="spool-table gc-summary-table"><thead><tr>
-                <th>Slot</th><th>Filament</th><th style="text-align:right">Amount</th><th>Spool</th><th>Result</th>
+                <th>${escapeHtml(t("dashboard.summary.slot"))}</th><th>${escapeHtml(t("dashboard.summary.filament"))}</th><th style="text-align:right">${escapeHtml(t("dashboard.summary.amount"))}</th><th>${escapeHtml(t("dashboard.summary.spool"))}</th><th>${escapeHtml(t("dashboard.summary.result"))}</th>
             </tr></thead><tbody>${rows}</tbody></table>`;
         } else if (!summary.note) {
-            html += `<p class="gc-required">This print booked nothing.</p>`;
+            html += `<p class="gc-required">${escapeHtml(t("dashboard.summary.nothingBooked"))}</p>`;
         }
 
         content.innerHTML = html;
@@ -2667,14 +2773,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const ctx = { fullCons, partCons, keyCount: countSpoolKeys(spools), showBooking: true, booked, usedKnown };
 
         const columns = [
-            ["Spool", "left"],
-            ["On spool / total", "right"],
-            ["Needed", "right"],
-            ["After print", "right"],
-            ["Action"],
+            [t("dashboard.table.spool"), "left"],
+            [t("dashboard.table.onSpool"), "right"],
+            [t("dashboard.table.needed"), "right"],
+            [t("dashboard.table.afterPrint"), "right"],
+            [t("dashboard.table.action")],
         ];
 
-        return buildSpoolTables(spools, columns, spool => createGcodeSpoolRow(spool, ctx), "No spools loaded");
+        return buildSpoolTables(spools, columns, spool => createGcodeSpoolRow(spool, ctx), t("dashboard.table.noSpools"));
     }
 
     // The grams a slot carries in a consumption map.
@@ -2734,12 +2840,12 @@ document.addEventListener("DOMContentLoaded", () => {
             // spool's weight above already has it taken off. `used || needed`
             // stood here and showed the whole plate as booked for a print
             // cancelled at layer 0, whose 0 g fell through to the fallback.
-            neededCell = `${needed}g<br><span class="gc-muted" style="font-size:0.8em">booked: ${usedKnown ? used : needed}g</span>`;
+            neededCell = `${needed}g<br><span class="gc-muted" style="font-size:0.8em">${escapeHtml(t("dashboard.table.bookedGrams", { grams: usedKnown ? used : needed }))}</span>`;
             if (onSpool != null) {
-                afterPrintCell = `<span class="gc-muted" title="Already booked, this is the spool's weight now">${grams2(onSpool)}</span>`;
+                afterPrintCell = `<span class="gc-muted" title="${escapeHtml(t("dashboard.table.alreadyBookedTitle"))}">${grams2(onSpool)}</span>`;
             }
         } else if (needed > 0) {
-            neededCell = `${needed}g${used ? `<br><span class="gc-muted" style="font-size:0.8em">printed: ${used}g</span>` : ""}`;
+            neededCell = `${needed}g${used ? `<br><span class="gc-muted" style="font-size:0.8em">${escapeHtml(t("dashboard.table.printedGrams", { grams: used }))}</span>` : ""}`;
             if (onSpool != null) {
                 const afterPrint = onSpool - needed;
                 afterPrintCell = `<span class="${afterPrint < 0 ? "gc-bad" : "gc-ok"}">${grams2(afterPrint)}</span>`;
@@ -2755,14 +2861,16 @@ document.addEventListener("DOMContentLoaded", () => {
             : "—";
 
         tr.innerHTML = `
-            <td data-label="Spool" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
-            <td data-label="On spool / total" style="text-align:right">${onSpoolCell}</td>
-            <td data-label="Needed" style="text-align:right">${neededCell}</td>
-            <td data-label="After print" style="text-align:right">${afterPrintCell}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.spool"))}" style="text-align:left">${spoolIdentityHtml(amsSpool, ctx)}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.onSpool"))}" style="text-align:right">${onSpoolCell}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.needed"))}" style="text-align:right">${neededCell}</td>
+            <td data-label="${escapeHtml(t("dashboard.table.afterPrint"))}" style="text-align:right">${afterPrintCell}</td>
         `;
 
         const tdBtn = document.createElement("td");
-        tdBtn.setAttribute("data-label", "Action");
+        // styles.css finds the cell by its class, the label is only shown text
+        tdBtn.className = "action-cell";
+        tdBtn.setAttribute("data-label", t("dashboard.table.action"));
         tdBtn.appendChild(createActionButton(amsSpool));
         tr.appendChild(tdBtn);
 
@@ -2779,7 +2887,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!missing.length) return null;
 
         const wrap = document.createElement("div");
-        let html = `<h4 class="gc-required" style="margin:16px 0 4px">Required but not loaded</h4>`;
+        let html = `<h4 class="gc-required" style="margin:16px 0 4px">${escapeHtml(t("dashboard.missing.title"))}</h4>`;
         html += `<table class="data-table gc-required-table">`;
         for (const e of missing) {
             // The sliced file names one colour per filament, so there is never a
@@ -2787,7 +2895,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const swatch = swatchHtml(e.color ? [normColor(e.color)] : []);
             const label = e.type ? `${e.type} <code>${e.tray_info_idx}</code>` : `<code>${e.tray_info_idx}</code>`;
             html += `<tr><td>${swatch}${label}</td>
-                <td class="gc-required-amount">${e.grams}g needed</td></tr>`;
+                <td class="gc-required-amount">${escapeHtml(t("dashboard.missing.needed", { grams: e.grams }))}</td></tr>`;
         }
         html += `</table>`;
         wrap.innerHTML = html;
@@ -2813,41 +2921,49 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setupButton(button, amsSpool) {
         if (amsSpool.error && amsSpool.slotState === "Loaded (Bambu Lab)") {
-            button.textContent = SLOT_OPTIONS.SHOW_INFO;
+            setButtonOption(button, SLOT_OPTIONS.SHOW_INFO);
             button.disabled = false;
             return;
         }
 
-        button.textContent = KNOWN_OPTIONS.has(amsSpool.option) ? amsSpool.option : SLOT_OPTIONS.NONE;
+        setButtonOption(button, KNOWN_OPTIONS.has(amsSpool.option) ? amsSpool.option : SLOT_OPTIONS.NONE);
         button.disabled = amsSpool.enableButton !== "true" || !spoolmanConnected;
         if (amsSpool.option === SLOT_OPTIONS.WAITING) {
-            button.title = "The AMS has not reported how much filament is left yet. Creating the spool now would store it as brand new.";
+            button.title = t("dashboard.slotOption.waitingTitle");
         }
+    }
+
+    // The option travels on the button as data, the words on it are only what
+    // it shows. Every comparison reads the data.
+    function setButtonOption(button, option) {
+        button.dataset.option = option;
+        button.textContent = optionLabel(option);
     }
 
     // What the printer reports about the slot the action is about. The same row
     // opens all three confirmations, which used to spell it out once each.
     function amsSpoolRow(amsSpool) {
         return `<tr>
-                        <th>AMS Spool:</th>
+                        <th>${escapeHtml(t("dashboard.dialog.amsSpool"))}</th>
                         <td>${escapeHtml(amsSpool.slot.tray_sub_brands)} - ${escapeHtml(amsSpool.matchingExternalFilament.name)} - ${escapeHtml(amsSpool.slot.tray_uuid)}</td>
                     </tr>`;
     }
 
     // Generate the content of the confirmation dialog
     function generateDialogContent(button, amsSpool) {
-        if (button.textContent === SLOT_OPTIONS.CREATE) {
+        const option = button.dataset.option;
+        if (option === SLOT_OPTIONS.CREATE) {
             return `
-                <p>Do you really want to create a Spool with the following stats in Spoolman?</p>
+                <p>${escapeHtml(t("dashboard.dialog.createQuestion"))}</p>
                 <table class="data-table">
                     ${amsSpoolRow(amsSpool)}
                     <tr>
-                        <th>Spoolman Filament:</th>
+                        <th>${escapeHtml(t("dashboard.dialog.spoolmanFilament"))}</th>
                         <td>Bambu Lab - ${escapeHtml(amsSpool.matchingInternalFilament.material)} - ${escapeHtml(amsSpool.matchingInternalFilament.name)}</td>
                     </tr>
                 </table>
             `;
-        } else if (button.textContent === SLOT_OPTIONS.MERGE) {
+        } else if (option === SLOT_OPTIONS.MERGE) {
             // The server's figure, which applies the same correction the row
             // shows; the raw percentage is only a fallback for an entry that
             // carries none.
@@ -2856,42 +2972,46 @@ document.addEventListener("DOMContentLoaded", () => {
                 : (amsSpool.slot.remain / 100) * amsSpool.slot.tray_weight);
 
             return `
-                <p>Do you really want to merge this Spool with an existing Spool in Spoolman?</p>
+                <p>${escapeHtml(t("dashboard.dialog.mergeQuestion"))}</p>
                 <table class="data-table">
                     ${amsSpoolRow(amsSpool)}
                     <tr>
-                        <th>Spoolman Spool:</th>
-                        <td>Spool-ID ${amsSpool.mergeableSpool.id} - Bambu Lab - ${escapeHtml(amsSpool.mergeableSpool.filament.material)} - ${escapeHtml(amsSpool.mergeableSpool.filament.name)} - ${remain == null ? "unknown" : grams2(remain)} left on spool</td>
+                        <th>${escapeHtml(t("dashboard.dialog.spoolmanSpool"))}</th>
+                        <td>${escapeHtml(t("dashboard.dialog.spoolId", { id: amsSpool.mergeableSpool.id }))} - Bambu Lab - ${escapeHtml(amsSpool.mergeableSpool.filament.material)} - ${escapeHtml(amsSpool.mergeableSpool.filament.name)} - ${escapeHtml(t("dashboard.dialog.leftOnSpool", { grams: remain == null ? t("dashboard.summary.unknown") : grams2(remain) }))}</td>
                     </tr>
                 </table>
             `;
-        } else if (button.textContent === SLOT_OPTIONS.CREATE_WITH_FILAMENT) {
+        } else if (option === SLOT_OPTIONS.CREATE_WITH_FILAMENT) {
             return `
-                <p>Do you really want to create a Spool and a new Filament with the following stats in Spoolman?</p>
+                <p>${escapeHtml(t("dashboard.dialog.createWithFilamentQuestion"))}</p>
                 <table class="data-table">
                     ${amsSpoolRow(amsSpool)}
                     <tr>
-                        <th>New Spool & Filament:</th>
+                        <th>${escapeHtml(t("dashboard.dialog.newSpoolAndFilament"))}</th>
                         <td>${escapeHtml(amsSpool.matchingExternalFilament.manufacturer)} - ${escapeHtml(amsSpool.matchingExternalFilament.material)} - ${escapeHtml(amsSpool.matchingExternalFilament.name)} - ${amsSpool.matchingExternalFilament.density} g/cm³ - ${amsSpool.matchingExternalFilament.diameter} mm</td>
                     </tr>
                 </table>
             `;
         } else {
             return `
-                <p>No matching filament found in the database, please check manually!</p>
-                <p>This shows up when the official data from Bambu Lab does not match the data collected from the spool.</p>
-                <p>To solve this issue, please follow this guide:</p>
-                <p>&emsp;1. Click on "Go to Spoolman". This will open Spoolman in the Spool creation menu.</p>
-                <p>&emsp;2. Type in the Name of your BambuLab Filament and select it, the necessary data will be filled in automatically.</p>
-                <p>&emsp;3. If you wish, you can enter any optional data you need (e.g., first used, price, location…)</p>
-                <p>&emsp;4. Copy the serial into the Extra Field 'tag' and click save</p>
-                <p>&emsp;5. Wait until the new data is collected. After this, the spool will be displayed correctly!</p>
+                <p>${escapeHtml(t("dashboard.dialog.noMatch"))}</p>
+                <p>${escapeHtml(t("dashboard.dialog.noMatchWhy"))}</p>
+                <p>${escapeHtml(t("dashboard.dialog.guide"))}</p>
+                <p>&emsp;1. ${escapeHtml(t("dashboard.dialog.guideStep1", { button: t("dashboard.dialog.goToSpoolman") }))}</p>
+                <p>&emsp;2. ${escapeHtml(t("dashboard.dialog.guideStep2"))}</p>
+                <p>&emsp;3. ${escapeHtml(t("dashboard.dialog.guideStep3"))}</p>
+                <p>&emsp;4. ${escapeHtml(t("dashboard.dialog.guideStep4"))}</p>
+                <p>&emsp;5. ${escapeHtml(t("dashboard.dialog.guideStep5"))}</p>
             `;
         }
     }
 
     // Show a confirmation dialog
-    function showDialog(button, content, actionButtonText, actionCallback) {
+    //
+    // `opensSpoolman` marks the action that leaves for Spoolman's create page.
+    // It used to be recognised by the words on the button, which are
+    // translated now.
+    function showDialog(button, content, actionButtonText, actionCallback, opensSpoolman = false) {
         const dialog = document.getElementById("info-dialog");
         const dialogContent = document.getElementById("dialog-content");
         const closeDialog = document.getElementById("close-dialog");
@@ -2905,7 +3025,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // until the page was reloaded.
         actionButton.disabled = false;
 
-        if (actionButton.textContent === "Go to Spoolman") {
+        if (opensSpoolman) {
             actionButton.onclick = () => {
                 actionCallback();
                 dialog.close();
@@ -2933,12 +3053,12 @@ document.addEventListener("DOMContentLoaded", () => {
             [SLOT_OPTIONS.CREATE_WITH_FILAMENT]: "./api/createSpoolWithFilament"
         };
 
-        const endpoint = endpointMap[button.textContent];
+        const endpoint = endpointMap[button.dataset.option];
         if (!endpoint) return;
 
         const originalText = button.textContent;
         button.disabled = true;
-        button.textContent = "Sending...";
+        button.textContent = t("dashboard.sending");
 
         try {
             const res = await fetch(endpoint, {
@@ -2949,17 +3069,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                showNotification(`Error: ${err.error || "Action failed"}`, "error");
+                showNotification(t("dashboard.error", { error: err.error || t("dashboard.actionFailed") }), "error");
                 button.textContent = originalText;
                 button.disabled = false;
                 return;
             }
 
-            button.textContent = SLOT_OPTIONS.NONE;
-            showNotification("Action sent successfully. UI updates after next MQTT event.", "success");
+            setButtonOption(button, SLOT_OPTIONS.NONE);
+            showNotification(t("dashboard.actionSent"), "success");
         } catch (err) {
             console.error("Action failed:", err);
-            showNotification("Request failed. Please check your connection.", "error");
+            showNotification(t("dashboard.requestFailedConnection"), "error");
             button.textContent = originalText;
             button.disabled = false;
         }
@@ -2985,11 +3105,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         data.lastMqttUpdate = data.lastMqttUpdate
             ? formatDate(new Date(data.lastMqttUpdate))
-            : "No update yet";
+            : t("dashboard.status.noUpdate");
 
         data.lastMqttAmsUpdate = data.lastMqttAmsUpdate
             ? formatDate(new Date(data.lastMqttAmsUpdate))
-            : "No update yet";
+            : t("dashboard.status.noUpdate");
 
         setAmsEnv(data.amsEnv);
 
@@ -3001,12 +3121,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (modeEl) {
             if (legacyMode) {
                 modeEl.className = "pill pill-legacy";
-                modeEl.textContent = "Legacy · MQTT remain";
-                modeEl.title = "Spool weight is tracked from the AMS RFID remain % via MQTT";
+                modeEl.textContent = t("dashboard.status.legacyMode");
+                modeEl.title = t("dashboard.status.legacyModeTitle");
             } else {
                 modeEl.className = "pill pill-gcode";
-                modeEl.textContent = "G-code tracking";
-                modeEl.title = "Spool weight is tracked from the sliced G-code consumption";
+                modeEl.textContent = t("dashboard.status.gcodeMode");
+                modeEl.title = t("dashboard.status.gcodeModeTitle");
             }
         }
 
@@ -3022,7 +3142,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // printer the dashboard settled on, which it decides itself on the
         // first load.
         syncMenuPrinter(data.PRINTER_ID);
-        updateElementText("mode", data.MODE);
+        updateElementText("mode", serverWord("operationMode", data.MODE));
         updateElementText("printer-serial", data.PRINTER_ID);
 
         const footer = document.getElementById("dynamic-footer");
@@ -3033,10 +3153,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="container">
                     <div class="content">
                         ${new Date().getFullYear()} - v.${escapeHtml(data.VERSION)} |
-                        <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">GitHub Repository</a> -
-                        Created by
+                        <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">${escapeHtml(t("dashboard.footer.repository"))}</a> -
+                        ${escapeHtml(t("dashboard.footer.createdBy"))}
                         <a href="https://github.com/Rdiger-36" target="_blank">Rdiger-36</a> |
-                        <a id="spoolmanLink" href="${URL}" target="_blank">Link to Spoolman</a>
+                        <a id="spoolmanLink" href="${URL}" target="_blank">${escapeHtml(t("dashboard.footer.spoolmanLink"))}</a>
                     </div>
                 </div>
             `;
@@ -3048,19 +3168,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const el = getElementSafe(elementId);
         if (!el) return;
         const ok = status === "Connected";
-        el.innerHTML = `<span class="pill ${ok ? "pill-ok" : "pill-bad"}">● ${status}</span>`;
+        // "Connected" and the other states the server compares are looked up,
+        // an error text arrives as it is.
+        el.innerHTML = `<span class="pill ${ok ? "pill-ok" : "pill-bad"}">● ${escapeHtml(serverWord("connection", status) ?? "")}</span>`;
     }
 
     // Set status icon for spool behavior
     function setIcon(status, slotState) {
         if (slotState === "Loaded (Bambu Lab)") return status ? "❗️" : "✅";
-        if (slotState === "Loaded (archived)") return `<span title="${ARCHIVED_HINT}">📦</span>`;
+        if (slotState === "Loaded (archived)") return `<span title="${escapeHtml(ARCHIVED_HINT)}">📦</span>`;
         // Everything else is a warning triangle, so it carries the reason as a
         // tooltip: an untagged 3rd party spool is a normal state, not a fault.
         const title = slotState === "Loaded (3rd party)"
             ? THIRD_PARTY_HINT
-            : "No spool data from the printer for this slot.";
-        return `<span title="${title}">⚠️</span>`;
+            : t("dashboard.spool.noData");
+        return `<span title="${escapeHtml(title)}">⚠️</span>`;
     }
 
     // Safely get an element by ID and log a warning if it doesn't exist

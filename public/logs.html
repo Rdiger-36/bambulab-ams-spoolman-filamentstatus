@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Backend Logs</title>
+    <title data-i18n="logs.pageTitle">Backend Logs</title>
     <link rel="stylesheet" href="styles.css">
     <script>
       // Applies the stored theme before the first paint so page changes do not flash.
@@ -29,21 +29,21 @@
              the first person who needed one did not find. -->
         <div class="log-toolbar">
             <div class="log-field">
-                <span class="log-field-label">Source</span>
+                <span class="log-field-label" data-i18n="logs.source">Source</span>
                 <!-- The picker over the logs, filled by menu.js -->
                 <span id="headline"></span>
             </div>
             <!-- Hidden for the server log, which has no trace -->
             <div class="log-field" id="log-stream-field" hidden>
-                <span class="log-field-label">Show</span>
-                <div class="log-switch" id="log-stream" role="group" aria-label="Which file of the printer">
-                    <button type="button" data-stream="log" aria-pressed="true">Log</button>
-                    <button type="button" data-stream="mqtt" aria-pressed="false">Raw MQTT trace</button>
+                <span class="log-field-label" data-i18n="logs.show">Show</span>
+                <div class="log-switch" id="log-stream" role="group" aria-label="Which file of the printer" data-i18n-aria-label="logs.whichFile">
+                    <button type="button" data-stream="log" aria-pressed="true" data-i18n="logs.stream.log">Log</button>
+                    <button type="button" data-stream="mqtt" aria-pressed="false" data-i18n="logs.stream.mqtt">Raw MQTT trace</button>
                 </div>
             </div>
             <div class="log-toolbar-end">
                 <span class="log-meta" id="log-meta"></span>
-                <button id="download-logs" class="log-button">Download...</button>
+                <button id="download-logs" class="log-button" data-i18n="logs.download.button">Download...</button>
             </div>
         </div>
         <h3 class="log-title">

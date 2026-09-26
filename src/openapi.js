@@ -139,6 +139,8 @@ const schemas = {
     Error: t.object({
         ok: t.boolean(null, { enum: [false] }),
         error: t.string("What went wrong, in a sentence."),
+        code: t.string("The same as a stable word, `printerNotFound`, `weightAboveLimit` and so on, for a client that words it in its own language. Missing where the text carries a detail from elsewhere, such as Spoolman's own answer."),
+        params: t.object({}, { additional: true, description: "The values the sentence names, `{ limit, weight }` and so on, for a client that words it itself." }),
     }, { required: ["ok", "error"] }),
 
     Ok: t.object({ ok: t.boolean(null, { enum: [true] }) }, { required: ["ok"] }),
@@ -340,7 +342,7 @@ const schemas = {
         fullConsumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What the whole print needs, per sliced filament." })),
         consumption: t.nullable(t.object({}, { additional: t.ref("Consumption"), description: "What has been consumed at the current layer, or the whole amount once the print finished." })),
         consumptionBooked: t.boolean("Whether the consumption of the last print has been written to Spoolman."),
-        lastPrintSummary: t.nullable(t.object({}, { additional: true, description: "The closing report of the last print: what was booked where, and what could not be." })),
+        lastPrintSummary: t.nullable(t.object({}, { additional: true, description: "The closing report of the last print: what was booked where, and what could not be. `printError` is the English line of the log, `printErrorDetails` the same as parts, `{ kind, code, texts }` with the catalogue's sentence per language, for a client that words it in its own." })),
         printResetAt: t.nullable(t.number("When the result card clears itself, epoch milliseconds. Null while no countdown runs.")),
         printResultCleared: t.boolean(),
         startedAt: t.nullable(t.number("When the print was first seen running, epoch milliseconds.")),

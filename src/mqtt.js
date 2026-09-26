@@ -25,7 +25,7 @@ import { learnPresets } from "./presets.js";
 import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
 import { humanLayers } from "../public/shared.js";
-import { describePrintError } from "./printerrors.js";
+import { describePrintError, describePrintErrorInAll } from "./printerrors.js";
 import { createLocationSync, releaseSlotLocation } from "./location.js";
 import {
     processData,
@@ -716,6 +716,7 @@ export async function handlePrintStateChange(printer, print) {
         printer.printResultDismissed   = false;
         printer.printResetAt           = null;
         printer.lastPrintError         = null;
+        printer.lastPrintErrorDetails  = null;
 
         // The printer does not clear its previous complaint when the state
         // changes. Measured on a P2S through the raw MQTT capture: the report
@@ -758,10 +759,12 @@ export async function handlePrintStateChange(printer, print) {
     const errorNow = printer.staleErrorText ? null : reported;
     if (errorNow) {
         printer.lastPrintError = errorNow;
+        printer.lastPrintErrorDetails = printErrorDetails(print);
         // The summary may already be built, and it is the record of this very
         // print until the next one starts, so it takes the late arrival.
         if (printer.lastPrintSummary && !printer.lastPrintSummary.printError) {
             printer.lastPrintSummary.printError = errorNow;
+            printer.lastPrintSummary.printErrorDetails = printer.lastPrintErrorDetails;
         }
     }
 
@@ -845,6 +848,7 @@ export async function handlePrintStateChange(printer, print) {
             layerNum,
             totalLayers: printer.currentSliceInfo?.totalLayers ?? null,
             printError:  errorNow ?? printer.lastPrintError ?? null,
+            printErrorDetails: errorNow ? printErrorDetails(print) : (printer.lastPrintErrorDetails ?? null),
             rows:        [],
             note:        null,
         };
@@ -911,6 +915,27 @@ export function printErrorText(print) {
     }
     if (code) return describe("Printer error", code);
     return describe("Fail reason", reason);
+}
+
+/**
+ * The same error as `printErrorText()`, as parts a client can put into words
+ * of its own: which field said it, the number, and the catalogue's sentence in
+ * every shipped language. The Web UI builds its line from this in the viewer's
+ * language; `printError` next to it stays the English line of the log.
+ *
+ * @param {object} print - the `print` object from the MQTT report
+ * @returns {{kind: "printer"|"fail", code: string, texts: object|null}[]|null}
+ */
+export function printErrorDetails(print) {
+    const code = Number(print?.print_error ?? print?.mc_print_error_code ?? 0);
+    const reason = print?.fail_reason;
+    const failed = reason && reason !== "0" && reason !== 0;
+    const part = (kind, value) => ({ kind, code: String(value), texts: describePrintErrorInAll(value) });
+
+    if (!code && !failed) return null;
+    if (code && failed && String(reason) !== String(code)) return [part("printer", code), part("fail", reason)];
+    if (code) return [part("printer", code)];
+    return [part("fail", reason)];
 }
 
 /**

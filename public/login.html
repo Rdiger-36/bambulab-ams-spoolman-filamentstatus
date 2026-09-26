@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign in</title>
+    <title data-i18n="login.pageTitle">Sign in</title>
     <link rel="stylesheet" href="styles.css">
     <script>
       // Applies the stored theme before the first paint so page changes do not flash.
@@ -21,12 +21,12 @@
     <div id="app">
         <form id="login-form" class="login-card" autocomplete="on">
             <h1>AMS Spoolman Manager</h1>
-            <p class="login-lead">This installation asks for a password.</p>
+            <p class="login-lead" data-i18n="login.lead">This installation asks for a password.</p>
 
-            <label class="login-label" for="login-password">Password</label>
+            <label class="login-label" for="login-password" data-i18n="login.password">Password</label>
             <input type="password" id="login-password" name="password" autocomplete="current-password" autofocus>
 
-            <button type="submit" id="login-submit">Sign in</button>
+            <button type="submit" id="login-submit" data-i18n="login.submit">Sign in</button>
             <p id="login-error" class="login-error" hidden></p>
         </form>
     </div>
