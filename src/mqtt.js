@@ -4,7 +4,7 @@ import { serverLogFilePath } from "./config.js";
 import { settings, spoolmanUrl, legacyMode } from "./settings.js";
 import { originalConsoleLog, debug, trace, appendTrace } from "./logger.js";
 import { state } from "./state.js";
-import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, activeSlotFromReport, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError, decodePrintMapping } from "./utils.js";
+import { sleep, formatDate, formatInterval, offlineBackoff, convertAMSandSlot, activeSlotFromReport, connectionErrorCode, spoolIsEmpty, externalSlotLabel, EXTERNAL_SPOOL_ID, SLOT_OPTIONS, ACTIVE_PRINT_STATES, describeConnectionError, decodePrintMapping } from "./utils.js";
 import {
     getSpoolmanSpools,
     getArchivedSpoolmanSpools,
@@ -2433,10 +2433,12 @@ export async function testMqttConnection(printer, timeout = 8000, listenTimeout 
         return {
             ok: true,
             warning: `Connected, but nothing arrived on ${topic}. Check the serial number if this stays empty.`,
+            code: "mqttNothingArrived",
+            params: { topic },
         };
     } catch (err) {
         const detail = err?.message || String(err);
-        return { ok: false, error: describeMqttError(err), detail };
+        return { ok: false, error: describeMqttError(err), ...mqttErrorCode(err), detail };
     } finally {
         // force close, the test must not linger as a second session
         client?.end(true);
@@ -2472,6 +2474,13 @@ function describeMqttError(err) {
     const message = err?.message || String(err);
     if (/Not authorized|Bad username or password|code: [45]/.test(message)) return "The printer rejected the access code";
     return describeConnectionError(err, { port: 8883, timeoutHint: "Is LAN mode enabled?" }) ?? message;
+}
+
+/** The same as describeMqttError(), as a code for the Web UI. */
+function mqttErrorCode(err) {
+    const message = err?.message || String(err);
+    if (/Not authorized|Bad username or password|code: [45]/.test(message)) return { code: "accessCodeRejected", params: {} };
+    return connectionErrorCode(err, 8883) ?? {};
 }
 
 /**

@@ -4,7 +4,7 @@ import { spoolmanUrl } from "./settings.js";
 import { state } from "./state.js";
 import { debug, trace } from "./logger.js";
 import { correctRemainInt } from "./ams.js";
-import { describeConnectionError } from "./utils.js";
+import { describeConnectionError, connectionErrorCode } from "./utils.js";
 
 /**
  * Derives the used weight a newly created Spoolman spool should start at.
@@ -644,17 +644,17 @@ export async function useSpoolWeight(spoolId, usedGrams, lastUsed) {
  * @returns {Promise<{ok: boolean, status?: string, error?: string}>}
  */
 export async function checkSpoolmanHealth(url, timeout = 5000) {
-    if (!url) return { ok: false, error: "No endpoint configured" };
+    if (!url) return { ok: false, error: "No endpoint configured", code: "spoolmanNoEndpoint" };
 
     try {
         const response = await got(`${url}/api/v1/health`, { timeout: { request: timeout }, retry: { limit: 0 } });
         const health = JSON.parse(response.body);
 
         if (health.status === "healthy") return { ok: true, status: health.status };
-        return { ok: false, error: `Spoolman reports status "${health.status}"` };
+        return { ok: false, error: `Spoolman reports status "${health.status}"`, code: "spoolmanStatus", params: { status: health.status } };
     } catch (err) {
         const message = err?.message || String(err);
-        if (/404/.test(message)) return { ok: false, error: "Reachable, but there is no Spoolman API at this address" };
-        return { ok: false, error: describeConnectionError(err) ?? message };
+        if (/404/.test(message)) return { ok: false, error: "Reachable, but there is no Spoolman API at this address", code: "spoolmanNoApi" };
+        return { ok: false, error: describeConnectionError(err) ?? message, ...(connectionErrorCode(err) ?? {}) };
     }
 }

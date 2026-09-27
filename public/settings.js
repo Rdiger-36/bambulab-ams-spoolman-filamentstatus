@@ -847,7 +847,10 @@ async function saveLogDetail(printer) {
 function testPill(label, result) {
     const kind = !result.ok ? "pill-bad" : result.warning ? "pill-legacy" : "pill-ok";
     const state = !result.ok ? "failed" : result.warning ? "unconfirmed" : "reachable";
-    const message = result.ok ? result.warning : result.error;
+    // Worded by the code the server sends where the tables know it, see errorText() in i18n.js
+    const message = result.ok
+        ? (result.warning ? I18N.errorText({ error: result.warning, code: result.code, params: result.params }) : "")
+        : I18N.errorText(result);
     const reason = message ? ` <span class="set-test-reason">${escapeHtml(message)}</span>` : "";
 
     return `<span class="pill ${kind}">${escapeHtml(t(`settings.test.${state}`, { label }))}</span>${reason}`;
