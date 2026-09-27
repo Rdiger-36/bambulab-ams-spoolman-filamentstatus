@@ -1,0 +1,151 @@
+name: Bug report
+description: Something does not work as described, a spool is booked wrong, or a print is not tracked.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The fields below are what almost every report ends up needing, so filling them in now saves a round of questions.
+
+        Before you start, the [troubleshooting page](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/troubleshooting.md) and the [FAQ](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/faq.md) answer the most common cases, for example "No sliced file on the printer" on a P2S, H2 or X2D without a USB stick.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown at the bottom of every page and in the Service card on the settings page.
+      placeholder: 1.3.0-dev.27
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: How it runs
+      options:
+        - Docker or Docker Compose
+        - Home Assistant add-on
+        - Node directly, without a container
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: printer
+    attributes:
+      label: Printer model
+      description: Pick every printer the problem shows on.
+      multiple: true
+      options:
+        - A1 mini
+        - A1
+        - P1P
+        - P1S
+        - P2S
+        - X1C
+        - X1E
+        - H2S
+        - H2D
+        - H2C
+        - X2D
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ams
+    attributes:
+      label: AMS units
+      multiple: true
+      options:
+        - AMS (original)
+        - AMS 2 Pro
+        - AMS HT
+        - AMS Lite
+        - External spool holder only
+    validations:
+      required: true
+
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Storage in the printer
+      description: The sliced file is read from the printer's USB stick or microSD card. Without one, consumption cannot be tracked.
+      options:
+        - USB stick or microSD card inserted
+        - Nothing inserted
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tracking
+    attributes:
+      label: Tracking and mode
+      description: Both are on the settings page.
+      multiple: true
+      options:
+        - G-code tracking (default)
+        - Legacy mode
+        - Manual mode
+        - Automatic mode
+    validations:
+      required: true
+
+  - type: dropdown
+    id: print_start
+    attributes:
+      label: How the print was started
+      description: Only if the problem is about a print or its consumption.
+      options:
+        - Not about a print
+        - Bambu Studio or Orca over the LAN
+        - Bambu Studio through the cloud
+        - Bambu Handy app
+        - MakerWorld profile, printed directly
+        - MakerWorld model, changed in Bambu Studio and then printed
+        - On the printer's screen
+        - Other
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and which slot or spool it was about.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: |
+        The lines around the moment it happened, from the log page of the printer. Set the printer's log level to debug first if you can reproduce it.
+        Check that nothing private is in them. Log lines never contain the access code, but they do contain your printer's serial number and IP address.
+      render: text
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics archive
+      description: |
+        For anything about tracking, booking or a printer model that behaves differently, the diagnostics archive helps most: Settings, Service card, Download diagnostics, choose Anonymised, and drag the zip in here.
+        For a problem with a print, switch the raw MQTT trace on for that printer before the print starts (Settings, Printers, Log). The printer announces a print once, right before it starts, and a trace switched on later misses it.
+      placeholder: Drag the anonymised zip here, or say why you would rather not attach it.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the troubleshooting page and the open issues.
+          required: true
+        - label: I removed or anonymised access codes, API keys and passwords from everything above.
+          required: true
