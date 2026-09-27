@@ -7,9 +7,11 @@
  * English where it is missing rather than the key.
  *
  * A language is one file under `public/i18n/`, which registers its table with
- * `I18N.register("de", "Deutsch", { ... })`, and one script tag for it on every
- * page. Nothing else has to change for another language: the switch in the menu
- * bar lists whatever registered.
+ * `I18N.register("de", "Deutsch", { ... })`. The pages load every table at once
+ * through `i18n/all.js`, which the server puts together from that folder (see
+ * src/languages.js), so nothing else has to change for another language: the
+ * switch in the menu bar lists whatever registered. Its name in the other
+ * languages is a `language.<code>` key in their tables.
  *
  * A classic script on purpose. `menu.js`, `export.js`, `logs.js` and `login.js`
  * are classic scripts and read it off the global scope, the modules do the same

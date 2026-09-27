@@ -50,6 +50,8 @@ const PUBLIC_PATHS = new Set([
     "/login.html",
     "/login.js",
     "/styles.css",
+    "/i18n.js",
+    "/i18n/all.js",
     "/api/auth/state",
     "/api/auth/login",
     "/api/auth/logout",

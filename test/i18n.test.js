@@ -64,3 +64,24 @@ test("a text fills its placeholders, falls back to English and then to the key",
     assert.equal(I18N.languageLabel("de"), "German (DE)");
     assert.equal(I18N.languageLabel("xx"), "Test (XX)");
 });
+
+test("the pages get every table in the folder through one script, English first", async () => {
+    const { readLanguageBundle } = await import("../src/languages.js");
+    const dir = new URL("../public/i18n/", import.meta.url).pathname;
+    const bundle = readLanguageBundle(dir);
+    assert.ok(bundle.startsWith("// en.js\n"));
+    for (const name of languageFiles) assert.ok(bundle.includes(`// ${name}\n`), name);
+
+    // A new table is picked up by being there
+    const fs = await import("fs");
+    const os = await import("os");
+    const path = await import("path");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "i18n-"));
+    for (const name of languageFiles) fs.copyFileSync(path.join(dir, name), path.join(tmp, name));
+    fs.writeFileSync(path.join(tmp, "es.js"), 'I18N.register("es", "Español", {});\n');
+    fs.writeFileSync(path.join(tmp, "notes.txt"), "not a table");
+    const extended = readLanguageBundle(tmp);
+    assert.ok(extended.includes('I18N.register("es"'));
+    assert.ok(!extended.includes("not a table"));
+    fs.rmSync(tmp, { recursive: true });
+});
