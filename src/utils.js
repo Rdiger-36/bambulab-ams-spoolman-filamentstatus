@@ -364,10 +364,31 @@ export function offlineBackoff(failures, base, limit) {
 export function describeConnectionError(err, { port = null, timeoutHint = "", refusedHint = "" } = {}) {
     const message = err?.message || String(err ?? "");
     const where = port ? `Port ${port}` : "The connection";
-    if (/ECONNREFUSED/.test(message)) return `${where} refused the connection${refusedHint ? `. ${refusedHint}` : ""}`;
+    if (/ECONNREFUSED/.test(message)) return `${port ? `${where} refused the connection` : "The connection was refused"}${refusedHint ? `. ${refusedHint}` : ""}`;
     if (/ETIMEDOUT|timeout/i.test(message)) return `No answer${port ? ` on port ${port}` : ""} within the timeout${timeoutHint ? `. ${timeoutHint}` : ""}`;
     if (/EHOSTUNREACH|ENETUNREACH/.test(message)) return "The address cannot be reached";
     if (/ENOTFOUND|EAI_AGAIN/.test(message)) return "The host name cannot be resolved";
+    return null;
+}
+
+/**
+ * The same four causes as `describeConnectionError()`, as a code and the
+ * values the sentence names, for the Web UI to word in its own language. The
+ * code carries which of the known hints the sentence ends with: `Mqtt` for
+ * the LAN mode question on 8883, `Ftps` for the FTP access question on 990.
+ *
+ * @param {Error|string} err - the error, or its message
+ * @param {number|string|null} [port] - the port, as the caller names it to describeConnectionError()
+ * @returns {{code: string, params: object}|null}
+ */
+export function connectionErrorCode(err, port = null) {
+    const message = err?.message || String(err ?? "");
+    const hint = Number(port) === 8883 ? "Mqtt" : Number(port) === 990 ? "Ftps" : "";
+    const params = port ? { port } : {};
+    if (/ECONNREFUSED/.test(message)) return { code: `connection.refused${port ? "" : "Anywhere"}${hint === "Ftps" ? "Ftps" : ""}`, params };
+    if (/ETIMEDOUT|timeout/i.test(message)) return { code: `connection.timeout${port ? "" : "Anywhere"}${hint === "Mqtt" ? "Mqtt" : ""}`, params };
+    if (/EHOSTUNREACH|ENETUNREACH/.test(message)) return { code: "connection.unreachable", params: {} };
+    if (/ENOTFOUND|EAI_AGAIN/.test(message)) return { code: "connection.unresolved", params: {} };
     return null;
 }
 

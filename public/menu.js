@@ -72,6 +72,7 @@ function initMenubar(options = {}) {
     menuOptions = options;
     renderMenubar();
     setupDarkMode();
+    setupLanguageSwitch();
     return refreshMenubarPrinters();
 }
 
@@ -95,28 +96,29 @@ function renderMenubar() {
     const page = currentPage();
 
     root.innerHTML = `
-        <nav class="menunav" aria-label="Main">
+        <nav class="menunav" aria-label="${t("menu.main")}">
             <button class="menu-item menu-burger" type="button" id="menu-burger"
                     aria-haspopup="true" aria-expanded="false" aria-controls="menu-pages">
-                <span aria-hidden="true">☰</span> Menu
+                <span aria-hidden="true">☰</span> ${t("menu.menu")}
             </button>
 
             <div class="menu-pages" id="menu-pages">
-                <a class="menu-item" href="index.html"${page === "dashboard" ? ' aria-current="page"' : ""}>Dashboard</a>
-                <a class="menu-item" href="settings.html"${page === "settings" ? ' aria-current="page"' : ""}>Settings</a>
+                <a class="menu-item" href="index.html"${page === "dashboard" ? ' aria-current="page"' : ""}>${t("menu.dashboard")}</a>
+                <a class="menu-item" href="settings.html"${page === "settings" ? ' aria-current="page"' : ""}>${t("menu.settings")}</a>
                 <div class="menu-host">
                     <button class="menu-item menu-caret" type="button" id="menu-logs"
                             aria-haspopup="true" aria-expanded="false" aria-controls="menu-logs-panel"
-                            ${page === "logs" ? 'aria-current="page"' : ""}>Logs</button>
+                            ${page === "logs" ? 'aria-current="page"' : ""}>${t("menu.logs")}</button>
                     <div class="menu-panel" id="menu-logs-panel" hidden></div>
                 </div>
             </div>
 
             <div class="menu-end">
-                <button id="dark-mode-toggle" type="button" title="Light and dark mode" aria-label="Toggle dark mode">
+                ${languageSwitch()}
+                <button id="dark-mode-toggle" type="button" title="${t("menu.theme")}" aria-label="${t("menu.themeToggle")}">
                     <span id="dark-mode-icon">${LIGHT_MODE_ICON}</span>
                 </button>
-                <a class="menu-item menu-logout" href="#" id="menu-logout" hidden>${LOGOUT_ICON}Log out</a>
+                <a class="menu-item menu-logout" href="#" id="menu-logout" hidden>${LOGOUT_ICON}${t("menu.logout")}</a>
             </div>
         </nav>`;
 
@@ -415,7 +417,7 @@ function printerChoices() {
     const current = currentMenuPrinter();
     return menuPrinters.map(printer => ({
         label: printer.name,
-        heading: "Show on the dashboard",
+        heading: t("menu.showOnDashboard"),
         current: printer.id === current?.id,
         action: () => selectMenuPrinter(printer),
     }));
@@ -436,7 +438,7 @@ function logChoices() {
     const openTrace = params.get("stream") === "mqtt";
 
     const choices = [{
-        label: "Server",
+        label: t("menu.server"),
         current: !openSerial,
         action: () => { window.location.href = "logs.html?name=server"; },
     }];
@@ -444,7 +446,7 @@ function logChoices() {
     for (const printer of menuPrinters) {
         choices.push({
             label: printer.name,
-            heading: "Printers",
+            heading: t("menu.printers"),
             note: printer.id,
             current: printer.id === openSerial,
             action: () => openPrinterLog(printer, openTrace),
@@ -456,7 +458,7 @@ function logChoices() {
     if (openSerial && !choices.some(choice => choice.current)) {
         choices.push({
             label: params.get("name") || openSerial,
-            heading: "Printers",
+            heading: t("menu.printers"),
             note: openSerial,
             current: true,
             action: () => {},
@@ -502,13 +504,13 @@ function renderLogEntries() {
     const serverOpen = onLogs && !openSerial;
 
     panel.innerHTML = "";
-    panel.appendChild(panelEntry("Server", () => {
+    panel.appendChild(panelEntry(t("menu.server"), () => {
         window.location.href = "logs.html?name=server";
     }, { current: serverOpen }));
 
     if (!menuPrinters.length) return;
 
-    panel.appendChild(panelHeading("Printers"));
+    panel.appendChild(panelHeading(t("menu.printers")));
     for (const printer of menuPrinters) {
         panel.appendChild(panelEntry(printer.name, () => openPrinterLog(printer), {
             current: printer.id === openSerial,
@@ -538,6 +540,25 @@ function selectMenuPrinter(printer) {
 function currentMenuPrinter() {
     const lastId = sessionStorage.getItem(SELECTED_PRINTER_KEY);
     return menuPrinters.find(printer => printer.id === lastId) ?? menuPrinters[0] ?? null;
+}
+
+/**
+ * The language switch next to the dark mode button: every language that has a
+ * table, each under its own name. Left out while there is only one.
+ */
+function languageSwitch() {
+    const languages = window.I18N.languages();
+    if (languages.length < 2) return "";
+    const current = window.I18N.language();
+    const options = languages
+        .map(([code]) => `<option value="${code}"${code === current ? " selected" : ""}>${window.I18N.languageLabel(code)}</option>`)
+        .join("");
+    return `<select id="language-select" class="menu-language" title="${t("menu.language")}" aria-label="${t("menu.language")}">${options}</select>`;
+}
+
+function setupLanguageSwitch() {
+    const select = document.getElementById("language-select");
+    if (select) select.addEventListener("change", () => window.I18N.setLanguage(select.value));
 }
 
 function setupDarkMode() {

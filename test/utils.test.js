@@ -45,3 +45,12 @@ test("the four connection failures read the same wherever a socket is opened", (
     assert.equal(describeConnectionError(new Error("Not authorized")), null);
     assert.equal(describeConnectionError("Response code 404 (Not Found)"), null);
 });
+
+test("a failed connection is handed out as a code the Web UI words itself", async () => {
+    const { connectionErrorCode } = await import("../src/utils.js");
+    assert.deepEqual(connectionErrorCode(new Error("connect ECONNREFUSED"), 990), { code: "connection.refusedFtps", params: { port: 990 } });
+    assert.deepEqual(connectionErrorCode(new Error("connect ETIMEDOUT"), 8883), { code: "connection.timeoutMqtt", params: { port: 8883 } });
+    assert.deepEqual(connectionErrorCode(new Error("connect ECONNREFUSED"), null), { code: "connection.refusedAnywhere", params: {} });
+    assert.deepEqual(connectionErrorCode(new Error("getaddrinfo ENOTFOUND spoolman"), null), { code: "connection.unresolved", params: {} });
+    assert.equal(connectionErrorCode(new Error("something else"), 990), null);
+});

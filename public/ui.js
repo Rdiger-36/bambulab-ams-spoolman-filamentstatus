@@ -38,7 +38,9 @@ async function fetchJson(url, options) {
             window.location.href = `login.html?next=${next}`;
         }
 
-        const error = new Error(body.error || `HTTP ${res.status}`);
+        // In the viewer's language where the answer carries a code the tables
+        // know, see errorText() in i18n.js
+        const error = new Error(globalThis.I18N ? globalThis.I18N.errorText(body, res.status) : (body.error || `HTTP ${res.status}`));
         error.conflict = !!body.conflict;
         error.printInFlight = !!body.printInFlight;
         throw error;

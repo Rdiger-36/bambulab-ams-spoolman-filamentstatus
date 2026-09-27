@@ -24,10 +24,13 @@ import { fileURLToPath } from "node:url";
  * three times as many codes and three times the bytes for a field this
  * service does not read.
  *
- * English only. The Web UI is English, and every language multiplies the
- * file.
+ * One file per language. English is `print-errors.json`, which the log and
+ * the API speak, and every other language `print-errors.<lang>.json`, which
+ * the Web UI shows in that language. A code a language lacks falls back to
+ * English there. German is shipped because the Web UI speaks German; another
+ * language is one more run with its code.
  *
- * Usage: node scripts/fetch-print-errors.js
+ * Usage: node scripts/fetch-print-errors.js [lang]   (default en)
  *
  * The output is sorted and stable, so a rerun that changes nothing produces
  * no diff and a rerun that does shows exactly which sentences moved. ha-bambulab
@@ -58,18 +61,20 @@ const SERIAL_PREFIXES = {
     H2D: "094",
 };
 
+const LANG = (process.argv[2] || "en").toLowerCase();
+
 const OUTPUT = path.join(
     path.dirname(path.dirname(fileURLToPath(import.meta.url))),
-    "src", "data", "print-errors.json",
+    "src", "data", LANG === "en" ? "print-errors.json" : `print-errors.${LANG}.json`,
 );
 
 /** One model's catalogue, or null when the endpoint has none for the prefix. */
 async function fetchCatalogue(prefix) {
-    const response = await fetch(`https://e.bambulab.com/query.php?lang=en&d=${prefix}`);
+    const response = await fetch(`https://e.bambulab.com/query.php?lang=${LANG}&d=${prefix}`);
     if (!response.ok) throw new Error(`${prefix}: HTTP ${response.status}`);
 
     const body = await response.json();
-    const entries = body?.data?.device_error?.en;
+    const entries = body?.data?.device_error?.[LANG];
     if (body?.result !== 0 || !Array.isArray(entries)) return null;
 
     return { version: body.ver, entries };
@@ -126,7 +131,7 @@ async function main() {
     }
 
     const output = {
-        source: "https://e.bambulab.com/query.php?lang=en&d=<serial prefix>",
+        source: `https://e.bambulab.com/query.php?lang=${LANG}&d=<serial prefix>`,
         version: [...versions].sort().at(-1),
         models,
         errors,

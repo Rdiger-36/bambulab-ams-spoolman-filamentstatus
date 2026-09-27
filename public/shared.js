@@ -174,6 +174,46 @@ export function formatDate(date) {
 }
 
 /**
+ * The text of a key in the viewer's language, or `english` when there is none.
+ *
+ * The browser loads `i18n.js` before this file and the server never does, so
+ * `globalThis.I18N` is the one thing that tells the two apart. The server's log
+ * lines stay English that way, and so does a page whose tables lack the key: a
+ * key that is not known is answered in English here rather than shown as a key.
+ *
+ * @param {string} key - a `format.` key
+ * @param {object} params - the placeholder values, `count` among them
+ * @param {string} english - today's English text, exactly as it was
+ * @returns {string}
+ */
+function translated(key, params, english) {
+    const i18n = globalThis.I18N;
+    if (!i18n?.has?.(key)) return english;
+    return i18n.t(key, params);
+}
+
+/**
+ * One unit of a duration, "5 hours", "1 Day", "14 min", "05 s".
+ *
+ * `value` may arrive padded, "05", and is written as it arrives; the plural is
+ * picked by its number. Only days and hours have a plural in English.
+ *
+ * @param {"days"|"hours"|"min"|"s"} unit
+ * @param {number|string} value
+ * @returns {string}
+ */
+function durationUnit(unit, value) {
+    const one = Number(value) === 1;
+    const english = {
+        days: `${value} ${one ? "Day" : "Days"}`,
+        hours: `${value} ${one ? "hour" : "hours"}`,
+        min: `${value} min`,
+        s: `${value} s`,
+    }[unit];
+    return translated(`format.${unit}`, { count: value }, english);
+}
+
+/**
  * A running duration, in words: how long a print has been running, how long
  * its result still has before it clears itself, and how long a finished print
  * took.
@@ -206,11 +246,13 @@ export function formatCounter(ms) {
     const hours = Math.floor(total / 3600) % 24;
     const days = Math.floor(total / 86400);
 
-    const hourWord = `${hours} ${hours === 1 ? "hour" : "hours"}`;
-    if (days) return `${days} ${days === 1 ? "Day" : "Days"} ${hourWord} ${minutes} min`;
-    if (total >= 3600) return `${hourWord} ${pad(minutes)} min ${pad(seconds)} s`;
-    if (total >= 60) return `${minutes} min ${pad(seconds)} s`;
-    return `${pad(seconds)} s`;
+    const hourWord = durationUnit("hours", hours);
+    const minuteWord = value => durationUnit("min", value);
+    const secondWord = durationUnit("s", pad(seconds));
+    if (days) return `${durationUnit("days", days)} ${hourWord} ${minuteWord(minutes)}`;
+    if (total >= 3600) return `${hourWord} ${minuteWord(pad(minutes))} ${secondWord}`;
+    if (total >= 60) return `${minuteWord(minutes)} ${secondWord}`;
+    return secondWord;
 }
 
 /**
@@ -229,18 +271,18 @@ export function formatCounter(ms) {
  */
 export function formatRemaining(minutes) {
     if (minutes == null) return null;
-    if (minutes <= 0) return "< 1 min";
+    if (minutes <= 0) return translated("format.lessThanMinute", {}, "< 1 min");
 
     const days = Math.floor(minutes / 1440);
     const hours = Math.floor(minutes / 60) % 24;
     const rest = minutes % 60;
 
     const parts = [];
-    if (days) parts.push(`${days} ${days === 1 ? "Day" : "Days"}`);
-    if (hours) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+    if (days) parts.push(durationUnit("days", days));
+    if (hours) parts.push(durationUnit("hours", hours));
     // The minutes are dropped only when something larger carries the estimate
     // already, so "4 hours" stays "4 hours" rather than becoming "4 hours 0 min".
-    if (rest || !parts.length) parts.push(`${rest} min`);
+    if (rest || !parts.length) parts.push(durationUnit("min", rest));
 
     return `~ ${parts.join(" ")}`;
 }

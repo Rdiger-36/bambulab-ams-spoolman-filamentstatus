@@ -3,7 +3,7 @@ import AdmZip from "adm-zip";
 import { Writable } from "stream";
 import { createHash } from "crypto";
 
-import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot, describeConnectionError } from "./utils.js";
+import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot, describeConnectionError, connectionErrorCode } from "./utils.js";
 import { debug, trace } from "./logger.js";
 import { normColor } from "../public/shared.js";
 
@@ -1166,7 +1166,7 @@ export async function testFtpsConnection(printer, timeout = 8000) {
         return { ok: true };
     } catch (err) {
         const detail = err?.message || String(err);
-        return { ok: false, error: describeFtpsError(err), detail };
+        return { ok: false, error: describeFtpsError(err), ...ftpsErrorCode(err), detail };
     } finally {
         client.close();
     }
@@ -1181,6 +1181,13 @@ function describeFtpsError(err) {
     const message = err?.message || String(err);
     if (err?.code === 530 || /530/.test(message)) return "The printer rejected the access code";
     return describeConnectionError(err, { port: 990, refusedHint: "Is FTP access enabled on the printer?" }) ?? message;
+}
+
+/** The same as describeFtpsError(), as a code for the Web UI. */
+function ftpsErrorCode(err) {
+    const message = err?.message || String(err);
+    if (err?.code === 530 || /530/.test(message)) return { code: "accessCodeRejected", params: {} };
+    return connectionErrorCode(err, 990) ?? {};
 }
 
 /**

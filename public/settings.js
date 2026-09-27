@@ -7,16 +7,48 @@
 // stay classic scripts and are read off the global scope.
 import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 
-// Order and headline of the field groups. The group key comes from the schema,
-// the fields the schema marks as advanced go into the collapsed part.
-const GROUPS = [
-    { key: "spoolman", title: "Spoolman connection", advancedLabel: "Host, port, subfolder and public URL" },
-    { key: "tracking", title: "Tracking" },
-    { key: "sync",     title: "Synchronisation" },
-    { key: "printer",  title: "Printer connection" },
-    { key: "logging",  title: "Logging" },
-    { key: "network",  title: "Network access" },
-];
+// Order of the field groups. The group key comes from the schema, the fields
+// the schema marks as advanced go into the collapsed part. The headline is
+// `settings.group.<key>.title`, the label of the collapsed part
+// `settings.group.<key>.advanced` where a group names it.
+const GROUPS = ["spoolman", "tracking", "sync", "printer", "logging", "network"];
+
+/**
+ * The label, description or option label of a schema field in the viewer's
+ * language.
+ *
+ * The server describes its fields in English and stays that way, because API
+ * clients read the same schema. A table that knows the field wins, and a field
+ * added on the server before any table knows it still shows its English text
+ * rather than a key.
+ *
+ * @param {object} field - one entry of `fields`
+ * @param {"label"|"description"} part - which text
+ * @returns {string}
+ */
+function fieldText(field, part) {
+    const key = `settings.field.${field.key}.${part}`;
+    return window.I18N.has(key) ? t(key) : field[part];
+}
+
+/** The label of one option of a field, falling back to the value itself. */
+function optionText(field, option) {
+    const key = `settings.field.${field.key}.option.${option}`;
+    return window.I18N.has(key) ? t(key) : option;
+}
+
+/**
+ * A status word the server hands out in English, such as the MQTT state of a
+ * printer, in the viewer's language. The value itself is never changed, only
+ * what is shown for it.
+ *
+ * @param {string} prefix - the key group, "settings.status"
+ * @param {string} value - the value as the server sent it
+ */
+function valueText(prefix, value) {
+    const key = `${prefix}.${value}`;
+    return window.I18N.has(key) ? t(key) : value;
+}
 
 let fields = [];
 let values = {};
@@ -130,22 +162,20 @@ async function loadEnvInfo() {
     }
 
     const code = list => `<code>${list.map(escapeHtml).join("</code>, <code>")}</code>`;
-    const parts = ["<h2>Information</h2>"];
+    const parts = [`<h2>${escapeHtml(t("settings.env.title"))}</h2>`];
 
-    parts.push(`<p>These settings are still taken from environment variables, which is
-                   <b>deprecated since 1.3.0</b>: ${code(notice.variables)}. They are marked
-                   <span class="pill pill-gcode">from the environment</span> in the fields below.</p>`);
-    parts.push(`<p>Saving on this page writes <b>every</b> setting into
-                   <code>printers/settings.json</code>, not only the field that was changed. After
-                   that the file owns them all and none of these variables changes anything any
-                   more, whatever the compose file says.</p>`);
+    // The keys ending in Html carry their own markup. Only the variable list is
+    // filled in, and code() has already escaped it.
+    parts.push(`<p>${t("settings.env.deprecatedHtml", {
+        variables: code(notice.variables),
+        badge: `<span class="pill pill-gcode">${escapeHtml(t("settings.badge.environment"))}</span>`,
+    })}</p>`);
+    parts.push(`<p>${t("settings.env.saveWritesAllHtml")}</p>`);
 
     if (notice.printerVariables?.length) {
-        parts.push(notice.printerVariablesIgnored
-            ? `<p>${code(notice.printerVariables)} are set but have no effect:
-                  <code>printers.json</code> exists and owns the printer list.</p>`
-            : `<p>The printer list was seeded from ${code(notice.printerVariables)} and written to
-                  <code>printers.json</code>, which owns it from now on.</p>`);
+        parts.push(`<p>${t(notice.printerVariablesIgnored
+            ? "settings.env.printerVariablesIgnoredHtml"
+            : "settings.env.printerVariablesSeededHtml", { variables: code(notice.printerVariables) })}</p>`);
     }
 
     box.innerHTML = parts.join("");
@@ -171,7 +201,7 @@ function setDirty(dirty) {
     formDirty = dirty;
     document.getElementById("save-settings").disabled = !dirty;
     document.getElementById("reload-settings").disabled = !dirty;
-    document.getElementById("dirty-hint").textContent = dirty ? "Unsaved changes" : "";
+    document.getElementById("dirty-hint").textContent = dirty ? t("settings.unsavedChanges") : "";
 }
 
 /* ---- Settings form ---- */
@@ -182,7 +212,7 @@ async function loadSettings(userRequested = false) {
         if (userRequested) clearBanner();
         showRestartNotice();
     } catch (err) {
-        showBanner(`Could not load the settings: ${err.message}`, "bad");
+        showBanner(t("settings.error.load", { message: err.message }), "bad");
     }
 }
 
@@ -210,16 +240,13 @@ function showRestartNotice() {
 
     // With the supervisor the button next to this does the whole job, so naming
     // the manual way would only send the user off to a terminal for nothing.
-    showBanner(supervised
-        ? "Legacy mode was changed. Restart the service to apply it."
-        : "Legacy mode was changed. Restart the service to apply it: restart the container "
-          + "(docker restart <container>) or the Home Assistant add-on.", "warn");
+    showBanner(t(supervised ? "settings.restart.pendingSupervised" : "settings.restart.pendingManual"), "warn");
     // Straight from the notice, rather than sending the user looking for the
     // button further down the page.
     const action = document.createElement("button");
     action.className = "btn btn-small";
     action.type = "button";
-    action.textContent = "Restart now";
+    action.textContent = t("settings.restart.now");
     action.addEventListener("click", confirmRestart);
     document.getElementById("set-banner").append(" ", action);
 }
@@ -242,21 +269,21 @@ async function loadSystemInfo() {
     try {
         info = await fetchJson("./api/system");
     } catch (err) {
-        container.innerHTML = `<div class="set-fact"><dt>System</dt><dd>could not be read: ${escapeHtml(err.message)}</dd></div>`;
+        container.innerHTML = `<div class="set-fact"><dt>${escapeHtml(t("settings.system.system"))}</dt><dd>${escapeHtml(t("settings.system.unreadable", { message: err.message }))}</dd></div>`;
         return;
     }
 
     const rows = [
-        ["Version", info.version],
-        ["Node", info.node],
-        ["Platform", info.platform],
-        ["Uptime", formatUptime(info.uptime)],
-        ["Memory", `${info.memoryMB} MB`],
-        ["Tracking", info.tracking],
-        ["Supervisor", info.supervised ? "on" : "off"],
-        ["Printers", String(info.printers)],
-        ["API keys", String(info.apiKeys ?? 0)],
-        ["Spoolman", info.spoolman],
+        [t("settings.system.version"), info.version],
+        [t("settings.system.node"), info.node],
+        [t("settings.system.platform"), info.platform],
+        [t("settings.system.uptime"), formatUptime(info.uptime)],
+        [t("settings.system.memory"), `${info.memoryMB} MB`],
+        [t("settings.system.tracking"), trackingText(info.tracking)],
+        [t("settings.system.supervisor"), t(info.supervised ? "settings.on" : "settings.off")],
+        [t("settings.system.printers"), String(info.printers)],
+        [t("settings.system.apiKeys"), String(info.apiKeys ?? 0)],
+        [t("settings.system.spoolman"), valueText("settings.status", info.spoolman)],
     ];
 
     container.innerHTML = rows
@@ -264,13 +291,28 @@ async function loadSystemInfo() {
         .join("");
 }
 
+/**
+ * The tracking mode as the diagnostics name it, in the viewer's language. The
+ * server hands out a description rather than a key, so it is matched here and
+ * anything else is shown as it came.
+ */
+function trackingText(tracking) {
+    if (tracking === "G-code") return t("settings.system.trackingGcode");
+    if (typeof tracking === "string" && tracking.startsWith("legacy")) return t("settings.system.trackingLegacy");
+    return tracking;
+}
+
 /** Seconds into the coarsest unit that still says something useful. */
 function formatUptime(seconds) {
-    if (!Number.isFinite(seconds)) return "unknown";
-    if (seconds < 60) return `${seconds} s`;
-    if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
-    if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`;
-    return `${(seconds / 86400).toFixed(1)} days`;
+    if (!Number.isFinite(seconds)) return t("settings.unknown");
+    const number = (value, digits) => value.toLocaleString(window.I18N.language(), {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+    });
+    if (seconds < 60) return t("settings.uptime.seconds", { value: seconds });
+    if (seconds < 3600) return t("settings.uptime.minutes", { value: Math.round(seconds / 60) });
+    if (seconds < 86400) return t("settings.uptime.hours", { value: number(seconds / 3600, 1) });
+    return t("settings.uptime.days", { value: number(seconds / 86400, 1) });
 }
 
 /**
@@ -288,29 +330,29 @@ async function loadUpdate() {
     try {
         update = await fetchJson("./api/update");
     } catch {
-        note.textContent = "The update check could not be reached.";
+        note.textContent = t("settings.update.unreachable");
         return;
     }
 
     if (update.error) {
-        note.textContent = `Could not check for updates: ${update.error}`;
+        note.textContent = t("settings.update.failed", { message: update.error });
         return;
     }
 
     if (update.ahead) {
         // A dev or release candidate image. Saying "up to date" here would
         // suggest this version is the released one, which it is not.
-        note.textContent = `This is a prerelease. The latest release is ${update.latest}.`;
+        note.textContent = t("settings.update.prerelease", { latest: update.latest });
         return;
     }
 
     if (!update.updateAvailable) {
-        note.textContent = `Up to date, the latest release is ${update.latest}.`;
+        note.textContent = t("settings.update.upToDate", { latest: update.latest });
         return;
     }
 
-    note.innerHTML = `Version <strong>${escapeHtml(update.latest)}</strong> is available.
-        ${update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noopener">Release notes</a>` : ""}`;
+    note.innerHTML = `${t("settings.update.availableHtml", { latest: `<strong>${escapeHtml(update.latest)}</strong>` })}
+        ${update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noopener">${escapeHtml(t("settings.update.releaseNotes"))}</a>` : ""}`;
 }
 
 /**
@@ -332,12 +374,13 @@ async function downloadDiagnostics() {
 
     downloadWithExportMode({
         url: "./api/diagnostics/download",
-        title: "Download diagnostics",
-        what: "One archive with the settings, the printer list, the assignments and the facts about this installation, plus the logs ticked below, each with its rotated history and its raw MQTT trace where one was captured. This is what a bug report needs.",
+        title: t("settings.diagnostics.title"),
+        what: t("settings.diagnostics.what"),
         choices: {
-            heading: "Logs to include",
+            // export.js puts the heading into markup as it is
+            heading: escapeHtml(t("settings.diagnostics.heading")),
             options: [
-                { id: "server", label: "Server log" },
+                { id: "server", label: escapeHtml(t("settings.diagnostics.serverLog")) },
                 ...list.map(printer => ({ id: printer.id, label: `${escapeHtml(printer.name)} (${escapeHtml(printer.id)})` })),
             ],
         },
@@ -357,11 +400,13 @@ async function reconnectPrinters() {
 
     try {
         const result = await sendJson("./api/printers/reconnect", "POST", {});
-        const skipped = result.skipped ? `, ${result.skipped} skipped because monitoring is off` : "";
-        showBanner(`Reconnecting ${result.reconnected.length} printer(s)${skipped}.`, "ok");
+        const count = result.reconnected.length;
+        showBanner(result.skipped
+            ? t("settings.service.reconnectingSkipped", { count, skipped: result.skipped })
+            : t("settings.service.reconnecting", { count }), "ok");
         loadPrinters();
     } catch (err) {
-        showBanner(`Could not reconnect: ${err.message}`, "bad");
+        showBanner(t("settings.error.reconnect", { message: err.message }), "bad");
     } finally {
         button.disabled = false;
     }
@@ -378,9 +423,9 @@ function renderMonitoringButton() {
     if (!button) return;
 
     button.disabled = !printers.length;
-    button.textContent = anyMonitoring() ? "Pause all monitoring" : "Resume all monitoring";
+    button.textContent = t(anyMonitoring() ? "settings.service.pauseMonitoring" : "settings.service.resumeMonitoring");
     document.getElementById("service-note").textContent = printers.length && !anyMonitoring()
-        ? "Monitoring is paused. No AMS report is processed and nothing is written to Spoolman."
+        ? t("settings.service.monitoringPaused")
         : "";
 }
 
@@ -400,13 +445,14 @@ async function toggleAllMonitoring() {
         const result = await sendJson(`./api/monitoring/${enable ? "start" : "stop"}`, "POST", {});
         showBanner(
             result.changed.length
-                ? `Monitoring ${enable ? "resumed" : "paused"} for ${result.changed.length} of ${result.total} printer(s).`
-                : `Monitoring was already ${enable ? "on" : "off"} everywhere.`,
+                ? t(enable ? "settings.service.monitoringResumedFor" : "settings.service.monitoringPausedFor",
+                    { changed: result.changed.length, count: result.total })
+                : t(enable ? "settings.service.monitoringAlreadyOn" : "settings.service.monitoringAlreadyOff"),
             "ok",
         );
         await loadPrinters();
     } catch (err) {
-        showBanner(`Could not change monitoring: ${err.message}`, "bad");
+        showBanner(t("settings.error.monitoring", { message: err.message }), "bad");
     } finally {
         button.disabled = false;
         renderMonitoringButton();
@@ -415,23 +461,19 @@ async function toggleAllMonitoring() {
 
 /* ---- Restarting the service ---- */
 
-// The same promise the backend makes when it refuses a change during a print
-const RESTART_PRINT_NOTE = "A running print keeps printing and is booked when it ends, with its start time; "
-    + "on a P1 or an A1 the slots Bambu Studio sent it to are lost.";
-
+/** Asks before the service is restarted, and says what a running print keeps. */
 async function confirmRestart() {
+    // The print note is the same promise the backend makes when it refuses a
+    // change during a print
+    const printNote = escapeHtml(t("settings.restart.printNote"));
     const warning = supervised
-        ? `<p class="set-note">${RESTART_PRINT_NOTE}</p>`
-        : `<p class="set-note">When the container is not set to restart, for example with
-              <code>restart: unless-stopped</code>, it stays down and has to be started by hand.
-              ${RESTART_PRINT_NOTE}</p>`;
+        ? `<p class="set-note">${printNote}</p>`
+        : `<p class="set-note">${t("settings.restart.containerNoteHtml")} ${printNote}</p>`;
 
     const confirmed = await confirmAction({
-        title: "Restart the service?",
-        html: `<p>${supervised
-            ? "The service ends and is started again right away."
-            : "The process ends and has to be started again by Docker or the Home Assistant supervisor."}</p>${warning}`,
-        okLabel: "Restart",
+        title: t("settings.restart.confirmTitle"),
+        html: `<p>${escapeHtml(t(supervised ? "settings.restart.confirmSupervised" : "settings.restart.confirmManual"))}</p>${warning}`,
+        okLabel: t("settings.restart.ok"),
     });
 
     if (confirmed) restartNow(false);
@@ -440,14 +482,14 @@ async function confirmRestart() {
 async function restartNow(force) {
     try {
         await sendJson("./api/restart", "POST", { force });
-        showBanner("Restarting, waiting for the service to come back...", "warn");
+        showBanner(t("settings.restart.waiting"), "warn");
         waitForService();
     } catch (err) {
         if (err.printInFlight) {
             await confirmWhilePrinting(err, () => restartNow(true));
             return;
         }
-        showBanner(`Could not restart: ${err.message}`, "bad");
+        showBanner(t("settings.error.restart", { message: err.message }), "bad");
     }
 }
 
@@ -468,7 +510,7 @@ function waitForService(deadline = Date.now() + 60000) {
         }
 
         if (Date.now() < deadline) return waitForService(deadline);
-        showBanner("The service has not come back. Check whether the container is set to restart.", "bad");
+        showBanner(t("settings.restart.notBack"), "bad");
     }, 1500);
 }
 
@@ -476,7 +518,13 @@ function renderSettings() {
     const container = document.getElementById("settings-groups");
     container.innerHTML = "";
 
-    for (const group of GROUPS) {
+    for (const key of GROUPS) {
+        const advancedKey = `settings.group.${key}.advanced`;
+        const group = {
+            key,
+            title: t(`settings.group.${key}.title`),
+            advancedLabel: window.I18N.has(advancedKey) ? t(advancedKey) : t("settings.advanced"),
+        };
         const groupFields = fields.filter(field => field.group === group.key);
         if (!groupFields.length) continue;
 
@@ -499,7 +547,7 @@ function renderSettings() {
             ${group.key === "spoolman" ? renderEffectiveUrl() : ""}
             ${advanced.length ? `
                 <details class="set-advanced">
-                    <summary>${escapeHtml(group.advancedLabel || "Advanced")}</summary>
+                    <summary>${escapeHtml(group.advancedLabel)}</summary>
                     <div class="set-form">${advanced.map(renderField).join("")}</div>
                 </details>` : ""}
             ${group.key === "spoolman" ? renderSpoolmanTest() : ""}
@@ -533,7 +581,7 @@ function renderSettings() {
 
 function renderSpoolmanTest() {
     return `<div class="set-test-row">
-                <button class="btn btn-small" type="button" id="test-spoolman">Test connection</button>
+                <button class="btn btn-small" type="button" id="test-spoolman">${escapeHtml(t("settings.testConnection"))}</button>
                 <span class="set-test-result" id="test-spoolman-result"></span>
             </div>`;
 }
@@ -562,21 +610,25 @@ function renderLogDetailShell() {
     const categories = values.LOG_CATEGORIES ?? [];
     const all = logDetailField("LOG_CATEGORIES")?.options ?? [];
     const areas = categories.length === all.length
-        ? "every area"
+        ? t("settings.logDetail.areasAll")
         : categories.length
-            ? `${categories.length} of ${all.length} areas`
-            : "no area";
+            ? t("settings.logDetail.areasSome", { selected: categories.length, count: all.length })
+            : t("settings.logDetail.areasNone");
+    const levelField = logDetailField("LOG_LEVEL");
 
     // The line about printers that decided something of their own is filled by
     // renderPrinters(): the two cards are loaded independently, and this one is
     // rebuilt on every settings save while the printer list is not.
     return `<div class="set-test-row">
-                <button class="btn btn-small" type="button" id="open-logdetail">Log detail...</button>
+                <button class="btn btn-small" type="button" id="open-logdetail">${escapeHtml(t("settings.logDetail.open"))}</button>
                 <span class="set-test-reason">${escapeHtml(
                     // One text node, no inline markup: the row is a flex
                     // container, so an element inside this span would become a
                     // flex item and swallow the spaces around it
-                    `Level ${level ?? ""}, ${areas}, raw MQTT trace ${values.MQTT_TRACE ? "on" : "off"}`
+                    t(values.MQTT_TRACE ? "settings.logDetail.summaryTraceOn" : "settings.logDetail.summaryTraceOff", {
+                        level: level && levelField ? optionText(levelField, level) : (level ?? ""),
+                        areas,
+                    })
                 )}</span>
             </div>
             <p class="set-note" id="logdetail-overrides" hidden></p>`;
@@ -594,9 +646,11 @@ function renderLogDetailOverrides() {
 
     const overriding = printers.filter(printer => Object.keys(printer.logDetail || {}).length);
     note.hidden = overriding.length === 0;
-    const one = overriding.length === 1;
     note.textContent = overriding.length
-        ? `${overriding.map(printer => printer.name).join(", ")} ${one ? "has" : "have"} log settings of ${one ? "its" : "their"} own, edited in the Printers card.`
+        ? t("settings.logDetail.overrides", {
+            count: overriding.length,
+            names: overriding.map(printer => printer.name).join(", "),
+        })
         : "";
 }
 
@@ -624,18 +678,17 @@ function openLogDetailDialog(printer) {
     const trace = detail.mqttTrace ?? values.MQTT_TRACE;
 
     document.getElementById("logdetail-dialog-title").textContent =
-        printer ? `Log detail for ${printer.name}` : "Log detail";
+        printer ? t("settings.logDetail.titleFor", { name: printer.name }) : t("settings.logDetail.title");
     document.getElementById("logdetail-dialog-error").textContent = "";
 
     const inheritRow = printer
         ? `<div class="set-field set-field-toggle">
-               <label class="set-field-label" for="ld-inherit"><span>Follow the global settings</span></label>
+               <label class="set-field-label" for="ld-inherit"><span>${escapeHtml(t("settings.logDetail.inherit"))}</span></label>
                <label class="set-switch" for="ld-inherit">
                    <input type="checkbox" id="ld-inherit" ${inherits ? "checked" : ""}>
                    <span class="set-switch-track"></span>
                </label>
-               <small>On, this printer logs whatever the Logging card says. Off, the values below apply to
-                      this printer only and a later change to the global ones does not reach it.</small>
+               <small>${escapeHtml(t("settings.logDetail.inheritHelp"))}</small>
            </div>`
         : "";
 
@@ -653,21 +706,19 @@ function openLogDetailDialog(printer) {
     // leaving out, at about 22 MB an hour.
     const exportRow = printer
         ? `<div class="set-field" id="ld-export">
-               <label class="set-field-label"><span>Export</span></label>
+               <label class="set-field-label"><span>${escapeHtml(t("settings.logDetail.export"))}</span></label>
                <div class="set-checks set-export-row">
                    <label class="set-check">
                        <input type="checkbox" value="log" checked>
-                       <span>Printer log</span>
+                       <span>${escapeHtml(t("settings.logDetail.printerLog"))}</span>
                    </label>
                    <label class="set-check">
                        <input type="checkbox" value="trace" checked>
-                       <span>Raw MQTT trace</span>
+                       <span>${escapeHtml(t("settings.logDetail.rawTrace"))}</span>
                    </label>
-                   <button class="btn btn-small" type="button" id="ld-export-download">Download...</button>
+                   <button class="btn btn-small" type="button" id="ld-export-download">${escapeHtml(t("settings.logDetail.download"))}</button>
                </div>
-               <small>One archive with the ticked logs of this printer, each with its rotated history, plus the
-                      settings, the printer list and the assignments. The trace is only in it where one was
-                      captured. The download asks whether to anonymise.</small>
+               <small>${escapeHtml(t("settings.logDetail.exportHelp"))}</small>
            </div>`
         : "";
 
@@ -675,34 +726,34 @@ function openLogDetailDialog(printer) {
         <div class="set-form">
             ${inheritRow}
             <div class="set-field">
-                <label class="set-field-label" for="ld-level"><span>${escapeHtml(levelField.label)}</span></label>
+                <label class="set-field-label" for="ld-level"><span>${escapeHtml(fieldText(levelField, "label"))}</span></label>
                 <input type="range" id="ld-level" class="set-slider"
                        min="0" max="${levelField.options.length - 1}" step="1"
                        value="${Math.max(0, levelField.options.indexOf(level))}">
                 <div class="set-slider-scale">
-                    ${levelField.options.map(option => `<span>${escapeHtml(option)}</span>`).join("")}
+                    ${levelField.options.map(option => `<span>${escapeHtml(optionText(levelField, option))}</span>`).join("")}
                 </div>
-                <small>${escapeHtml(levelField.description)}</small>
+                <small>${escapeHtml(fieldText(levelField, "description"))}</small>
             </div>
             <div class="set-field">
-                <label class="set-field-label"><span>${escapeHtml(categoryField.label)}</span></label>
+                <label class="set-field-label"><span>${escapeHtml(fieldText(categoryField, "label"))}</span></label>
                 <div class="set-checks" id="ld-categories">
                     ${categoryField.options.map(option => `
                         <label class="set-check">
                             <input type="checkbox" value="${escapeHtml(option)}"
                                    ${categories.includes(option) ? "checked" : ""}>
-                            <span>${escapeHtml(option)}</span>
+                            <span>${escapeHtml(optionText(categoryField, option))}</span>
                         </label>`).join("")}
                 </div>
-                <small>${escapeHtml(categoryField.description)}</small>
+                <small>${escapeHtml(fieldText(categoryField, "description"))}</small>
             </div>
             <div class="set-field set-field-toggle">
-                <label class="set-field-label" for="ld-trace"><span>${escapeHtml(traceField.label)}</span></label>
+                <label class="set-field-label" for="ld-trace"><span>${escapeHtml(fieldText(traceField, "label"))}</span></label>
                 <label class="set-switch" for="ld-trace">
                     <input type="checkbox" id="ld-trace" ${trace ? "checked" : ""}>
                     <span class="set-switch-track"></span>
                 </label>
-                <small>${escapeHtml(traceField.description)}</small>
+                <small>${escapeHtml(fieldText(traceField, "description"))}</small>
             </div>
             ${budget}
             ${exportRow}
@@ -727,8 +778,8 @@ function openLogDetailDialog(printer) {
             const scope = ticked().map(file => `${printer.id}/${file}`).join(",");
             downloadWithExportMode({
                 url: `./api/diagnostics/download?scope=${encodeURIComponent(scope)}`,
-                title: `Export the logs of ${printer.name}`,
-                what: `The ticked logs of ${printer.name}, each with its rotated history, plus the settings, the printer list and the assignments.`,
+                title: t("settings.logDetail.exportTitle", { name: printer.name }),
+                what: t("settings.logDetail.exportWhat", { name: printer.name }),
             });
         };
     }
@@ -778,11 +829,11 @@ async function saveLogDetail(printer) {
         }
 
         closeDialog("logdetail-dialog");
-        showBanner("Saved and applied.", "ok");
+        showBanner(t("settings.savedApplied"), "ok");
     } catch (err) {
         error.textContent = err.conflict
-            ? "The settings were changed somewhere else in the meantime. Discard changes to load them, then apply yours again."
-            : `Could not save: ${err.message}`;
+            ? t("settings.error.conflict")
+            : t("settings.error.save", { message: err.message });
     } finally {
         save.disabled = false;
     }
@@ -796,10 +847,13 @@ async function saveLogDetail(printer) {
 function testPill(label, result) {
     const kind = !result.ok ? "pill-bad" : result.warning ? "pill-legacy" : "pill-ok";
     const state = !result.ok ? "failed" : result.warning ? "unconfirmed" : "reachable";
-    const message = result.ok ? result.warning : result.error;
+    // Worded by the code the server sends where the tables know it, see errorText() in i18n.js
+    const message = result.ok
+        ? (result.warning ? I18N.errorText({ error: result.warning, code: result.code, params: result.params }) : "")
+        : I18N.errorText(result);
     const reason = message ? ` <span class="set-test-reason">${escapeHtml(message)}</span>` : "";
 
-    return `<span class="pill ${kind}">${escapeHtml(label)} ${state}</span>${reason}`;
+    return `<span class="pill ${kind}">${escapeHtml(t(`settings.test.${state}`, { label }))}</span>${reason}`;
 }
 
 /**
@@ -811,7 +865,7 @@ async function testSpoolmanConnection() {
     const button = document.getElementById("test-spoolman");
     const output = document.getElementById("test-spoolman-result");
     button.disabled = true;
-    output.textContent = "Testing...";
+    output.textContent = t("settings.test.testing");
 
     try {
         const payload = {};
@@ -838,7 +892,7 @@ async function testPrinterConnection() {
     const button = document.getElementById("printer-dialog-test");
     const output = document.getElementById("printer-test-result");
     button.disabled = true;
-    output.textContent = "Testing...";
+    output.textContent = t("settings.test.testing");
 
     try {
         const result = await sendJson("./api/test/printer", "POST", {
@@ -863,8 +917,8 @@ async function testPrinterConnection() {
  */
 function renderEffectiveUrl() {
     return spoolmanUrl
-        ? `<p class="set-note">Currently talking to <code>${escapeHtml(spoolmanUrl)}</code></p>`
-        : `<p class="set-note set-note-warn">No endpoint configured, nothing is synchronised.</p>`;
+        ? `<p class="set-note">${t("settings.spoolman.talkingToHtml", { url: `<code>${escapeHtml(spoolmanUrl)}</code>` })}</p>`
+        : `<p class="set-note set-note-warn">${escapeHtml(t("settings.spoolman.noEndpoint"))}</p>`;
 }
 
 /**
@@ -878,18 +932,19 @@ function renderHeaderField(field) {
     const id = `set-${field.key}`;
     const reset = isDefault(field)
         ? ""
-        : `<button type="button" class="set-reset" data-reset="${field.key}">default</button>`;
+        : `<button type="button" class="set-reset" data-reset="${field.key}">${escapeHtml(t("settings.badge.default"))}</button>`;
+    const description = fieldText(field, "description");
 
     return `<div class="set-head-field">
-                <label for="${id}">${escapeHtml(field.label)}</label>
+                <label for="${id}">${escapeHtml(fieldText(field, "label"))}</label>
                 ${reset}
                 <label class="set-switch" for="${id}">
                     <input type="checkbox" id="${id}" ${values[field.key] ? "checked" : ""}>
                     <span class="set-switch-track"></span>
                 </label>
                 <span class="set-info" tabindex="0" role="note"
-                      aria-label="${escapeHtml(field.description)}"
-                      data-tip="${escapeHtml(field.description)}">i</span>
+                      aria-label="${escapeHtml(description)}"
+                      data-tip="${escapeHtml(description)}">i</span>
             </div>`;
 }
 
@@ -906,7 +961,7 @@ function renderField(field) {
                  </label>`;
     } else if (field.type === "enum") {
         const options = field.options
-            .map(option => `<option value="${escapeHtml(option)}" ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`)
+            .map(option => `<option value="${escapeHtml(option)}" ${option === value ? "selected" : ""}>${escapeHtml(optionText(field, option))}</option>`)
             .join("");
         input = `<select id="${id}">${options}</select>`;
     } else if (field.type === "integer") {
@@ -918,21 +973,21 @@ function renderField(field) {
         // not send. Left empty it keeps what is stored, which is the same rule
         // the printer access code follows.
         input = `<input type="password" id="${id}" autocomplete="new-password"
-                        placeholder="${hasValue[field.key] ? "unchanged" : "not set"}">`;
+                        placeholder="${escapeHtml(t(hasValue[field.key] ? "settings.placeholder.unchanged" : "settings.placeholder.notSet"))}">`;
     } else {
         input = `<input type="text" id="${id}" value="${escapeHtml(value ?? "")}">`;
     }
 
     const badges = [
-        field.restartRequired ? `<span class="pill pill-legacy">restart required</span>` : "",
-        sources[field.key] === "environment" ? `<span class="pill pill-gcode">from the environment</span>` : "",
+        field.restartRequired ? `<span class="pill pill-legacy">${escapeHtml(t("settings.badge.restartRequired"))}</span>` : "",
+        sources[field.key] === "environment" ? `<span class="pill pill-gcode">${escapeHtml(t("settings.badge.environment"))}</span>` : "",
         // Once saved, the file owns every field, so this is the only way back to
         // the documented value.
-        isDefault(field) ? "" : `<button type="button" class="set-reset" data-reset="${field.key}">default</button>`,
+        isDefault(field) ? "" : `<button type="button" class="set-reset" data-reset="${field.key}">${escapeHtml(t("settings.badge.default"))}</button>`,
         // Emptying the field means "unchanged", so removing a stored password
         // needs a gesture of its own.
         field.type === "password" && hasValue[field.key]
-            ? `<button type="button" class="set-reset" data-clear="${field.key}">remove</button>`
+            ? `<button type="button" class="set-reset" data-clear="${field.key}">${escapeHtml(t("settings.badge.remove"))}</button>`
             : "",
     ].join("");
 
@@ -940,10 +995,10 @@ function renderField(field) {
     // the label row and the description stays where it is for every field.
     return `<div class="set-field${field.type === "boolean" ? " set-field-toggle" : ""}">
                 <label class="set-field-label" for="${id}">
-                    <span>${escapeHtml(field.label)}</span>${badges}
+                    <span>${escapeHtml(fieldText(field, "label"))}</span>${badges}
                 </label>
                 ${input}
-                <small>${escapeHtml(field.description)}</small>
+                <small>${escapeHtml(fieldText(field, "description"))}</small>
             </div>`;
 }
 
@@ -980,7 +1035,7 @@ function clearPassword(key) {
 
     input.value = "";
     input.dataset.clear = "true";
-    input.placeholder = "will be removed on save";
+    input.placeholder = t("settings.placeholder.removedOnSave");
     document.querySelector(`[data-clear="${key}"]`)?.remove();
     setDirty(true);
 }
@@ -1025,14 +1080,14 @@ async function saveSettings(event) {
         if (restartPending) {
             showRestartNotice();
         } else if (result.changed.length) {
-            showBanner("Saved and applied.", "ok");
+            showBanner(t("settings.savedApplied"), "ok");
         } else {
-            showBanner("Nothing changed.", "ok");
+            showBanner(t("settings.nothingChanged"), "ok");
         }
     } catch (err) {
         showBanner(err.conflict
-            ? "The settings were changed somewhere else in the meantime. Discard changes to load them, then apply yours again."
-            : `Could not save: ${err.message}`, "bad");
+            ? t("settings.error.conflict")
+            : t("settings.error.save", { message: err.message }), "bad");
         button.disabled = false;
     }
 }
@@ -1058,14 +1113,11 @@ async function confirmKeysSurvivePassword(values) {
 
     const list = apiKeys.map(key => `<li>${escapeHtml(key.name)}</li>`).join("");
     return confirmAction({
-        title: "These API keys keep working",
-        html: `<p>The password ends every browser session, but it does not touch an API key. These
-                  ${apiKeys.length === 1 ? "key keeps" : `${apiKeys.length} keys keep`} full access to this
-                  service without ever being asked for it:</p>
+        title: t("settings.password.keysTitle"),
+        html: `<p>${escapeHtml(t("settings.password.keysText", { count: apiKeys.length }))}</p>
                <ul class="set-list">${list}</ul>
-               <p class="set-note">That is what a key is for. Revoke the ones you do not recognise, under
-                  API keys in this card, and save again.</p>`,
-        okLabel: "Set the password",
+               <p class="set-note">${escapeHtml(t("settings.password.keysNote"))}</p>`,
+        okLabel: t("settings.password.set"),
     });
 }
 
@@ -1082,46 +1134,49 @@ async function loadPrinters() {
         renderMonitoringButton();
     } catch (err) {
         document.getElementById("printer-table").innerHTML =
-            `<p class="set-error">Could not load the printers: ${escapeHtml(err.message)}</p>`;
+            `<p class="set-error">${escapeHtml(t("settings.error.loadPrinters", { message: err.message }))}</p>`;
     }
 }
 
 /** Maps an MQTT status onto one of the shared status pill styles. */
 function statusPill(status) {
     const kind = status === "Connected" ? "pill-ok" : status === "Disabled" ? "pill-legacy" : "pill-bad";
-    return `<span class="pill ${kind}">${escapeHtml(status)}</span>`;
+    return `<span class="pill ${kind}">${escapeHtml(valueText("settings.status", status))}</span>`;
 }
 
 function renderPrinters() {
     const container = document.getElementById("printer-table");
 
     if (!printers.length) {
-        container.innerHTML = `<p class="set-note">No printers configured yet. The access code is the LAN code from the network settings of the printer.</p>`;
+        container.innerHTML = `<p class="set-note">${escapeHtml(t("settings.printers.empty"))}</p>`;
         return;
     }
 
     // The data-label of a cell is what the phone layout puts above its value,
     // where there is no header row to read it off. See the responsive block in
     // styles.css, which the spool tables use the same way.
+    const name = escapeHtml(t("settings.printers.name"));
+    const serial = escapeHtml(t("settings.printers.serial"));
+    const address = escapeHtml(t("settings.printers.address"));
     const rows = printers.map(printer => `
         <tr>
-            <td data-label="Name">${escapeHtml(printer.name)}</td>
-            <td class="set-mono" data-label="Serial number">${escapeHtml(printer.id)}</td>
-            <td class="set-mono" data-label="Address">${escapeHtml(printer.ip)}</td>
+            <td data-label="${name}">${escapeHtml(printer.name)}</td>
+            <td class="set-mono" data-label="${serial}">${escapeHtml(printer.id)}</td>
+            <td class="set-mono" data-label="${address}">${escapeHtml(printer.ip)}</td>
             <td data-label="MQTT">${statusPill(printer.mqttStatus)}</td>
             <td class="set-row-actions" data-label="">
-                <button class="btn btn-small" data-edit="${escapeHtml(printer.id)}">Edit</button>
-                <button class="btn btn-small" data-logdetail="${escapeHtml(printer.id)}">Log${
+                <button class="btn btn-small" data-edit="${escapeHtml(printer.id)}">${escapeHtml(t("settings.printers.edit"))}</button>
+                <button class="btn btn-small" data-logdetail="${escapeHtml(printer.id)}">${escapeHtml(t("settings.printers.log"))}${
                     Object.keys(printer.logDetail || {}).length ? " *" : ""}</button>
-                <button class="btn btn-small btn-danger" data-delete="${escapeHtml(printer.id)}">Delete</button>
+                <button class="btn btn-small btn-danger" data-delete="${escapeHtml(printer.id)}">${escapeHtml(t("settings.delete"))}</button>
             </td>
         </tr>`).join("");
 
     container.innerHTML = `<table class="data-table">
-            <thead><tr><th>Name</th><th>Serial number</th><th>Address</th><th>MQTT</th><th></th></tr></thead>
+            <thead><tr><th>${name}</th><th>${serial}</th><th>${address}</th><th>MQTT</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
         </table>
-        <p class="set-note">The access code is stored on the server and never sent back to the browser. Leave it empty while editing to keep the one already stored. <strong>Log</strong> sets how much this printer writes; a star marks one that no longer follows the Logging card.</p>`;
+        <p class="set-note">${t("settings.printers.noteHtml", { log: `<strong>${escapeHtml(t("settings.printers.log"))}</strong>` })}</p>`;
 
     container.querySelectorAll("[data-edit]").forEach(button => {
         button.onclick = () => openPrinterDialog(printers.find(p => p.id === button.dataset.edit));
@@ -1143,30 +1198,30 @@ function openPrinterDialog(printer) {
     const editing = !!printer;
     const dialog = document.getElementById("printer-dialog");
 
-    document.getElementById("printer-dialog-title").textContent = editing ? `Edit ${printer.name}` : "Add printer";
+    document.getElementById("printer-dialog-title").textContent = editing ? t("settings.printers.editTitle", { name: printer.name }) : t("settings.printers.add");
     document.getElementById("printer-dialog-error").textContent = "";
     document.getElementById("printer-test-result").textContent = "";
     document.getElementById("printer-dialog-fields").innerHTML = `
         <div class="set-field">
-            <label class="set-field-label" for="printer-name"><span>Name</span></label>
+            <label class="set-field-label" for="printer-name"><span>${escapeHtml(t("settings.printers.name"))}</span></label>
             <input type="text" id="printer-name" value="${escapeHtml(printer?.name ?? "")}">
-            <small>Shown in the Web UI and in the log files.</small>
+            <small>${escapeHtml(t("settings.printers.nameHelp"))}</small>
         </div>
         <div class="set-field">
-            <label class="set-field-label" for="printer-id"><span>Serial number</span></label>
+            <label class="set-field-label" for="printer-id"><span>${escapeHtml(t("settings.printers.serial"))}</span></label>
             <input type="text" id="printer-id" value="${escapeHtml(printer?.id ?? "")}" ${editing ? "disabled" : ""}>
-            <small>${editing ? "Cannot be changed. Add a new printer instead." : "Found on the printer under Settings, Device."}</small>
+            <small>${escapeHtml(t(editing ? "settings.printers.serialLocked" : "settings.printers.serialHelp"))}</small>
         </div>
         <div class="set-field">
-            <label class="set-field-label" for="printer-ip"><span>Address</span></label>
+            <label class="set-field-label" for="printer-ip"><span>${escapeHtml(t("settings.printers.address"))}</span></label>
             <input type="text" id="printer-ip" value="${escapeHtml(printer?.ip ?? "")}">
-            <small>Host name or IP address in the local network.</small>
+            <small>${escapeHtml(t("settings.printers.addressHelp"))}</small>
         </div>
         <div class="set-field">
-            <label class="set-field-label" for="printer-code"><span>Access code</span></label>
+            <label class="set-field-label" for="printer-code"><span>${escapeHtml(t("settings.printers.code"))}</span></label>
             <input type="password" id="printer-code" value="" autocomplete="new-password"
-                   placeholder="${editing ? "unchanged" : ""}">
-            <small>${editing ? "Leave empty to keep the stored code." : "LAN access code from the network settings of the printer."}</small>
+                   placeholder="${editing ? escapeHtml(t("settings.placeholder.unchanged")) : ""}">
+            <small>${escapeHtml(t(editing ? "settings.printers.codeKeep" : "settings.printers.codeHelp"))}</small>
         </div>`;
 
     document.getElementById("printer-dialog-save").onclick = () => savePrinter(printer);
@@ -1187,10 +1242,10 @@ async function savePrinter(printer, force = false) {
     try {
         if (printer) {
             await sendJson(`./api/printers/${encodeURIComponent(printer.id)}`, "PUT", payload);
-            showBanner(`Saved ${payload.name || printer.name}.`, "ok");
+            showBanner(t("settings.printers.saved", { name: payload.name || printer.name }), "ok");
         } else {
             await sendJson("./api/printers", "POST", { ...payload, id: document.getElementById("printer-id").value });
-            showBanner(`Added ${payload.name}. The connection is being established.`, "ok");
+            showBanner(t("settings.printers.added", { name: payload.name }), "ok");
         }
         closeDialog("printer-dialog");
         loadPrinters();
@@ -1213,7 +1268,7 @@ async function savePrinter(printer, force = false) {
  * @param {{title: string, html: string, okLabel?: string}} options
  * @returns {Promise<boolean>} whether the action was confirmed
  */
-function confirmAction({ title, html, okLabel = "Delete" }) {
+function confirmAction({ title, html, okLabel = t("settings.delete") }) {
     const dialog = document.getElementById("confirm-dialog");
     const ok = document.getElementById("confirm-dialog-ok");
     const cancel = document.getElementById("confirm-dialog-cancel");
@@ -1247,10 +1302,10 @@ function confirmAction({ title, html, okLabel = "Delete" }) {
  */
 async function confirmWhilePrinting(err, retry) {
     const confirmed = await confirmAction({
-        title: "A print is running",
+        title: t("settings.printing.title"),
         html: `<p>${escapeHtml(err.message)}</p>
-               <p class="set-note">Waiting until the print has finished is the safe way. A restart is usually back within seconds and still books the job with its start time, measured on a P2S; on a P1 or an A1 it loses the slots Bambu Studio sent the job to.</p>`,
-        okLabel: "Do it anyway",
+               <p class="set-note">${escapeHtml(t("settings.printing.note"))}</p>`,
+        okLabel: t("settings.printing.anyway"),
     });
 
     if (!confirmed) return false;
@@ -1260,10 +1315,9 @@ async function confirmWhilePrinting(err, retry) {
 
 function confirmDeletePrinter(printer) {
     confirmAction({
-        title: `Delete ${printer.name}?`,
-        html: `<p>The printer is disconnected and removed from the configuration.
-                  Its spool assignments are dropped as well. The log file is kept.</p>
-               <p class="set-note">Spools already created in Spoolman are not touched.</p>`,
+        title: t("settings.printers.deleteTitle", { name: printer.name }),
+        html: `<p>${escapeHtml(t("settings.printers.deleteText"))}</p>
+               <p class="set-note">${escapeHtml(t("settings.printers.deleteNote"))}</p>`,
     }).then(confirmed => confirmed && deletePrinter(printer, false));
 }
 
@@ -1276,14 +1330,14 @@ async function deletePrinter(printer, force) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ force }),
         });
-        showBanner(`Removed ${printer.name}.`, "ok");
+        showBanner(t("settings.printers.removed", { name: printer.name }), "ok");
         loadPrinters();
     } catch (err) {
         if (err.printInFlight) {
             await confirmWhilePrinting(err, () => deletePrinter(printer, true));
             return;
         }
-        showBanner(`Could not remove the printer: ${err.message}`, "bad");
+        showBanner(t("settings.error.removePrinter", { message: err.message }), "bad");
     }
 }
 
@@ -1301,12 +1355,12 @@ async function deletePrinter(printer, force) {
 function renderApiKeyShell() {
     return `<div class="set-subsection">
                 <div class="set-subhead">
-                    <h3>API keys
+                    <h3>${escapeHtml(t("settings.apikeys.title"))}
                         <a class="set-info set-info-link" href="api.html" id="open-api-page"
-                           data-tip="Opens the API page: every route of this service with its parameters and answers, and a button that sends it from the browser."
-                           aria-label="Open the API page">i</a>
+                           data-tip="${escapeHtml(t("settings.apikeys.apiPageTip"))}"
+                           aria-label="${escapeHtml(t("settings.apikeys.apiPageLabel"))}">i</a>
                     </h3>
-                    <button class="btn btn-small" type="button" id="add-apikey">Add key</button>
+                    <button class="btn btn-small" type="button" id="add-apikey">${escapeHtml(t("settings.apikeys.add"))}</button>
                 </div>
                 <div id="apikey-table"></div>
             </div>`;
@@ -1318,7 +1372,7 @@ async function loadApiKeys() {
     } catch (err) {
         apiKeys = [];
         const container = document.getElementById("apikey-table");
-        if (container) container.innerHTML = `<p class="set-error">Could not load the API keys: ${escapeHtml(err.message)}</p>`;
+        if (container) container.innerHTML = `<p class="set-error">${escapeHtml(t("settings.error.loadApiKeys", { message: err.message }))}</p>`;
         return;
     }
     renderApiKeys();
@@ -1329,37 +1383,40 @@ function renderApiKeys() {
     if (!container) return;
 
     if (!apiKeys.length) {
-        container.innerHTML = `<p class="set-note">No API keys. This API answers only the Web UI of this installation, so
-            a tool that has no browser, for example Home Assistant, Node-RED or a script, needs a key. It is shown once
-            when it is created.</p>`;
+        container.innerHTML = `<p class="set-note">${escapeHtml(t("settings.apikeys.empty"))}</p>`;
         return;
     }
 
+    const name = escapeHtml(t("settings.apikeys.name"));
+    const created = escapeHtml(t("settings.apikeys.created"));
+    const lastUsed = escapeHtml(t("settings.apikeys.lastUsed"));
     const rows = apiKeys.map(key => `
         <tr>
-            <td data-label="Name">${escapeHtml(key.name)}</td>
-            <td data-label="Created">${escapeHtml(formatStamp(key.createdAt))}</td>
-            <td data-label="Last used">${escapeHtml(key.lastUsedAt ? formatStamp(key.lastUsedAt) : "never")}</td>
+            <td data-label="${name}">${escapeHtml(key.name)}</td>
+            <td data-label="${created}">${escapeHtml(formatStamp(key.createdAt))}</td>
+            <td data-label="${lastUsed}">${escapeHtml(key.lastUsedAt ? formatStamp(key.lastUsedAt) : t("settings.apikeys.never"))}</td>
             <td class="set-row-actions" data-label="">
-                <button class="btn btn-small btn-danger" data-revoke="${escapeHtml(key.id)}">Revoke</button>
+                <button class="btn btn-small btn-danger" data-revoke="${escapeHtml(key.id)}">${escapeHtml(t("settings.apikeys.revoke"))}</button>
             </td>
         </tr>`).join("");
 
     container.innerHTML = `<table class="data-table">
-            <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+            <thead><tr><th>${name}</th><th>${created}</th><th>${lastUsed}</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
         </table>
-        <p class="set-note">A key counts as a full session: it may read and change everything the Web UI can. Send it as
-            <code>Authorization: Bearer &lt;key&gt;</code> or <code>X-API-Key: &lt;key&gt;</code>. Only a hash is stored,
-            so a lost key is replaced rather than looked up. "Last used" is written at most once a minute.</p>`;
+        <p class="set-note">${t("settings.apikeys.noteHtml", { bearer: BEARER_HEADER, header: KEY_HEADER, lastUsed })}</p>`;
 
     container.querySelectorAll("[data-revoke]").forEach(button => {
         button.onclick = () => confirmRevokeApiKey(apiKeys.find(key => key.id === button.dataset.revoke));
     });
 }
 
+// The two ways to send a key, the same in every language
+const BEARER_HEADER = "<code>Authorization: Bearer &lt;key&gt;</code>";
+const KEY_HEADER = "<code>X-API-Key: &lt;key&gt;</code>";
+
 /**
- * A stored timestamp in the language of the browser, or "unknown".
+ * A stored timestamp in the language of the page, or "unknown".
  *
  * Every part two digits, so the column lines up rather than jumping between
  * "3.9.2026" and "13.10.2026". The order stays whatever the browser's language
@@ -1367,9 +1424,9 @@ function renderApiKeys() {
  */
 function formatStamp(iso) {
     const date = iso ? new Date(iso) : null;
-    if (!date || Number.isNaN(date.getTime())) return "unknown";
+    if (!date || Number.isNaN(date.getTime())) return t("settings.unknown");
 
-    return date.toLocaleString(undefined, {
+    return date.toLocaleString(window.I18N.language(), {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -1384,21 +1441,21 @@ function openApiKeyDialog() {
     const dialog = document.getElementById("apikey-dialog");
     const save = document.getElementById("apikey-dialog-save");
 
-    document.getElementById("apikey-dialog-title").textContent = "New API key";
+    document.getElementById("apikey-dialog-title").textContent = t("settings.apikeys.newTitle");
     document.getElementById("apikey-dialog-error").textContent = "";
     document.getElementById("apikey-dialog-body").innerHTML = `
         <div class="set-form">
             <div class="set-field">
-                <label class="set-field-label" for="apikey-name"><span>Name</span></label>
+                <label class="set-field-label" for="apikey-name"><span>${escapeHtml(t("settings.apikeys.name"))}</span></label>
                 <input type="text" id="apikey-name" maxlength="64" placeholder="Home Assistant">
-                <small>Only for you, so you know which key to revoke later.</small>
+                <small>${escapeHtml(t("settings.apikeys.nameHelp"))}</small>
             </div>
         </div>`;
 
-    save.textContent = "Create key";
+    save.textContent = t("settings.apikeys.create");
     save.hidden = false;
     save.onclick = createApiKey;
-    document.getElementById("apikey-dialog-cancel").textContent = "Cancel";
+    document.getElementById("apikey-dialog-cancel").textContent = t("settings.cancel");
 
     dialog.showModal();
     document.getElementById("apikey-name").focus();
@@ -1436,20 +1493,20 @@ async function createApiKey() {
  * service are reached over plain HTTP under their address.
  */
 function showCreatedApiKey(name, key) {
-    document.getElementById("apikey-dialog-title").textContent = `Key for ${name}`;
+    document.getElementById("apikey-dialog-title").textContent = t("settings.apikeys.keyFor", { name });
     document.getElementById("apikey-dialog-error").textContent = "";
     document.getElementById("apikey-dialog-body").innerHTML = `
-        <p>Copy it now. Only a hash of it is stored, so this is the only time it is shown.</p>
+        <p>${escapeHtml(t("settings.apikeys.copyNow"))}</p>
         <div class="set-key-row">
             <input type="text" id="apikey-value" class="set-mono" readonly value="${escapeHtml(key)}">
-            <button class="btn btn-small" type="button" id="apikey-copy">Copy</button>
+            <button class="btn btn-small" type="button" id="apikey-copy">${escapeHtml(t("settings.apikeys.copy"))}</button>
         </div>
-        <p class="set-note">Send it as <code>Authorization: Bearer &lt;key&gt;</code> or <code>X-API-Key: &lt;key&gt;</code>.</p>`;
+        <p class="set-note">${t("settings.apikeys.sendAsHtml", { bearer: BEARER_HEADER, header: KEY_HEADER })}</p>`;
 
     const save = document.getElementById("apikey-dialog-save");
     save.hidden = true;
     save.onclick = null;
-    document.getElementById("apikey-dialog-cancel").textContent = "Done";
+    document.getElementById("apikey-dialog-cancel").textContent = t("settings.apikeys.done");
 
     const field = document.getElementById("apikey-value");
     field.focus();
@@ -1459,11 +1516,11 @@ function showCreatedApiKey(name, key) {
         field.select();
         try {
             await navigator.clipboard.writeText(key);
-            document.getElementById("apikey-copy").textContent = "Copied";
+            document.getElementById("apikey-copy").textContent = t("settings.apikeys.copied");
         } catch {
             // No clipboard permission, or no secure context. The field is
             // selected, so the key is one keyboard shortcut away either way.
-            document.getElementById("apikey-copy").textContent = "Press Ctrl+C";
+            document.getElementById("apikey-copy").textContent = t("settings.apikeys.pressCtrlC");
         }
     };
 }
@@ -1472,11 +1529,10 @@ function confirmRevokeApiKey(key) {
     if (!key) return;
 
     confirmAction({
-        title: `Revoke ${key.name}?`,
-        html: `<p>Anything still using this key stops working at once. Every other key and every browser session keeps
-                  working.</p>
-               <p class="set-note">A revoked key cannot be brought back. Create a new one and give it to the tool.</p>`,
-        okLabel: "Revoke",
+        title: t("settings.apikeys.revokeTitle", { name: key.name }),
+        html: `<p>${escapeHtml(t("settings.apikeys.revokeText"))}</p>
+               <p class="set-note">${escapeHtml(t("settings.apikeys.revokeNote"))}</p>`,
+        okLabel: t("settings.apikeys.revoke"),
     }).then(confirmed => confirmed && revokeApiKey(key));
 }
 
@@ -1486,9 +1542,9 @@ async function revokeApiKey(key) {
         apiKeys = result.keys ?? apiKeys;
         renderApiKeys();
         loadSystemInfo();
-        showBanner(`Revoked the key "${key.name}".`, "ok");
+        showBanner(t("settings.apikeys.revoked", { name: key.name }), "ok");
     } catch (err) {
-        showBanner(`Could not revoke the key: ${err.message}`, "bad");
+        showBanner(t("settings.error.revoke", { message: err.message }), "bad");
     }
 }
 

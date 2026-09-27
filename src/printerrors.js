@@ -18,10 +18,22 @@ import { fileURLToPath } from "node:url";
  * it while the network is down too.
  */
 
-const CATALOGUE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "print-errors.json");
+const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "data");
 
-/** The catalogue as written by the fetch script: `{ version, models, errors }`. */
-export const PRINT_ERROR_CATALOGUE = JSON.parse(fs.readFileSync(CATALOGUE_PATH, "utf8"));
+/** The English catalogue as written by the fetch script: `{ version, models, errors }`. */
+export const PRINT_ERROR_CATALOGUE = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "print-errors.json"), "utf8"));
+
+/**
+ * Every catalogue shipped, by language: English from `print-errors.json`, and
+ * one more per `print-errors.<lang>.json` next to it. The log and the API speak
+ * English; the others are for the Web UI, which shows a print's error in the
+ * viewer's language. Another language is one more file, see the fetch script.
+ */
+export const PRINT_ERROR_CATALOGUES = { en: PRINT_ERROR_CATALOGUE };
+for (const file of fs.readdirSync(DATA_DIR)) {
+    const match = /^print-errors\.([a-z]{2})\.json$/.exec(file);
+    if (match) PRINT_ERROR_CATALOGUES[match[1]] = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), "utf8"));
+}
 
 /**
  * The code a printer reports, as the eight hex digits the catalogue is keyed
@@ -49,10 +61,25 @@ export function printErrorHex(code) {
  * The catalogue's sentence for a code, or null when the catalogue has none.
  *
  * @param {number|string|null|undefined} code - what the printer reported
+ * @param {string} [lang] - the catalogue's language; a code it lacks is looked up in English
  * @returns {string|null} the sentence
  */
-export function describePrintError(code) {
+export function describePrintError(code, lang = "en") {
     const hex = printErrorHex(code);
     if (!hex) return null;
-    return PRINT_ERROR_CATALOGUE.errors[hex] ?? null;
+    return PRINT_ERROR_CATALOGUES[lang]?.errors[hex] ?? PRINT_ERROR_CATALOGUE.errors[hex] ?? null;
+}
+
+/**
+ * The catalogue's sentence for a code in every shipped language, for a client
+ * that shows it in its own. Null when the catalogue has none at all.
+ *
+ * @param {number|string|null|undefined} code - what the printer reported
+ * @returns {object|null} language code to sentence
+ */
+export function describePrintErrorInAll(code) {
+    if (!describePrintError(code)) return null;
+    const texts = {};
+    for (const lang of Object.keys(PRINT_ERROR_CATALOGUES)) texts[lang] = describePrintError(code, lang);
+    return texts;
 }
