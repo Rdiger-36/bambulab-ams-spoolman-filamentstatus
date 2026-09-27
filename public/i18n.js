@@ -55,17 +55,13 @@
     }
 
     /**
-     * The language to show: the one picked in the menu bar, else the first of
-     * the browser's languages there is a table for, else English.
+     * The language to show: the one picked in the menu bar, else English. The
+     * browser's language is deliberately not followed, so every installation
+     * looks the same until somebody picks another one.
      */
     function detect() {
         const stored = storedChoice();
         if (stored && tables[stored]) return stored;
-        const wanted = global.navigator?.languages ?? [global.navigator?.language].filter(Boolean);
-        for (const tag of wanted) {
-            const code = String(tag).toLowerCase().split("-")[0];
-            if (tables[code]) return code;
-        }
         return FALLBACK;
     }
 
@@ -171,12 +167,25 @@
         return Object.entries(names);
     }
 
+    /**
+     * A language's name for the switch, in the shown language and with its
+     * code: "German (DE)" on an English page, "Deutsch (DE)" on a German one.
+     * A table without a name for it gives the name the language registered
+     * itself with.
+     *
+     * @param {string} code - a registered language code
+     */
+    function languageLabel(code) {
+        const name = has(`language.${code}`) ? t(`language.${code}`) : names[code] ?? code;
+        return `${name} (${code.toUpperCase()})`;
+    }
+
     /** The table of a language, for the tests. */
     function table(code) {
         return tables[code] || {};
     }
 
-    global.I18N = { register, t, has, errorText, language, languages, setLanguage, apply, table, FALLBACK };
+    global.I18N = { register, t, has, errorText, language, languages, languageLabel, setLanguage, apply, table, FALLBACK };
     // `t` on its own as well, because the classic scripts share one global
     // scope and a `const { t }` in each of them would be declared twice.
     global.t = t;

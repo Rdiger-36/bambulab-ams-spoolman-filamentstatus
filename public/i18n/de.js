@@ -3,6 +3,10 @@
  * See public/i18n.js.
  */
 I18N.register("de", "Deutsch", {
+    // Language names for the switch in the menu bar
+    "language.en": "Englisch",
+    "language.de": "Deutsch",
+
     // Menu bar, on every page
     "menu.dashboard": "Dashboard",
     "menu.language": "Sprache",

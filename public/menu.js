@@ -551,7 +551,7 @@ function languageSwitch() {
     if (languages.length < 2) return "";
     const current = window.I18N.language();
     const options = languages
-        .map(([code, name]) => `<option value="${code}"${code === current ? " selected" : ""}>${name}</option>`)
+        .map(([code]) => `<option value="${code}"${code === current ? " selected" : ""}>${window.I18N.languageLabel(code)}</option>`)
         .join("");
     return `<select id="language-select" class="menu-language" title="${t("menu.language")}" aria-label="${t("menu.language")}">${options}</select>`;
 }

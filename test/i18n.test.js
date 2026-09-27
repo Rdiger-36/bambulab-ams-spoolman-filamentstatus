@@ -59,4 +59,8 @@ test("a text fills its placeholders, falls back to English and then to the key",
     assert.equal(I18N.t("test.items", { count: 3 }), "3 items");
     assert.equal(I18N.t("test.missing"), "test.missing");
     assert.equal(globalThis.t, I18N.t);
+    // The switch names each language in the shown one, with its code, and a
+    // language no table names yet under the name it registered itself with
+    assert.equal(I18N.languageLabel("de"), "German (DE)");
+    assert.equal(I18N.languageLabel("xx"), "Test (XX)");
 });
