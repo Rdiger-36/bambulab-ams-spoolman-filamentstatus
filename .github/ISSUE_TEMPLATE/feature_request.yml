@@ -1,0 +1,24 @@
+name: Feature request
+description: Something this service should do that it does not yet.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The situation and what gets in the way today. A concrete example helps more than a proposed solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you imagine it, if you already have an idea.
+
+  - type: input
+    id: setup
+    attributes:
+      label: Your setup
+      description: Printer model, AMS units and version, if the idea depends on them.
+      placeholder: P2S with two AMS 2 Pro, 1.3.0-dev.27
