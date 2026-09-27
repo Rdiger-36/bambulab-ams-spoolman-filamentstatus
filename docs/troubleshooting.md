@@ -90,7 +90,7 @@ The printer reports whether a stick is in, and the print card on the dashboard s
 Where on the stick the file lands and what it is called differs. A P2S writes `/cache/<job>.gcode.3mf`. An X2D sending a MakerWorld model that was changed in Bambu Studio writes it to the root under the project's name, `/CartPicker.gcode.3mf`, while the job is named after the print profile, "0.2mm layer, 3 walls, 15% infill". When no file is found under the job's name, the service lists the root and `/cache` and checks the 3MF files written within ten minutes of the print's start. A file is taken when it is proven to be the print's, by the md5 Bambu Studio sent, by the MakerWorld ids or by its profile or model title being the job name, or when it is the only candidate that nothing rules out. The log says which file it took and why:
 
 ```bash
-[LOG] Bambu Lab X2D - [Print] Found the sliced file by its time instead of its name: /CartPicker.gcode.3mf, written 2 seconds after the print started, its md5 is the one Bambu Studio sent
+[LOG] Bambu Lab X2D - [Print] Sliced file found on the stick: /CartPicker.gcode.3mf, written 2 seconds after the start, its md5 is the one Bambu Studio sent
 ```
 
 A print started on the printer's screen from its internal storage, such as the sample models it ships with, is never on the stick and cannot be tracked.
