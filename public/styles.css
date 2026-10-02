@@ -1362,9 +1362,6 @@ body.logs-page .log-page { width: 100%; }
   height: 15px;
 }
 
-/* The entries of the gear menu are actions, not a list to pick from, so the
-   tick column of a picker has no place in front of them. */
-.menu-tools .menu-entry::before { content: none; }
 
 .menu-sep {
   height: 1px;
@@ -1448,19 +1445,18 @@ a.menu-foot-update:hover { text-decoration: underline; }
   outline-offset: -2px;
 }
 
-/* The tick sits in a fixed column, so the entries line up whether or not one
-   of them carries it. */
-.menu-entry::before {
-  content: "\2713";
-  width: 12px;
-  flex: none;
-  opacity: 0;
-  color: var(--accent-text);
-  font-weight: 700;
+/* The one that is open or shown carries a line at its left edge in the brand
+   green, the mark the tabs carry at their bottom edge, and is bold. Every
+   entry has the line, transparent where it is not the one, so the labels
+   line up. */
+.menu-entry {
+  border-left: 3px solid transparent;
 }
 
-.menu-entry[aria-current]::before { opacity: 1; }
-.menu-entry[aria-current] { font-weight: 700; }
+.menu-entry[aria-current] {
+  border-left-color: var(--brand);
+  font-weight: 700;
+}
 
 /* ---- The picker in the headline ----
    The dashboard headline names the printer and the log viewer names the log,
