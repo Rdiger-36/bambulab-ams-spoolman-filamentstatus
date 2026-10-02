@@ -212,7 +212,7 @@ Not punctuation, and therefore allowed:
 - Comments in this codebase explain why, usually pointing at the bug the line
   prevents. Preserve them when editing nearby; they are the record of hardware
   quirks that are otherwise invisible.
-- `OPEN.md` (untracked) carries the current known gaps and unverified paths.
+- `OPEN.md` carries the current known gaps and unverified paths.
   Read it before assuming something is finished.
 
 ## Anti-patterns
