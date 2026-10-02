@@ -53,11 +53,12 @@ function ensureExportDialog() {
  * @param {object} options
  * @param {string} options.title - headline of the dialog
  * @param {string} options.what - one sentence naming what is about to be downloaded
- * @param {{heading: string, options: {id: string, label: string}[]}} [options.choices] - parts to
- *   tick on or off, all ticked to begin with; without it the dialog asks the mode alone
+ * @param {{heading: string, options: {id: string, label: string, checked?: boolean}[]}} [options.choices] - parts to
+ *   tick on or off, ticked to begin with unless an option says otherwise; without it the dialog asks the mode alone
+ * @param {string} [options.note] - markup for a line under the choices, for a pointer to a wider export elsewhere
  * @returns {Promise<{mode: "anonymized"|"full", selected: string[]}|null>} null when the user cancelled
  */
-function askExportMode({ title, what, choices = null }) {
+function askExportMode({ title, what, choices = null, note = "" }) {
     const dialog = ensureExportDialog();
 
     document.getElementById("export-mode-title").textContent = title;
@@ -76,10 +77,11 @@ function askExportMode({ title, what, choices = null }) {
         <div class="set-checks">
             ${choices.options.map(option => `
                 <label class="set-check">
-                    <input type="checkbox" value="${option.id}" checked>
+                    <input type="checkbox" value="${option.id}"${option.checked === false ? "" : " checked"}>
                     <span>${option.label}</span>
                 </label>`).join("")}
         </div>` : "";
+    if (note) choiceBox.insertAdjacentHTML("beforeend", `<p class="set-note export-note">${note}</p>`);
 
     const anon = document.getElementById("export-mode-anon");
     const full = document.getElementById("export-mode-full");
@@ -121,18 +123,21 @@ function askExportMode({ title, what, choices = null }) {
  * Asks, then starts the download.
  *
  * @param {object} options - passed to askExportMode, plus the URL
- * @param {string} options.url - the download endpoint, without the query
- * @param {string} [options.scopeParam] - the query parameter the ticked choices go into, comma separated
+ * @param {string|function(string[]): string} options.url - the download endpoint without the query, or a
+ *   function of the ticked choices that returns it, for a page whose endpoint depends on what was ticked
+ * @param {string} [options.scopeParam] - the query parameter the ticked choices go into, comma separated;
+ *   null leaves them to the url function
  * @returns {Promise<boolean>} whether a download was started
  */
-async function downloadWithExportMode({ url, title, what, choices = null, scopeParam = "scope" }) {
-    const answer = await askExportMode({ title, what, choices });
+async function downloadWithExportMode({ url, title, what, choices = null, note = "", scopeParam = "scope" }) {
+    const answer = await askExportMode({ title, what, choices, note });
     if (!answer) return false;
 
     const params = new URLSearchParams({ anonymize: String(answer.mode === "anonymized") });
-    if (choices) params.set(scopeParam, answer.selected.join(","));
+    if (choices && scopeParam) params.set(scopeParam, answer.selected.join(","));
 
-    const separator = url.includes("?") ? "&" : "?";
-    window.location.href = `${url}${separator}${params}`;
+    const target = typeof url === "function" ? url(answer.selected) : url;
+    const separator = target.includes("?") ? "&" : "?";
+    window.location.href = `${target}${separator}${params}`;
     return true;
 }

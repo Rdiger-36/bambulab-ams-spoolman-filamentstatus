@@ -44,14 +44,19 @@
                 </div>
             </div>
             <div class="log-toolbar-end">
-                <span class="log-meta" id="log-meta"></span>
                 <button id="download-logs" class="log-button" data-i18n="logs.download.button">Download...</button>
             </div>
         </div>
+        <!-- The line under the toolbar names the file on disk, which is what a
+             bug report ends up naming, and describes it: whether the trace is
+             being captured, how much is on screen, how large the download
+             would be. It sat next to the download button once, where the long
+             sentence of a trace pushed the whole right end of the toolbar into
+             a second row. -->
         <h3 class="log-title">
             <span id="log-title"></span>
-            <!-- The file on disk, which is what a bug report ends up naming -->
             <span class="log-file" id="log-file"></span>
+            <span class="log-meta" id="log-meta"></span>
         </h3>
         <div id="log-box">
             <div id="logs"></div>

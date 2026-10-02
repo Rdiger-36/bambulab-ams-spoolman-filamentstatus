@@ -385,6 +385,28 @@ export function registerRoutes(app, printers) {
     // download is worth waiting for. "capturing" says whether the trace is
     // being written at all: a trace that stays empty because the capture is
     // off reads the same as one that is empty because nothing arrived yet.
+    // Several logs at once, the way the log page's dialog asks for them: the
+    // diagnostics archive without the configuration files. Registered before
+    // the route below, which would otherwise read "download" as a serial.
+    app.get("/api/logs/download", async (req, res) => {
+        const scope = parseDiagnosticsScope(req.query.scope, printers);
+        if (scope.error) return res.status(400).json({ ok: false, error: scope.error, code: "unknownScope" });
+
+        try {
+            const anonymize = req.query.anonymize !== "false";
+            const { buffer, filename } = await buildDiagnosticsBundle({ anonymize, scope, config: false });
+            console.log("Server", serverLogFilePath, `[Service] Log bundle created (${anonymize ? "anonymised" : "full"}, ${Math.round(buffer.length / 1024)} KB)`);
+
+            res.setHeader("Content-Type", "application/zip");
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Length", buffer.length);
+            res.end(buffer);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, `Log bundle failed: ${err.message}`);
+            res.status(500).json({ ok: false, error: "The bundle could not be built", code: "bundleFailed" });
+        }
+    });
+
     app.get("/api/logs/:printerId", async (req, res) => {
         try {
             const limitRaw = req.query.limit;

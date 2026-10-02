@@ -177,9 +177,11 @@ export function parseDiagnosticsScope(raw, known) {
  * @param {object} [options]
  * @param {boolean} [options.anonymize] - mask addresses, serials and paths
  * @param {{server: boolean, printers: string[]}} [options.scope] - which logs to carry, from `parseDiagnosticsScope()`; everything when absent
+ * @param {boolean} [options.config] - carry the configuration files and the facts; false is the
+ *   log download of the log page, which is the logs alone under another name
  * @returns {Promise<{buffer: Buffer, filename: string}>}
  */
-export async function buildDiagnosticsBundle({ anonymize = true, scope = null } = {}) {
+export async function buildDiagnosticsBundle({ anonymize = true, scope = null, config = true } = {}) {
     const included = scope ?? parseDiagnosticsScope(undefined, printers);
     const zip = new AdmZip();
     const known = knownValues();
@@ -200,8 +202,37 @@ export async function buildDiagnosticsBundle({ anonymize = true, scope = null } 
         },
         ...systemInfo(anonymize),
     };
-    zip.addFile("info.json", Buffer.from(JSON.stringify(info, null, 4)));
+    if (config) zip.addFile("info.json", Buffer.from(JSON.stringify(info, null, 4)));
 
+    if (config) await addConfigFiles(zip, anonymize);
+
+    if (included.server) await addLogFiles(zip, "logs/server", serverLogFilePath, mask);
+
+    for (const wanted of included.printers) {
+        const printer = printers.find(entry => entry.id === wanted.id);
+        if (!printer) continue;
+        const base = `logs/${anonymize ? maskSerial(printer.id) : printer.id}`;
+        if (wanted.log) await addLogFiles(zip, base, printer.logFilePath, mask);
+        // The raw MQTT trace, when one was captured. Masked like every other
+        // file, and simply absent for a printer the trace was never on for.
+        if (wanted.trace) await addLogFiles(zip, `${base}.mqtt`, printer.traceFilePath, mask);
+    }
+
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "_");
+    return {
+        buffer: zip.toBuffer(),
+        filename: `${config ? "ams-diagnostics" : "ams-logs"}_${stamp}${anonymize ? "" : "_full"}.zip`,
+    };
+}
+
+/**
+ * The configuration files of the bundle: the settings with the origin of
+ * each value, the printer list, the assignments and the learned presets.
+ *
+ * @param {AdmZip} zip - the archive
+ * @param {boolean} anonymize - mask addresses, serials and paths
+ */
+async function addConfigFiles(zip, anonymize) {
     const view = getSettingsView();
     zip.addFile("settings.json", Buffer.from(JSON.stringify({
         values: exportSettings(view.values, anonymize),
@@ -235,24 +266,6 @@ export async function buildDiagnosticsBundle({ anonymize = true, scope = null } 
     if (Object.keys(learned).length) {
         zip.addFile("presets.json", Buffer.from(JSON.stringify({ schemaVersion: 1, presets: learned }, null, 4)));
     }
-
-    if (included.server) await addLogFiles(zip, "logs/server", serverLogFilePath, mask);
-
-    for (const wanted of included.printers) {
-        const printer = printers.find(entry => entry.id === wanted.id);
-        if (!printer) continue;
-        const base = `logs/${anonymize ? maskSerial(printer.id) : printer.id}`;
-        if (wanted.log) await addLogFiles(zip, base, printer.logFilePath, mask);
-        // The raw MQTT trace, when one was captured. Masked like every other
-        // file, and simply absent for a printer the trace was never on for.
-        if (wanted.trace) await addLogFiles(zip, `${base}.mqtt`, printer.traceFilePath, mask);
-    }
-
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "_");
-    return {
-        buffer: zip.toBuffer(),
-        filename: `ams-diagnostics_${stamp}${anonymize ? "" : "_full"}.zip`,
-    };
 }
 
 /**

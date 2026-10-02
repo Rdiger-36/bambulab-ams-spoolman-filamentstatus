@@ -1121,6 +1121,30 @@ export function buildOpenApiDocument() {
         },
     });
 
+    op("get", "/api/logs/download", {
+        tags: ["Logs"],
+        summary: "Download several logs as one zip",
+        description: "The logs `scope` names, each with its rotated history, without the configuration files the diagnostics bundle carries. Anonymised unless `anonymize=false`; the access codes are masked in both variants.",
+        "x-download": true,
+        parameters: [{
+            name: "scope",
+            in: "query",
+            required: true,
+            description: "Comma separated: `server`, a serial number for both files of that printer, `<serial>/log` or `<serial>/trace` for one of them.",
+            schema: t.string(null, { example: "server,01P00A000000001/log" }),
+        }, {
+            name: "anonymize",
+            in: "query",
+            required: false,
+            schema: t.boolean(null, { default: true }),
+        }],
+        responses: {
+            200: { description: "The zip", content: { "application/zip": { schema: t.string(null, { format: "binary" }) } } },
+            400: failure("The scope names an unknown printer or log"),
+            500: failure("The bundle could not be built"),
+        },
+    });
+
     op("get", "/api/logs/{printerId}/download", {
         tags: ["Logs"],
         summary: "Download a log with its rotated history",

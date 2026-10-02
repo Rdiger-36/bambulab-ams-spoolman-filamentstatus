@@ -942,9 +942,7 @@ button {
   color: var(--text-muted);
 }
 
-/* The size line and the download, on the right whatever wraps to the left. On
-   a phone the whole group takes a line of its own and the line pushes the
-   button to the edge, so the two stay apart. */
+/* The download, on the right whatever wraps to the left. */
 .log-toolbar-end {
   display: flex;
   align-items: center;
@@ -1035,6 +1033,14 @@ button {
   font-size: 0.78em;
   font-weight: 400;
   color: var(--text-muted);
+}
+
+/* At the right end of the title row, in the weight of a note; on a phone it
+   wraps under the name. */
+.log-title .log-meta {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.72em;
 }
 
 /* The log page is a column the height of the window: the box takes what is left
