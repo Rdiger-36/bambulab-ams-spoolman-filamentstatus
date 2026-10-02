@@ -22,7 +22,22 @@
 <body class="hide-footer">
     <div id="app">
         <form id="login-form" class="login-card" autocomplete="on">
-            <h1>HaspelSync</h1>
+            <!-- The brand, drawn here because this page imports nothing from
+                 the rest of the UI: the same spool as in the menu bar, its
+                 flanges in the text colour. -->
+            <h1 class="login-brand">
+                <svg class="login-brand-icon" viewBox="0 0 64 64" width="44" height="44" aria-hidden="true" focusable="false">
+                    <defs><clipPath id="login-brand-winding"><rect x="15" y="9" width="34" height="46"/></clipPath></defs>
+                    <rect x="2" y="27.5" width="60" height="9" rx="4.5" fill="#8c8c8c"/>
+                    <g clip-path="url(#login-brand-winding)">
+                        <rect x="15" y="9" width="34" height="46" fill="#00ae42"/>
+                        <path d="M37 9 L49 9 L49 55 L27 55 Z" fill="#dc7734"/>
+                    </g>
+                    <rect x="5" y="2" width="11" height="60" rx="4" fill="currentColor"/>
+                    <rect x="48" y="2" width="11" height="60" rx="4" fill="currentColor"/>
+                </svg>
+                <span class="login-wordmark">Haspel<b>Sync</b></span>
+            </h1>
             <p class="login-lead" data-i18n="login.lead">This installation asks for a password.</p>
 
             <label class="login-label" for="login-password" data-i18n="login.password">Password</label>
