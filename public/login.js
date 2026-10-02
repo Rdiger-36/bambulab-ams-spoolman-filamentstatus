@@ -96,6 +96,7 @@ function setupLanguageMenu() {
 document.addEventListener("DOMContentLoaded", () => {
     setupDarkMode();
     setupLanguageMenu();
+    document.getElementById("login-year").textContent = String(new Date().getFullYear());
 
     const form = document.getElementById("login-form");
     const password = document.getElementById("login-password");

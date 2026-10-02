@@ -75,6 +75,21 @@
         </form>
     </div>
 
+    <!-- The footer of the dashboard, without the version and the Spoolman
+         link: both are read from the API, which is behind the password this
+         page asks for, and the version of an installation is not told to
+         whoever reaches its login page. login.js fills in the year. -->
+    <footer class="footer">
+        <div class="container">
+            <div class="content">
+                <span id="login-year"></span> |
+                <a href="https://github.com/Rdiger-36/HaspelSync" target="_blank" rel="noopener" data-i18n="dashboard.footer.repository">GitHub Repository</a> -
+                <span data-i18n="dashboard.footer.createdBy">Created by</span>
+                <a href="https://github.com/Rdiger-36" target="_blank" rel="noopener">Rdiger-36</a>
+            </div>
+        </div>
+    </footer>
+
     <script src="login.js"></script>
 </body>
 </html>
