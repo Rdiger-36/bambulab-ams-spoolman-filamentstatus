@@ -1751,8 +1751,20 @@ a.menu-foot-update:hover { text-decoration: underline; }
   grid-template-columns: 200px minmax(0, 1fr);
   gap: 20px;
   align-items: start;
-  margin-top: 12px;
+  /* The margins a card carries, so the navigation card sits where a card
+     would, and the save bar keeps its distance from it when the open section
+     is the shorter of the two. */
+  margin: 14px 0;
 }
+
+/* The cards of a section carry their margins between each other; at the top
+   and the bottom of the section the grid already gives the distance, and the
+   first card has to start level with the navigation card. */
+.set-section > :first-child { margin-top: 0; }
+.set-section > :last-child { margin-bottom: 0; }
+.set-section > [data-group] > .set-card:first-child { margin-top: 0; }
+.set-section > [data-group] > .set-card:last-child { margin-bottom: 0; }
+.set-section > [data-group]:empty { display: none; }
 
 .set-nav {
   position: sticky;
