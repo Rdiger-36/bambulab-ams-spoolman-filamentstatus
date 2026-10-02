@@ -1,5 +1,6 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.29
+   Fourth release candidate for 1.3.0, and the build that renames the project to HaspelSync: new image name, new look of the Web UI, the settings page in sections. The old image name receives this build as well and says in the log and on the dashboard that it is deprecated. Like dev.28, what is found on it goes into 1.3.0
    - Breaking:
       - The project is called HaspelSync. The image is ghcr.io/rdiger-36/haspelsync and the repository is github.com/Rdiger-36/HaspelSync. GitHub redirects the old repository address, so links, clones and the update check of an installed version keep working. GHCR does not redirect an image name: every release is published under the old name ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus as well for a transition period, so an installation that pulls it keeps updating, but the old name will be retired. Switch the image in docker run or docker-compose to the new name
    - Changes:
