@@ -1,5 +1,6 @@
 -----------------------------------------------------------------------------------------------
-Unreleased
+Version 1.3.0-dev.30
+   Fifth release candidate for 1.3.0. The print card says why nothing will be booked and what to do, names the model where the printer names the job after its print profile, and a reprint from the printer's screen is tracked after a restart of the service. Like dev.29, what is found on it goes into 1.3.0
    - New Features:
       - The print card names the model where the printer names the job after its print profile. A MakerWorld model printed through one of its profiles from Bambu Studio is "0.2mm layer, 2 walls, 15% infill" in every report; the sliced file carries the model's title, "Darts Holder and Storage", and the card, the summary and the log line "Slice info loaded" show it, with the profile name in the tooltip. /api/print and the summary carry it as modelTitle, jobName stays what the printer reports
       - An i at the end of the line that says nothing will be booked opens a dialog with the reason and what to do: for a printer whose file transfer did not answer, for a file none of the paths held, and for a missing USB stick, each with the printer's answer as the log has it and a link to the troubleshooting guide
