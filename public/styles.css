@@ -1757,13 +1757,18 @@ a.menu-foot-update:hover { text-decoration: underline; }
   margin: 14px 0;
 }
 
-/* The cards of a section carry their margins between each other; at the top
-   and the bottom of the section the grid already gives the distance, and the
-   first card has to start level with the navigation card. */
-.set-section > :first-child { margin-top: 0; }
-.set-section > :last-child { margin-bottom: 0; }
-.set-section > [data-group] > .set-card:first-child { margin-top: 0; }
-.set-section > [data-group] > .set-card:last-child { margin-bottom: 0; }
+/* A section spaces its cards with a gap rather than with the cards' own
+   margins: the first card then starts level with the navigation card, the
+   last ends where the grid ends, and two cards that sit in two group hosts
+   keep the same distance as two in one. */
+.set-section,
+.set-section > [data-group] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.set-section .set-card { margin: 0; }
 .set-section > [data-group]:empty { display: none; }
 
 .set-nav {
