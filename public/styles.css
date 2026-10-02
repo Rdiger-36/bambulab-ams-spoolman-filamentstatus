@@ -1302,25 +1302,30 @@ body.logs-page .log-page { width: 100%; }
 }
 
 /* ---- The tools ----
-   A square the size of the dark mode button, holding one glyph. The settings
-   gear is the one tool that is a page, so it is filled while that page is
-   open, the way a tab is underlined. As a menu it grows a caret and opens
-   towards the middle of the bar. */
+   The gear is drawn like a tab: quiet, the full height of the bar, and
+   underlined in the brand green while the settings page is open, so the
+   mark of the open page is the same at both ends of the bar. As a menu it
+   grows a caret and opens towards the middle of the bar. */
 .menu-tool {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  gap: 3px;
+  align-self: stretch;
   flex: none;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--text);
+  padding: 0 8px;
+  border: 0;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-quiet);
+  font: inherit;
   text-decoration: none;
-  transition: background-color 0.2s, border-color 0.2s;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.menu-tool:hover { background: var(--control-hover-bg); }
+.menu-tool:hover { color: var(--text); }
 
 .menu-tool:focus-visible {
   outline: 2px solid var(--accent);
@@ -1328,8 +1333,8 @@ body.logs-page .log-page { width: 100%; }
 }
 
 .menu-tool[aria-current] {
-  background: var(--control-hover-bg);
-  border-color: var(--border-control);
+  color: var(--text);
+  border-bottom-color: var(--brand);
 }
 
 .menu-tool .menu-glyph {
@@ -1338,19 +1343,13 @@ body.logs-page .log-page { width: 100%; }
   opacity: 0.9;
 }
 
-.menu-tool.menu-caret {
-  width: auto;
-  padding: 0 6px 0 7px;
-  gap: 3px;
-}
-
 .menu-tool.menu-caret::after { font-size: 0.95em; }
 
 /* The host of the gear menu stretches with the bar like the one of the logs,
    so its panel opens under the bar's edge rather than under the button. */
 .menu-end .menu-host {
   align-self: stretch;
-  align-items: center;
+  align-items: stretch;
 }
 
 .menu-tools { display: contents; }
