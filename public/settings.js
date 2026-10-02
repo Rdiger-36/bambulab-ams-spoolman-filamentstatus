@@ -78,6 +78,7 @@ let formDirty = false;
 document.addEventListener("DOMContentLoaded", () => {
     // Menu bar, including the dark mode button
     initMenubar();
+    setupLanguageField();
 
     document.getElementById("settings-form").addEventListener("submit", saveSettings);
     document.getElementById("reload-settings").addEventListener("click", () => loadSettings(true));
@@ -1041,6 +1042,25 @@ function clearPassword(key) {
 }
 
 /** Reads every field back out of the form, in the type the backend expects. */
+/**
+ * The language field of the Web UI card: every registered language, the shown
+ * one selected. A pick is stored in this browser and reloads the page in it,
+ * see I18N.setLanguage. It is a choice of the browser, not a setting of the
+ * installation, so it never reaches the form or settings.json: two phones on
+ * the same installation can read it in two languages.
+ */
+function setupLanguageField() {
+    const select = document.getElementById("ui-language");
+    if (!select) return;
+
+    const current = window.I18N.language();
+    select.innerHTML = window.I18N.languages()
+        .map(([code]) => `<option value="${escapeHtml(code)}"${code === current ? " selected" : ""}>${escapeHtml(window.I18N.languageLabel(code))}</option>`)
+        .join("");
+
+    select.addEventListener("change", () => window.I18N.setLanguage(select.value));
+}
+
 function collectSettings() {
     const payload = {};
 

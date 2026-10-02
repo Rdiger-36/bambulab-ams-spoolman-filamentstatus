@@ -46,6 +46,24 @@
             <div id="printer-table"></div>
         </div>
 
+        <!-- Choices of this browser rather than of the installation: kept in
+             the browser, never in settings.json, so the card sits outside the
+             form and its save. settings.js fills the language field. -->
+        <div class="set-card">
+            <div class="set-card-head">
+                <h2 data-i18n="settings.ui.title">Web UI</h2>
+            </div>
+            <div class="set-form">
+                <div class="set-field">
+                    <label class="set-field-label" for="ui-language">
+                        <span data-i18n="settings.ui.language">Language</span><span class="pill pill-gcode" data-i18n="settings.ui.thisBrowser">this browser</span>
+                    </label>
+                    <select id="ui-language"></select>
+                    <small data-i18n="settings.ui.languageHelp">The language of the pages, applied at once and kept per browser. Log lines and everything the API hands out stay English.</small>
+                </div>
+            </div>
+        </div>
+
         <form id="settings-form">
             <div id="settings-groups"></div>
 

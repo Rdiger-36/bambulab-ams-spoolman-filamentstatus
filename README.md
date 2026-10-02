@@ -93,7 +93,7 @@ x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supp
 - A detail dialog per slot: everything Spoolman holds about the spool and its filament, next to what the printer reports, with the remaining weight, lot number and comment editable in place
 - New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
 - Web UI with print dashboard, printer management, settings and log viewer, no container restart needed except for switching legacy mode, and usable on a phone
-- The Web UI in English and German, picked per browser in the menu bar; another language is one file, see [Translations](#translations)
+- The Web UI in English and German, picked per browser on the settings page; another language is one file, see [Translations](#translations)
 - An optional password in front of the Web UI, and named API keys for callers that have no browser
 - An [API page](docs/api.md) in the Web UI that lists every route and sends it from the browser, with the same description as OpenAPI for Swagger UI or Postman
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
@@ -136,14 +136,14 @@ You need a running Spoolman instance and, per printer, its serial number, access
 
 ## Translations
 
-The Web UI is English by default and speaks German as well; the switch in the menu bar picks the language per browser. Log lines, the API reference and every value the API hands out stay English on purpose, so bug reports, scripts and the Home Assistant integration read the same everywhere.
+The Web UI is English by default and speaks German as well; the language field on the settings page picks it per browser. Log lines, the API reference and every value the API hands out stay English on purpose, so bug reports, scripts and the Home Assistant integration read the same everywhere.
 
 Adding a language takes one file and no change to any page:
 
 1. Copy `public/i18n/en.js` to `public/i18n/<code>.js`, named by the two letter ISO 639-1 code of the language, for example `es.js`.
 2. In its first line, replace `I18N.register("en", "English", {` with the code and the language's own name, `I18N.register("es", "Español", {`.
 3. Translate the values and leave the keys alone. Keep every `{placeholder}` and every `<b>`, `<code>` or link exactly as it is. A plural is written as `{ "one": ..., "other": ... }`; use the categories your language has in `Intl.PluralRules`, German and English need `one` and `other`, Polish for example `one`, `few`, `many` and `other`.
-4. Optional: add `"language.<code>"` with the language's name to the other tables, `"language.es": "Spanish"` in `en.js` and `"Spanisch"` in `de.js`, so the switch names it in every language. Without it the switch shows the name the file registers itself with.
+4. Optional: add `"language.<code>"` with the language's name to the other tables, `"language.es": "Spanish"` in `en.js` and `"Spanisch"` in `de.js`, so the language field names it in every language. Without it the field shows the name the file registers itself with.
 5. Optional: fetch Bambu Lab's print error catalogue in that language with `node scripts/fetch-print-errors.js <code>`, so the reason a print failed is shown in it too. A code the catalogue lacks falls back to English.
 6. Run `npm test`. It finds the new file by itself and names every key, placeholder or plural form that is missing or different.
 

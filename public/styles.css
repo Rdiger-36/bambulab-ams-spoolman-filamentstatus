@@ -1138,26 +1138,6 @@ body.logs-page .log-page { width: 100%; }
 
 /* The language switch next to it: as quiet as the button, a native select so
    the choice stays usable with a keyboard and on a phone. */
-.menu-language {
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 6px;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.85em;
-  cursor: pointer;
-}
-
-.menu-language:hover,
-.menu-language:focus-visible {
-  background: #8881;
-}
-
-.menu-language option {
-  color: initial;
-}
-
 #dark-mode-icon {
   display: inline-block;
   width: 22px;
@@ -1173,9 +1153,10 @@ body.logs-page .log-page { width: 100%; }
 
 /* ---- Menu bar ----
    The brand at the left end, the dashboard and the logs as tabs next to it,
-   and the tools at the right end: language, theme, the settings gear, log out.
-   The page you are on is the underlined tab, or the filled gear. `#menu-root`
-   takes the free width so its groups can sit at the two ends of the bar. */
+   and the tools at the right end: the theme and the settings gear, which is a
+   link or, with a session to end, a menu. The page you are on is the
+   underlined tab, or the filled gear. `#menu-root` takes the free width so its
+   groups can sit at the two ends of the bar. */
 #menu-root {
   flex: 1;
   min-width: 0;
@@ -1320,14 +1301,11 @@ body.logs-page .log-page { width: 100%; }
   opacity: 0.8;
 }
 
-/* The settings tab exists for the folded menu of a phone; a wide screen has
-   the gear among the tools instead. */
-.menu-tab-settings { display: none; }
-
 /* ---- The tools ----
    A square the size of the dark mode button, holding one glyph. The settings
    gear is the one tool that is a page, so it is filled while that page is
-   open, the way a tab is underlined. */
+   open, the way a tab is underlined. As a menu it grows a caret and opens
+   towards the middle of the bar. */
 .menu-tool {
   display: inline-flex;
   align-items: center;
@@ -1360,13 +1338,53 @@ body.logs-page .log-page { width: 100%; }
   opacity: 0.9;
 }
 
-/* The two things at the end of the bar: the theme, then the session. */
-.menu-logout .menu-icon {
-  flex: none;
-  opacity: 0.75;
+.menu-tool.menu-caret {
+  width: auto;
+  padding: 0 6px 0 7px;
+  gap: 3px;
 }
 
-.menu-logout:hover .menu-icon { opacity: 1; }
+.menu-tool.menu-caret::after { font-size: 0.95em; }
+
+/* The host of the gear menu stretches with the bar like the one of the logs,
+   so its panel opens under the bar's edge rather than under the button. */
+.menu-end .menu-host {
+  align-self: stretch;
+  align-items: center;
+}
+
+.menu-tools { display: contents; }
+
+/* The lines of the gear menu: a glyph in front of each entry, a rule between
+   the actions and the foot, and the foot in the small quiet type of a panel
+   heading. */
+.menu-entry .menu-glyph {
+  width: 15px;
+  height: 15px;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+.menu-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 10px 4px 8px;
+  font-size: 0.74em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.menu-foot-update {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+a.menu-foot-update:hover { text-decoration: underline; }
 
 .menu-caret::after {
   content: "\203A";
@@ -1531,8 +1549,7 @@ body.logs-page .log-page { width: 100%; }
 }
 
 /* ---- Narrow screens ----
-   The pages fold into one button next to the brand, the settings among them
-   and the gear gone from the tools; the language, the theme and the log out
+   The pages fold into one button next to the brand; the theme and the gear
    stay in the bar, and what the page is showing is in the page itself either
    way. */
 .menu-burger {
@@ -1574,8 +1591,8 @@ body.logs-page .log-page { width: 100%; }
   }
 
   /* The name goes before the pages do: the spool alone still says whose bar
-     this is, and the width it frees is what keeps the language, the theme and
-     the log out on the one line. */
+     this is, and the width it frees is what keeps the theme and the gear on
+     the one line next to the folded pages. */
   .menu-wordmark { display: none; }
 
   .menunav { gap: 8px; }
@@ -1619,10 +1636,7 @@ body.logs-page .log-page { width: 100%; }
 
   .menu-pages .menu-caret::after { margin-left: auto; }
 
-  .menu-tab-settings { display: inline-flex; }
-  .menu-tool-settings { display: none; }
-
-  .menu-host { display: block; }
+  .menu-pages .menu-host { display: block; }
 
   /* The log list opens inside the folded menu rather than over it, so one
      panel does not cover the other on a screen this size. */

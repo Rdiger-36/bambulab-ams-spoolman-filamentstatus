@@ -9,7 +9,6 @@ I18N.register("de", "Deutsch", {
 
     // Menu bar, on every page
     "menu.dashboard": "Dashboard",
-    "menu.language": "Sprache",
     "menu.logout": "Abmelden",
     "menu.logs": "Logs",
     "menu.main": "Hauptmenü",
@@ -20,6 +19,7 @@ I18N.register("de", "Deutsch", {
     "menu.showOnDashboard": "Auf dem Dashboard anzeigen",
     "menu.theme": "Heller und dunkler Modus",
     "menu.themeToggle": "Dunklen Modus umschalten",
+    "menu.updateAvailable": "Update verfügbar: {latest}",
 
     // Dashboard
     "dashboard.actionFailed": "Aktion fehlgeschlagen",
@@ -674,6 +674,10 @@ I18N.register("de", "Deutsch", {
     "settings.test.testing": "Wird getestet...",
     "settings.test.unconfirmed": "{label} unbestätigt",
     "settings.testConnection": "Verbindung testen",
+    "settings.ui.language": "Sprache",
+    "settings.ui.languageHelp": "Die Sprache der Seiten, gilt sofort und wird pro Browser gemerkt. Logzeilen und alles, was die API liefert, bleiben Englisch.",
+    "settings.ui.thisBrowser": "dieser Browser",
+    "settings.ui.title": "Web UI",
     "settings.unknown": "unbekannt",
     "settings.unsavedChanges": "Ungespeicherte Änderungen",
     "settings.update.availableHtml": "Version {latest} ist verfügbar.",

@@ -12,7 +12,6 @@ I18N.register("en", "English", {
 
     // Menu bar, on every page
     "menu.dashboard": "Dashboard",
-    "menu.language": "Language",
     "menu.logout": "Log out",
     "menu.logs": "Logs",
     "menu.main": "Main",
@@ -23,6 +22,7 @@ I18N.register("en", "English", {
     "menu.showOnDashboard": "Show on the dashboard",
     "menu.theme": "Light and dark mode",
     "menu.themeToggle": "Toggle dark mode",
+    "menu.updateAvailable": "Update available: {latest}",
 
     // Dashboard
     "dashboard.actionFailed": "Action failed",
@@ -677,6 +677,10 @@ I18N.register("en", "English", {
     "settings.test.testing": "Testing...",
     "settings.test.unconfirmed": "{label} unconfirmed",
     "settings.testConnection": "Test connection",
+    "settings.ui.language": "Language",
+    "settings.ui.languageHelp": "The language of the pages, applied at once and kept per browser. Log lines and everything the API hands out stay English.",
+    "settings.ui.thisBrowser": "this browser",
+    "settings.ui.title": "Web UI",
     "settings.unknown": "unknown",
     "settings.unsavedChanges": "Unsaved changes",
     "settings.update.availableHtml": "Version {latest} is available.",
