@@ -7,6 +7,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
 import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { UPGRADE_NOTICE, upgradeNotice } from "./upgradenotice.js";
+import { IMAGE_NOTICE, legacyImageNotice } from "./imagenotice.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
@@ -1294,6 +1295,7 @@ export function registerRoutes(app, printers) {
         res.json({
             [UPGRADE_NOTICE]: upgradeNotice(),
             [ENV_CONFIG_NOTICE]: deprecatedConfig(),
+            [IMAGE_NOTICE]: legacyImageNotice(),
         });
     });
 
@@ -1306,7 +1308,7 @@ export function registerRoutes(app, printers) {
     });
 
     app.post("/api/notices/:id/ack", (req, res) => {
-        if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE].includes(req.params.id)) {
+        if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE, IMAGE_NOTICE].includes(req.params.id)) {
             return res.status(404).json({ ok: false, error: "Unknown notice", code: "unknownNotice" });
         }
 

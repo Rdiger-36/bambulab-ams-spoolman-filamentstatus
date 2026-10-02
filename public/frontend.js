@@ -313,10 +313,34 @@ document.addEventListener("DOMContentLoaded", () => {
         await showNoticeDialog("env-config", t("dashboard.notice.env.title"), parts, true);
     }
 
+    /**
+     * The container runs from the old image name, which will stop receiving
+     * releases. Said once on the dashboard; the settings page keeps saying it
+     * under System, and the log says it on every start.
+     */
+    async function showLegacyImageNotice(notice) {
+        if (!notice || !notice.active || notice.acknowledged) return;
+
+        const code = text => `<code>${escapeHtml(text)}</code>`;
+        const parts = [
+            `<p>${t("dashboard.notice.image.intro", { image: code(notice.image) })}</p>`,
+            `<p>${t("dashboard.notice.image.renamed")}</p>`,
+            `<p>${t("dashboard.notice.image.switch", { image: code(notice.replacement) })}</p>`,
+        ];
+        if (notice.docs) {
+            parts.push(`<p>${t("dashboard.notice.image.docs", {
+                link: `<a href="${escapeHtml(notice.docs)}" target="_blank" rel="noopener">${escapeHtml(t("dashboard.notice.image.docsLink"))}</a>`,
+            })}</p>`);
+        }
+
+        await showNoticeDialog("legacy-image", t("dashboard.notice.image.title"), parts);
+    }
+
     // One dialog at a time, the update notice first: an installation updated
     // from 1.2.x is by definition still configured through the environment, so
     // it gets both on its first visit, and what changed matters more than
-    // where the settings live now.
+    // where the settings live now. The image name comes last: it is the one
+    // that can wait for the next pull.
     async function showNotices() {
         let notices;
         try {
@@ -329,6 +353,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         await showUpgradeNotice(notices["upgrade-1.3.0"]);
         await showDeprecationNotice(notices["env-config"]);
+        await showLegacyImageNotice(notices["legacy-image"]);
     }
 
     showNotices();

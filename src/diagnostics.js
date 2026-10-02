@@ -5,6 +5,7 @@ import path from "path";
 
 import { version, dataDir, logsDir, serverLogFilePath, mappingsPath, supervised } from "./config.js";
 import { deprecatedConfig } from "./deprecation.js";
+import { legacyImageNotice } from "./imagenotice.js";
 import { logFileSet } from "./logger.js";
 import { printers } from "./printers.js";
 import { parseStoredFile } from "./mappings.js";
@@ -40,9 +41,14 @@ import {
 export function systemInfo(anonymize = false) {
     const view = getSettingsView();
     const notice = deprecatedConfig();
+    const image = legacyImageNotice();
 
     return {
         version,
+        // The name the image was published under, null for a checkout, and
+        // whether that name is the deprecated one
+        image: image.image,
+        imageDeprecated: image.active,
         node: process.version,
         platform: `${process.platform} ${process.arch}`,
         os: `${os.type()} ${os.release()}`,

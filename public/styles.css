@@ -2499,6 +2499,12 @@ a.menu-foot-update:hover { text-decoration: underline; }
 }
 
 
+/* A note that is a warning: the deprecated image name under the facts. */
+.set-note-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* ---- Service card ---- */
 /* Named "facts", not "info": .set-info is already taken by the round tooltip
    badge further up, and sharing the name left this list 16 px wide and round. */

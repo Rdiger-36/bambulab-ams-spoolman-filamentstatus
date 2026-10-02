@@ -64,3 +64,30 @@ test("an unknown notice is refused", async () => {
     const { status } = await call(`${app.url}/api/notices/whatever/ack`, "POST", {});
     assert.equal(status, 404);
 });
+
+test("the image notice is served, inactive outside a published image", async () => {
+    const { body } = await call(`${app.url}/api/notices`);
+
+    // The tests run from a checkout, which has no image name baked in
+    assert.equal(body["legacy-image"].active, false);
+    assert.equal(body["legacy-image"].acknowledged, false);
+    assert.equal(body["legacy-image"].image, null);
+    assert.match(body["legacy-image"].replacement, /^ghcr\.io\/rdiger-36\/haspelsync$/);
+});
+
+test("a container from the old image name is told so, in the log on every start", async () => {
+    const { legacyImageNotice, legacyImageLogLines, LEGACY_IMAGE } = await import("../src/imagenotice.js");
+
+    const notice = legacyImageNotice(LEGACY_IMAGE);
+    assert.equal(notice.active, true);
+    assert.equal(notice.image, "ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus");
+
+    const lines = legacyImageLogLines(notice);
+    assert.equal(lines.length, 2);
+    assert.match(lines[0], /bambulab-ams-spoolman-filamentstatus/);
+    assert.match(lines[1], /ghcr\.io\/rdiger-36\/haspelsync/);
+
+    // The HaspelSync image and a checkout say nothing
+    assert.deepEqual(legacyImageLogLines(legacyImageNotice("haspelsync")), []);
+    assert.deepEqual(legacyImageLogLines(legacyImageNotice(null)), []);
+});

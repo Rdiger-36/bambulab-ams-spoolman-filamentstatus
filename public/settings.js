@@ -419,6 +419,8 @@ async function loadSystemInfo() {
 
     const rows = [
         [t("settings.system.version"), info.version],
+        // Only a published image knows its name; a checkout has none to show
+        ...(info.image ? [[t("settings.system.image"), info.image]] : []),
         [t("settings.system.node"), info.node],
         [t("settings.system.platform"), info.platform],
         [t("settings.system.uptime"), formatUptime(info.uptime)],
@@ -433,6 +435,19 @@ async function loadSystemInfo() {
     container.innerHTML = rows
         .map(([label, value]) => `<div class="set-fact"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
         .join("");
+
+    // Said here for as long as it is true, where the dashboard says it once:
+    // the facts are what somebody looks at before pulling a new image.
+    const imageNote = document.getElementById("image-note");
+    if (imageNote) {
+        imageNote.hidden = !info.imageDeprecated;
+        imageNote.innerHTML = info.imageDeprecated
+            ? t("settings.system.imageDeprecatedHtml", {
+                image: `<code>ghcr.io/rdiger-36/haspelsync</code>`,
+                link: `<a href="https://github.com/Rdiger-36/HaspelSync/blob/main/docs/installation.md" target="_blank" rel="noopener">${escapeHtml(t("settings.system.imageDocsLink"))}</a>`,
+            })
+            : "";
+    }
 }
 
 /**

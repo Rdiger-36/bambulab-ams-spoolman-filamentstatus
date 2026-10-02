@@ -73,11 +73,6 @@ jobs:
           IMAGE="${IMAGE,,}"  # lowercase
           LEGACY_IMAGE="${{ env.REGISTRY }}/${{ env.LEGACY_IMAGE_NAME }}"
           LEGACY_IMAGE="${LEGACY_IMAGE,,}"
-          # Both names, or one while the repository still carries the old name.
-          IMAGES="${IMAGE}"
-          if [[ "${LEGACY_IMAGE}" != "${IMAGE}" ]]; then
-            IMAGES="${IMAGE} ${LEGACY_IMAGE}"
-          fi
 
           VERSION="${GITHUB_REF_NAME#v}"
 
@@ -100,12 +95,18 @@ jobs:
             *-*)           NAMES="${VERSION}"        ; PRERELEASE=true  ;;
             *)             NAMES="${VERSION} latest" ; PRERELEASE=false ;;
           esac
+          # The HaspelSync image carries the tags; the image of the old name,
+          # built on top of it below, carries the same tags under its own
+          # name, or none while the repository still carries the old name.
           TAGS=""
-          for image in ${IMAGES}; do
-            for name in ${NAMES}; do
-              TAGS="${TAGS:+${TAGS},}${image}:${name}"
-            done
+          LEGACY_TAGS=""
+          for name in ${NAMES}; do
+            TAGS="${TAGS:+${TAGS},}${IMAGE}:${name}"
+            if [[ "${LEGACY_IMAGE}" != "${IMAGE}" ]]; then
+              LEGACY_TAGS="${LEGACY_TAGS:+${LEGACY_TAGS},}${LEGACY_IMAGE}:${name}"
+            fi
           done
+          ALL_TAGS="${TAGS}${LEGACY_TAGS:+,${LEGACY_TAGS}}"
 
           # The release these notes compare against. A pre-release compares
           # against whatever came before it, dev builds included, so a -dev.7
@@ -124,8 +125,11 @@ jobs:
             seen { print; exit }
           ' <<< "${CANDIDATES}")"
 
-          echo "Publishing: ${TAGS} (prerelease: ${PRERELEASE}, previous: ${PREVIOUS:-none})"
+          echo "Publishing: ${ALL_TAGS} (prerelease: ${PRERELEASE}, previous: ${PREVIOUS:-none})"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "legacy_tags=${LEGACY_TAGS}" >> $GITHUB_OUTPUT
+          echo "all_tags=${ALL_TAGS}" >> $GITHUB_OUTPUT
+          echo "image=${IMAGE}" >> $GITHUB_OUTPUT
           echo "previous=${PREVIOUS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "prerelease=${PRERELEASE}" >> $GITHUB_OUTPUT
@@ -151,6 +155,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The image of the old name: the image just pushed, with the name it is
+      # published under baked in, so the service can say that this name is
+      # deprecated. Built from the registry rather than from the context, which
+      # is what makes it the same bytes under another name, one layer apart.
+      - name: Build and push the image of the old name
+        if: steps.tags.outputs.legacy_tags != ''
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.legacy
+          push: true
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          tags: ${{ steps.tags.outputs.legacy_tags }}
+          build-args: |
+            BASE=${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=HaspelSync (deprecated image name)
+            org.opencontainers.image.description=Keeps a Bambu Lab AMS in sync with Spoolman. This image name is deprecated, pull ghcr.io/rdiger-36/haspelsync instead
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
+
       # Runs after the push on purpose: a release that points at an image which
       # never got built would send people to a pull that fails.
       - name: Publish the GitHub release
@@ -158,7 +185,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.tags.outputs.version }}
           PRERELEASE: ${{ steps.tags.outputs.prerelease }}
-          TAGS: ${{ steps.tags.outputs.tags }}
+          TAGS: ${{ steps.tags.outputs.all_tags }}
           PREVIOUS: ${{ steps.tags.outputs.previous }}
         run: |
           set -euo pipefail
