@@ -11,36 +11,20 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rdiger-36/HaspelSync/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?style=flat-square&label=version&color=blue" alt="version" />
-  </a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/releases/latest"><img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?style=flat-square&label=version&color=blue" alt="version" /></a>
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A522-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
-  <a href="docs/installation.md#supported-architectures">
-    <img src="https://img.shields.io/badge/platforms-amd64%20%C2%B7%20arm64%20%C2%B7%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platforms" />
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/Rdiger-36/HaspelSync?style=flat-square&color=green" alt="license" />
-  </a>
+  <a href="docs/installation.md#supported-architectures"><img src="https://img.shields.io/badge/platforms-amd64%20%C2%B7%20arm64%20%C2%B7%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platforms" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Rdiger-36/HaspelSync?style=flat-square&color=green" alt="license" /></a>
   <img src="https://img.shields.io/badge/maintained-yes-brightgreen?style=flat-square" alt="maintained" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rdiger-36/HaspelSync/stargazers">
-    <img src="https://img.shields.io/github/stars/Rdiger-36/HaspelSync?style=flat-square&color=yellow" alt="stars" />
-  </a>
-  <a href="https://github.com/Rdiger-36/HaspelSync/forks">
-    <img src="https://img.shields.io/github/forks/Rdiger-36/HaspelSync?style=flat-square&color=orange" alt="forks" />
-  </a>
-  <a href="https://github.com/Rdiger-36/HaspelSync/issues">
-    <img src="https://img.shields.io/github/issues/Rdiger-36/HaspelSync?style=flat-square" alt="open issues" />
-  </a>
-  <a href="https://github.com/Rdiger-36/HaspelSync/pkgs/container/haspelsync">
-    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRdiger-36%2FRdiger-36%2Fmain%2Fbadges%2Fpulls.json&style=flat-square&logo=docker" alt="pulls" />
-  </a>
-  <a href="https://github.com/Rdiger-36/HaspelSync/commits/main">
-    <img src="https://img.shields.io/github/last-commit/Rdiger-36/HaspelSync?style=flat-square&label=last%20commit" alt="last commit" />
-  </a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/stargazers"><img src="https://img.shields.io/github/stars/Rdiger-36/HaspelSync?style=flat-square&color=yellow" alt="stars" /></a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/forks"><img src="https://img.shields.io/github/forks/Rdiger-36/HaspelSync?style=flat-square&color=orange" alt="forks" /></a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/issues"><img src="https://img.shields.io/github/issues/Rdiger-36/HaspelSync?style=flat-square" alt="open issues" /></a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/pkgs/container/haspelsync"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRdiger-36%2FRdiger-36%2Fmain%2Fbadges%2Fpulls.json&style=flat-square&logo=docker" alt="pulls" /></a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/commits/main"><img src="https://img.shields.io/github/last-commit/Rdiger-36/HaspelSync?style=flat-square&label=last%20commit" alt="last commit" /></a>
 </p>
 
 ---
