@@ -6,7 +6,7 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 
 ![Settings](images/settings.png)
 
-The page is split into sections, listed in a navigation card at the left; on a phone the card becomes a row above the content. The section is part of the address, `settings.html#access`, so a link lands on the right one. One save covers every section: a section with unsaved changes carries a green dot in the navigation, and the save bar names it.
+The page is split into sections, listed in a navigation card at the left; on a window narrower than about 1000 px the card becomes a row above the content. The section is part of the address, `settings.html#access`, so a link lands on the right one. One save covers every section: a section with unsaved changes carries a green dot in the navigation, and the save bar names it.
 
 | Section | Holds |
 | :---- | :---- |

@@ -694,7 +694,16 @@ document.addEventListener("DOMContentLoaded", () => {
             table.style.width = 'auto';
         });
 
-        indices.forEach(colIdx => {
+        // A cell's padding, which offsetWidth counts and a width style does
+        // not: pinning the measured outer width as the content width made
+        // every column 20px wider than measured, five columns 100px, which is
+        // what pushed the action column off the right edge of a narrow window.
+        const paddingOf = cell => {
+            const style = getComputedStyle(cell);
+            return parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        };
+
+        const widths = indices.map(colIdx => {
             let maxWidth = 0;
             tables.forEach(table => {
                 Array.from(table.rows).forEach(row => {
@@ -702,16 +711,33 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!cell) return;
                     cell.style.width = 'auto';
                     cell.style.minWidth = 'unset';
-                    const cellWidth = cell.offsetWidth;
+                    const cellWidth = cell.offsetWidth - paddingOf(cell);
                     if (cellWidth > maxWidth) maxWidth = cellWidth;
                 });
             });
+            return maxWidth;
+        });
+
+        // The widest cells measured unwrapped, so on a narrow window their sum
+        // can exceed the container. The first column is the one whose text can
+        // wrap, the spool name, so it gives up what does not fit, down to a
+        // width that still reads as a name.
+        const container = tables[0].parentElement?.clientWidth || 0;
+        const firstRow = tables[0].rows[0];
+        const padding = firstRow ? indices.reduce((sum, colIdx) => sum + (firstRow.cells[colIdx] ? paddingOf(firstRow.cells[colIdx]) : 0), 0) : 0;
+        const total = widths.reduce((sum, width) => sum + width, 0) + padding + 2;
+        if (container && total > container) {
+            widths[0] = Math.max(140, widths[0] - (total - container));
+        }
+
+        indices.forEach((colIdx, position) => {
+            const width = widths[position];
             tables.forEach(table => {
                 Array.from(table.rows).forEach(row => {
                     const cell = row.cells[colIdx];
                     if (!cell) return;
-                    cell.style.minWidth = maxWidth + "px";
-                    cell.style.width = maxWidth + "px";
+                    cell.style.minWidth = width + "px";
+                    cell.style.width = width + "px";
                 });
             });
         });

@@ -221,7 +221,7 @@ export async function buildDiagnosticsBundle({ anonymize = true, scope = null, c
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "_");
     return {
         buffer: zip.toBuffer(),
-        filename: `${config ? "ams-diagnostics" : "ams-logs"}_${stamp}${anonymize ? "" : "_full"}.zip`,
+        filename: `${config ? "haspelsync-diagnostics" : "haspelsync-logs"}_${stamp}${anonymize ? "" : "_full"}.zip`,
     };
 }
 

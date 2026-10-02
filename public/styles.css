@@ -1930,9 +1930,12 @@ a.menu-foot-update:hover { text-decoration: underline; }
    first card of a section starts where the cards did before. */
 .set-sections { min-width: 0; }
 
-@media (max-width: 760px) {
-  /* The card becomes a row above the content that scrolls sideways, the
-     entries never wrapping: seven of them do not fit a phone in one line. */
+/* Below a desk's width the card becomes a row above the content that scrolls
+   sideways, the entries never wrapping: seven of them do not fit a phone in
+   one line. The break is well above the phone's: next to a 200px card the
+   printer table and the three column field grids have too little room long
+   before the layout of a phone is called for. */
+@media (max-width: 1000px) {
   .set-side { grid-template-columns: minmax(0, 1fr); }
 
   .set-nav {
@@ -2373,6 +2376,13 @@ a.menu-foot-update:hover { text-decoration: underline; }
 
 #printer-table .data-table {
   min-width: 520px;
+}
+
+/* A printer's name is one word to the eye, so it is not broken inside like
+   the long serials and addresses may be; the table scrolls instead. */
+#printer-table .data-table td:first-child {
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 #printer-table .data-table tbody tr:hover td { background: #8881; }

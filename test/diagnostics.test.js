@@ -258,7 +258,7 @@ test("the log bundle carries the logs the scope names and nothing of the configu
     const response = await fetch(`${app.url}/api/logs/download?scope=server,01P00A000000042/log`, { headers: UI_HEADERS });
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("content-type"), "application/zip");
-    assert.match(response.headers.get("content-disposition"), /ams-logs_/);
+    assert.match(response.headers.get("content-disposition"), /haspelsync-logs_/);
 
     const zip = new AdmZip(Buffer.from(await response.arrayBuffer()));
     const names = zip.getEntries().map(entry => entry.entryName).sort();
