@@ -16,7 +16,7 @@ Configuring this service through **environment variables** and a hand-written **
 
   Dismissing the hint is stored on the server. It stops appearing on its own as soon as nothing is left that the environment still decides.
 
-The full list of variables and the `printers.json` format are documented in the **[README of v1.2.1](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/v1.2.1/README.md)**.
+The full list of variables and the `printers.json` format are documented in the **[README of v1.2.1](https://github.com/Rdiger-36/HaspelSync/blob/v1.2.1/README.md)**.
 
 Four variables are container level and stay as they are, they have no field in the Web UI:
 

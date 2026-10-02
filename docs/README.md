@@ -1,6 +1,6 @@
 # Documentation
 
-The documentation of **Bambulab AMS Spoolman Filament Status**. It belongs to the version it sits in: this page describes the state of this branch or tag, the [README of v1.2.1](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/v1.2.1/README.md) describes the releases before G-code tracking.
+The documentation of **HaspelSync**. It belongs to the version it sits in: this page describes the state of this branch or tag, the [README of v1.2.1](https://github.com/Rdiger-36/HaspelSync/blob/v1.2.1/README.md) describes the releases before G-code tracking.
 
 | Page | Covers |
 | :---- | :---- |
@@ -15,4 +15,4 @@ The documentation of **Bambulab AMS Spoolman Filament Status**. It belongs to th
 | [Deprecated configuration](deprecated-configuration.md) | Environment variables, hand-written `printers.json`, and the four container level variables |
 | [FAQ](faq.md) | The questions that come up most |
 
-Something missing or wrong? [Open an issue](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues).
+Something missing or wrong? [Open an issue](https://github.com/Rdiger-36/HaspelSync/issues).

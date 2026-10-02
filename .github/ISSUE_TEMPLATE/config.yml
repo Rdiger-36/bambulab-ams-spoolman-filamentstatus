@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: Documentation and troubleshooting
-    url: https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/README.md
+    url: https://github.com/Rdiger-36/HaspelSync/blob/main/docs/README.md
     about: Installation, settings, the tracking modes and the most common problems with their fixes.
   - name: Home Assistant integration
     url: https://github.com/Rdiger-36/ha-bambulab-ams-spoolman-filamentstatus/issues

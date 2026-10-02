@@ -2,6 +2,7 @@ import { version } from "./config.js";
 import { LOG_CATEGORIES, LOG_LEVELS, SETTINGS_SCHEMA } from "./settings.js";
 import { ENV_CONFIG_NOTICE } from "./deprecation.js";
 import { UPGRADE_NOTICE } from "./upgradenotice.js";
+import { IMAGE_NOTICE } from "./imagenotice.js";
 import { SLOT_OPTIONS } from "./utils.js";
 
 /**
@@ -427,6 +428,8 @@ const schemas = {
 
     SystemInfo: t.object({
         version: t.string(),
+        image: t.nullable(t.string("The name the image was published under, `ghcr.io/rdiger-36/haspelsync`; null for a checkout or a locally built image.")),
+        imageDeprecated: t.boolean("The container runs from the old image name, which will stop receiving releases."),
         node: t.string(),
         platform: t.string(),
         os: t.string(),
@@ -462,6 +465,14 @@ const schemas = {
         printerVariables: t.array(t.string(), "The PRINTER_* variables that are set."),
         printerVariablesIgnored: t.boolean("They no longer do anything because printers.json owns the list."),
     }, { additional: true }),
+
+    ImageNotice: t.object({
+        active: t.boolean("The container runs from the deprecated image name and the notice has not been dismissed."),
+        acknowledged: t.boolean("Dismissed in the Web UI. Stored server side, so it holds for every browser."),
+        image: t.nullable(t.string("The image the container runs from.")),
+        replacement: t.string("The image to switch to."),
+        docs: t.string("The page of the documentation that says how."),
+    }),
 
     UpgradeNotice: t.object({
         active: t.boolean("This process, or one before it, started on the files of a 1.2.x installation and the notice has not been dismissed."),
@@ -1121,6 +1132,30 @@ export function buildOpenApiDocument() {
         },
     });
 
+    op("get", "/api/logs/download", {
+        tags: ["Logs"],
+        summary: "Download several logs as one zip",
+        description: "The logs `scope` names, each with its rotated history, without the configuration files the diagnostics bundle carries. Anonymised unless `anonymize=false`; the access codes are masked in both variants.",
+        "x-download": true,
+        parameters: [{
+            name: "scope",
+            in: "query",
+            required: true,
+            description: "Comma separated: `server`, a serial number for both files of that printer, `<serial>/log` or `<serial>/trace` for one of them.",
+            schema: t.string(null, { example: "server,01P00A000000001/log" }),
+        }, {
+            name: "anonymize",
+            in: "query",
+            required: false,
+            schema: t.boolean(null, { default: true }),
+        }],
+        responses: {
+            200: { description: "The zip", content: { "application/zip": { schema: t.string(null, { format: "binary" }) } } },
+            400: failure("The scope names an unknown printer or log"),
+            500: failure("The bundle could not be built"),
+        },
+    });
+
     op("get", "/api/logs/{printerId}/download", {
         tags: ["Logs"],
         summary: "Download a log with its rotated history",
@@ -1200,9 +1235,9 @@ export function buildOpenApiDocument() {
     op("get", "/api/notices", {
         tags: ["Service"],
         summary: "The notices the dashboard may show",
-        description: `Two: \`${UPGRADE_NOTICE}\`, this installation was updated from 1.2.x and has not read what changed, and \`${ENV_CONFIG_NOTICE}\`, it is still configured through environment variables.`,
+        description: `Three: \`${UPGRADE_NOTICE}\`, this installation was updated from 1.2.x and has not read what changed, \`${ENV_CONFIG_NOTICE}\`, it is still configured through environment variables, and \`${IMAGE_NOTICE}\`, the container runs from the old image name.`,
         responses: {
-            200: json("Keyed by notice id", t.object({ [UPGRADE_NOTICE]: t.ref("UpgradeNotice"), [ENV_CONFIG_NOTICE]: t.ref("Notice") })),
+            200: json("Keyed by notice id", t.object({ [UPGRADE_NOTICE]: t.ref("UpgradeNotice"), [ENV_CONFIG_NOTICE]: t.ref("Notice"), [IMAGE_NOTICE]: t.ref("ImageNotice") })),
         },
     });
 
@@ -1210,7 +1245,7 @@ export function buildOpenApiDocument() {
         tags: ["Service"],
         summary: "Dismiss a notice",
         description: "Stored server side, so it stays dismissed in every browser.",
-        parameters: [{ name: "id", in: "path", required: true, schema: t.string(null, { enum: [UPGRADE_NOTICE, ENV_CONFIG_NOTICE] }) }],
+        parameters: [{ name: "id", in: "path", required: true, schema: t.string(null, { enum: [UPGRADE_NOTICE, ENV_CONFIG_NOTICE, IMAGE_NOTICE] }) }],
         responses: {
             200: json("Dismissed", t.ref("Ok")),
             404: failure("Unknown notice"),
@@ -1228,7 +1263,7 @@ export function buildOpenApiDocument() {
     return {
         openapi: "3.0.3",
         info: {
-            title: "Bambulab AMS Spoolman Filament Status",
+            title: "HaspelSync",
             version,
             description: [
                 "The HTTP API of the service that keeps a Bambu Lab AMS in sync with Spoolman. Every route answers JSON,",
@@ -1244,11 +1279,11 @@ export function buildOpenApiDocument() {
                 "**Slot labels** count the way the printer does: `A1` is the first slot of the first AMS, `External` the spool holder,",
                 "`External-2` the second holder of a dual nozzle printer, `HT-A` the first AMS HT.",
             ].join("\n"),
-            license: { name: "GPL-3.0", url: "https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/LICENSE" },
+            license: { name: "GPL-3.0", url: "https://github.com/Rdiger-36/HaspelSync/blob/main/LICENSE" },
         },
         externalDocs: {
             description: "The documentation on GitHub",
-            url: "https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/api.md",
+            url: "https://github.com/Rdiger-36/HaspelSync/blob/main/docs/api.md",
         },
         servers: [{ url: "/", description: "This installation" }],
         tags: [

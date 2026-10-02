@@ -73,26 +73,73 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (downloadBtn) {
-    downloadBtn.addEventListener("click", () => {
-      const downloadUrl = isServer
-        ? `./api/logs/server/download`
-        : `./api/logs/${encodeURIComponent(printerSerial)}/download${stream === "mqtt" ? "?stream=mqtt" : ""}`;
+  /**
+   * What the download dialog offers to tick, in the scope words the API
+   * takes: the shown file ticked, the printer's other file and the server log
+   * unticked; on the server log, the server ticked and every printer's log
+   * unticked. The traces of other printers are not offered here, they are
+   * what the diagnostics bundle on the settings page is for.
+   */
+  async function downloadChoices() {
+    if (!isServer) {
+      return [
+        { id: `${printerSerial}/log`, label: t("logs.download.optionLog", { name }), checked: stream === "log" },
+        { id: `${printerSerial}/trace`, label: t("logs.download.optionTrace", { name }), checked: stream === "mqtt" },
+        { id: "server", label: t("logs.download.optionServer"), checked: false },
+      ];
+    }
+    let list = [];
+    try {
+      const response = await fetch("./api/printers");
+      if (response.ok) list = await response.json();
+    } catch {
+      // Without the list the dialog offers the server log alone
+    }
+    return [
+      { id: "server", label: t("logs.download.optionServer"), checked: true },
+      ...list.map(printer => ({ id: `${printer.id}/log`, label: t("logs.download.optionLog", { name: printer.name }), checked: false })),
+    ];
+  }
 
+  /**
+   * The endpoint for what was ticked: one file keeps the plain download, the
+   * file as it is on disk or a zip of its history, several go through the
+   * bundle, which is the diagnostics archive without the configuration.
+   */
+  function downloadUrl(selected) {
+    if (selected.length !== 1) return `./api/logs/download?scope=${encodeURIComponent(selected.join(","))}`;
+    const [id, file] = selected[0].split("/");
+    if (id === "server") return "./api/logs/server/download";
+    return `./api/logs/${encodeURIComponent(id)}/download${file === "trace" ? "?stream=mqtt" : ""}`;
+  }
+
+  if (downloadBtn) {
+    downloadBtn.addEventListener("click", async () => {
       // A log carries every address and serial the service has seen, and these
       // files end up attached to bug reports, so the choice is asked rather
       // than assumed. A trace carries more than a log does: it is every field
       // the printer reports, so the same choice matters more here.
       downloadWithExportMode({
         url: downloadUrl,
-        title: stream === "mqtt" ? t("logs.download.titleTrace") : t("logs.download.titleLog"),
-        what: isServer
-          ? t("logs.download.whatServer")
-          : stream === "mqtt"
-            ? t("logs.download.whatTrace", { name })
-            : t("logs.download.whatLog", { name }),
+        scopeParam: null,
+        title: t("logs.download.title"),
+        what: t("logs.download.what"),
+        choices: {
+          heading: escapeText(t("logs.download.heading")),
+          options: (await downloadChoices()).map(option => ({ ...option, label: escapeText(option.label) })),
+        },
+        // The wider export, with the configuration files, lives on the
+        // settings page; said here so nobody looks for it in this dialog.
+        note: t("logs.download.diagnosticsHint", {
+          link: `<a href="settings.html#system">${escapeText(t("logs.download.diagnosticsLink"))}</a>`,
+        }),
       });
     });
+  }
+
+  /** export.js puts labels into markup as they are, and a printer name is text. */
+  function escapeText(text) {
+    return String(text).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char]);
   }
 
   // The download hands out a zip as soon as the log has rotated, so the button

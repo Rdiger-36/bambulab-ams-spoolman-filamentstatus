@@ -1,4 +1,9 @@
-<h1 align="center">Bambulab AMS Spoolman Filament Status</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.png">
+    <img src="docs/images/banner-light.png" alt="HaspelSync" width="800">
+  </picture>
+</p>
 
 <p align="center">
   Synchronize your Bambu Lab AMS filament spools with Spoolman, automatically.<br/>
@@ -6,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=version&color=blue" alt="version" />
+  <img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?style=flat-square&label=version&color=blue" alt="version" />
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A522-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platform" />
@@ -15,11 +20,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&color=yellow" alt="stars" />
-  <img src="https://img.shields.io/github/forks/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&color=orange" alt="forks" />
-  <img src="https://img.shields.io/github/issues/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square" alt="open issues" />
+  <img src="https://img.shields.io/github/stars/Rdiger-36/HaspelSync?style=flat-square&color=yellow" alt="stars" />
+  <img src="https://img.shields.io/github/forks/Rdiger-36/HaspelSync?style=flat-square&color=orange" alt="forks" />
+  <img src="https://img.shields.io/github/issues/Rdiger-36/HaspelSync?style=flat-square" alt="open issues" />
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FRdiger-36%2Fbambulab-ams-spoolman-filamentstatus%2Fbambulab-ams-spoolman-filamentstatus&query=%24.downloadCount&style=flat-square&logo=docker&label=pulls&color=blue" alt="GHCR Pulls" />
-  <img src="https://img.shields.io/github/last-commit/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=last%20commit" alt="last commit" />
+  <img src="https://img.shields.io/github/last-commit/Rdiger-36/HaspelSync?style=flat-square&label=last%20commit" alt="last commit" />
 </p>
 
 ---
@@ -61,7 +66,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 | H series | ✅ with a USB stick in the printer, see below |
 | X1 series | ✅ |
 | X2D | ✅ with a USB stick in the printer, see below |
-| A2L | ❓ untested, its AMS reports as unit 16 and is not addressed yet, see [issue tracker](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues) |
+| A2L | ❓ untested, its AMS reports as unit 16 and is not addressed yet, see [issue tracker](https://github.com/Rdiger-36/HaspelSync/issues) |
 
 | AMS | Supported |
 | :---- | :---- |
@@ -88,7 +93,7 @@ x86-64, arm64 and arm/v7 are built; the [installation](docs/installation.md#supp
 - A detail dialog per slot: everything Spoolman holds about the spool and its filament, next to what the printer reports, with the remaining weight, lot number and comment editable in place
 - New filaments filled in from the SpoolmanDB catalogue, multi colour spools included
 - Web UI with print dashboard, printer management, settings and log viewer, no container restart needed except for switching legacy mode, and usable on a phone
-- The Web UI in English and German, picked per browser in the menu bar; another language is one file, see [Translations](#translations)
+- The Web UI in English and German, picked per browser on the settings page; another language is one file, see [Translations](#translations)
 - An optional password in front of the Web UI, and named API keys for callers that have no browser
 - An [API page](docs/api.md) in the Web UI that lists every route and sends it from the browser, with the same description as OpenAPI for Swagger UI or Postman
 - Lightweight Docker container, ready for x86-64, arm64 and arm/v7
@@ -131,14 +136,14 @@ You need a running Spoolman instance and, per printer, its serial number, access
 
 ## Translations
 
-The Web UI is English by default and speaks German as well; the switch in the menu bar picks the language per browser. Log lines, the API reference and every value the API hands out stay English on purpose, so bug reports, scripts and the Home Assistant integration read the same everywhere.
+The Web UI is English by default and speaks German as well; the language field on the settings page picks it per browser. Log lines, the API reference and every value the API hands out stay English on purpose, so bug reports, scripts and the Home Assistant integration read the same everywhere.
 
 Adding a language takes one file and no change to any page:
 
 1. Copy `public/i18n/en.js` to `public/i18n/<code>.js`, named by the two letter ISO 639-1 code of the language, for example `es.js`.
 2. In its first line, replace `I18N.register("en", "English", {` with the code and the language's own name, `I18N.register("es", "Español", {`.
 3. Translate the values and leave the keys alone. Keep every `{placeholder}` and every `<b>`, `<code>` or link exactly as it is. A plural is written as `{ "one": ..., "other": ... }`; use the categories your language has in `Intl.PluralRules`, German and English need `one` and `other`, Polish for example `one`, `few`, `many` and `other`.
-4. Optional: add `"language.<code>"` with the language's name to the other tables, `"language.es": "Spanish"` in `en.js` and `"Spanisch"` in `de.js`, so the switch names it in every language. Without it the switch shows the name the file registers itself with.
+4. Optional: add `"language.<code>"` with the language's name to the other tables, `"language.es": "Spanish"` in `en.js` and `"Spanisch"` in `de.js`, so the language field names it in every language. Without it the field shows the name the file registers itself with.
 5. Optional: fetch Bambu Lab's print error catalogue in that language with `node scripts/fetch-print-errors.js <code>`, so the reason a print failed is shown in it too. A code the catalogue lacks falls back to English.
 6. Run `npm test`. It finds the new file by itself and names every key, placeholder or plural form that is missing or different.
 
@@ -146,7 +151,7 @@ The service picks the file up on the next page load; the pages load every table 
 
 ## Feedback
 
-Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues).
+Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger-36/HaspelSync/issues).
 
 ## Credits
 

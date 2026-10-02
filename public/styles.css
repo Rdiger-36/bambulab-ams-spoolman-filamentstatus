@@ -74,6 +74,11 @@
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-menu: 0 4px 14px rgba(0, 0, 0, 0.12);
   --shadow-dialog: 0px 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* The brand green, Bambu Lab's: "Sync" in the wordmark and the line under
+     the current tab. The same in both themes, it is the one colour that is
+     the brand rather than the surface. */
+  --brand: #00ae42;
 }
 
 .dark-mode {
@@ -762,6 +767,84 @@ caption.ams-env .ams-env-drying {
   font-weight: 600;
 }
 
+/* The readings sit in a span of their own, so each needs the spacing the
+   direct children have. */
+caption.ams-env .ams-env-readings > span {
+  margin-right: 12px;
+}
+
+/* ---- Folding a unit ----
+   The header is the control: the whole line folds the slots away and back,
+   the chevron at its right end says so and points down while open, right
+   while folded. Folded, the table body is gone and the header turns into a
+   slim card carrying the swatches of the loaded slots. */
+caption.ams-env {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ams-toggle {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ams-toggle svg { transition: transform 0.2s; }
+
+caption.ams-env:hover .ams-toggle { color: var(--text); }
+
+.ams-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.spool-table.is-collapsed .ams-toggle svg { transform: rotate(-90deg); }
+
+.spool-table.is-collapsed thead,
+.spool-table.is-collapsed tbody { display: none; }
+
+.ams-summary { display: none; }
+
+.spool-table.is-collapsed .ams-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.ams-summary .gc-swatch { margin-right: 3px; }
+
+.ams-summary-empty {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* The folded header as a slim card of its own, where the open table's card
+   stands otherwise. The table box itself is empty while folded and draws
+   nothing. */
+.spool-table.is-collapsed {
+  border: 0;
+  box-shadow: none;
+}
+
+.spool-table.is-collapsed caption.ams-env {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+}
+
 /* Keep content clear of the fixed footer so the last table isn't overlapped */
 body.show-footer #spool-list {
   margin-bottom: 80px;
@@ -937,9 +1020,7 @@ button {
   color: var(--text-muted);
 }
 
-/* The size line and the download, on the right whatever wraps to the left. On
-   a phone the whole group takes a line of its own and the line pushes the
-   button to the edge, so the two stay apart. */
+/* The download, on the right whatever wraps to the left. */
 .log-toolbar-end {
   display: flex;
   align-items: center;
@@ -1032,6 +1113,14 @@ button {
   color: var(--text-muted);
 }
 
+/* At the right end of the title row, in the weight of a note; on a phone it
+   wraps under the name. */
+.log-title .log-meta {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.72em;
+}
+
 /* The log page is a column the height of the window: the box takes what is left
    after the bar, the toolbar and the title, so the whole box is on screen
    whatever the log contains and however far the toolbar wraps. A fixed
@@ -1096,7 +1185,9 @@ body.logs-page .log-page { width: 100%; }
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-card);
-  padding: 8px 12px;
+  /* No vertical padding: the tabs run the full height of the bar, so the
+     line under the current one sits on the bar's edge. */
+  padding: 0 12px;
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
 
@@ -1131,26 +1222,6 @@ body.logs-page .log-page { width: 100%; }
 
 /* The language switch next to it: as quiet as the button, a native select so
    the choice stays usable with a keyboard and on a phone. */
-.menu-language {
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 6px;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.85em;
-  cursor: pointer;
-}
-
-.menu-language:hover,
-.menu-language:focus-visible {
-  background: #8881;
-}
-
-.menu-language option {
-  color: initial;
-}
-
 #dark-mode-icon {
   display: inline-block;
   width: 22px;
@@ -1165,11 +1236,11 @@ body.logs-page .log-page { width: 100%; }
 }
 
 /* ---- Menu bar ----
-   The three pages sit in the bar itself, the page you are on is marked, and the
-   two panels behind it are the printer picker and the log list. `#menu-root`
-   takes the free width so its own two groups can sit at the two ends of the
-   bar, with the dark mode button (and the download button of the log page)
-   staying to the right of it. */
+   The brand at the left end, the dashboard and the logs as tabs next to it,
+   and the tools at the right end: the theme and the settings gear, which is a
+   link or, with a session to end, a menu. The page you are on is the
+   underlined tab, or the filled gear. `#menu-root` takes the free width so its
+   groups can sit at the two ends of the bar. */
 #menu-root {
   flex: 1;
   min-width: 0;
@@ -1178,10 +1249,10 @@ body.logs-page .log-page { width: 100%; }
 .menunav {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: stretch;
+  gap: 14px;
   min-width: 0;
+  height: 50px;
 }
 
 .menu-pages,
@@ -1190,6 +1261,52 @@ body.logs-page .log-page { width: 100%; }
   align-items: center;
   gap: 4px;
   min-width: 0;
+}
+
+/* The tabs stretch to the bar's height, so their underline sits on its edge. */
+.menu-pages {
+  align-items: stretch;
+  gap: 2px;
+}
+
+.menu-end { margin-left: auto; }
+
+/* ---- The brand ----
+   Logo and name, the way home. The name is in the body font and weight 700,
+   with "Sync" in the brand green; the flanges of the spool take the text
+   colour through currentColor, see BRAND_ICON in menu.js. */
+.menu-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 0 4px;
+  flex: none;
+}
+
+.menu-brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.menu-brand-icon {
+  display: block;
+  flex: none;
+}
+
+.menu-wordmark {
+  font-weight: 700;
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.menu-wordmark b {
+  color: var(--brand);
+  font-weight: 700;
 }
 
 /* Every clickable thing in the bar, whether it is a link to a page or a button
@@ -1233,13 +1350,125 @@ body.logs-page .log-page { width: 100%; }
 
 .menu-item[disabled]:hover { background: none; }
 
-/* The two things at the end of the bar: the theme, then the session. */
-.menu-logout .menu-icon {
-  flex: none;
-  opacity: 0.75;
+/* ---- The tabs ----
+   A page is a tab: quiet text with a glyph in front, the current one in the
+   text colour, bold, with the brand green under it. The line is the mark, not
+   a frame or a fill, which is what makes two of them read as one row. The
+   top border of the same size keeps the label centred. */
+.menu-tab {
+  border: 0;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0 12px;
+  color: var(--text-quiet);
+  font-size: 0.9em;
 }
 
-.menu-logout:hover .menu-icon { opacity: 1; }
+.menu-tab:hover {
+  background: none;
+  color: var(--text);
+}
+
+.menu-tab[aria-current] {
+  background: none;
+  color: var(--text);
+  font-weight: 700;
+  /* The shared current mark frames the item; here only the bottom edge is the
+     mark, so the top stays clear. */
+  border-top-color: transparent;
+  border-bottom-color: var(--brand);
+}
+
+.menu-glyph {
+  flex: none;
+  opacity: 0.8;
+}
+
+/* ---- The tools ----
+   The gear is drawn like a tab: quiet, the full height of the bar, and
+   underlined in the brand green while the settings page is open, so the
+   mark of the open page is the same at both ends of the bar. As a menu it
+   grows a caret and opens towards the middle of the bar. */
+.menu-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  align-self: stretch;
+  flex: none;
+  padding: 0 8px;
+  border: 0;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-quiet);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.menu-tool:hover { color: var(--text); }
+
+.menu-tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.menu-tool[aria-current] {
+  color: var(--text);
+  border-bottom-color: var(--brand);
+}
+
+.menu-tool .menu-glyph {
+  width: 18px;
+  height: 18px;
+  opacity: 0.9;
+}
+
+.menu-tool.menu-caret::after { font-size: 0.95em; }
+
+/* The host of the gear menu stretches with the bar like the one of the logs,
+   so its panel opens under the bar's edge rather than under the button. */
+.menu-end .menu-host {
+  align-self: stretch;
+  align-items: stretch;
+}
+
+.menu-tools { display: contents; }
+
+/* The lines of the gear menu: a glyph in front of each entry, a rule between
+   the actions and the foot, and the foot in the small quiet type of a panel
+   heading. */
+.menu-entry .menu-glyph {
+  width: 15px;
+  height: 15px;
+}
+
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+.menu-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 10px 4px 8px;
+  font-size: 0.74em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.menu-foot-update {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+a.menu-foot-update:hover { text-decoration: underline; }
 
 .menu-caret::after {
   content: "\203A";
@@ -1251,6 +1480,10 @@ body.logs-page .log-page { width: 100%; }
 /* ---- Panels ---- */
 .menu-host {
   position: relative;
+  /* Stretches with the row, so the tab inside it reaches the bar's edge and
+     the panel opens below the bar rather than below the label. */
+  display: flex;
+  align-items: stretch;
 }
 
 .menu-panel {
@@ -1296,19 +1529,18 @@ body.logs-page .log-page { width: 100%; }
   outline-offset: -2px;
 }
 
-/* The tick sits in a fixed column, so the entries line up whether or not one
-   of them carries it. */
-.menu-entry::before {
-  content: "\2713";
-  width: 12px;
-  flex: none;
-  opacity: 0;
-  color: var(--accent-text);
-  font-weight: 700;
+/* The one that is open or shown carries a line at its left edge in the brand
+   green, the mark the tabs carry at their bottom edge, and is bold. Every
+   entry has the line, transparent where it is not the one, so the labels
+   line up. */
+.menu-entry {
+  border-left: 3px solid transparent;
 }
 
-.menu-entry[aria-current]::before { opacity: 1; }
-.menu-entry[aria-current] { font-weight: 700; }
+.menu-entry[aria-current] {
+  border-left-color: var(--brand);
+  font-weight: 700;
+}
 
 /* ---- The picker in the headline ----
    The dashboard headline names the printer and the log viewer names the log,
@@ -1400,8 +1632,9 @@ body.logs-page .log-page { width: 100%; }
 }
 
 /* ---- Narrow screens ----
-   The pages fold into one button; the theme and the log out stay in the bar,
-   and what the page is showing is in the page itself either way. */
+   The pages fold into one button next to the brand; the theme and the gear
+   stay in the bar, and what the page is showing is in the page itself either
+   way. */
 .menu-burger {
   display: none;
 }
@@ -1431,11 +1664,36 @@ body.logs-page .log-page { width: 100%; }
   .status-head-side { flex: 0 1 auto; }
   .status-head-side-end { justify-content: center; }
 
+  /* The button that folds the pages is drawn like the gear at the other end:
+     quiet, the full height of the bar, underlined while one of the pages it
+     holds is the open one, so the mark of the open page reads the same on a
+     phone as the tabs do on a desk. */
   .menu-burger {
     display: inline-flex;
-    border-color: var(--border-control);
-    background: var(--control-bg);
+    align-self: stretch;
+    gap: 7px;
+    padding: 0 8px;
+    border: 0;
+    border-top: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: none;
+    color: var(--text-quiet);
+    font-size: 0.9em;
   }
+
+  .menu-burger:hover {
+    background: none;
+    color: var(--text);
+  }
+
+  .menu-burger[data-current="true"] {
+    color: var(--text);
+    font-weight: 700;
+    border-bottom-color: var(--brand);
+  }
+
+  .menunav { gap: 8px; }
 
   .menu-pages {
     display: none;
@@ -1445,6 +1703,7 @@ body.logs-page .log-page { width: 100%; }
     z-index: 1000;
     flex-direction: column;
     align-items: stretch;
+    gap: 2px;
     min-width: 200px;
     background: var(--menu-bg);
     border: 1px solid var(--border);
@@ -1455,10 +1714,27 @@ body.logs-page .log-page { width: 100%; }
 
   .menunav.pages-open .menu-pages { display: flex; }
 
+  /* In the folded menu a page is an entry of a list again, the current one
+     filled: an underline under one line of a list marks nothing. */
   .menu-pages .menu-item {
-    border-color: transparent;
-    justify-content: space-between;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 0.88em;
+    justify-content: flex-start;
   }
+
+  .menu-pages .menu-item:hover { background: var(--control-hover-bg); }
+
+  .menu-pages .menu-item[aria-current] {
+    background: var(--control-hover-bg);
+    border-color: var(--border-control);
+  }
+
+  .menu-pages .menu-caret::after { margin-left: auto; }
+
+  .menu-pages .menu-host { display: block; }
 
   /* The log list opens inside the folded menu rather than over it, so one
      panel does not cover the other on a screen this size. */
@@ -1557,6 +1833,121 @@ body.logs-page .log-page { width: 100%; }
 .set-page-note {
   font-size: 0.82em;
   opacity: 0.7;
+}
+
+/* ---- Sections ----
+   The navigation card at the left names the sections, the open one filled
+   like the open page of a folded menu, and the cards of that section sit at
+   the right. The card stays put while the section scrolls. A green dot on
+   an entry marks a section with unsaved changes, so they are not lost from
+   sight behind another section. */
+.set-side {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  /* The margins a card carries, so the navigation card sits where a card
+     would, and the save bar keeps its distance from it when the open section
+     is the shorter of the two. */
+  margin: 14px 0;
+}
+
+/* A section spaces its cards with a gap rather than with the cards' own
+   margins: the first card then starts level with the navigation card, the
+   last ends where the grid ends, and two cards that sit in two group hosts
+   keep the same distance as two in one. */
+.set-section,
+.set-section > [data-group] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.set-section .set-card { margin: 0; }
+.set-section > [data-group]:empty { display: none; }
+
+.set-nav {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+.set-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.9em;
+  color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.set-nav-item:hover { background: var(--control-hover-bg); }
+
+.set-nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.set-nav-item[aria-current="true"] {
+  background: var(--control-hover-bg);
+  border-color: var(--border-control);
+  font-weight: 700;
+}
+
+.set-nav-glyph {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.set-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  flex: none;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.set-section[hidden] { display: none; }
+
+/* The sections are hidden rather than unmounted and share one form, so the
+   first card of a section starts where the cards did before. */
+.set-sections { min-width: 0; }
+
+/* Below a desk's width the card becomes a row above the content that scrolls
+   sideways, the entries never wrapping: seven of them do not fit a phone in
+   one line. The break is well above the phone's: next to a 200px card the
+   printer table and the three column field grids have too little room long
+   before the layout of a phone is called for. */
+@media (max-width: 1000px) {
+  .set-side { grid-template-columns: minmax(0, 1fr); }
+
+  .set-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .set-nav::-webkit-scrollbar { display: none; }
+
+  .set-dot { margin-left: 4px; }
 }
 
 .set-card {
@@ -1987,6 +2378,13 @@ body.logs-page .log-page { width: 100%; }
   min-width: 520px;
 }
 
+/* A printer's name is one word to the eye, so it is not broken inside like
+   the long serials and addresses may be; the table scrolls instead. */
+#printer-table .data-table td:first-child {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 #printer-table .data-table tbody tr:hover td { background: #8881; }
 
 .set-mono {
@@ -2100,6 +2498,12 @@ body.logs-page .log-page { width: 100%; }
   box-shadow: 0 -6px 10px -6px rgba(0, 0, 0, 0.25);
 }
 
+
+/* A note that is a warning: the deprecated image name under the facts. */
+.set-note-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
 
 /* ---- Service card ---- */
 /* Named "facts", not "info": .set-info is already taken by the round tooltip
@@ -2650,7 +3054,33 @@ body.logs-page .log-page { width: 100%; }
 
   /* The gap spaces them now, and a trailing margin would push the band open on
      the right. */
-  caption.ams-env > span { margin-right: 0; }
+  caption.ams-env > span,
+  caption.ams-env .ams-env-readings > span { margin-right: 0; }
+
+  caption.ams-env .ams-env-readings {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 14px;
+  }
+
+  caption.ams-env .ams-env-readings:empty { display: none; }
+
+  /* The chevron at the right edge of the band, the rest stays centred. */
+  .ams-toggle {
+    float: none;
+    margin-left: auto;
+    order: 10;
+  }
+
+  /* Folded, the band is the whole card, so its own card frame is not needed */
+  .spool-table.is-collapsed { border: 1px solid var(--border); }
+
+  .spool-table.is-collapsed caption.ams-env {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 
   caption.ams-env .ams-env-unit {
     font-size: 1.06em;

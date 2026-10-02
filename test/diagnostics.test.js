@@ -253,3 +253,19 @@ test("a reconnect skips the printers whose monitoring is off", async () => {
     assert.deepEqual(body.reconnected, []);
     assert.equal(body.skipped, 1);
 });
+
+test("the log bundle carries the logs the scope names and nothing of the configuration", async () => {
+    const response = await fetch(`${app.url}/api/logs/download?scope=server,01P00A000000042/log`, { headers: UI_HEADERS });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/zip");
+    assert.match(response.headers.get("content-disposition"), /haspelsync-logs_/);
+
+    const zip = new AdmZip(Buffer.from(await response.arrayBuffer()));
+    const names = zip.getEntries().map(entry => entry.entryName).sort();
+    assert.deepEqual(names, ["logs/01P00XXXXXXXXXX.current.log", "logs/server.current.log"]);
+    // Anonymised like every other download, so the address and the serial are masked
+    assert.doesNotMatch(zip.readAsText("logs/server.current.log"), /192\.168\.178\.55|01P00A000000042/);
+
+    const refused = await fetch(`${app.url}/api/logs/download?scope=01P00B000000099`, { headers: UI_HEADERS });
+    assert.equal(refused.status, 400);
+});

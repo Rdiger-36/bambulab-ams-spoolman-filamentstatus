@@ -27,7 +27,7 @@ import { getAcknowledgedNotices, markNoticePending, settingsFileExistedAtStart }
 export const UPGRADE_NOTICE = "upgrade-1.3.0";
 
 /** Where the update page of the documentation lives. */
-const UPGRADE_DOCS_URL = "https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/updating.md";
+const UPGRADE_DOCS_URL = "https://github.com/Rdiger-36/HaspelSync/blob/main/docs/updating.md";
 
 /**
  * Whether this process started on the files of a 1.2.x installation.

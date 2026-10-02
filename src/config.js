@@ -40,6 +40,11 @@ export const apiKeysPath = path.join(dataDir, "apikeys.json");
 // brings the service back on its own or depends on the container policy.
 export const supervised = process.env.SUPERVISED === "1";
 
+// The name the image was published under, baked in by the Dockerfile; null
+// outside the published images, which is a checkout or a locally built image.
+// src/imagenotice.js is what reads it.
+export const imageName = process.env.HASPELSYNC_IMAGE || null;
+
 export const version = "1.3.0-dev.28";
 export const PORT = 4000;
 

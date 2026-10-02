@@ -2,9 +2,16 @@
 // included the dark mode button, so navigation and the theme behave the same on
 // the dashboard, the log viewer and the settings page.
 //
-// The bar carries two things and no more: where you can go, and your session.
-// The three pages sit in it with the current one marked, and the dark mode
-// button and, once a password is set, the log out sit at the other end.
+// The bar carries three things and no more: who this is, where you can go, and
+// your session. The brand at the left end is the way home. Next to it the
+// dashboard and the logs sit as tabs with the current one underlined, and the
+// dark mode button and the gear sit at the other end. The gear is the settings
+// page: a link to it while there is nothing to log out of, and once a password
+// is set a menu holding the settings page, the log out and, at its foot, the
+// version. The settings are a gear among the tools rather than a tab among
+// the pages: they are something you reach for, not a place you spend time on,
+// and the tabs read as the two views of the printers. The language is a field
+// of the settings page, not a control of the bar.
 //
 // What the page is showing does not belong in the bar, it belongs in the page.
 // The dashboard headline already names the printer and the log viewer already
@@ -40,11 +47,52 @@ const DARK_MODE_ICON = `
  * rather than whenever an icon host answers.
  */
 const LOGOUT_ICON = `
-    <svg class="menu-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
         <path d="M6.5 2.4H3.6c-.7 0-1.2.5-1.2 1.2v8.8c0 .7.5 1.2 1.2 1.2h2.9"
               fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         <path d="M10.4 5.2 13.2 8l-2.8 2.8M13.2 8H6.2"
               fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
+/**
+ * The HaspelSync spool, the same drawing as public/favicon.svg.
+ *
+ * The flanges take the text colour, so they are dark on the light bar and
+ * light on the dark one without a second file; the winding keeps its two
+ * colours in both. The clip path carries an id of its own because the icon
+ * sits in the page's document, where "winding" from the favicon would be
+ * another element of the same name.
+ */
+const BRAND_ICON = `
+    <svg class="menu-brand-icon" viewBox="0 0 64 64" width="26" height="26" aria-hidden="true" focusable="false">
+        <defs><clipPath id="menu-brand-winding"><rect x="15" y="9" width="34" height="46"/></clipPath></defs>
+        <rect x="2" y="27.5" width="60" height="9" rx="4.5" fill="#8c8c8c"/>
+        <g clip-path="url(#menu-brand-winding)">
+            <rect x="15" y="9" width="34" height="46" fill="#00ae42"/>
+            <path d="M37 9 L49 9 L49 55 L27 55 Z" fill="#dc7734"/>
+        </g>
+        <rect x="5" y="2" width="11" height="60" rx="4" fill="currentColor"/>
+        <rect x="48" y="2" width="11" height="60" rx="4" fill="currentColor"/>
+    </svg>`;
+
+// The glyphs in front of the entries: four tiles for the dashboard, three
+// lines for the logs, a gear for the settings. Drawn here like everything else
+// in the bar, in the colour of the entry they sit in. The gear is a ring with
+// eight teeth; a circle with rays around it was read as the sun, right next to
+// the button that shows one.
+const DASHBOARD_ICON = `
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" fill="currentColor"/>
+    </svg>`;
+const LOGS_ICON = `
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <path d="M2 3h12M2 8h12M2 13h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>`;
+const SETTINGS_ICON = `
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <circle cx="8" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="2.4"/>
+        <path d="M8 .9v2.6M8 12.5v2.6M.9 8h2.6M12.5 8h2.6M2.98 2.98l1.84 1.84M11.18 11.18l1.84 1.84M2.98 13.02l1.84-1.84M11.18 4.82l1.84-1.84"
+              fill="none" stroke="currentColor" stroke-width="2.6"/>
     </svg>`;
 
 /** Where the picked printer is remembered, read by the dashboard as well. */
@@ -72,7 +120,6 @@ function initMenubar(options = {}) {
     menuOptions = options;
     renderMenubar();
     setupDarkMode();
-    setupLanguageSwitch();
     return refreshMenubarPrinters();
 }
 
@@ -95,59 +142,143 @@ function renderMenubar() {
 
     const page = currentPage();
 
+    const current = name => (page === name ? ' aria-current="page"' : "");
+
     root.innerHTML = `
         <nav class="menunav" aria-label="${t("menu.main")}">
+            <a class="menu-brand" href="index.html" title="${t("menu.dashboard")}">
+                ${BRAND_ICON}<span class="menu-wordmark">Haspel<b>Sync</b></span>
+            </a>
+
             <button class="menu-item menu-burger" type="button" id="menu-burger"
-                    aria-haspopup="true" aria-expanded="false" aria-controls="menu-pages">
-                <span aria-hidden="true">☰</span> ${t("menu.menu")}
+                    aria-haspopup="true" aria-expanded="false" aria-controls="menu-pages"
+                    ${page !== "settings" ? 'data-current="true"' : ""}>
+                <span aria-hidden="true">☰</span><span>${t("menu.menu")}</span>
             </button>
 
             <div class="menu-pages" id="menu-pages">
-                <a class="menu-item" href="index.html"${page === "dashboard" ? ' aria-current="page"' : ""}>${t("menu.dashboard")}</a>
-                <a class="menu-item" href="settings.html"${page === "settings" ? ' aria-current="page"' : ""}>${t("menu.settings")}</a>
+                <a class="menu-item menu-tab" href="index.html"${current("dashboard")}>${DASHBOARD_ICON}<span>${t("menu.dashboard")}</span></a>
                 <div class="menu-host">
-                    <button class="menu-item menu-caret" type="button" id="menu-logs"
+                    <button class="menu-item menu-tab menu-caret" type="button" id="menu-logs"
                             aria-haspopup="true" aria-expanded="false" aria-controls="menu-logs-panel"
-                            ${page === "logs" ? 'aria-current="page"' : ""}>${t("menu.logs")}</button>
+                            ${current("logs")}>${LOGS_ICON}<span>${t("menu.logs")}</span></button>
                     <div class="menu-panel" id="menu-logs-panel" hidden></div>
                 </div>
             </div>
 
             <div class="menu-end">
-                ${languageSwitch()}
                 <button id="dark-mode-toggle" type="button" title="${t("menu.theme")}" aria-label="${t("menu.themeToggle")}">
                     <span id="dark-mode-icon">${LIGHT_MODE_ICON}</span>
                 </button>
-                <a class="menu-item menu-logout" href="#" id="menu-logout" hidden>${LOGOUT_ICON}${t("menu.logout")}</a>
+                <span class="menu-tools" id="menu-tools"></span>
             </div>
         </nav>`;
 
     setupMenuBehaviour(root);
 
-    document.getElementById("menu-logout").onclick = event => {
-        event.preventDefault();
-        logout();
-    };
-
-    showLogoutWhenLoggedIn();
+    // The link first, the menu once the service has said there is a session:
+    // the gear is on screen with the rest of the bar either way, and an
+    // installation without a password never sees it change.
+    renderTools(false);
+    showSessionTools();
 }
 
 /**
- * Shows the log out entry only where there is a session to end.
+ * Turns the gear into the menu where there is a session to end.
  *
- * The entry would otherwise sit in the bar of every installation that never set
- * a password, promising something that does nothing.
+ * A log out would otherwise sit in the bar of every installation that never
+ * set a password, promising something that does nothing.
  */
-async function showLogoutWhenLoggedIn() {
+async function showSessionTools() {
     try {
         const res = await fetch("./api/auth/state");
         if (!res.ok) return;
         const state = await res.json();
-        const entry = document.getElementById("menu-logout");
-        if (entry) entry.hidden = !state.required;
+        if (state.required) renderTools(true);
     } catch {
-        // Nothing is shown when the service cannot be asked, which is the same
-        // as before this entry existed.
+        // The gear stays the link when the service cannot be asked, which is
+        // what an installation without a password has anyway.
+    }
+}
+
+/**
+ * The gear at the right end of the bar.
+ *
+ * Without a password there is nothing to log out of, and a menu holding one
+ * entry is a dead end, so the gear is the settings page itself, filled while
+ * that page is open. With a password it opens a panel: the settings page, the
+ * log out and, at the foot, the version and whether a newer release exists.
+ * The filled gear is the only mark of the open page; the entries are actions,
+ * not a list to pick from, so none of them carries the tick of a picker.
+ *
+ * @param {boolean} withSession - whether there is a session to end
+ */
+function renderTools(withSession) {
+    const host = document.getElementById("menu-tools");
+    if (!host) return;
+
+    const onSettings = currentPage() === "settings";
+    const current = onSettings ? ' aria-current="page"' : "";
+
+    if (!withSession) {
+        host.innerHTML = `<a class="menu-tool" href="settings.html" title="${t("menu.settings")}" aria-label="${t("menu.settings")}"${current}>${SETTINGS_ICON}</a>`;
+        return;
+    }
+
+    host.innerHTML = `
+        <div class="menu-host">
+            <button class="menu-tool menu-caret" type="button" id="menu-tools-button"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="menu-tools-panel"
+                    title="${t("menu.menu")}" aria-label="${t("menu.menu")}"${current}>${SETTINGS_ICON}</button>
+            <div class="menu-panel menu-panel-end" id="menu-tools-panel" hidden>
+                <a class="menu-entry" href="settings.html">${SETTINGS_ICON}${t("menu.settings")}</a>
+                <a class="menu-entry" href="#" id="menu-logout">${LOGOUT_ICON}${t("menu.logout")}</a>
+                <div class="menu-sep"></div>
+                <div class="menu-foot" id="menu-foot">HaspelSync</div>
+            </div>
+        </div>`;
+
+    const button = document.getElementById("menu-tools-button");
+    wirePopupControl(button);
+    // Fetched when the panel is first opened rather than with the page: the
+    // version check is a request to GitHub, cached by the service, and the
+    // foot is read far less often than the bar is loaded.
+    button.addEventListener("click", loadToolsFoot, { once: true });
+
+    document.getElementById("menu-logout").onclick = event => {
+        event.preventDefault();
+        logout();
+    };
+}
+
+/**
+ * Fills the foot of the gear menu: the version, and the release that is
+ * available when a newer one exists, linked to its notes.
+ */
+async function loadToolsFoot() {
+    const foot = document.getElementById("menu-foot");
+    if (!foot) return;
+
+    try {
+        const res = await fetch("./api/update");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const update = await res.json();
+
+        foot.textContent = `HaspelSync v${update.current}`;
+        if (!update.updateAvailable || !update.latest) return;
+
+        const line = document.createElement(update.url ? "a" : "span");
+        line.className = "menu-foot-update";
+        line.textContent = t("menu.updateAvailable", { latest: update.latest });
+        if (update.url) {
+            line.href = update.url;
+            line.target = "_blank";
+            line.rel = "noopener";
+        }
+        foot.appendChild(line);
+    } catch {
+        // The foot keeps the name alone: the version is on the settings page
+        // too, and a menu is not where a failed check gets reported.
     }
 }
 
@@ -540,25 +671,6 @@ function selectMenuPrinter(printer) {
 function currentMenuPrinter() {
     const lastId = sessionStorage.getItem(SELECTED_PRINTER_KEY);
     return menuPrinters.find(printer => printer.id === lastId) ?? menuPrinters[0] ?? null;
-}
-
-/**
- * The language switch next to the dark mode button: every language that has a
- * table, each under its own name. Left out while there is only one.
- */
-function languageSwitch() {
-    const languages = window.I18N.languages();
-    if (languages.length < 2) return "";
-    const current = window.I18N.language();
-    const options = languages
-        .map(([code]) => `<option value="${code}"${code === current ? " selected" : ""}>${window.I18N.languageLabel(code)}</option>`)
-        .join("");
-    return `<select id="language-select" class="menu-language" title="${t("menu.language")}" aria-label="${t("menu.language")}">${options}</select>`;
-}
-
-function setupLanguageSwitch() {
-    const select = document.getElementById("language-select");
-    if (select) select.addEventListener("change", () => window.I18N.setLanguage(select.value));
 }
 
 function setupDarkMode() {

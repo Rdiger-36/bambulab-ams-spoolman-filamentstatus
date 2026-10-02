@@ -9,6 +9,11 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # The name the image was published under before the rename to HaspelSync.
+  # GHCR does not redirect an image name, so every release is pushed there
+  # too until the old name is retired: an installation that still pulls it
+  # keeps updating instead of stopping without a word.
+  LEGACY_IMAGE_NAME: ${{ github.repository_owner }}/bambulab-ams-spoolman-filamentstatus
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -66,6 +71,8 @@ jobs:
 
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           IMAGE="${IMAGE,,}"  # lowercase
+          LEGACY_IMAGE="${{ env.REGISTRY }}/${{ env.LEGACY_IMAGE_NAME }}"
+          LEGACY_IMAGE="${LEGACY_IMAGE,,}"
 
           VERSION="${GITHUB_REF_NAME#v}"
 
@@ -84,10 +91,22 @@ jobs:
           # GitHub release a pre-release, so the two cannot drift apart: an
           # image that is not :latest is never the release users are pointed at.
           case "${VERSION}" in
-            *-dev|*-dev.*) TAGS="${IMAGE}:${VERSION},${IMAGE}:dev"    ; PRERELEASE=true  ;;
-            *-*)           TAGS="${IMAGE}:${VERSION}"                 ; PRERELEASE=true  ;;
-            *)             TAGS="${IMAGE}:${VERSION},${IMAGE}:latest" ; PRERELEASE=false ;;
+            *-dev|*-dev.*) NAMES="${VERSION} dev"    ; PRERELEASE=true  ;;
+            *-*)           NAMES="${VERSION}"        ; PRERELEASE=true  ;;
+            *)             NAMES="${VERSION} latest" ; PRERELEASE=false ;;
           esac
+          # The HaspelSync image carries the tags; the image of the old name,
+          # built on top of it below, carries the same tags under its own
+          # name, or none while the repository still carries the old name.
+          TAGS=""
+          LEGACY_TAGS=""
+          for name in ${NAMES}; do
+            TAGS="${TAGS:+${TAGS},}${IMAGE}:${name}"
+            if [[ "${LEGACY_IMAGE}" != "${IMAGE}" ]]; then
+              LEGACY_TAGS="${LEGACY_TAGS:+${LEGACY_TAGS},}${LEGACY_IMAGE}:${name}"
+            fi
+          done
+          ALL_TAGS="${TAGS}${LEGACY_TAGS:+,${LEGACY_TAGS}}"
 
           # The release these notes compare against. A pre-release compares
           # against whatever came before it, dev builds included, so a -dev.7
@@ -106,8 +125,11 @@ jobs:
             seen { print; exit }
           ' <<< "${CANDIDATES}")"
 
-          echo "Publishing: ${TAGS} (prerelease: ${PRERELEASE}, previous: ${PREVIOUS:-none})"
+          echo "Publishing: ${ALL_TAGS} (prerelease: ${PRERELEASE}, previous: ${PREVIOUS:-none})"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "legacy_tags=${LEGACY_TAGS}" >> $GITHUB_OUTPUT
+          echo "all_tags=${ALL_TAGS}" >> $GITHUB_OUTPUT
+          echo "image=${IMAGE}" >> $GITHUB_OUTPUT
           echo "previous=${PREVIOUS}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "prerelease=${PRERELEASE}" >> $GITHUB_OUTPUT
@@ -124,14 +146,37 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
-            org.opencontainers.image.title=AMS Spoolman Manager
-            org.opencontainers.image.description=Bambu Lab AMS ↔ Spoolman filament status manager
+            org.opencontainers.image.title=HaspelSync
+            org.opencontainers.image.description=Keeps a Bambu Lab AMS in sync with Spoolman
             org.opencontainers.image.version=${{ steps.tags.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.tags.outputs.created }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The image of the old name: the image just pushed, with the name it is
+      # published under baked in, so the service can say that this name is
+      # deprecated. Built from the registry rather than from the context, which
+      # is what makes it the same bytes under another name, one layer apart.
+      - name: Build and push the image of the old name
+        if: steps.tags.outputs.legacy_tags != ''
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.legacy
+          push: true
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          tags: ${{ steps.tags.outputs.legacy_tags }}
+          build-args: |
+            BASE=${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=HaspelSync (deprecated image name)
+            org.opencontainers.image.description=Keeps a Bambu Lab AMS in sync with Spoolman. This image name is deprecated, pull ghcr.io/rdiger-36/haspelsync instead
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
 
       # Runs after the push on purpose: a release that points at an image which
       # never got built would send people to a pull that fails.
@@ -140,7 +185,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.tags.outputs.version }}
           PRERELEASE: ${{ steps.tags.outputs.prerelease }}
-          TAGS: ${{ steps.tags.outputs.tags }}
+          TAGS: ${{ steps.tags.outputs.all_tags }}
           PREVIOUS: ${{ steps.tags.outputs.previous }}
         run: |
           set -euo pipefail

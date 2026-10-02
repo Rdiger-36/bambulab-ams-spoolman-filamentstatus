@@ -175,6 +175,7 @@ The log and the raw MQTT trace of each printer, and the server log.
 | Route | Does |
 | :---- | :---- |
 | `GET /api/logs/{printerId}` | The last lines of a log |
+| `GET /api/logs/download` | Download several logs as one zip (download) |
 | `GET /api/logs/{printerId}/download` | Download a log with its rotated history (download) |
 
 ### Service

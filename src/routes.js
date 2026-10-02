@@ -7,6 +7,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
 import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { UPGRADE_NOTICE, upgradeNotice } from "./upgradenotice.js";
+import { IMAGE_NOTICE, legacyImageNotice } from "./imagenotice.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
@@ -385,6 +386,28 @@ export function registerRoutes(app, printers) {
     // download is worth waiting for. "capturing" says whether the trace is
     // being written at all: a trace that stays empty because the capture is
     // off reads the same as one that is empty because nothing arrived yet.
+    // Several logs at once, the way the log page's dialog asks for them: the
+    // diagnostics archive without the configuration files. Registered before
+    // the route below, which would otherwise read "download" as a serial.
+    app.get("/api/logs/download", async (req, res) => {
+        const scope = parseDiagnosticsScope(req.query.scope, printers);
+        if (scope.error) return res.status(400).json({ ok: false, error: scope.error, code: "unknownScope" });
+
+        try {
+            const anonymize = req.query.anonymize !== "false";
+            const { buffer, filename } = await buildDiagnosticsBundle({ anonymize, scope, config: false });
+            console.log("Server", serverLogFilePath, `[Service] Log bundle created (${anonymize ? "anonymised" : "full"}, ${Math.round(buffer.length / 1024)} KB)`);
+
+            res.setHeader("Content-Type", "application/zip");
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Length", buffer.length);
+            res.end(buffer);
+        } catch (err) {
+            console.error("Server", serverLogFilePath, `Log bundle failed: ${err.message}`);
+            res.status(500).json({ ok: false, error: "The bundle could not be built", code: "bundleFailed" });
+        }
+    });
+
     app.get("/api/logs/:printerId", async (req, res) => {
         try {
             const limitRaw = req.query.limit;
@@ -1272,6 +1295,7 @@ export function registerRoutes(app, printers) {
         res.json({
             [UPGRADE_NOTICE]: upgradeNotice(),
             [ENV_CONFIG_NOTICE]: deprecatedConfig(),
+            [IMAGE_NOTICE]: legacyImageNotice(),
         });
     });
 
@@ -1284,7 +1308,7 @@ export function registerRoutes(app, printers) {
     });
 
     app.post("/api/notices/:id/ack", (req, res) => {
-        if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE].includes(req.params.id)) {
+        if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE, IMAGE_NOTICE].includes(req.params.id)) {
             return res.status(404).json({ ok: false, error: "Unknown notice", code: "unknownNotice" });
         }
 

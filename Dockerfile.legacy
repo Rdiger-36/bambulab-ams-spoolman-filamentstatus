@@ -1,0 +1,10 @@
+# The image of the old name, bambulab-ams-spoolman-filamentstatus, published for
+# a transition period after the rename to HaspelSync. It is the HaspelSync image
+# of the same version with one variable changed, which is what lets the service
+# tell its log and its dashboard that the name it was pulled under is deprecated.
+# Built by the publish workflow right after the HaspelSync image, from the
+# version it just pushed.
+ARG BASE
+FROM ${BASE}
+
+ENV HASPELSYNC_IMAGE=bambulab-ams-spoolman-filamentstatus

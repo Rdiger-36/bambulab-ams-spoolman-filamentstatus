@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+    <!-- D1 without a tile: dark flanges, grey axle, the two colours and their seam, nothing else. -->
+    <defs>
+        <clipPath id="winding"><rect x="15" y="9" width="34" height="46"/></clipPath>
+    </defs>
+    <rect x="2" y="27.5" width="60" height="9" rx="4.5" fill="#8c8c8c"/>
+    <g clip-path="url(#winding)">
+        <rect x="15" y="9" width="34" height="46" fill="#00ae42"/>
+        <path d="M37 9 L49 9 L49 55 L27 55 Z" fill="#dc7734"/>
+    </g>
+    <rect x="5" y="2" width="11" height="60" rx="4" fill="#343434"/>
+    <rect x="48" y="2" width="11" height="60" rx="4" fill="#343434"/>
+</svg>
