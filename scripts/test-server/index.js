@@ -31,6 +31,7 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  *                                     [--real-printer <ip> <code> <serial>]
  *                                     [--spoolman <url>] [--mode manual|automatic]
  *                                     [--report <name>] [--ams-model n3f|ams|ams_f1]
+ *                                     [--state-dir <dir>]
  *
  * Then open http://localhost:4000. `--no-service` runs only the two mocks, for
  * pointing an already running container at them.
@@ -62,6 +63,11 @@ import { AMS_UNITS, EXTERNAL_SPOOL } from "./scenario.js";
  * one, while Spoolman stays the mock. That is the way to see how a spool nobody
  * here owns is really reported and really drawn, without a single write
  * reaching a Spoolman instance that matters.
+ *
+ * `--state-dir <dir>` keeps the service's state in that directory instead of
+ * a fresh temporary one, so a second run finds what the first one wrote:
+ * printstate.json with the running print's start and sliced file, which is
+ * what a restart of the service mid print reads.
  *
  * `--spoolman <url>` skips the mock Spoolman and points the service at a real
  * instance. Everything the service writes then reaches that instance, so use it
@@ -109,6 +115,7 @@ function readOptions(argv) {
             case "--no-service": options.service = false; break;
             case "--delta-reports": options.deltaReports = true; break;
             case "--no-storage": options.storage = false; break;
+            case "--state-dir": options.stateDir = value; i++; break;
             case "--spoolman":
                 if (!value || !/^https?:\/\//.test(value)) {
                     console.error("--spoolman takes a base URL, for example http://spoolman.example:7912");
@@ -244,7 +251,9 @@ async function main() {
     if (options.service) {
         // A directory of its own, so a run cannot touch the printers.json,
         // settings.json or mappings.json of a real installation.
-        dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ams-test-server-"));
+        dataDir = options.stateDir
+            ? path.resolve(options.stateDir)
+            : fs.mkdtempSync(path.join(os.tmpdir(), "ams-test-server-"));
         fs.mkdirSync(path.join(dataDir, "logs"), { recursive: true });
 
         service = spawn(process.execPath, ["entrypoint.js"], {
@@ -305,7 +314,8 @@ async function main() {
             for (const write of store.writes) console.log(`[spoolman]   ${write}`);
         }
         if (printer) console.log(`[printer] published ${printer.reports()} report(s)`);
-        if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
+        // A directory the caller named is theirs to keep, see --state-dir
+        if (dataDir && !options.stateDir) fs.rmSync(dataDir, { recursive: true, force: true });
 
         process.exit(code);
     }

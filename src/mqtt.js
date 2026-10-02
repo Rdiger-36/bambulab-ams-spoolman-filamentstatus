@@ -22,7 +22,7 @@ import {
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodeStudioMapping, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
-import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
+import { rememberPrintStart, recallPrintStart, forgetPrintStart, rememberSlicedFile, recallSlicedFile } from "./printstate.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
 import { humanLayers } from "../public/shared.js";
 import { describePrintError, describePrintErrorInAll } from "./printerrors.js";
@@ -167,6 +167,9 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = n
         .then(sliceInfo => {
             if (sliceInfo) {
                 printer.currentSliceInfo = sliceInfo;
+                // So a restart of the service during this print reads the same
+                // file again, whatever the job is called by then
+                if (printer.lastSliceFetch?.path) rememberSlicedFile(printer.id, printer.lastSliceFetch.path);
                 console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
             } else {
                 console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
@@ -195,6 +198,7 @@ export function runningPrint(printer) {
         startedAt: printer.printStartedAt ?? null,
         totalLayers: printer.currentTotalLayers ?? null,
         identity: printer.currentIdentity ?? null,
+        filePath: printer.currentFilePath ?? null,
     };
 }
 
@@ -724,9 +728,11 @@ export async function handlePrintStateChange(printer, print) {
         // duration count from the print, not from the restart.
         const recalled = firstSinceStart ? recallPrintStart(printer.id, jobName) : null;
         printer.printStartedAt = recalled ?? Date.now();
+        // The file the process before the restart read, when it got that far
+        printer.currentFilePath = recalled ? recallSlicedFile(printer.id, jobName) : null;
         if (recalled) {
             console.log(printer.name, printer.logFilePath,
-                `[Print] Found "${jobName ?? "the job"}" already running, started ${new Date(recalled).toISOString()}`);
+                `[Print] Found "${jobName ?? "the job"}" already running, started ${new Date(recalled).toISOString()}${printer.currentFilePath ? `, its sliced file was read from ${printer.currentFilePath}` : ""}`);
         } else {
             rememberPrintStart(printer.id, jobName, printer.printStartedAt);
         }

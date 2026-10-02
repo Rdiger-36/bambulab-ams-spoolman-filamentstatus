@@ -93,6 +93,14 @@ Where on the stick the file lands and what it is called differs. A P2S writes `/
 [LOG] Bambu Lab X2D - [Print] Sliced file found on the stick: /CartPicker.gcode.3mf, written 2 seconds after the start, its md5 is the one Bambu Studio sent
 ```
 
+When no file was written at the start, or every one that was is ruled out, the other 3MF files on the stick are checked as well, newest first: a reprint started on the printer's screen takes a file that has been on the stick for days. Each is read from its end only, where the layer count and the plates sit, and only a file that does not contradict the printer is downloaded whole and checked by its title and ids. Two files nothing rules out are still a guess, and none is taken. The log reads the same, with the file's age in place of the seconds:
+
+```bash
+[LOG] Bambu Lab P2S - [Print] Sliced file found on the stick: /cache/0.2mm layer, 2 walls, 15% infill.gcode.3mf, written 34 minutes before the start, its title is the job name
+```
+
+Once found, the path is kept in `printstate.json` next to the print's start, and a restart of the service during the print reads the same file again, whatever the job is called by then: "Found "Darts Holder and Storage" already running, started ..., its sliced file was read from /cache/...".
+
 A print started on the printer's screen from its internal storage, such as the sample models it ships with, is never on the stick and cannot be tracked.
 
 The i at the end of the line on the print card opens the same advice in the Web UI, with the printer's answer as the log has it.

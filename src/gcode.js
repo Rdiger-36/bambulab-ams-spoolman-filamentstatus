@@ -2,6 +2,7 @@ import * as ftp from "basic-ftp";
 import AdmZip from "adm-zip";
 import { Writable } from "stream";
 import { createHash } from "crypto";
+import { inflateRawSync } from "zlib";
 
 import { EXTERNAL_SLOT, SECOND_EXTERNAL_SLOT, convertAMSandSlot, describeConnectionError, connectionErrorCode } from "./utils.js";
 import { debug, trace } from "./logger.js";
@@ -63,14 +64,19 @@ function ftpsAccess(client, printer) {
  * @param {string} jobName  - subtask_name from MQTT
  * @param {string|null} [gcodeFile] - gcode_file from MQTT, when the report carries one
  * @param {string|null} [fileName] - the file name from the printer's own project_file command, see resolveRemotePaths()
- * @param {object|null} [running] - what the printer reports about the running print: `startedAt` in epoch milliseconds, `gcodeFile` and `totalLayers`; null leaves the listing out
+ * @param {object|null} [running] - what the printer reports about the running print: `startedAt` in epoch milliseconds, `gcodeFile` and `totalLayers`, plus `filePath` when the process before a restart found the file; null leaves the listing out
  * @returns {object|null} parsed slice info or null if not found
  */
 export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileName = null, running = null) {
     const client = new ftp.Client(20000); // 20 s timeout
     client.ftp.verbose = false;
 
-    const candidates = resolveRemotePaths(jobName, gcodeFile, fileName);
+    // The path the service read before a restart comes first: after a reprint
+    // from the printer's screen nothing else leads to it, see printstate.js
+    const named = resolveRemotePaths(jobName, gcodeFile, fileName);
+    const candidates = running?.filePath && !named.includes(running.filePath)
+        ? [running.filePath, ...named]
+        : named;
     // The attempt counts on from the last fetch of the same job, so a retry
     // knows how many came before it. See sliceFetchRetryDue(). A look before
     // the print runs is free: the dashboard asks for the file as soon as the
@@ -109,6 +115,10 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
                 record.path = path;
                 debug("gcode", printer.name, printer.logFilePath,
                     `[Print] Downloaded ${path}, ${buf.length} bytes`);
+                if (path === running?.filePath && !named.includes(path)) {
+                    console.log(printer.name, printer.logFilePath,
+                        `[Print] Sliced file read from where it was found before the restart: ${path}`);
+                }
                 break;
             } catch (err) {
                 // Trying the next candidate is the normal path, not a failure:
@@ -200,6 +210,15 @@ const LISTED_DIRECTORIES = ["/", "/cache"];
 export const SLICED_FILE_TIME_WINDOW_MS = 10 * 60 * 1000;
 
 /**
+ * How much of the end of a 3MF is read to check a file the time does not
+ * vouch for, see `findSlicedFileByTime()`. Bambu Studio writes
+ * `Metadata/slice_info.config` after the G-code, so it sits in the last few
+ * kilobytes next to the zip's central directory; 128 KB holds both with room
+ * for the small files written after it.
+ */
+export const SLICED_FILE_TAIL_BYTES = 128 * 1024;
+
+/**
  * Lists the printer's storage and downloads the 3MF of the running print, for
  * a job whose name does not lead to its file.
  *
@@ -268,7 +287,9 @@ async function findSlicedFileByTime(client, printer, tried, running, record) {
 
     const judged = [];
     const buffers = new Map();
-    for (const file of slicedFileCandidates(files, running.startedAt)) {
+
+    /** Downloads one file whole and judges it by everything it says. */
+    const judgeWhole = async file => {
         let buf;
         try {
             const chunks = [];
@@ -280,7 +301,7 @@ async function findSlicedFileByTime(client, printer, tried, running, record) {
         } catch (err) {
             record.reasons[file.path] = err.message;
             debug("gcode", printer.name, printer.logFilePath, `[Print] Not at ${file.path}: ${err.message}`);
-            continue;
+            return null;
         }
 
         let facts;
@@ -288,7 +309,7 @@ async function findSlicedFileByTime(client, printer, tried, running, record) {
             facts = { ...readSlicedFileFacts(new AdmZip(buf)), fileMd5: createHash("md5").update(buf).digest("hex") };
         } catch (err) {
             debug("gcode", printer.name, printer.logFilePath, `[Print] ${file.path} is not a readable archive: ${err.message}`);
-            continue;
+            return null;
         }
 
         const verdict = judgeSlicedFile(facts, expected);
@@ -296,15 +317,183 @@ async function findSlicedFileByTime(client, printer, tried, running, record) {
         buffers.set(file.path, buf);
         debug("gcode", printer.name, printer.logFilePath,
             `[Print] ${file.path}, written ${describeOffset(file.modifiedAt - running.startedAt)} the start: ${verdict.verdict}, ${verdict.reason}`);
+        return verdict;
+    };
+
+    const atStart = slicedFileCandidates(files, running.startedAt);
+    for (const file of atStart) {
+        const verdict = await judgeWhole(file);
         // A confirmed file is the answer, the rest need not be downloaded
-        if (verdict.verdict === "confirmed") break;
+        if (verdict?.verdict === "confirmed") break;
+    }
+
+    let scope = "written at the start";
+    let settled = settleSlicedFile(judged, scope);
+
+    // Nothing was written at the start, or everything that was is ruled out:
+    // the file may be older. A reprint started on the printer's screen takes a
+    // file that has been on the stick for days, and a restart of the service
+    // during it has lost the echo that named the file (P2S, 2026-10-02). The
+    // other files are checked by their tail first, which holds the layer count
+    // and the plates and costs a few kilobytes each, and only what that does
+    // not rule out is downloaded whole and judged by its title and ids. Two
+    // files nothing rules out are still a guess, and none is taken then.
+    if (!settled.file && !judged.some(file => file.verdict === "possible")) {
+        const rest = files
+            .filter(file => !atStart.includes(file))
+            .sort((a, b) => b.modifiedAt - a.modifiedAt);
+        if (rest.length) {
+            debug("gcode", printer.name, printer.logFilePath,
+                `[Print] No file written at the start is the print's, checking the other ${rest.length} by their tail`);
+        }
+        const kept = [];
+        for (const file of rest) {
+            const tail = await readSlicedFileTail(client, file.path);
+            if (!tail) {
+                debug("gcode", printer.name, printer.logFilePath, `[Print] ${file.path}: tail not readable, left out`);
+                continue;
+            }
+            // No md5 without the whole file; the ids and the titles may be there
+            const verdict = judgeSlicedFile(tail.facts, { ...expected, md5: null });
+            debug("gcode", printer.name, printer.logFilePath, `[Print] ${file.path}, by its tail: ${verdict.verdict}, ${verdict.reason}`);
+            if (verdict.verdict === "rejected") continue;
+            kept.push({ file, confirmed: verdict.verdict === "confirmed" });
+        }
+        // A file the tail already proves goes first: it is read whole for its
+        // slice info and ends the search, so the rest costs nothing
+        kept.sort((a, b) => Number(b.confirmed) - Number(a.confirmed));
+        for (const { file } of kept) {
+            const verdict = await judgeWhole(file);
+            if (verdict?.verdict === "confirmed") break;
+        }
+        if (kept.length) {
+            scope = "on the printer";
+            settled = settleSlicedFile(judged, scope);
+        }
     }
 
     record.judged = judged.map(({ path, verdict, reason }) => ({ path, verdict, reason }));
-    const settled = settleSlicedFile(judged);
     record.settled = settled.reason;
     if (!settled.file) return null;
     return { ...settled.file, buf: buffers.get(settled.file.path), reason: settled.reason };
+}
+
+/**
+ * Reads the end of a 3MF on the printer and what `slice_info.config` in it
+ * says, without downloading the G-code in front of it.
+ *
+ * FTP resumes a download at an offset (`REST`), which is what the tail read
+ * is. A file shorter than the tail is read whole and judged as such. Read
+ * off the P2S's stick on 2026-10-02: 26 files in four seconds, where the
+ * three Handy files alone would have been nine megabytes.
+ *
+ * @param {object} client - the logged in FTPS client
+ * @param {string} path - the file on the printer
+ * @returns {Promise<{facts: object}|null>} the facts the tail holds, null when it cannot be read
+ */
+async function readSlicedFileTail(client, path) {
+    let size;
+    try {
+        size = await client.size(path);
+    } catch {
+        return null;
+    }
+    const start = Math.max(0, size - SLICED_FILE_TAIL_BYTES);
+    const chunks = [];
+    const writable = new Writable({
+        write(chunk, _, cb) { chunks.push(chunk); cb(); },
+    });
+    try {
+        await client.downloadTo(writable, path, start);
+    } catch {
+        return null;
+    }
+    const buf = Buffer.concat(chunks);
+    if (start === 0) {
+        try {
+            return { facts: readSlicedFileFacts(new AdmZip(buf)) };
+        } catch {
+            return null;
+        }
+    }
+    // Two layouts have been seen. Bambu Studio writes slice_info.config after
+    // the G-code, so the tail holds the plates and the layer count. A file
+    // sliced by MakerWorld for Bambu Handy writes it in front and the
+    // thumbnails after the G-code, and its tail holds 3dmodel.model instead,
+    // with the titles and the ids: that is the file's identity, which proves
+    // more than the layer count rules out. Whatever is there is judged.
+    const sliceInfo = readZipTailEntry(buf, start, "Metadata/slice_info.config");
+    const model = readZipTailEntry(buf, start, "3D/3dmodel.model");
+    if (!sliceInfo && !model) return null;
+    const xml = sliceInfo ? sliceInfo.toString("utf8") : "";
+    const head = model ? model.subarray(0, 65536).toString("utf8") : "";
+    const ids = parseModelIds(head);
+    return {
+        facts: {
+            titles: parseModelTitles(head),
+            plates: parsePlateIndices(xml),
+            layers: countPrintedLayers(xml),
+            modelId: ids.modelId,
+            profileId: ids.profileId,
+        },
+    };
+}
+
+/**
+ * One entry out of the tail of a zip file, when the tail holds it.
+ *
+ * The central directory sits at the end of a zip and says where each entry's
+ * local header is, so the tail of a file is enough to read the entries that
+ * were written last. Entries in front of the tail, zip64 archives and
+ * compression methods other than deflate and stored give null.
+ *
+ * @param {Buffer} tail - the last bytes of the file
+ * @param {number} tailStart - the file offset the tail begins at
+ * @param {string} name - the entry name, as the archive spells it
+ * @returns {Buffer|null} the entry's content
+ */
+export function readZipTailEntry(tail, tailStart, name) {
+    // End of central directory record: signature, then the directory's size
+    // and offset, with a comment of up to 64 KB after it
+    let eocd = -1;
+    for (let i = tail.length - 22; i >= 0 && i >= tail.length - 22 - 65535; i--) {
+        if (tail.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) return null;
+    const cdSize = tail.readUInt32LE(eocd + 12);
+    const cdOffset = tail.readUInt32LE(eocd + 16);
+    if (cdOffset === 0xffffffff || cdSize === 0xffffffff) return null;
+    let at = cdOffset - tailStart;
+    if (at < 0 || at + cdSize > tail.length) return null;
+
+    const end = at + cdSize;
+    while (at + 46 <= end && tail.readUInt32LE(at) === 0x02014b50) {
+        const method = tail.readUInt16LE(at + 10);
+        const compressedSize = tail.readUInt32LE(at + 20);
+        const nameLength = tail.readUInt16LE(at + 28);
+        const extraLength = tail.readUInt16LE(at + 30);
+        const commentLength = tail.readUInt16LE(at + 32);
+        const localOffset = tail.readUInt32LE(at + 42);
+        const entryName = tail.toString("utf8", at + 46, at + 46 + nameLength);
+        at += 46 + nameLength + extraLength + commentLength;
+        if (entryName !== name) continue;
+
+        const local = localOffset - tailStart;
+        if (local < 0 || local + 30 > tail.length || tail.readUInt32LE(local) !== 0x04034b50) return null;
+        const dataAt = local + 30 + tail.readUInt16LE(local + 26) + tail.readUInt16LE(local + 28);
+        if (dataAt + compressedSize > tail.length) return null;
+        const data = tail.subarray(dataAt, dataAt + compressedSize);
+        if (method === 0) return Buffer.from(data);
+        if (method === 8) {
+            try {
+                return inflateRawSync(data);
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    }
+    return null;
 }
 
 /**
@@ -564,15 +753,16 @@ export function judgeSlicedFile(facts, expected) {
  * guess, and a booking on the wrong file is worse than no booking.
  *
  * @param {{path: string, verdict: string}[]} judged - in the order they were tried
+ * @param {string} [scope] - which files were judged, for the reason: "written at the start" or "on the printer"
  * @returns {{file: object|null, reason: string}}
  */
-export function settleSlicedFile(judged) {
+export function settleSlicedFile(judged, scope = "written at the start") {
     const confirmed = judged.find(file => file.verdict === "confirmed");
     if (confirmed) return { file: confirmed, reason: confirmed.reason };
     const possible = judged.filter(file => file.verdict === "possible");
-    if (possible.length === 1) return { file: possible[0], reason: "the only file written at the start that nothing rules out" };
-    if (possible.length > 1) return { file: null, reason: `${possible.length} files written at the start could be it, so none is taken` };
-    return { file: null, reason: judged.length ? "every file written at the start was ruled out" : "no 3MF was written at the start" };
+    if (possible.length === 1) return { file: possible[0], reason: `the only file ${scope} that nothing rules out` };
+    if (possible.length > 1) return { file: null, reason: `${possible.length} files ${scope} could be it, so none is taken` };
+    return { file: null, reason: judged.length ? `every file ${scope} was ruled out` : "no 3MF was written at the start" };
 }
 
 /**
