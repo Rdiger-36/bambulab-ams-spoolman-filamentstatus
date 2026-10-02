@@ -11,7 +11,7 @@ import { serverLogFilePath, version } from "./config.js";
  * every load and the rate limit for an unauthenticated caller is not generous.
  */
 
-const RELEASE_URL = "https://api.github.com/repos/Rdiger-36/bambulab-ams-spoolman-filamentstatus/releases/latest";
+const RELEASE_URL = "https://api.github.com/repos/Rdiger-36/HaspelSync/releases/latest";
 const CACHE_MS = 6 * 60 * 60 * 1000;
 
 let cached = null;
@@ -93,7 +93,7 @@ export async function checkForUpdate({ force = false } = {}) {
             headers: {
                 accept: "application/vnd.github+json",
                 // GitHub refuses a request without one
-                "user-agent": `ams-spoolman-manager/${version}`,
+                "user-agent": `haspelsync/${version}`,
             },
             timeout: { request: 8000 },
             retry: { limit: 0 },

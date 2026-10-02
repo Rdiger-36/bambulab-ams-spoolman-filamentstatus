@@ -5,7 +5,7 @@
 ## Checking logs
 
 ```bash
-docker logs -f bambulab-ams-spoolman-filamentstatus
+docker logs -f haspelsync
 ```
 
 Startup and the AMS report:

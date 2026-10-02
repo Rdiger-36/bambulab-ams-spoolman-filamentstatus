@@ -1,4 +1,9 @@
-<h1 align="center">Bambulab AMS Spoolman Filament Status</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.png">
+    <img src="docs/images/banner-light.png" alt="HaspelSync" width="800">
+  </picture>
+</p>
 
 <p align="center">
   Synchronize your Bambu Lab AMS filament spools with Spoolman, automatically.<br/>
@@ -6,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=version&color=blue" alt="version" />
+  <img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?style=flat-square&label=version&color=blue" alt="version" />
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A522-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/platform-x86--64%20%7C%20arm64%20%7C%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platform" />
@@ -15,11 +20,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&color=yellow" alt="stars" />
-  <img src="https://img.shields.io/github/forks/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&color=orange" alt="forks" />
-  <img src="https://img.shields.io/github/issues/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square" alt="open issues" />
+  <img src="https://img.shields.io/github/stars/Rdiger-36/HaspelSync?style=flat-square&color=yellow" alt="stars" />
+  <img src="https://img.shields.io/github/forks/Rdiger-36/HaspelSync?style=flat-square&color=orange" alt="forks" />
+  <img src="https://img.shields.io/github/issues/Rdiger-36/HaspelSync?style=flat-square" alt="open issues" />
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FRdiger-36%2Fbambulab-ams-spoolman-filamentstatus%2Fbambulab-ams-spoolman-filamentstatus&query=%24.downloadCount&style=flat-square&logo=docker&label=pulls&color=blue" alt="GHCR Pulls" />
-  <img src="https://img.shields.io/github/last-commit/Rdiger-36/bambulab-ams-spoolman-filamentstatus?style=flat-square&label=last%20commit" alt="last commit" />
+  <img src="https://img.shields.io/github/last-commit/Rdiger-36/HaspelSync?style=flat-square&label=last%20commit" alt="last commit" />
 </p>
 
 ---
@@ -61,7 +66,7 @@ Automatic creating and merging of spools and filaments in Spoolman relies on the
 | H series | ✅ with a USB stick in the printer, see below |
 | X1 series | ✅ |
 | X2D | ✅ with a USB stick in the printer, see below |
-| A2L | ❓ untested, its AMS reports as unit 16 and is not addressed yet, see [issue tracker](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues) |
+| A2L | ❓ untested, its AMS reports as unit 16 and is not addressed yet, see [issue tracker](https://github.com/Rdiger-36/HaspelSync/issues) |
 
 | AMS | Supported |
 | :---- | :---- |
@@ -146,7 +151,7 @@ The service picks the file up on the next page load; the pages load every table 
 
 ## Feedback
 
-Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/issues).
+Found a bug, an issue or an improvement? [Let me know](https://github.com/Rdiger-36/HaspelSync/issues).
 
 ## Credits
 

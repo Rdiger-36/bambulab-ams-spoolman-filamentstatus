@@ -1,4 +1,11 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Breaking:
+      - The project is called HaspelSync. The image is ghcr.io/rdiger-36/haspelsync and the repository is github.com/Rdiger-36/HaspelSync. GitHub redirects the old repository address, so links, clones and the update check of an installed version keep working. GHCR does not redirect an image name: every release is published under the old name ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus as well for a transition period, so an installation that pulls it keeps updating, but the old name will be retired. Switch the image in docker run or docker-compose to the new name
+   - Changes:
+      - The Web UI has an icon: a filament spool whose winding is half Bambu Lab green and half Spoolman orange, as the tab icon of every page, the login page included, and as the home screen icon on a phone
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.28
    Third release candidate for 1.3.0. It brings the Web UI in English and German, with English as the default and a language switch in the menu bar, and API errors that carry a code a client can word in its own language. Like dev.27, what is found on it goes into 1.3.0
    - New Features:

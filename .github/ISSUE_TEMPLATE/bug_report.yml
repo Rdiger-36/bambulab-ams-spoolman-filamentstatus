@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for taking the time. The fields below are what almost every report ends up needing, so filling them in now saves a round of questions.
 
-        Before you start, the [troubleshooting page](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/troubleshooting.md) and the [FAQ](https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/faq.md) answer the most common cases, for example "No sliced file on the printer" on a P2S, H2 or X2D without a USB stick.
+        Before you start, the [troubleshooting page](https://github.com/Rdiger-36/HaspelSync/blob/main/docs/troubleshooting.md) and the [FAQ](https://github.com/Rdiger-36/HaspelSync/blob/main/docs/faq.md) answer the most common cases, for example "No sliced file on the printer" on a P2S, H2 or X2D without a USB stick.
 
   - type: input
     id: version

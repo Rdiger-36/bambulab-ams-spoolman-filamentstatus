@@ -1,12 +1,12 @@
 services:
-  bambulab-ams-spoolman-filamentstatus:
-    image: ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus:dev
-    container_name: bambulab-ams-spoolman-filamentstatus
+  haspelsync:
+    image: ghcr.io/rdiger-36/haspelsync:dev
+    container_name: haspelsync
     ports:
       - 4000:4000
     environment:
       - TZ=Europe/Berlin
     volumes:
-      - ./basf/config/printers:/app/printers
-      - ./basf/config/logs:/app/logs
+      - ./haspelsync/config/printers:/app/printers
+      - ./haspelsync/config/logs:/app/logs
     restart: unless-stopped

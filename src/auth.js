@@ -50,6 +50,11 @@ const PUBLIC_PATHS = new Set([
     "/login.html",
     "/login.js",
     "/styles.css",
+    // The browser asks for the tab icon on the login page as well; behind the
+    // password the login tab would be the one tab without it.
+    "/favicon.svg",
+    "/favicon.ico",
+    "/apple-touch-icon.png",
     "/i18n.js",
     "/i18n/all.js",
     "/api/auth/state",

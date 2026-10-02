@@ -3153,7 +3153,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="container">
                     <div class="content">
                         ${new Date().getFullYear()} - v.${escapeHtml(data.VERSION)} |
-                        <a href="https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus" target="_blank">${escapeHtml(t("dashboard.footer.repository"))}</a> -
+                        <a href="https://github.com/Rdiger-36/HaspelSync" target="_blank">${escapeHtml(t("dashboard.footer.repository"))}</a> -
                         ${escapeHtml(t("dashboard.footer.createdBy"))}
                         <a href="https://github.com/Rdiger-36" target="_blank">Rdiger-36</a> |
                         <a id="spoolmanLink" href="${URL}" target="_blank">${escapeHtml(t("dashboard.footer.spoolmanLink"))}</a>

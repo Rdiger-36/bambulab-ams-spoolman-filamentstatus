@@ -9,6 +9,11 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # The name the image was published under before the rename to HaspelSync.
+  # GHCR does not redirect an image name, so every release is pushed there
+  # too until the old name is retired: an installation that still pulls it
+  # keeps updating instead of stopping without a word.
+  LEGACY_IMAGE_NAME: ${{ github.repository_owner }}/bambulab-ams-spoolman-filamentstatus
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -66,6 +71,13 @@ jobs:
 
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           IMAGE="${IMAGE,,}"  # lowercase
+          LEGACY_IMAGE="${{ env.REGISTRY }}/${{ env.LEGACY_IMAGE_NAME }}"
+          LEGACY_IMAGE="${LEGACY_IMAGE,,}"
+          # Both names, or one while the repository still carries the old name.
+          IMAGES="${IMAGE}"
+          if [[ "${LEGACY_IMAGE}" != "${IMAGE}" ]]; then
+            IMAGES="${IMAGE} ${LEGACY_IMAGE}"
+          fi
 
           VERSION="${GITHUB_REF_NAME#v}"
 
@@ -84,10 +96,16 @@ jobs:
           # GitHub release a pre-release, so the two cannot drift apart: an
           # image that is not :latest is never the release users are pointed at.
           case "${VERSION}" in
-            *-dev|*-dev.*) TAGS="${IMAGE}:${VERSION},${IMAGE}:dev"    ; PRERELEASE=true  ;;
-            *-*)           TAGS="${IMAGE}:${VERSION}"                 ; PRERELEASE=true  ;;
-            *)             TAGS="${IMAGE}:${VERSION},${IMAGE}:latest" ; PRERELEASE=false ;;
+            *-dev|*-dev.*) NAMES="${VERSION} dev"    ; PRERELEASE=true  ;;
+            *-*)           NAMES="${VERSION}"        ; PRERELEASE=true  ;;
+            *)             NAMES="${VERSION} latest" ; PRERELEASE=false ;;
           esac
+          TAGS=""
+          for image in ${IMAGES}; do
+            for name in ${NAMES}; do
+              TAGS="${TAGS:+${TAGS},}${image}:${name}"
+            done
+          done
 
           # The release these notes compare against. A pre-release compares
           # against whatever came before it, dev builds included, so a -dev.7
@@ -124,8 +142,8 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
-            org.opencontainers.image.title=AMS Spoolman Manager
-            org.opencontainers.image.description=Bambu Lab AMS ↔ Spoolman filament status manager
+            org.opencontainers.image.title=HaspelSync
+            org.opencontainers.image.description=Keeps a Bambu Lab AMS in sync with Spoolman
             org.opencontainers.image.version=${{ steps.tags.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

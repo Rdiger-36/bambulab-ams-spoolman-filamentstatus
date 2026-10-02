@@ -1228,7 +1228,7 @@ export function buildOpenApiDocument() {
     return {
         openapi: "3.0.3",
         info: {
-            title: "Bambulab AMS Spoolman Filament Status",
+            title: "HaspelSync",
             version,
             description: [
                 "The HTTP API of the service that keeps a Bambu Lab AMS in sync with Spoolman. Every route answers JSON,",
@@ -1244,11 +1244,11 @@ export function buildOpenApiDocument() {
                 "**Slot labels** count the way the printer does: `A1` is the first slot of the first AMS, `External` the spool holder,",
                 "`External-2` the second holder of a dual nozzle printer, `HT-A` the first AMS HT.",
             ].join("\n"),
-            license: { name: "GPL-3.0", url: "https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/LICENSE" },
+            license: { name: "GPL-3.0", url: "https://github.com/Rdiger-36/HaspelSync/blob/main/LICENSE" },
         },
         externalDocs: {
             description: "The documentation on GitHub",
-            url: "https://github.com/Rdiger-36/bambulab-ams-spoolman-filamentstatus/blob/main/docs/api.md",
+            url: "https://github.com/Rdiger-36/HaspelSync/blob/main/docs/api.md",
         },
         servers: [{ url: "/", description: "This installation" }],
         tags: [
