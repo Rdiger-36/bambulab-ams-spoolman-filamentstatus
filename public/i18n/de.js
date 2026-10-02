@@ -733,6 +733,7 @@ I18N.register("de", "Deutsch", {
     "export.note.spoolmanHost": "Der Hostname von Spoolman wird ersetzt, Schema, Port und Pfad bleiben erhalten",
 
     // Login page
+    "login.language": "Sprache",
     "login.lead": "Diese Installation ist mit einem Passwort geschützt.",
     "login.noAnswer": "Der Dienst antwortet nicht",
     "login.pageTitle": "Anmelden",

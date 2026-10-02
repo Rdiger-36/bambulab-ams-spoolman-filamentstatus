@@ -736,6 +736,7 @@ I18N.register("en", "English", {
     "export.note.spoolmanHost": "The Spoolman host name is replaced, the scheme, port and path are kept",
 
     // Login page
+    "login.language": "Language",
     "login.lead": "This installation asks for a password.",
     "login.noAnswer": "The service did not answer",
     "login.pageTitle": "Sign in",

@@ -2685,29 +2685,10 @@ a.menu-foot-update:hover { text-decoration: underline; }
   box-shadow: var(--shadow-card);
 }
 
-/* The brand over the form: the spool above the name, the name set like the
-   wordmark in the menu bar, "Sync" in the brand green. */
 .login-card h1 {
-  margin: 2px 0 4px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  font-size: 1.4em;
+  margin: 0;
+  font-size: 1.15em;
   text-align: center;
-}
-
-.login-brand-icon { display: block; }
-
-.login-wordmark {
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-
-.login-wordmark b {
-  color: var(--brand);
-  font-weight: 700;
 }
 
 .login-lead {
