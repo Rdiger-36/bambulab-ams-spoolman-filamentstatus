@@ -1310,7 +1310,7 @@ body.logs-page .log-page { width: 100%; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 7px;
   align-self: stretch;
   flex: none;
   padding: 0 8px;
