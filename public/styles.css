@@ -1586,19 +1586,34 @@ a.menu-foot-update:hover { text-decoration: underline; }
   .status-head-side { flex: 0 1 auto; }
   .status-head-side-end { justify-content: center; }
 
+  /* The button that folds the pages is drawn like the gear at the other end:
+     quiet, the full height of the bar, underlined while one of the pages it
+     holds is the open one, so the mark of the open page reads the same on a
+     phone as the tabs do on a desk. */
   .menu-burger {
     display: inline-flex;
-    align-self: center;
-    border-color: var(--border-control);
-    background: var(--control-bg);
-    padding: 6px 10px;
-    font-size: 1em;
+    align-self: stretch;
+    gap: 7px;
+    padding: 0 8px;
+    border: 0;
+    border-top: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: none;
+    color: var(--text-quiet);
+    font-size: 0.9em;
   }
 
-  /* The name goes before the pages do: the spool alone still says whose bar
-     this is, and the width it frees is what keeps the theme and the gear on
-     the one line next to the folded pages. */
-  .menu-wordmark { display: none; }
+  .menu-burger:hover {
+    background: none;
+    color: var(--text);
+  }
+
+  .menu-burger[data-current="true"] {
+    color: var(--text);
+    font-weight: 700;
+    border-bottom-color: var(--brand);
+  }
 
   .menunav { gap: 8px; }
 

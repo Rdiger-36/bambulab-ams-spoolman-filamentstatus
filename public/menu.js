@@ -152,8 +152,8 @@ function renderMenubar() {
 
             <button class="menu-item menu-burger" type="button" id="menu-burger"
                     aria-haspopup="true" aria-expanded="false" aria-controls="menu-pages"
-                    title="${t("menu.menu")}" aria-label="${t("menu.menu")}">
-                <span aria-hidden="true">☰</span>
+                    ${page !== "settings" ? 'data-current="true"' : ""}>
+                <span aria-hidden="true">☰</span><span>${t("menu.menu")}</span>
             </button>
 
             <div class="menu-pages" id="menu-pages">
