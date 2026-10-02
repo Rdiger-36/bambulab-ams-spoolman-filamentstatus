@@ -13,6 +13,36 @@ import { escapeHtml, fetchJson, sendJson } from "./ui.js";
 // `settings.group.<key>.advanced` where a group names it.
 const GROUPS = ["spoolman", "tracking", "sync", "printer", "logging", "network"];
 
+// The sections of the page, in the order of the navigation at the left. Each
+// names the schema groups it shows; the hand written cards, the printer list,
+// the Web UI choices and the service card, sit in the page's own markup under
+// the section's name. The label is `settings.section.<key>`.
+const SECTIONS = [
+    { key: "printers", groups: ["printer"] },
+    { key: "spoolman", groups: ["spoolman"] },
+    { key: "tracking", groups: ["tracking", "sync"] },
+    { key: "logging", groups: ["logging"] },
+    { key: "access", groups: ["network"] },
+    { key: "webui", groups: [] },
+    { key: "system", groups: [] },
+];
+
+// One glyph per section, drawn in the colour of the entry: a printer, a spool
+// seen from the side, a trend line, three log lines, a padlock, a window and
+// a gear.
+const SECTION_GLYPHS = {
+    printers: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="5" width="12" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V2.5h6V5M5 12v1.5h6V12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`,
+    spoolman: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>`,
+    tracking: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 12l3.5-4 3 2.5L14 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    logging: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12M2 8h12M2 13h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    access: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`,
+    webui: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6h12" stroke="currentColor" stroke-width="1.5"/></svg>`,
+    system: `<svg class="set-nav-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 1v2.4M8 12.6V15M1 8h2.4M12.6 8H15M3 3l1.7 1.7M11.3 11.3L13 13M3 13l1.7-1.7M11.3 4.7L13 3" stroke="currentColor" stroke-width="2.2"/></svg>`,
+};
+
+/** The sections with unsaved changes, for the dot in the navigation. */
+const dirtySections = new Set();
+
 /**
  * The label, description or option label of a schema field in the viewer's
  * language.
@@ -78,7 +108,11 @@ let formDirty = false;
 document.addEventListener("DOMContentLoaded", () => {
     // Menu bar, including the dark mode button
     initMenubar();
+    renderSectionNav();
+    openSectionFromHash();
+    window.addEventListener("hashchange", openSectionFromHash);
     setupLanguageField();
+    setupThemeField();
 
     document.getElementById("settings-form").addEventListener("submit", saveSettings);
     document.getElementById("reload-settings").addEventListener("click", () => loadSettings(true));
@@ -202,7 +236,116 @@ function setDirty(dirty) {
     formDirty = dirty;
     document.getElementById("save-settings").disabled = !dirty;
     document.getElementById("reload-settings").disabled = !dirty;
-    document.getElementById("dirty-hint").textContent = dirty ? t("settings.unsavedChanges") : "";
+    if (!dirty) dirtySections.clear();
+    renderDirtySections();
+}
+
+/**
+ * Marks the section a changed field sits in, so the navigation shows where
+ * the unsaved changes are while another section is open.
+ *
+ * @param {HTMLElement} input - the field that changed
+ */
+function markDirty(input) {
+    const section = input.closest(".set-section")?.dataset.section;
+    if (section) dirtySections.add(section);
+    setDirty(true);
+}
+
+/**
+ * The dots in the navigation and the sentence in the save bar: "Unsaved
+ * changes in Spoolman, Tracking", in the order of the navigation.
+ */
+function renderDirtySections() {
+    for (const button of document.querySelectorAll("#set-nav [data-section]")) {
+        button.querySelector(".set-dot")?.remove();
+        if (!dirtySections.has(button.dataset.section)) continue;
+        const dot = document.createElement("span");
+        dot.className = "set-dot";
+        dot.title = t("settings.unsavedChanges");
+        button.appendChild(dot);
+    }
+
+    const hint = document.getElementById("dirty-hint");
+    if (!formDirty) {
+        hint.textContent = "";
+        return;
+    }
+    const names = SECTIONS.filter(section => dirtySections.has(section.key))
+        .map(section => t(`settings.section.${section.key}`));
+    hint.textContent = names.length
+        ? t("settings.unsavedChangesIn", { sections: names.join(", ") })
+        : t("settings.unsavedChanges");
+}
+
+/* ---- Sections ---- */
+
+/**
+ * Builds the navigation at the left: one entry per section, the open one
+ * marked. Built once; the dots for unsaved changes are painted onto it.
+ */
+function renderSectionNav() {
+    const nav = document.getElementById("set-nav");
+    nav.innerHTML = "";
+    for (const section of SECTIONS) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "set-nav-item";
+        button.dataset.section = section.key;
+        button.innerHTML = `${SECTION_GLYPHS[section.key]}<span>${escapeHtml(t(`settings.section.${section.key}`))}</span>`;
+        button.addEventListener("click", () => openSection(section.key, { pushHash: true }));
+        nav.appendChild(button);
+    }
+}
+
+/**
+ * Shows one section and hides the others.
+ *
+ * The section is kept in the address as `settings.html#access`, so a link
+ * from the documentation or from another page lands on the right one and a
+ * reload stays where it was. The sections are hidden, not unmounted: the form
+ * holds every field whichever one is shown, so a save takes all of them.
+ *
+ * @param {string} key - a key of SECTIONS
+ * @param {object} [options]
+ * @param {boolean} [options.pushHash] - write the section into the address
+ */
+function openSection(key, { pushHash = false } = {}) {
+    if (!SECTIONS.some(section => section.key === key)) key = SECTIONS[0].key;
+
+    for (const section of document.querySelectorAll(".set-section")) {
+        section.hidden = section.dataset.section !== key;
+    }
+    for (const button of document.querySelectorAll("#set-nav [data-section]")) {
+        const current = button.dataset.section === key;
+        button.setAttribute("aria-current", current ? "true" : "false");
+        // On a phone the navigation is a row that scrolls sideways, so the
+        // open entry is brought into it; "nearest" leaves the page alone.
+        if (current) button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+
+    if (pushHash && window.location.hash !== `#${key}`) {
+        history.replaceState(null, "", `#${key}`);
+    }
+}
+
+/**
+ * Opens the section the address names.
+ *
+ * The hash is a section key, or the id of an element inside one: the API page
+ * links back to `#apikey-table`, which sits in the access section. An element
+ * is scrolled to once its section is on screen.
+ */
+function openSectionFromHash() {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (!hash) return openSection(SECTIONS[0].key);
+
+    if (SECTIONS.some(section => section.key === hash)) return openSection(hash);
+
+    const target = document.getElementById(hash);
+    const section = target?.closest(".set-section")?.dataset.section;
+    openSection(section || SECTIONS[0].key);
+    if (section) target.scrollIntoView({ block: "start" });
 }
 
 /* ---- Settings form ---- */
@@ -516,10 +659,15 @@ function waitForService(deadline = Date.now() + 60000) {
 }
 
 function renderSettings() {
-    const container = document.getElementById("settings-groups");
-    container.innerHTML = "";
+    // Every group goes into the host its section provides; a host whose group
+    // has no fields stays empty. Cleared first, because a rebuild after a save
+    // or a discard would otherwise stack a second card under the first.
+    for (const host of document.querySelectorAll("[data-group]")) host.innerHTML = "";
+    const container = document.querySelector(".set-sections");
 
     for (const key of GROUPS) {
+        const host = document.querySelector(`[data-group="${key}"]`);
+        if (!host) continue;
         const advancedKey = `settings.group.${key}.advanced`;
         const group = {
             key,
@@ -554,11 +702,11 @@ function renderSettings() {
             ${group.key === "spoolman" ? renderSpoolmanTest() : ""}
             ${group.key === "logging" ? renderLogDetailShell() : ""}
             ${group.key === "network" ? renderApiKeyShell() : ""}`;
-        container.appendChild(card);
+        host.appendChild(card);
     }
 
-    container.querySelectorAll("input, select").forEach(input => {
-        input.addEventListener("input", () => setDirty(true));
+    container.querySelectorAll("[data-group] input, [data-group] select").forEach(input => {
+        input.addEventListener("input", () => markDirty(input));
     });
 
     container.querySelectorAll("[data-reset]").forEach(button => {
@@ -1021,7 +1169,7 @@ function resetField(key) {
     document.querySelector(`[data-reset="${key}"]`)?.remove();
     // A dialog field is not part of the page form, so it must not arm the save
     // button or the warning about leaving with unsaved changes
-    if (!field.dialog) setDirty(true);
+    if (!field.dialog) markDirty(input);
 }
 
 /**
@@ -1038,10 +1186,9 @@ function clearPassword(key) {
     input.dataset.clear = "true";
     input.placeholder = t("settings.placeholder.removedOnSave");
     document.querySelector(`[data-clear="${key}"]`)?.remove();
-    setDirty(true);
+    markDirty(input);
 }
 
-/** Reads every field back out of the form, in the type the backend expects. */
 /**
  * The language field of the Web UI card: every registered language, the shown
  * one selected. A pick is stored in this browser and reloads the page in it,
@@ -1061,6 +1208,30 @@ function setupLanguageField() {
     select.addEventListener("change", () => window.I18N.setLanguage(select.value));
 }
 
+/**
+ * The theme field of the Web UI card, the moon of the menu bar as a select.
+ *
+ * It does not switch the theme itself: it clicks the moon, which owns the
+ * class on <html>, its own icon and the stored choice, so the two can never
+ * disagree. And when the moon is clicked, the field follows; its listener runs
+ * after the one of menu.js, so it reads the state the click left behind.
+ */
+function setupThemeField() {
+    const select = document.getElementById("ui-theme");
+    const toggle = document.getElementById("dark-mode-toggle");
+    if (!select || !toggle) return;
+
+    const isDark = () => document.documentElement.classList.contains("dark-mode");
+    const follow = () => { select.value = isDark() ? "dark" : "light"; };
+    follow();
+
+    select.addEventListener("change", () => {
+        if ((select.value === "dark") !== isDark()) toggle.click();
+    });
+    toggle.addEventListener("click", follow);
+}
+
+/** Reads every field back out of the form, in the type the backend expects. */
 function collectSettings() {
     const payload = {};
 

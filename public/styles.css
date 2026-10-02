@@ -1740,6 +1740,101 @@ a.menu-foot-update:hover { text-decoration: underline; }
   opacity: 0.7;
 }
 
+/* ---- Sections ----
+   The navigation card at the left names the sections, the open one filled
+   like the open page of a folded menu, and the cards of that section sit at
+   the right. The card stays put while the section scrolls. A green dot on
+   an entry marks a section with unsaved changes, so they are not lost from
+   sight behind another section. */
+.set-side {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+.set-nav {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+.set-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.9em;
+  color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.set-nav-item:hover { background: var(--control-hover-bg); }
+
+.set-nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.set-nav-item[aria-current="true"] {
+  background: var(--control-hover-bg);
+  border-color: var(--border-control);
+  font-weight: 700;
+}
+
+.set-nav-glyph {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.set-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  flex: none;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.set-section[hidden] { display: none; }
+
+/* The sections are hidden rather than unmounted and share one form, so the
+   first card of a section starts where the cards did before. */
+.set-sections { min-width: 0; }
+
+@media (max-width: 760px) {
+  /* The card becomes a row above the content that scrolls sideways, the
+     entries never wrapping: seven of them do not fit a phone in one line. */
+  .set-side { grid-template-columns: minmax(0, 1fr); }
+
+  .set-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .set-nav::-webkit-scrollbar { display: none; }
+
+  .set-dot { margin-left: 4px; }
+}
+
 .set-card {
   border: 1px solid var(--border);
   border-radius: 10px;

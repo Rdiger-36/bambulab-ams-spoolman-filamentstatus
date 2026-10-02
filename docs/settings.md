@@ -6,17 +6,17 @@ Everything is stored in `printers/settings.json` and applied to the running serv
 
 ![Settings](images/settings.png)
 
-| Card | Holds |
+The page is split into sections, listed in a navigation card at the left; on a phone the card becomes a row above the content. The section is part of the address, `settings.html#access`, so a link lands on the right one. One save covers every section: a section with unsaved changes carries a green dot in the navigation, and the save bar names it.
+
+| Section | Holds |
 | :---- | :---- |
-| **Spoolman connection** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
-| **Tracking** | Operation mode, whether a [3rd party spool is assigned automatically](web-ui.md), **Clear print result after**, the minutes a finished print stays on the dashboard before the card returns to idle (ten by default, 0 keeps the result until it is cleared by hand), and [legacy mode](legacy-mode.md) |
-| **Synchronisation** | Slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
-| **Printer connection** | Offline check interval, the backoff limit for a printer that stays offline and the retry limit |
+| **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS, and the **Printer connection** card: offline check interval, the backoff limit for a printer that stays offline and the retry limit |
+| **Spoolman** | Endpoint, plus host, port, subfolder and public URL in a collapsed section. The line under the field says which URL the service actually talks to |
+| **Tracking** | Operation mode, whether a [3rd party spool is assigned automatically](web-ui.md), **Clear print result after**, the minutes a finished print stays on the dashboard before the card returns to idle (ten by default, 0 keeps the result until it is cleared by hand), and [legacy mode](legacy-mode.md). Below it the **Synchronisation** card: slot update interval, writing the slot as the spool location, never merging a tagged spool, [archiving empty spools](how-it-works.md#archiving-empty-spools) |
 | **Logging** | Log file size and how many rotated files are kept, for the server and per printer, plus **Log detail...**: the [log level, the areas and the raw MQTT capture](troubleshooting.md#how-much-gets-logged). The same dialog per printer, **Log** in the Printers card, also [exports that printer's logs](troubleshooting.md#diagnostics-and-privacy) |
-| **Network access** | The Web UI password, the host names this service may be addressed under, and the API keys for callers that have no browser. All three are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
-| **Printers** | Add, edit and remove printers, each with a connection test for MQTT and FTPS |
-| **Web UI** | The language of the pages. A choice of this browser rather than of the installation: it applies at once, is kept in the browser and never reaches `settings.json`, so two people on two phones can read the same installation in two languages |
-| **Service** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection |
+| **Access** | The Web UI password, the host names this service may be addressed under, and the API keys for callers that have no browser. All three are empty by default: without a password the Web UI is open to the network, and IP addresses, `localhost` and `.local` names are accepted whatever the host list says |
+| **Web UI** | The language and the theme of the pages. Choices of this browser rather than of the installation: they apply at once, are kept in the browser and never reach `settings.json`, so two people on two phones can read the same installation in two languages |
+| **System** | Version, Node, platform, uptime, memory, the tracking mode the process actually runs in, the supervisor state and the Spoolman connection, and the actions on the running service |
 
 A new printer connects right away, a removed one is disconnected and its assignments are dropped. Removing a printer, or changing its address or access code, asks first while a print is running, because the consumption of a running job is booked only when it ends. The serial number cannot be changed, it keys the MQTT topic, the log file and the assignments. **Test connection** checks MQTT on port 8883 and FTPS on port 990 with the values in the form, so an address can be verified before it is saved:
 
@@ -26,7 +26,7 @@ The access code is stored on the server and never sent back to the browser; leav
 
 **Log** next to a printer opens the same log detail dialog the **Logging** card offers, for that printer alone. It follows the global settings until **Follow the global settings** is switched off, and a star on the button marks a printer that no longer does. That is what lets one machine be turned up to `trace`, with its raw MQTT capture running, while the rest of the service stays quiet.
 
-The **Service** card is what a support question usually asks for first, plus the actions that work on the running service rather than on a stored setting:
+The **System** section is what a support question usually asks for first, plus the actions that work on the running service rather than on a stored setting:
 
 ![Service card](images/settings-service.png)
 

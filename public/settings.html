@@ -38,55 +38,98 @@
 
         <div id="set-banner" class="set-banner"></div>
 
-        <div class="set-card">
-            <div class="set-card-head">
-                <h2 data-i18n="settings.printers.title">Printers</h2>
-                <button class="btn btn-primary" id="add-printer" data-i18n="settings.printers.add">Add printer</button>
-            </div>
-            <div id="printer-table"></div>
-        </div>
-
-        <!-- Choices of this browser rather than of the installation: kept in
-             the browser, never in settings.json, so the card sits outside the
-             form and its save. settings.js fills the language field. -->
-        <div class="set-card">
-            <div class="set-card-head">
-                <h2 data-i18n="settings.ui.title">Web UI</h2>
-            </div>
-            <div class="set-form">
-                <div class="set-field">
-                    <label class="set-field-label" for="ui-language">
-                        <span data-i18n="settings.ui.language">Language</span><span class="pill pill-gcode" data-i18n="settings.ui.thisBrowser">this browser</span>
-                    </label>
-                    <select id="ui-language"></select>
-                    <small data-i18n="settings.ui.languageHelp">The language of the pages, applied at once and kept per browser. Log lines and everything the API hands out stay English.</small>
-                </div>
-            </div>
-        </div>
-
+        <!-- One form over every section, so a save takes what was changed on
+             any of them and the sticky save bar stays the last element of the
+             page. The navigation at the left is built by settings.js from
+             SECTIONS; a section shows the cards it names, the schema groups
+             rendered into the data-group hosts and the hand written cards
+             around them. type="button" keeps every action out of the submit. -->
         <form id="settings-form">
-            <div id="settings-groups"></div>
+            <div class="set-side">
+                <nav class="set-nav" id="set-nav" aria-label="Settings sections" data-i18n-aria-label="settings.sections"></nav>
 
-            <!-- Inside the form so the sticky save bar stays the last element on
-                 the page. type="button" keeps the restart out of the submit. -->
-            <div class="set-card">
-                <div class="set-card-head">
-                    <h2 data-i18n="settings.service.title">Service</h2>
-                </div>
-                <p class="set-note" data-i18n="settings.service.note">What this installation is running, and the actions that work on the
-                    running service itself rather than on a stored setting.</p>
+                <div class="set-sections">
+                    <section class="set-section" data-section="printers" hidden>
+                        <div class="set-card">
+                            <div class="set-card-head">
+                                <h2 data-i18n="settings.printers.title">Printers</h2>
+                                <button class="btn btn-primary" type="button" id="add-printer" data-i18n="settings.printers.add">Add printer</button>
+                            </div>
+                            <div id="printer-table"></div>
+                        </div>
+                        <div data-group="printer"></div>
+                    </section>
 
-                <dl class="set-facts" id="system-info"></dl>
-                <p class="set-note" id="update-note"></p>
-                <p class="set-note" id="service-note"></p>
+                    <section class="set-section" data-section="spoolman" hidden>
+                        <div data-group="spoolman"></div>
+                    </section>
 
-                <!-- The restart sits at the end of this row, apart from the three
-                     that leave the process running. -->
-                <div class="set-service-actions">
-                    <button class="btn" type="button" id="download-diagnostics" data-i18n="settings.service.diagnostics">Download diagnostics...</button>
-                    <button class="btn" type="button" id="reconnect-printers" data-i18n="settings.service.reconnect">Reconnect all printers</button>
-                    <button class="btn" type="button" id="toggle-monitoring" data-i18n="settings.service.pauseMonitoring">Pause all monitoring</button>
-                    <button class="btn btn-danger-solid set-action-end" type="button" id="restart-service" data-i18n="settings.service.restart">Restart service</button>
+                    <section class="set-section" data-section="tracking" hidden>
+                        <div data-group="tracking"></div>
+                        <div data-group="sync"></div>
+                    </section>
+
+                    <section class="set-section" data-section="logging" hidden>
+                        <div data-group="logging"></div>
+                    </section>
+
+                    <section class="set-section" data-section="access" hidden>
+                        <div data-group="network"></div>
+                    </section>
+
+                    <!-- Choices of this browser rather than of the installation:
+                         kept in the browser, never in settings.json. The fields
+                         carry no schema key, so a save never reads them, and
+                         settings.js fills and wires them. -->
+                    <section class="set-section" data-section="webui" hidden>
+                        <div class="set-card">
+                            <div class="set-card-head">
+                                <h2 data-i18n="settings.ui.title">Web UI</h2>
+                            </div>
+                            <div class="set-form">
+                                <div class="set-field">
+                                    <label class="set-field-label" for="ui-language">
+                                        <span data-i18n="settings.ui.language">Language</span><span class="pill pill-gcode" data-i18n="settings.ui.thisBrowser">this browser</span>
+                                    </label>
+                                    <select id="ui-language"></select>
+                                    <small data-i18n="settings.ui.languageHelp">The language of the pages, applied at once and kept per browser. Log lines and everything the API hands out stay English.</small>
+                                </div>
+                                <div class="set-field">
+                                    <label class="set-field-label" for="ui-theme">
+                                        <span data-i18n="settings.ui.theme">Theme</span><span class="pill pill-gcode" data-i18n="settings.ui.thisBrowser">this browser</span>
+                                    </label>
+                                    <select id="ui-theme">
+                                        <option value="light" data-i18n="settings.ui.themeLight">Light</option>
+                                        <option value="dark" data-i18n="settings.ui.themeDark">Dark</option>
+                                    </select>
+                                    <small data-i18n="settings.ui.themeHelp">The same switch as the moon in the menu bar, kept per browser.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="set-section" data-section="system" hidden>
+                        <div class="set-card">
+                            <div class="set-card-head">
+                                <h2 data-i18n="settings.service.title">Service</h2>
+                            </div>
+                            <p class="set-note" data-i18n="settings.service.note">What this installation is running, and the actions that work on the
+                                running service itself rather than on a stored setting.</p>
+
+                            <dl class="set-facts" id="system-info"></dl>
+                            <p class="set-note" id="update-note"></p>
+                            <p class="set-note" id="service-note"></p>
+
+                            <!-- The restart sits at the end of this row, apart from the three
+                                 that leave the process running. -->
+                            <div class="set-service-actions">
+                                <button class="btn" type="button" id="download-diagnostics" data-i18n="settings.service.diagnostics">Download diagnostics...</button>
+                                <button class="btn" type="button" id="reconnect-printers" data-i18n="settings.service.reconnect">Reconnect all printers</button>
+                                <button class="btn" type="button" id="toggle-monitoring" data-i18n="settings.service.pauseMonitoring">Pause all monitoring</button>
+                                <button class="btn btn-danger-solid set-action-end" type="button" id="restart-service" data-i18n="settings.service.restart">Restart service</button>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
 
