@@ -1363,6 +1363,10 @@ body.logs-page .log-page { width: 100%; }
   height: 15px;
 }
 
+/* The entries of the gear menu are actions, not a list to pick from, so the
+   tick column of a picker has no place in front of them. */
+.menu-tools .menu-entry::before { content: none; }
+
 .menu-sep {
   height: 1px;
   margin: 4px 0;

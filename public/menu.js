@@ -208,6 +208,8 @@ async function showSessionTools() {
  * entry is a dead end, so the gear is the settings page itself, filled while
  * that page is open. With a password it opens a panel: the settings page, the
  * log out and, at the foot, the version and whether a newer release exists.
+ * The filled gear is the only mark of the open page; the entries are actions,
+ * not a list to pick from, so none of them carries the tick of a picker.
  *
  * @param {boolean} withSession - whether there is a session to end
  */
@@ -229,7 +231,7 @@ function renderTools(withSession) {
                     aria-haspopup="true" aria-expanded="false" aria-controls="menu-tools-panel"
                     title="${t("menu.menu")}" aria-label="${t("menu.menu")}"${current}>${SETTINGS_ICON}</button>
             <div class="menu-panel menu-panel-end" id="menu-tools-panel" hidden>
-                <a class="menu-entry" href="settings.html"${onSettings ? ' aria-current="true"' : ""}>${SETTINGS_ICON}${t("menu.settings")}</a>
+                <a class="menu-entry" href="settings.html">${SETTINGS_ICON}${t("menu.settings")}</a>
                 <a class="menu-entry" href="#" id="menu-logout">${LOGOUT_ICON}${t("menu.logout")}</a>
                 <div class="menu-sep"></div>
                 <div class="menu-foot" id="menu-foot">HaspelSync</div>
