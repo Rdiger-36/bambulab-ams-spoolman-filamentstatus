@@ -767,6 +767,84 @@ caption.ams-env .ams-env-drying {
   font-weight: 600;
 }
 
+/* The readings sit in a span of their own, so each needs the spacing the
+   direct children have. */
+caption.ams-env .ams-env-readings > span {
+  margin-right: 12px;
+}
+
+/* ---- Folding a unit ----
+   The header is the control: the whole line folds the slots away and back,
+   the chevron at its right end says so and points down while open, right
+   while folded. Folded, the table body is gone and the header turns into a
+   slim card carrying the swatches of the loaded slots. */
+caption.ams-env {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ams-toggle {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ams-toggle svg { transition: transform 0.2s; }
+
+caption.ams-env:hover .ams-toggle { color: var(--text); }
+
+.ams-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.spool-table.is-collapsed .ams-toggle svg { transform: rotate(-90deg); }
+
+.spool-table.is-collapsed thead,
+.spool-table.is-collapsed tbody { display: none; }
+
+.ams-summary { display: none; }
+
+.spool-table.is-collapsed .ams-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.ams-summary .gc-swatch { margin-right: 3px; }
+
+.ams-summary-empty {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* The folded header as a slim card of its own, where the open table's card
+   stands otherwise. The table box itself is empty while folded and draws
+   nothing. */
+.spool-table.is-collapsed {
+  border: 0;
+  box-shadow: none;
+}
+
+.spool-table.is-collapsed caption.ams-env {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+}
+
 /* Keep content clear of the fixed footer so the last table isn't overlapped */
 body.show-footer #spool-list {
   margin-bottom: 80px;
@@ -2960,7 +3038,33 @@ a.menu-foot-update:hover { text-decoration: underline; }
 
   /* The gap spaces them now, and a trailing margin would push the band open on
      the right. */
-  caption.ams-env > span { margin-right: 0; }
+  caption.ams-env > span,
+  caption.ams-env .ams-env-readings > span { margin-right: 0; }
+
+  caption.ams-env .ams-env-readings {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 14px;
+  }
+
+  caption.ams-env .ams-env-readings:empty { display: none; }
+
+  /* The chevron at the right edge of the band, the rest stays centred. */
+  .ams-toggle {
+    float: none;
+    margin-left: auto;
+    order: 10;
+  }
+
+  /* Folded, the band is the whole card, so its own card frame is not needed */
+  .spool-table.is-collapsed { border: 1px solid var(--border); }
+
+  .spool-table.is-collapsed caption.ams-env {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 
   caption.ams-env .ams-env-unit {
     font-size: 1.06em;

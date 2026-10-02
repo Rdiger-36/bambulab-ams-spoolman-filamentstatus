@@ -119,6 +119,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // both views rebuild their rows on every update and an SSE slot update
     // replaces a single row in place, which would drop a listener bound to it.
     document.getElementById("spool-list").addEventListener("click", event => {
+        // The header of a unit folds its slots away and back. The whole line
+        // is the control, the chevron in it only says so.
+        const caption = event.target.closest("caption.ams-env");
+        if (caption) {
+            const table = caption.closest("table");
+            setUnitCollapsed(caption.dataset.unit, !table.classList.contains("is-collapsed"));
+            applyUnitCollapsed(table);
+            return;
+        }
+
         const name = event.target.closest(".spool-name-link");
         if (!name) return;
         const amsSpool = renderedSpools.get(name.dataset.amsid);
@@ -401,18 +411,21 @@ document.addEventListener("DOMContentLoaded", () => {
             const table = document.createElement("table");
             table.className = "spool-table";
 
-            // First child, because that is where a caption belongs, and kept
-            // even when the unit reports nothing so a later reading can fill it
-            // in without rebuilding the table.
+            // First child, because that is where a caption belongs. Every unit
+            // has one, named after the unit, with the readings the AMS reports
+            // about itself where it reports any, the fold control, and the
+            // swatches of the loaded slots for while it is folded.
             const caption = document.createElement("caption");
             caption.className = "ams-env";
             caption.dataset.unit = amsUnitKey(slots[0]?.amsId);
-            caption.innerHTML = amsEnvCaptionHtml(caption.dataset.unit);
-            caption.hidden = !caption.innerHTML;
+            caption.innerHTML = amsUnitHeaderHtml(caption.dataset.unit, slots);
+            // The one table without a unit is the "nothing loaded" placeholder
+            caption.hidden = !caption.dataset.unit;
             // Prepended, not appended: `display:flex` takes the element out of
             // the table layout, so it renders where it sits in the DOM rather
             // than where `caption-side` asks for it.
             table.prepend(caption);
+            applyUnitCollapsed(table);
 
             const thead = document.createElement("thead");
             const headerRow = document.createElement("tr");
@@ -466,13 +479,40 @@ document.addEventListener("DOMContentLoaded", () => {
         amsEnvByUnit = Object.fromEntries(amsEnv.map(entry => [entry.amsId, entry]));
     }
 
-    // The header line of one unit's table: what the AMS reports about itself.
+    // The header line of one unit's table: its name, what the AMS reports
+    // about itself, the swatches shown while it is folded, and the chevron.
     //
-    // Empty for a unit that reports nothing, which is the external spool holder
-    // and any unit whose readings have not arrived yet. The original AMS and the
-    // AMS Lite report only the humidity level, the AMS 2 Pro and the AMS HT a
-    // percentage and a temperature as well, so every part is optional.
-    function amsEnvCaptionHtml(unitKey) {
+    // The name is always there, so every unit can be folded, the external
+    // spool holder and an AMS Lite included. The readings are what the unit
+    // reports: the original AMS and the AMS Lite only the humidity level, the
+    // AMS 2 Pro and the AMS HT a percentage and a temperature as well, the
+    // holder nothing, so every part is optional and the readings get a span
+    // of their own that the refresh rewrites without touching the rest.
+    function amsUnitHeaderHtml(unitKey, slots) {
+        const unit = amsUnitLabel(unitKey, amsEnvByUnit[unitKey]);
+        const expand = t("dashboard.unit.expand");
+        return `<span class="ams-env-unit"${unit.title ? ` title="${escapeHtml(unit.title)}"` : ""}>${escapeHtml(unit.label)}</span>` +
+            `<span class="ams-env-readings">${amsEnvReadingsHtml(unitKey)}</span>` +
+            `<span class="ams-summary">${amsSummaryHtml(slots)}</span>` +
+            `<button type="button" class="ams-toggle" aria-expanded="true" title="${escapeHtml(expand)}" aria-label="${escapeHtml(expand)}">` +
+                `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>` +
+            `</button>`;
+    }
+
+    // What a folded unit still shows: one swatch per loaded slot, in slot
+    // order, so what is in the unit is seen without opening it. A slot
+    // without a colour, which a 3rd party spool can be, shows nothing.
+    function amsSummaryHtml(slots) {
+        const loaded = slots.filter(spool => spool.slotState !== "Empty");
+        if (!loaded.length) return `<span class="ams-summary-empty">${escapeHtml(t("dashboard.unit.empty"))}</span>`;
+        return loaded.map(spool => {
+            const swatch = swatchHtml(slotColors(spool.slot || {}));
+            return swatch ? `<span class="ams-summary-slot" title="${escapeHtml(spool.amsId)}">${swatch}</span>` : "";
+        }).join("");
+    }
+
+    // The readings of one unit, as the spans of its header.
+    function amsEnvReadingsHtml(unitKey) {
         const env = amsEnvByUnit[unitKey];
         if (!env) return "";
 
@@ -496,9 +536,53 @@ document.addEventListener("DOMContentLoaded", () => {
             parts.push(`<span class="ams-env-drying" title="${escapeHtml(t("dashboard.env.dryingTitle"))}">♨️ ${escapeHtml(t("dashboard.env.drying"))}${escapeHtml(target)}${escapeHtml(left)}</span>`);
         }
 
-        if (!parts.length) return "";
-        const unit = amsUnitLabel(unitKey, env);
-        return `<span class="ams-env-unit"${unit.title ? ` title="${escapeHtml(unit.title)}"` : ""}>${escapeHtml(unit.label)}</span>${parts.join("")}`;
+        return parts.join("");
+    }
+
+    /* ---- Folding a unit ----
+     *
+     * Which units are folded is a choice of this browser for this printer,
+     * kept under collapsedUnits:<serial>. The tables are rebuilt on every
+     * update, so the choice is applied as a table is built rather than kept
+     * on the table; nothing springs open on a refresh. */
+
+    function collapsedUnitsKey() {
+        return `collapsedUnits:${document.getElementById("printer-serial")?.textContent || ""}`;
+    }
+
+    function collapsedUnits() {
+        try {
+            const stored = JSON.parse(localStorage.getItem(collapsedUnitsKey()) || "[]");
+            return new Set(Array.isArray(stored) ? stored : []);
+        } catch {
+            return new Set();
+        }
+    }
+
+    function setUnitCollapsed(unitKey, collapsed) {
+        const units = collapsedUnits();
+        if (collapsed) units.add(unitKey);
+        else units.delete(unitKey);
+        try {
+            localStorage.setItem(collapsedUnitsKey(), JSON.stringify([...units]));
+        } catch {
+            // Storage blocked: the fold lasts until the next rebuild
+            document.querySelector(`caption.ams-env[data-unit="${CSS.escape(unitKey)}"]`)?.closest("table")?.classList.toggle("is-collapsed", collapsed);
+        }
+    }
+
+    /** Puts one table into the folded or open state its unit was left in. */
+    function applyUnitCollapsed(table) {
+        const caption = table.querySelector("caption.ams-env");
+        if (!caption || !caption.dataset.unit) return;
+        const collapsed = collapsedUnits().has(caption.dataset.unit);
+        table.classList.toggle("is-collapsed", collapsed);
+        const toggle = caption.querySelector(".ams-toggle");
+        if (!toggle) return;
+        toggle.setAttribute("aria-expanded", String(!collapsed));
+        const label = t(collapsed ? "dashboard.unit.expand" : "dashboard.unit.collapse");
+        toggle.title = label;
+        toggle.setAttribute("aria-label", label);
     }
 
     // Names the unit as the printer names it.
@@ -520,6 +604,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (unitKey.startsWith("HT-")) {
             return { label: `AMS HT ${unitKey.slice(3)}`, title: t("dashboard.env.unitTitleHt") };
         }
+        // The external spool holder is a unit of this view too, under the
+        // name its slot carries
+        if (unitKey.startsWith("External")) {
+            return { label: unitKey, title: t("dashboard.env.unitTitleExternal") };
+        }
 
         return {
             label: `AMS ${unitKey}`,
@@ -531,9 +620,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // on their own schedule, so this runs without rebuilding a single row.
     function refreshAmsEnvCaptions() {
         for (const caption of document.querySelectorAll("caption.ams-env")) {
-            const html = amsEnvCaptionHtml(caption.dataset.unit || "");
-            caption.innerHTML = html;
-            caption.hidden = !html;
+            const unitKey = caption.dataset.unit || "";
+            if (!unitKey) continue;
+            const readings = caption.querySelector(".ams-env-readings");
+            if (readings) readings.innerHTML = amsEnvReadingsHtml(unitKey);
+            // The model arrives with the readings, and it is what names the unit
+            const name = caption.querySelector(".ams-env-unit");
+            const unit = amsUnitLabel(unitKey, amsEnvByUnit[unitKey]);
+            if (name) {
+                name.textContent = unit.label;
+                if (unit.title) name.title = unit.title;
+            }
         }
     }
 

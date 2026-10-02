@@ -215,6 +215,7 @@ I18N.register("en", "English", {
     "dashboard.env.temperatureTitle": "Temperature inside the unit",
     "dashboard.env.unitTitleHt": "Single slot unit, which only the AMS HT is",
     "dashboard.env.unitTitleModel": "As the printer names this unit",
+    "dashboard.env.unitTitleExternal": "The external spool holder",
     "dashboard.env.unitTitleUnknown": "The printer has not said yet which AMS this is",
     "dashboard.error": "Error: {error}",
     "dashboard.footer.createdBy": "Created by",
@@ -349,6 +350,9 @@ I18N.register("en", "English", {
     "dashboard.unassign.question": "Remove the assignment of slot {slot}?",
     "dashboard.unassign.questionSpool": "Remove the assignment of slot {slot} from Spoolman spool {spool}?",
     "dashboard.unassign.unassign": "Unassign",
+    "dashboard.unit.collapse": "Fold this unit away",
+    "dashboard.unit.empty": "nothing loaded",
+    "dashboard.unit.expand": "Show the slots of this unit",
     "dashboard.unknownFilament": "Unknown filament",
 
     // The print on the dashboard: stages and errors

@@ -212,6 +212,7 @@ I18N.register("de", "Deutsch", {
     "dashboard.env.temperatureTitle": "Temperatur in der Einheit",
     "dashboard.env.unitTitleHt": "Einheit mit einem Slot, das ist nur das AMS HT",
     "dashboard.env.unitTitleModel": "So benennt der Drucker diese Einheit",
+    "dashboard.env.unitTitleExternal": "Der externe Spulenhalter",
     "dashboard.env.unitTitleUnknown": "Der Drucker hat noch nicht gemeldet, welches AMS das ist",
     "dashboard.error": "Fehler: {error}",
     "dashboard.footer.createdBy": "Erstellt von",
@@ -346,6 +347,9 @@ I18N.register("de", "Deutsch", {
     "dashboard.unassign.question": "Die Zuweisung von Slot {slot} aufheben?",
     "dashboard.unassign.questionSpool": "Die Zuweisung von Slot {slot} zur Spoolman-Spule {spool} aufheben?",
     "dashboard.unassign.unassign": "Aufheben",
+    "dashboard.unit.collapse": "Diese Einheit einklappen",
+    "dashboard.unit.empty": "nichts geladen",
+    "dashboard.unit.expand": "Die Slots dieser Einheit anzeigen",
     "dashboard.unknownFilament": "Unbekanntes Filament",
 
     // The print on the dashboard: stages and errors
