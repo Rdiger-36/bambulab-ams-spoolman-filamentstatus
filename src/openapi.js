@@ -326,16 +326,18 @@ const schemas = {
 
     PrintState: t.object({
         gcodeState: t.string("`IDLE`, `PREPARE`, `RUNNING`, `PAUSE`, `FINISH`, `FAILED` or `CANCEL`."),
-        jobName: t.nullable(t.string()),
+        jobName: t.nullable(t.string("`subtask_name` as the printer reports it.")),
+        modelTitle: t.nullable(t.string("The model's title from the sliced file, when the job is named after a MakerWorld print profile, \"0.2mm layer, 2 walls, 15% infill\", rather than after the model. Null otherwise; `jobName` stays what the printer reports either way.")),
         layerNum: t.integer("The layer being printed, counted from 1. 0 means none: the printer is idle, the result was cleared, or no layer has been reported yet."),
         totalLayers: t.nullable(t.integer("The 0-based index of the last layer of the sliced file, which is what the booking maths counts with, so a plate of 15 layers reads 14. Null without slice info.")),
         sliceInfo: t.nullable(t.object({
             filaments: t.array(t.object({}, { additional: true }), "The filament list of the sliced file."),
         })),
         sliceFetch: t.nullable(t.object({
-            attempt: t.integer("Which fetch of the sliced file this was, counted from 1."),
+            attempt: t.integer("Which fetch of the sliced file this was, counted from 1. 0 for the look before the print runs, which does not count."),
             attempts: t.integer("How many fetches a print gets in all."),
             final: t.boolean("Whether this was the last attempt, so nothing will be booked for this print."),
+            kind: t.string("`connection` when the FTPS login itself failed, so no path was tried; `missing` when every path was tried and none held the file."),
             reason: t.string("What the printer answered, as the log says it."),
         }, { description: "Set while the running job has no slice info and the last fetch of its file did not deliver a path: while that fetch is still under way, after the printer refused the FTPS login, or once every candidate path was tried and none held the file. Null once the file is read, or when nothing was looked for." })),
         storagePresent: t.nullable(t.boolean("Whether the printer's USB stick or SD card is in, from `print.sdcard`. It is the storage the sliced file is read from, so `false` means nothing will be booked. Null until a report carried the field.")),

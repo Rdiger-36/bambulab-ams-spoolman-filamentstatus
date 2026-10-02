@@ -1,4 +1,13 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - New Features:
+      - The print card names the model where the printer names the job after its print profile. A MakerWorld model printed through one of its profiles from Bambu Studio is "0.2mm layer, 2 walls, 15% infill" in every report; the sliced file carries the model's title, "Darts Holder and Storage", and the card, the summary and the log line "Slice info loaded" show it, with the profile name in the tooltip. /api/print and the summary carry it as modelTitle, jobName stays what the printer reports
+      - An i at the end of the line that says nothing will be booked opens a dialog with the reason and what to do: for a printer whose file transfer did not answer, for a file none of the paths held, and for a missing USB stick, each with the printer's answer as the log has it and a link to the troubleshooting guide
+   - Fixes:
+      - A failed FTPS login is called that. The card and /api/print said "No sliced file on the printer under <paths>" when the printer had not let the login through and no path was tried; a P2S whose FTPS service had hung was restarted for a file name that was right all along. The card reads "The printer did not answer the file transfer, nothing will be booked for this print", the log line reads "FTPS login to the printer failed: <error>", and sliceFetch on /api/print carries kind, connection or missing
+      - The dashboard's look at the sliced file while the print prepares no longer counts as one of the three attempts, and it is logged. The dashboard asks for the file as soon as the job has a name, seconds before the printer has written it, and that look was attempt 1 without a line in the log; the fetch at RUNNING was attempt 2 and the next line read "attempt 3 of 3". A cloud print had two attempts once it ran and 30 seconds instead of 60 for the file to arrive. The look is attempt 0 now, "looking again once the print runs" in the log and on the card, and the three attempts start when the print runs
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.29
    Fourth release candidate for 1.3.0, and the build that renames the project to HaspelSync: new image name, new look of the Web UI, the settings page in sections. The old image name receives this build as well and says in the log and on the dashboard that it is deprecated. Like dev.28, what is found on it goes into 1.3.0
    - Breaking:

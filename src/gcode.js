@@ -72,10 +72,15 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
 
     const candidates = resolveRemotePaths(jobName, gcodeFile, fileName);
     // The attempt counts on from the last fetch of the same job, so a retry
-    // knows how many came before it. See sliceFetchRetryDue().
+    // knows how many came before it. See sliceFetchRetryDue(). A look before
+    // the print runs is free: the dashboard asks for the file as soon as the
+    // job has a name, seconds before the printer has written it, and that look
+    // used to be the first of the three attempts. A cloud print on a P2S had
+    // two left once it ran, and the first never reached the log.
     const previous = printer.lastSliceFetch;
-    const attempt = (previous?.jobName === jobName ? previous.attempt || 0 : 0) + 1;
-    const record = { jobName, attempt, tried: candidates, reasons: {}, error: null, path: null, sliceInfo: false, at: Date.now() };
+    const counted = !running?.beforeRunning;
+    const attempt = (previous?.jobName === jobName ? previous.attempt || 0 : 0) + (counted ? 1 : 0);
+    const record = { jobName, attempt, beforeRunning: !counted, tried: candidates, reasons: {}, error: null, path: null, sliceInfo: false, at: Date.now() };
     printer.lastSliceFetch = record;
 
     try {
@@ -164,6 +169,11 @@ export async function fetchSliceInfo(printer, jobName, gcodeFile = null, fileNam
             entry.getData().toString("utf8"),
             settings ? settings.getData().toString("utf8") : null,
         );
+        // A MakerWorld model printed through one of its print profiles is
+        // named after the profile in every report, "0.2mm layer, 2 walls, 15%
+        // infill". The model's own title is in the file and nowhere else.
+        const model = zip.getEntry("3D/3dmodel.model");
+        parsed.modelTitle = model ? modelTitleFor(jobName, parseModelNames(model.getData().toString("utf8"))) : null;
         record.sliceInfo = true;
 
         trace("gcode", printer.name, printer.logFilePath,
@@ -419,6 +429,46 @@ export function parseModelTitles(xml) {
         if (value) titles.push(value);
     }
     return titles;
+}
+
+/**
+ * The `Title` and `ProfileTitle` of a `3dmodel.model` by name, unescaped,
+ * null where empty or missing.
+ *
+ * `parseModelTitles()` gives both as one list for comparing against a job
+ * name; this keeps them apart for telling which one the job was named after.
+ *
+ * @param {string} xml - the entry, or its head
+ * @returns {{title: string|null, profileTitle: string|null}}
+ */
+export function parseModelNames(xml) {
+    const read = name => {
+        const m = new RegExp(`<metadata\\s+name="${name}"\\s*>([^<]*)</metadata>`).exec(xml);
+        const value = m ? unescapeXml(m[1]).trim() : "";
+        return value || null;
+    };
+    return { title: read("Title"), profileTitle: read("ProfileTitle") };
+}
+
+/**
+ * The model's title when the job is named after its print profile, else null.
+ *
+ * Bambu Studio names the job of a MakerWorld model printed through one of its
+ * print profiles after that profile, so the dashboard and the summary read
+ * "0.2mm layer, 2 walls, 15% infill" where the model is "Darts Holder and
+ * Storage". Read off a P2S on 2026-10-02: the job name is the file's
+ * `ProfileTitle` to the letter, and `Title` is the model. A job that carries
+ * the model's name, or a project of the user's own, which has neither, gets
+ * nothing: the printer's name is the name then.
+ *
+ * @param {string} jobName - `subtask_name` as the printer reports it
+ * @param {{title: string|null, profileTitle: string|null}} names - from parseModelNames()
+ * @returns {string|null}
+ */
+export function modelTitleFor(jobName, names) {
+    if (!names?.title || !names.profileTitle) return null;
+    if (names.profileTitle !== jobName || names.title === jobName) return null;
+    return names.title;
 }
 
 /**

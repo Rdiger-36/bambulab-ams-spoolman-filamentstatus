@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers, parseSliceInfo } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers, parseSliceInfo, parseModelNames, modelTitleFor } from "../src/gcode.js";
 import { sliceFetchFailure, localFileName, printIdentity } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -78,8 +78,35 @@ test("the file name comes off a file:// url only", () => {
     assert.equal(localFileName(undefined), null);
 });
 
+test("a job named after its print profile takes the model's title from the file", () => {
+    // Read off a P2S on 2026-10-02: a MakerWorld model printed through one of
+    // its print profiles from Bambu Studio
+    const xml = `<model><metadata name="Application">BambuStudio-02.08.02.61</metadata>
+<metadata name="ProfileTitle">0.2mm layer, 2 walls, 15% infill</metadata>
+<metadata name="Title">Darts Holder &amp; Storage</metadata></model>`;
+    assert.deepEqual(parseModelNames(xml), { title: "Darts Holder & Storage", profileTitle: "0.2mm layer, 2 walls, 15% infill" });
+    assert.equal(modelTitleFor("0.2mm layer, 2 walls, 15% infill", parseModelNames(xml)), "Darts Holder & Storage");
+
+    // The job carries the model's name already, a Handy print
+    assert.equal(modelTitleFor("Darts Holder & Storage", parseModelNames(xml)), null);
+    // The job is neither: a renamed project. The printer's name stands
+    assert.equal(modelTitleFor("Dartholder large", parseModelNames(xml)), null);
+    // A project of the user's own has no titles at all
+    assert.deepEqual(parseModelNames("<model><metadata name=\"Title\"></metadata></model>"), { title: null, profileTitle: null });
+    assert.equal(modelTitleFor("Würfel", parseModelNames("<model/>")), null);
+    // Both titles the same says nothing
+    assert.equal(modelTitleFor("Cube", { title: "Cube", profileTitle: "Cube" }), null);
+});
+
 test("the log names the problem it actually had", () => {
     assert.equal(sliceFetchFailure(null), "No sliced file was fetched");
+    // The login itself failed, so no path was tried: a P2S whose FTPS service
+    // had hung answered the TLS handshake with plain text (2026-10-02), and
+    // "No sliced file on the printer under ..." sent its owner after a name
+    assert.equal(
+        sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, error: "wrong version number (control socket)" }),
+        "FTPS login to the printer failed: wrong version number (control socket)",
+    );
     assert.equal(
         sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf", "/cache/Würfel.gcode.3mf"], path: null }),
         "No sliced file on the printer under /cache/Würfel.3mf, /cache/Würfel.gcode.3mf",
@@ -122,6 +149,8 @@ test("a fetch that found nothing is tried again, a few times, after a wait", () 
     // A record without an attempt count is the first attempt
     assert.equal(sliceFetchRetryDue({ jobName: "x", tried: [], path: null, at }, at + SLICE_FETCH_RETRY_MS), true);
     assert.equal(sliceFetchRetryDue(null, at), false);
+    // The look before the print ran is attempt 0 and leaves all three
+    assert.equal(sliceFetchRetryDue({ ...notFound, attempt: 0, beforeRunning: true }, at + SLICE_FETCH_RETRY_MS), true);
 });
 
 test("the time only picks the candidates, closest to the start first", () => {
