@@ -2,9 +2,13 @@
 // included the dark mode button, so navigation and the theme behave the same on
 // the dashboard, the log viewer and the settings page.
 //
-// The bar carries two things and no more: where you can go, and your session.
-// The three pages sit in it with the current one marked, and the dark mode
-// button and, once a password is set, the log out sit at the other end.
+// The bar carries three things and no more: who this is, where you can go, and
+// your session. The brand at the left end is the way home. Next to it the
+// dashboard and the logs sit as tabs with the current one underlined, and the
+// language, the dark mode button, the settings and, once a password is set,
+// the log out sit at the other end. The settings are a gear among the tools
+// rather than a tab among the pages: they are something you reach for, not a
+// place you spend time on, and the tabs read as the two views of the printers.
 //
 // What the page is showing does not belong in the bar, it belongs in the page.
 // The dashboard headline already names the printer and the log viewer already
@@ -45,6 +49,45 @@ const LOGOUT_ICON = `
               fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         <path d="M10.4 5.2 13.2 8l-2.8 2.8M13.2 8H6.2"
               fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
+/**
+ * The HaspelSync spool, the same drawing as public/favicon.svg.
+ *
+ * The flanges take the text colour, so they are dark on the light bar and
+ * light on the dark one without a second file; the winding keeps its two
+ * colours in both. The clip path carries an id of its own because the icon
+ * sits in the page's document, where "winding" from the favicon would be
+ * another element of the same name.
+ */
+const BRAND_ICON = `
+    <svg class="menu-brand-icon" viewBox="0 0 64 64" width="26" height="26" aria-hidden="true" focusable="false">
+        <defs><clipPath id="menu-brand-winding"><rect x="15" y="9" width="34" height="46"/></clipPath></defs>
+        <rect x="2" y="27.5" width="60" height="9" rx="4.5" fill="#8c8c8c"/>
+        <g clip-path="url(#menu-brand-winding)">
+            <rect x="15" y="9" width="34" height="46" fill="#00ae42"/>
+            <path d="M37 9 L49 9 L49 55 L27 55 Z" fill="#dc7734"/>
+        </g>
+        <rect x="5" y="2" width="11" height="60" rx="4" fill="currentColor"/>
+        <rect x="48" y="2" width="11" height="60" rx="4" fill="currentColor"/>
+    </svg>`;
+
+// The glyphs in front of the entries: four tiles for the dashboard, three
+// lines for the logs, a gear for the settings. Drawn here like everything else
+// in the bar, in the colour of the entry they sit in.
+const DASHBOARD_ICON = `
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" fill="currentColor"/>
+    </svg>`;
+const LOGS_ICON = `
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <path d="M2 3h12M2 8h12M2 13h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>`;
+const SETTINGS_ICON = `
+    <svg class="menu-glyph" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <circle cx="8" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"
+              fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
     </svg>`;
 
 /** Where the picked printer is remembered, read by the dashboard as well. */
@@ -95,22 +138,33 @@ function renderMenubar() {
 
     const page = currentPage();
 
+    const current = name => (page === name ? ' aria-current="page"' : "");
+
+    // The settings are written twice: as the gear among the tools, which is
+    // what a wide screen shows, and as an entry of the folded menu, which is
+    // what a phone shows. CSS shows one of the two, never both, so the pages a
+    // phone can reach are all in the one place it folds them into.
     root.innerHTML = `
         <nav class="menunav" aria-label="${t("menu.main")}">
+            <a class="menu-brand" href="index.html" title="${t("menu.dashboard")}">
+                ${BRAND_ICON}<span class="menu-wordmark">Haspel<b>Sync</b></span>
+            </a>
+
             <button class="menu-item menu-burger" type="button" id="menu-burger"
-                    aria-haspopup="true" aria-expanded="false" aria-controls="menu-pages">
-                <span aria-hidden="true">☰</span> ${t("menu.menu")}
+                    aria-haspopup="true" aria-expanded="false" aria-controls="menu-pages"
+                    title="${t("menu.menu")}" aria-label="${t("menu.menu")}">
+                <span aria-hidden="true">☰</span>
             </button>
 
             <div class="menu-pages" id="menu-pages">
-                <a class="menu-item" href="index.html"${page === "dashboard" ? ' aria-current="page"' : ""}>${t("menu.dashboard")}</a>
-                <a class="menu-item" href="settings.html"${page === "settings" ? ' aria-current="page"' : ""}>${t("menu.settings")}</a>
+                <a class="menu-item menu-tab" href="index.html"${current("dashboard")}>${DASHBOARD_ICON}<span>${t("menu.dashboard")}</span></a>
                 <div class="menu-host">
-                    <button class="menu-item menu-caret" type="button" id="menu-logs"
+                    <button class="menu-item menu-tab menu-caret" type="button" id="menu-logs"
                             aria-haspopup="true" aria-expanded="false" aria-controls="menu-logs-panel"
-                            ${page === "logs" ? 'aria-current="page"' : ""}>${t("menu.logs")}</button>
+                            ${current("logs")}>${LOGS_ICON}<span>${t("menu.logs")}</span></button>
                     <div class="menu-panel" id="menu-logs-panel" hidden></div>
                 </div>
+                <a class="menu-item menu-tab menu-tab-settings" href="settings.html"${current("settings")}>${SETTINGS_ICON}<span>${t("menu.settings")}</span></a>
             </div>
 
             <div class="menu-end">
@@ -118,6 +172,7 @@ function renderMenubar() {
                 <button id="dark-mode-toggle" type="button" title="${t("menu.theme")}" aria-label="${t("menu.themeToggle")}">
                     <span id="dark-mode-icon">${LIGHT_MODE_ICON}</span>
                 </button>
+                <a class="menu-tool menu-tool-settings" href="settings.html" title="${t("menu.settings")}" aria-label="${t("menu.settings")}"${current("settings")}>${SETTINGS_ICON}</a>
                 <a class="menu-item menu-logout" href="#" id="menu-logout" hidden>${LOGOUT_ICON}${t("menu.logout")}</a>
             </div>
         </nav>`;

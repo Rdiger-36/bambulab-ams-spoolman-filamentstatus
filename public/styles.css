@@ -74,6 +74,11 @@
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-menu: 0 4px 14px rgba(0, 0, 0, 0.12);
   --shadow-dialog: 0px 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* The brand green, Bambu Lab's: "Sync" in the wordmark and the line under
+     the current tab. The same in both themes, it is the one colour that is
+     the brand rather than the surface. */
+  --brand: #00ae42;
 }
 
 .dark-mode {
@@ -1096,7 +1101,9 @@ body.logs-page .log-page { width: 100%; }
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-card);
-  padding: 8px 12px;
+  /* No vertical padding: the tabs run the full height of the bar, so the
+     line under the current one sits on the bar's edge. */
+  padding: 0 12px;
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
 
@@ -1165,11 +1172,10 @@ body.logs-page .log-page { width: 100%; }
 }
 
 /* ---- Menu bar ----
-   The three pages sit in the bar itself, the page you are on is marked, and the
-   two panels behind it are the printer picker and the log list. `#menu-root`
-   takes the free width so its own two groups can sit at the two ends of the
-   bar, with the dark mode button (and the download button of the log page)
-   staying to the right of it. */
+   The brand at the left end, the dashboard and the logs as tabs next to it,
+   and the tools at the right end: language, theme, the settings gear, log out.
+   The page you are on is the underlined tab, or the filled gear. `#menu-root`
+   takes the free width so its groups can sit at the two ends of the bar. */
 #menu-root {
   flex: 1;
   min-width: 0;
@@ -1178,10 +1184,10 @@ body.logs-page .log-page { width: 100%; }
 .menunav {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: stretch;
+  gap: 14px;
   min-width: 0;
+  height: 50px;
 }
 
 .menu-pages,
@@ -1190,6 +1196,52 @@ body.logs-page .log-page { width: 100%; }
   align-items: center;
   gap: 4px;
   min-width: 0;
+}
+
+/* The tabs stretch to the bar's height, so their underline sits on its edge. */
+.menu-pages {
+  align-items: stretch;
+  gap: 2px;
+}
+
+.menu-end { margin-left: auto; }
+
+/* ---- The brand ----
+   Logo and name, the way home. The name is in the body font and weight 700,
+   with "Sync" in the brand green; the flanges of the spool take the text
+   colour through currentColor, see BRAND_ICON in menu.js. */
+.menu-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 0 4px;
+  flex: none;
+}
+
+.menu-brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.menu-brand-icon {
+  display: block;
+  flex: none;
+}
+
+.menu-wordmark {
+  font-weight: 700;
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.menu-wordmark b {
+  color: var(--brand);
+  font-weight: 700;
 }
 
 /* Every clickable thing in the bar, whether it is a link to a page or a button
@@ -1233,6 +1285,81 @@ body.logs-page .log-page { width: 100%; }
 
 .menu-item[disabled]:hover { background: none; }
 
+/* ---- The tabs ----
+   A page is a tab: quiet text with a glyph in front, the current one in the
+   text colour, bold, with the brand green under it. The line is the mark, not
+   a frame or a fill, which is what makes two of them read as one row. The
+   top border of the same size keeps the label centred. */
+.menu-tab {
+  border: 0;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0 12px;
+  color: var(--text-quiet);
+  font-size: 0.9em;
+}
+
+.menu-tab:hover {
+  background: none;
+  color: var(--text);
+}
+
+.menu-tab[aria-current] {
+  background: none;
+  color: var(--text);
+  font-weight: 700;
+  /* The shared current mark frames the item; here only the bottom edge is the
+     mark, so the top stays clear. */
+  border-top-color: transparent;
+  border-bottom-color: var(--brand);
+}
+
+.menu-glyph {
+  flex: none;
+  opacity: 0.8;
+}
+
+/* The settings tab exists for the folded menu of a phone; a wide screen has
+   the gear among the tools instead. */
+.menu-tab-settings { display: none; }
+
+/* ---- The tools ----
+   A square the size of the dark mode button, holding one glyph. The settings
+   gear is the one tool that is a page, so it is filled while that page is
+   open, the way a tab is underlined. */
+.menu-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.menu-tool:hover { background: var(--control-hover-bg); }
+
+.menu-tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.menu-tool[aria-current] {
+  background: var(--control-hover-bg);
+  border-color: var(--border-control);
+}
+
+.menu-tool .menu-glyph {
+  width: 18px;
+  height: 18px;
+  opacity: 0.9;
+}
+
 /* The two things at the end of the bar: the theme, then the session. */
 .menu-logout .menu-icon {
   flex: none;
@@ -1251,6 +1378,10 @@ body.logs-page .log-page { width: 100%; }
 /* ---- Panels ---- */
 .menu-host {
   position: relative;
+  /* Stretches with the row, so the tab inside it reaches the bar's edge and
+     the panel opens below the bar rather than below the label. */
+  display: flex;
+  align-items: stretch;
 }
 
 .menu-panel {
@@ -1400,8 +1531,10 @@ body.logs-page .log-page { width: 100%; }
 }
 
 /* ---- Narrow screens ----
-   The pages fold into one button; the theme and the log out stay in the bar,
-   and what the page is showing is in the page itself either way. */
+   The pages fold into one button next to the brand, the settings among them
+   and the gear gone from the tools; the language, the theme and the log out
+   stay in the bar, and what the page is showing is in the page itself either
+   way. */
 .menu-burger {
   display: none;
 }
@@ -1433,9 +1566,19 @@ body.logs-page .log-page { width: 100%; }
 
   .menu-burger {
     display: inline-flex;
+    align-self: center;
     border-color: var(--border-control);
     background: var(--control-bg);
+    padding: 6px 10px;
+    font-size: 1em;
   }
+
+  /* The name goes before the pages do: the spool alone still says whose bar
+     this is, and the width it frees is what keeps the language, the theme and
+     the log out on the one line. */
+  .menu-wordmark { display: none; }
+
+  .menunav { gap: 8px; }
 
   .menu-pages {
     display: none;
@@ -1445,6 +1588,7 @@ body.logs-page .log-page { width: 100%; }
     z-index: 1000;
     flex-direction: column;
     align-items: stretch;
+    gap: 2px;
     min-width: 200px;
     background: var(--menu-bg);
     border: 1px solid var(--border);
@@ -1455,10 +1599,30 @@ body.logs-page .log-page { width: 100%; }
 
   .menunav.pages-open .menu-pages { display: flex; }
 
+  /* In the folded menu a page is an entry of a list again, the current one
+     filled: an underline under one line of a list marks nothing. */
   .menu-pages .menu-item {
-    border-color: transparent;
-    justify-content: space-between;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 0.88em;
+    justify-content: flex-start;
   }
+
+  .menu-pages .menu-item:hover { background: var(--control-hover-bg); }
+
+  .menu-pages .menu-item[aria-current] {
+    background: var(--control-hover-bg);
+    border-color: var(--border-control);
+  }
+
+  .menu-pages .menu-caret::after { margin-left: auto; }
+
+  .menu-tab-settings { display: inline-flex; }
+  .menu-tool-settings { display: none; }
+
+  .menu-host { display: block; }
 
   /* The log list opens inside the folded menu rather than over it, so one
      panel does not cover the other on a screen this size. */
