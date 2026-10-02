@@ -173,6 +173,10 @@ function createRuntimePrinter(entry) {
         // A slice info download still running for the current job, shared
         // between the print handler and /api/print. See ensureSliceInfo().
         sliceFetchInFlight: null,
+        // Where the sliced file of the running job was read from before a
+        // restart of the service, from printstate.json. Tried first by the
+        // next fetch, because nothing else may lead to it, see printstate.js.
+        currentFilePath: null,
         // The slots Bambu Studio sent the next job to, from the project_file
         // command the printer echoes before the print starts. Consumed by the
         // start of that print, see notePrintCommand() in mqtt.js.

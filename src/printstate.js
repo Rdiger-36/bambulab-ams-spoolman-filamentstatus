@@ -17,6 +17,13 @@ import { readJsonFile, writeJsonFile } from "./jsonfile.js";
  * forgotten when the print ends, so a later print of the same name starts its
  * own clock; a stored start older than a week is not trusted either, in case
  * the end was never seen.
+ *
+ * The path of the sliced file is kept next to the start once it is found.
+ * A restart during a print whose file is not named after the job, a reprint
+ * started on the printer's screen of a file that had been on the stick for
+ * half an hour (P2S, 2026-10-02), had nothing to find it by: the printer's
+ * `project_file` echo named it once, before the restart, and the listing by
+ * time does not reach that far back. The path does.
  */
 
 const SCHEMA_VERSION = 1;
@@ -48,6 +55,21 @@ export function rememberPrintStart(printerId, jobName, startedAt) {
 }
 
 /**
+ * The entry recorded for a printer's job, if it is the same job and recent.
+ *
+ * @param {string} printerId - the printer's serial
+ * @param {string|null} jobName - `subtask_name` the printer reports now
+ * @returns {object|null} the stored entry, or null when nothing fits
+ */
+function currentEntry(printerId, jobName) {
+    const entry = load()[printerId];
+    if (!entry || typeof entry.startedAt !== "number") return null;
+    if ((entry.jobName ?? null) !== (jobName ?? null)) return null;
+    if (Date.now() - entry.startedAt > STALE_AFTER_MS || entry.startedAt > Date.now()) return null;
+    return entry;
+}
+
+/**
  * The start recorded for a printer's job, if it is the same job and recent.
  *
  * @param {string} printerId - the printer's serial
@@ -55,11 +77,35 @@ export function rememberPrintStart(printerId, jobName, startedAt) {
  * @returns {number|null} epoch milliseconds, or null when nothing fits
  */
 export function recallPrintStart(printerId, jobName) {
+    return currentEntry(printerId, jobName)?.startedAt ?? null;
+}
+
+/**
+ * Records where the sliced file of the running job was found.
+ *
+ * Only for a job whose start is recorded: a path without a start would be
+ * taken for a later print of the same name.
+ *
+ * @param {string} printerId - the printer's serial
+ * @param {string} filePath - the FTPS path the file was read from
+ */
+export function rememberSlicedFile(printerId, filePath) {
     const entry = load()[printerId];
-    if (!entry || typeof entry.startedAt !== "number") return null;
-    if ((entry.jobName ?? null) !== (jobName ?? null)) return null;
-    if (Date.now() - entry.startedAt > STALE_AFTER_MS || entry.startedAt > Date.now()) return null;
-    return entry.startedAt;
+    if (!entry || typeof entry.startedAt !== "number" || !filePath) return;
+    entry.filePath = filePath;
+    persist();
+}
+
+/**
+ * The path recorded for a printer's job, if it is the same job and recent.
+ *
+ * @param {string} printerId - the printer's serial
+ * @param {string|null} jobName - `subtask_name` the printer reports now
+ * @returns {string|null}
+ */
+export function recallSlicedFile(printerId, jobName) {
+    const path = currentEntry(printerId, jobName)?.filePath;
+    return typeof path === "string" && path ? path : null;
 }
 
 /**

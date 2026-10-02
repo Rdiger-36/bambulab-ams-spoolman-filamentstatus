@@ -280,6 +280,47 @@ h1 {
 .gc-card-lookup { margin: 10px 0 0; text-align: center; }
 .gc-card-lookup-open { color: var(--text-muted); }
 
+/* The i at the end of a lookup line, opens the help dialog. Drawn in the line's
+   own colour, so it is red on the final line and grey while attempts are left */
+.gc-card-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.72em;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.gc-card-help:hover { opacity: 1; }
+
+/* The printer's answer inside the help dialog, as the log has it */
+.gc-help-reason {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-control);
+  border-radius: 6px;
+  background: var(--control-bg);
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow: auto;
+}
+#lookup-help-content ol { padding-left: 1.4em; }
+#lookup-help-content li { margin: 6px 0; }
+
 /* The toast after an action, bottom right, fades out on its own */
 .action-note {
   position: fixed;

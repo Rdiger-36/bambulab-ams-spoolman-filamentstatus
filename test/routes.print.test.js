@@ -206,9 +206,26 @@ test("a job whose sliced file was not found says so, and whether attempts are le
         let { body } = await call(`${app.url}/api/print/${SERIAL}`);
         assert.equal(body.sliceInfo, null);
         assert.deepEqual(body.sliceFetch, {
-            attempt: 1, attempts: SLICE_FETCH_ATTEMPTS, final: false,
+            attempt: 1, attempts: SLICE_FETCH_ATTEMPTS, final: false, kind: "missing",
             reason: "No sliced file on the printer under /cache/four colours.gcode.3mf (550 Failed to open file.)",
         });
+        assert.equal(body.modelTitle, null);
+
+        // The login failed, so no path was tried: the card gets its own line
+        // and the help for a printer whose file transfer does not answer
+        printer.lastSliceFetch.error = "wrong version number (control socket)";
+        ({ body } = await call(`${app.url}/api/print/${SERIAL}`));
+        assert.equal(body.sliceFetch.kind, "connection");
+        assert.equal(body.sliceFetch.reason, "FTPS login to the printer failed: wrong version number (control socket)");
+        delete printer.lastSliceFetch.error;
+
+        // The look before the print ran does not count: attempt 0, not final
+        printer.lastSliceFetch.attempt = 0;
+        printer.lastSliceFetch.beforeRunning = true;
+        ({ body } = await call(`${app.url}/api/print/${SERIAL}`));
+        assert.equal(body.sliceFetch.attempt, 0);
+        assert.equal(body.sliceFetch.final, false);
+        delete printer.lastSliceFetch.beforeRunning;
 
         // The last attempt: nothing will be booked
         printer.lastSliceFetch.attempt = SLICE_FETCH_ATTEMPTS;

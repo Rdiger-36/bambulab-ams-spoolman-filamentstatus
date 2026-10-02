@@ -6,7 +6,7 @@ import path from "path";
 
 // The module reads its path from config.js at import time, so DATA_DIR has to
 // point at a throwaway directory before the first import.
-let dir, printStatePath, rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests, handlePrintStateChange, deltaAsReport, runningPrint;
+let dir, printStatePath, rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests, rememberSlicedFile, recallSlicedFile, handlePrintStateChange, deltaAsReport, runningPrint;
 
 before(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "ams-printstate-"));
@@ -16,7 +16,7 @@ before(async () => {
     fs.ensureDirSync(process.env.LOG_DIR);
 
     ({ printStatePath } = await import("../src/config.js"));
-    ({ rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests } = await import("../src/printstate.js"));
+    ({ rememberPrintStart, recallPrintStart, forgetPrintStart, resetPrintStateForTests, rememberSlicedFile, recallSlicedFile } = await import("../src/printstate.js"));
     ({ handlePrintStateChange, deltaAsReport, runningPrint } = await import("../src/mqtt.js"));
 });
 
@@ -36,6 +36,27 @@ test("a start is remembered for the job, survives a reload, and is forgotten at 
     forgetPrintStart("SERIAL");
     assert.equal(recallPrintStart("SERIAL", "Cube"), null);
     assert.deepEqual(JSON.parse(fs.readFileSync(printStatePath, "utf-8")).printers, {});
+});
+
+test("the sliced file's path is kept with the start and read back for the same job", () => {
+    resetPrintStateForTests();
+    fs.removeSync(printStatePath);
+    // No start recorded, so no path either: it would be taken for the next print
+    rememberSlicedFile("P2S", "/cache/old.gcode.3mf");
+    assert.equal(recallSlicedFile("P2S", "Darts Holder and Storage"), null);
+
+    rememberPrintStart("P2S", "Darts Holder and Storage", Date.now() - 60_000);
+    assert.equal(recallSlicedFile("P2S", "Darts Holder and Storage"), null);
+    rememberSlicedFile("P2S", "/cache/0.2mm layer, 2 walls, 15% infill.gcode.3mf");
+    resetPrintStateForTests();
+    assert.equal(recallSlicedFile("P2S", "Darts Holder and Storage"), "/cache/0.2mm layer, 2 walls, 15% infill.gcode.3mf");
+    assert.equal(recallSlicedFile("P2S", "another job"), null);
+
+    // A new start of the printer forgets the path with the old start
+    rememberPrintStart("P2S", "Darts Holder and Storage", Date.now());
+    assert.equal(recallSlicedFile("P2S", "Darts Holder and Storage"), null);
+    forgetPrintStart("P2S");
+    assert.equal(recallSlicedFile("P2S", "Darts Holder and Storage"), null);
 });
 
 test("a start older than a week is not trusted", () => {
