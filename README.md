@@ -11,7 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rdiger-36/HaspelSync/releases/latest"><img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?include_prereleases&style=flat-square&label=version&color=blue" alt="version" /></a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/releases/latest"><img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?style=flat-square&label=latest&color=blue" alt="latest release" /></a>
+  <a href="https://github.com/Rdiger-36/HaspelSync/releases"><img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?include_prereleases&style=flat-square&label=dev&color=orange" alt="latest pre-release" /></a>
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A522-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <a href="docs/installation.md#supported-architectures"><img src="https://img.shields.io/badge/platforms-amd64%20%C2%B7%20arm64%20%C2%B7%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platforms" /></a>
