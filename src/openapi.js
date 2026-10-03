@@ -469,8 +469,8 @@ const schemas = {
     }, { additional: true }),
 
     ImageNotice: t.object({
-        active: t.boolean("The container runs from the deprecated image name and the notice has not been dismissed."),
-        acknowledged: t.boolean("Dismissed in the Web UI. Stored server side, so it holds for every browser."),
+        active: t.boolean("The container runs from the deprecated image name."),
+        acknowledged: t.boolean("Dismissed in the Web UI since the service started. Held in memory for every browser, and back after every start until the image has been switched."),
         image: t.nullable(t.string("The image the container runs from.")),
         replacement: t.string("The image to switch to."),
         docs: t.string("The page of the documentation that says how."),
