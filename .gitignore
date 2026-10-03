@@ -7,3 +7,4 @@ node_modules
 printers
 .claude/launch.json
 .claude/worktrees/
+docker/data/

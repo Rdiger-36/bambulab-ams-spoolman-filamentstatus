@@ -1,16 +1,18 @@
 # Base Image
 FROM node:22-alpine
 
-# Install time zone data and set the time zone
-RUN apk update && apk add --no-cache tzdata mosquitto-clients openssl jq
+# Time zone data for TZ, and the tools debug.sh shells out to
+RUN apk add --no-cache tzdata mosquitto-clients openssl jq
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Install the dependencies from the lock file alone, the way the test workflow
+# does, so a package that is imported but missing from package.json fails the
+# build rather than running on whatever npm would have resolved
 COPY package.json package-lock.json ./
 RUN mkdir -p /app/logs /app/printers && chmod -R 777 /app/logs /app/printers
-RUN npm install
+RUN npm ci --omit=dev
 
 # Copy application code
 COPY . .
