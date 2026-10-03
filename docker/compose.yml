@@ -1,0 +1,21 @@
+# HaspelSync from the latest stable image. This is the file the installation
+# guide shows; start it from the repository root with
+#
+#     docker compose -f docker/compose.yml up -d
+#
+# or copy it anywhere. The two data directories are created next to the file:
+# printers/ holds the configuration and makes it survive an update, logs/ keeps
+# the logs. Everything else is configured in the Web UI on http://<host>:4000.
+services:
+  haspelsync:
+    image: ghcr.io/rdiger-36/haspelsync:latest
+    container_name: haspelsync
+    ports:
+      - 4000:4000
+    environment:
+      # The time zone the log timestamps follow. Without it the container runs on UTC.
+      - TZ=Europe/Berlin
+    volumes:
+      - ./data/printers:/app/printers
+      - ./data/logs:/app/logs
+    restart: unless-stopped

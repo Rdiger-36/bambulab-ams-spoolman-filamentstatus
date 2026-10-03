@@ -142,6 +142,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: docker/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: ${{ steps.tags.outputs.tags }}
@@ -164,7 +165,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile.legacy
+          file: docker/Dockerfile.legacy
           push: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: ${{ steps.tags.outputs.legacy_tags }}

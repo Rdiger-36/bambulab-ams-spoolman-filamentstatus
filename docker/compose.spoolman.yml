@@ -1,0 +1,42 @@
+# HaspelSync together with a Spoolman of its own, for an installation that has
+# neither yet. Spoolman is on http://<host>:7912, HaspelSync on
+# http://<host>:4000 and already pointed at it.
+#
+#     docker compose -f docker/compose.spoolman.yml up -d
+#
+# The Spoolman service mirrors the Compose file in Spoolman's own README. Its
+# process runs as user 1000, so the data directory has to be writable by that
+# user: `mkdir -p data/spoolman && chown 1000:1000 data/spoolman` before the
+# first start on a host where the files would otherwise belong to root.
+services:
+  spoolman:
+    image: ghcr.io/donkie/spoolman:latest
+    container_name: spoolman
+    ports:
+      - 7912:8000
+    environment:
+      - TZ=Europe/Berlin
+      - SPOOLMAN_DIR_DATA=/home/app/.local/share/spoolman
+    volumes:
+      - ./data/spoolman:/home/app/.local/share/spoolman
+    restart: unless-stopped
+
+  haspelsync:
+    image: ghcr.io/rdiger-36/haspelsync:latest
+    container_name: haspelsync
+    # Start order only. HaspelSync waits for Spoolman itself and keeps trying,
+    # so Spoolman still coming up is not an error.
+    depends_on:
+      - spoolman
+    ports:
+      - 4000:4000
+    environment:
+      - TZ=Europe/Berlin
+      # Seeds the Spoolman endpoint on the first start, over the Compose
+      # network and Spoolman's internal port. Once the settings have been saved
+      # in the Web UI they own the value and this line is ignored.
+      - SPOOLMAN_ENDPOINT=http://spoolman:8000
+    volumes:
+      - ./data/printers:/app/printers
+      - ./data/logs:/app/logs
+    restart: unless-stopped

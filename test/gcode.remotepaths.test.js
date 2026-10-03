@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers, parseSliceInfo } from "../src/gcode.js";
+import { resolveRemotePaths, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS, slicedFileCandidates, SLICED_FILE_TIME_WINDOW_MS, reportedPlate, parseModelTitles, parsePlateIndices, judgeSlicedFile, settleSlicedFile, readSlicedFileFacts, parseModelIds, countPrintedLayers, parseSliceInfo, parseModelNames, modelTitleFor, readZipTailEntry } from "../src/gcode.js";
+import AdmZip from "adm-zip";
+import { randomBytes } from "crypto";
 import { sliceFetchFailure, localFileName, printIdentity } from "../src/mqtt.js";
 
 // Where the sliced file sits depends on how the job reached the printer, and
@@ -78,8 +80,35 @@ test("the file name comes off a file:// url only", () => {
     assert.equal(localFileName(undefined), null);
 });
 
+test("a job named after its print profile takes the model's title from the file", () => {
+    // Read off a P2S on 2026-10-02: a MakerWorld model printed through one of
+    // its print profiles from Bambu Studio
+    const xml = `<model><metadata name="Application">BambuStudio-02.08.02.61</metadata>
+<metadata name="ProfileTitle">0.2mm layer, 2 walls, 15% infill</metadata>
+<metadata name="Title">Darts Holder &amp; Storage</metadata></model>`;
+    assert.deepEqual(parseModelNames(xml), { title: "Darts Holder & Storage", profileTitle: "0.2mm layer, 2 walls, 15% infill" });
+    assert.equal(modelTitleFor("0.2mm layer, 2 walls, 15% infill", parseModelNames(xml)), "Darts Holder & Storage");
+
+    // The job carries the model's name already, a Handy print
+    assert.equal(modelTitleFor("Darts Holder & Storage", parseModelNames(xml)), null);
+    // The job is neither: a renamed project. The printer's name stands
+    assert.equal(modelTitleFor("Dartholder large", parseModelNames(xml)), null);
+    // A project of the user's own has no titles at all
+    assert.deepEqual(parseModelNames("<model><metadata name=\"Title\"></metadata></model>"), { title: null, profileTitle: null });
+    assert.equal(modelTitleFor("Würfel", parseModelNames("<model/>")), null);
+    // Both titles the same says nothing
+    assert.equal(modelTitleFor("Cube", { title: "Cube", profileTitle: "Cube" }), null);
+});
+
 test("the log names the problem it actually had", () => {
     assert.equal(sliceFetchFailure(null), "No sliced file was fetched");
+    // The login itself failed, so no path was tried: a P2S whose FTPS service
+    // had hung answered the TLS handshake with plain text (2026-10-02), and
+    // "No sliced file on the printer under ..." sent its owner after a name
+    assert.equal(
+        sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf"], path: null, error: "wrong version number (control socket)" }),
+        "FTPS login to the printer failed: wrong version number (control socket)",
+    );
     assert.equal(
         sliceFetchFailure({ jobName: "Würfel", tried: ["/cache/Würfel.3mf", "/cache/Würfel.gcode.3mf"], path: null }),
         "No sliced file on the printer under /cache/Würfel.3mf, /cache/Würfel.gcode.3mf",
@@ -122,6 +151,8 @@ test("a fetch that found nothing is tried again, a few times, after a wait", () 
     // A record without an attempt count is the first attempt
     assert.equal(sliceFetchRetryDue({ jobName: "x", tried: [], path: null, at }, at + SLICE_FETCH_RETRY_MS), true);
     assert.equal(sliceFetchRetryDue(null, at), false);
+    // The look before the print ran is attempt 0 and leaves all three
+    assert.equal(sliceFetchRetryDue({ ...notFound, attempt: 0, beforeRunning: true }, at + SLICE_FETCH_RETRY_MS), true);
 });
 
 test("the time only picks the candidates, closest to the start first", () => {
@@ -190,6 +221,42 @@ test("a guess between two files books nothing", () => {
     assert.match(settleSlicedFile([possible, other]).reason, /2 files/);
     assert.equal(settleSlicedFile([rejected]).file, null);
     assert.equal(settleSlicedFile([]).file, null);
+});
+
+test("an entry at the end of a zip is read from its tail alone", () => {
+    // A 3MF the way Bambu Studio writes it: the G-code in front, slice_info
+    // and the small files after it. Random bytes, so deflate cannot shrink
+    // the G-code into the tail.
+    const zip = new AdmZip();
+    zip.addFile("3D/3dmodel.model", Buffer.from("<model><metadata name=\"Title\">Darts Holder and Storage</metadata></model>"));
+    zip.addFile("Metadata/plate_1.gcode", randomBytes(300 * 1024));
+    const sliceInfo = "<config><plate><metadata key=\"index\" value=\"1\"/><layer_filament_list layer_ranges=\"0 434\" filament_list=\"1\"/></plate></config>";
+    zip.addFile("Metadata/slice_info.config", Buffer.from(sliceInfo));
+    zip.addFile("_rels/.rels", Buffer.from("<Relationships/>"));
+    const whole = zip.toBuffer();
+
+    const tailStart = whole.length - 64 * 1024;
+    const tail = whole.subarray(tailStart);
+    assert.equal(readZipTailEntry(tail, tailStart, "Metadata/slice_info.config")?.toString("utf8"), sliceInfo);
+    // In front of the tail: the G-code, the model and, AdmZip writing the
+    // entries in name order, _rels/.rels as the very first one
+    assert.equal(readZipTailEntry(tail, tailStart, "Metadata/plate_1.gcode"), null);
+    assert.equal(readZipTailEntry(tail, tailStart, "3D/3dmodel.model"), null);
+    assert.equal(readZipTailEntry(tail, tailStart, "_rels/.rels"), null);
+    assert.equal(readZipTailEntry(tail, tailStart, "Metadata/none.config"), null);
+    // The whole file is a tail that starts at 0
+    assert.equal(readZipTailEntry(whole, 0, "3D/3dmodel.model")?.toString("utf8").includes("Darts Holder"), true);
+    // A tail too short for the central directory
+    assert.equal(readZipTailEntry(whole.subarray(whole.length - 10), whole.length - 10, "_rels/.rels"), null);
+    assert.equal(readZipTailEntry(Buffer.alloc(0), 0, "_rels/.rels"), null);
+});
+
+test("the settlement names which files were judged", () => {
+    const possible = { path: "/a.3mf", verdict: "possible" };
+    assert.equal(settleSlicedFile([possible], "on the printer").reason, "the only file on the printer that nothing rules out");
+    assert.equal(settleSlicedFile([possible, { path: "/b.3mf", verdict: "possible" }], "on the printer").reason, "2 files on the printer could be it, so none is taken");
+    assert.equal(settleSlicedFile([{ path: "/a.3mf", verdict: "rejected" }], "on the printer").reason, "every file on the printer was ruled out");
+    assert.equal(settleSlicedFile([possible]).reason, "the only file written at the start that nothing rules out");
 });
 
 test("the log says when the listing found nothing either", () => {

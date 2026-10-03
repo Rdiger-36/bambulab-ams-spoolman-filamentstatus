@@ -1,0 +1,17 @@
+# HaspelSync from the rolling :dev image, which every -dev pre-release moves.
+# For testing what is about to be released; :latest stays on the last stable
+# version. Same layout as compose.yml otherwise.
+#
+#     docker compose -f docker/compose.dev.yml up -d
+services:
+  haspelsync:
+    image: ghcr.io/rdiger-36/haspelsync:dev
+    container_name: haspelsync
+    ports:
+      - 4000:4000
+    environment:
+      - TZ=Europe/Berlin
+    volumes:
+      - ./data/printers:/app/printers
+      - ./data/logs:/app/logs
+    restart: unless-stopped

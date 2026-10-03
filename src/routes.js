@@ -671,9 +671,19 @@ export function registerRoutes(app, printers) {
         const alreadyLookedFor = !req.query.job && printer.lastSliceFetch?.jobName === jobName;
         if (jobName && !sliceInfo && !alreadyLookedFor) {
             try {
-                sliceInfo = req.query.job
-                    ? await loadSliceInfo(printer, jobName, null)
-                    : await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, runningPrint(printer));
+                if (req.query.job) {
+                    sliceInfo = await loadSliceInfo(printer, jobName, null);
+                } else {
+                    // Before the print runs, which is where this request lands
+                    // first, the look does not count as one of the attempts and
+                    // says so in the log, see fetchSliceInfo(). The outcome is
+                    // logged by ensureSliceInfo(), so only the start is said here
+                    const beforeRunning = state !== "RUNNING" && state !== "PAUSE";
+                    if (!printer.sliceFetchInFlight) {
+                        console.log(printer.name, printer.logFilePath, `[Print] "${jobName}" is starting, looking for its sliced file via FTPS...`);
+                    }
+                    sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, { ...runningPrint(printer), beforeRunning });
+                }
             } catch (err) {
                 // non-fatal, surface the error in the response
                 return res.json({
@@ -725,9 +735,12 @@ export function registerRoutes(app, printers) {
         const lookup = printer.lastSliceFetch;
         const sliceFetch = !sliceInfo && jobName && lookup?.jobName === jobName && !lookup.path
             ? {
-                attempt: lookup.attempt || 1,
+                attempt: lookup.attempt ?? 1,
                 attempts: SLICE_FETCH_ATTEMPTS,
                 final: (lookup.attempt || 1) >= SLICE_FETCH_ATTEMPTS,
+                // What the hint behind the card's line is about: a login the
+                // printer did not answer, or a file none of the paths held
+                kind: lookup.error ? "connection" : "missing",
                 reason: sliceFetchFailure(lookup),
             }
             : null;
@@ -735,6 +748,7 @@ export function registerRoutes(app, printers) {
         res.json({
             gcodeState: state,
             jobName,
+            modelTitle:     sliceInfo?.modelTitle ?? null,
             layerNum,
             totalLayers:    sliceInfo?.totalLayers   ?? null,
             sliceInfo:      sliceInfo ? {

@@ -93,7 +93,28 @@ Where on the stick the file lands and what it is called differs. A P2S writes `/
 [LOG] Bambu Lab X2D - [Print] Sliced file found on the stick: /CartPicker.gcode.3mf, written 2 seconds after the start, its md5 is the one Bambu Studio sent
 ```
 
+When no file was written at the start, or every one that was is ruled out, the other 3MF files on the stick are checked as well, newest first: a reprint started on the printer's screen takes a file that has been on the stick for days. Each is read from its end only, where the layer count and the plates sit, and only a file that does not contradict the printer is downloaded whole and checked by its title and ids. Two files nothing rules out are still a guess, and none is taken. The log reads the same, with the file's age in place of the seconds:
+
+```bash
+[LOG] Bambu Lab P2S - [Print] Sliced file found on the stick: /cache/0.2mm layer, 2 walls, 15% infill.gcode.3mf, written 34 minutes before the start, its title is the job name
+```
+
+Once found, the path is kept in `printstate.json` next to the print's start, and a restart of the service during the print reads the same file again, whatever the job is called by then: "Found "Darts Holder and Storage" already running, started ..., its sliced file was read from /cache/...".
+
 A print started on the printer's screen from its internal storage, such as the sample models it ships with, is never on the stick and cannot be tracked.
+
+The i at the end of the line on the print card opens the same advice in the Web UI, with the printer's answer as the log has it.
+
+## The printer does not answer the file transfer
+
+The sliced file is read over FTPS, port 990 on the printer. When the login itself fails, no path is tried and the log says so, with the error the connection raised; the print card reads "The printer did not answer the file transfer, nothing will be booked for this print" and the i next to it opens the steps below. Seen on a P2S on 2026-10-02, with the file sitting right under the first path:
+
+```bash
+[LOG] Bambu Lab P2S - [Print] Print running: "0.2mm layer, 2 walls, 15% infill", fetching slice info via FTPS...
+[ERROR] Bambu Lab P2S - [Print] Could not fetch slice info: error:0A00010B:SSL routines:tls_validate_record_header:wrong version number (control socket), trying again in 30 seconds
+```
+
+The printer accepted the TCP connection and answered the TLS handshake with plain text, or not at all, while its MQTT port kept working. That is the printer's FTPS service hung, and it stays hung until the printer is restarted. A restart ends the running print, so either restart now and print again, or let the print finish, which books nothing, and restart afterwards. Before restarting, close other programs that hold a connection to the printer's storage, the storage view in the Device tab of Bambu Studio, a second instance of this service or a script, and try option 3 of the [Debug-Printers CLI](#debug-printers-cli): a listing that hangs or fails with the service's own client confirms that it is the printer. Once the printer answers again, a restart of the service during the print gives it three new attempts; the next print gets them anyway.
 
 ## Debug-Printers CLI
 

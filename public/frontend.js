@@ -362,7 +362,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // the table underneath an open dialog replaces the row it was opened from,
     // so every dialog that reads a row has to be listed here.
     function isDialogOpen() {
-        return ["info-dialog", "spool-detail-dialog", "print-summary-dialog"]
+        return ["info-dialog", "spool-detail-dialog", "print-summary-dialog", "lookup-help-dialog"]
             .some(id => document.getElementById(id)?.open);
     }
 
@@ -2526,7 +2526,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let html = `<div class="gc-card-head">
             ${gcodeStateBadge(shownState)}
             ${printStageBadge(printData)}
-            <strong>${escapeHtml(printData.jobName || t("dashboard.print.noActive"))}</strong>
+            <strong${printData.modelTitle ? ` title="${escapeHtml(t("dashboard.print.profileJob", { job: printData.jobName }))}"` : ""}>${escapeHtml(printData.modelTitle || printData.jobName || t("dashboard.print.noActive"))}</strong>
             <span class="gc-card-note">${printResultControls(printData)}</span>
         </div>`;
         if (active && humanTotal) {
@@ -2544,18 +2544,30 @@ document.addEventListener("DOMContentLoaded", () => {
         // sliced file is read from. Said while idle as well, so the stick is in
         // before the next print rather than found missing by it, and it makes
         // the lookup line below redundant: the file cannot be there.
+        // Each line carries an i that opens the help dialog: what the line
+        // means and what to do about it, which the line itself cannot hold.
+        const helpButton = kind => `<button type="button" class="gc-card-help" data-lookup-help="${kind}" title="${escapeHtml(t("dashboard.print.helpButton"))}" aria-label="${escapeHtml(t("dashboard.print.helpButton"))}">i</button>`;
         const noStorage = printData.storagePresent === false;
         if (noStorage) {
-            html += `<p class="gc-card-lookup gc-required">${escapeHtml(t(active ? "dashboard.print.noStorageActive" : "dashboard.print.noStorage"))}</p>`;
+            html += `<p class="gc-card-lookup gc-required">${escapeHtml(t(active ? "dashboard.print.noStorageActive" : "dashboard.print.noStorage"))}${helpButton("storage")}</p>`;
         }
         // The sliced file was not found. While attempts are left the card says
         // so quietly, after the last one in red: nothing will be booked, and a
         // job that ran with a bare name used to say that only in its summary.
+        // A login the printer did not answer is its own sentence: that is the
+        // printer's file transfer, not a file, and the fix is another one.
         if (active && printData.sliceFetch && !noStorage) {
             const lookup = printData.sliceFetch;
-            html += lookup.final
-                ? `<p class="gc-card-lookup gc-required" title="${escapeHtml(lookup.reason)}">${escapeHtml(t("dashboard.print.noSlicedFile"))}</p>`
-                : `<p class="gc-card-lookup gc-card-lookup-open" title="${escapeHtml(lookup.reason)}">${escapeHtml(t("dashboard.print.lookingAgain", { attempt: lookup.attempt, attempts: lookup.attempts }))}</p>`;
+            const kind = lookup.kind === "connection" ? "connection" : "missing";
+            if (lookup.final) {
+                html += `<p class="gc-card-lookup gc-required" title="${escapeHtml(lookup.reason)}">${escapeHtml(t(kind === "connection" ? "dashboard.print.noFileTransfer" : "dashboard.print.noSlicedFile"))}${helpButton(kind)}</p>`;
+            } else {
+                // Attempt 0 is the look before the print ran, which does not count
+                const text = lookup.attempt
+                    ? t("dashboard.print.lookingAgain", { attempt: lookup.attempt, attempts: lookup.attempts })
+                    : t("dashboard.print.lookingBeforeRunning");
+                html += `<p class="gc-card-lookup gc-card-lookup-open" title="${escapeHtml(lookup.reason)}">${escapeHtml(text)}${helpButton(kind)}</p>`;
+            }
         }
         // The backend reports why consumption data is missing (e.g. the FTPS
         // download failed); without this the table would just show a placeholder with no
@@ -2564,6 +2576,10 @@ document.addEventListener("DOMContentLoaded", () => {
             html += `<p class="gc-required gc-error">${escapeHtml(printData.error)}</p>`;
         }
         card.innerHTML = html;
+
+        for (const button of card.querySelectorAll("[data-lookup-help]")) {
+            button.onclick = () => showLookupHelpDialog(button.dataset.lookupHelp, printData.sliceFetch?.reason || null);
+        }
 
         const summaryButton = card.querySelector("[data-print-summary]");
         if (summaryButton) {
@@ -2815,6 +2831,50 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     /**
+     * How many steps the help dialog lists per kind of lookup problem, and
+     * where the troubleshooting guide says more. The texts are i18n keys
+     * `dashboard.print.help.<kind>.step<n>`; a kind the server does not name
+     * falls back to the missing file, which is what it meant before `kind`.
+     */
+    const LOOKUP_HELP = {
+        connection: { steps: 4, url: "https://github.com/Rdiger-36/HaspelSync/blob/main/docs/troubleshooting.md#the-printer-does-not-answer-the-file-transfer" },
+        missing:    { steps: 4, url: "https://github.com/Rdiger-36/HaspelSync/blob/main/docs/troubleshooting.md#no-sliced-file-on-a-p2s-h2-or-x2d" },
+        storage:    { steps: 2, url: "https://github.com/Rdiger-36/HaspelSync/blob/main/docs/troubleshooting.md#no-sliced-file-on-a-p2s-h2-or-x2d" },
+    };
+
+    /**
+     * Why the sliced file of the running print is not read, and what to do.
+     *
+     * Opened from the i next to the line on the print card. The line says
+     * that nothing will be booked; this says why, with the printer's answer
+     * as the log has it, and the steps that have helped: a P2S whose FTPS
+     * service had hung on 2026-10-02 was rebooted for a file name that was
+     * right all along, because the card could not tell the two apart.
+     *
+     * @param {string} kind - `connection`, `missing` or `storage`
+     * @param {string|null} reason - what the printer answered, from `/api/print`
+     */
+    function showLookupHelpDialog(kind, reason) {
+        const help = LOOKUP_HELP[kind] ? kind : "missing";
+        const dialog = document.getElementById("lookup-help-dialog");
+        document.getElementById("lookup-help-title").textContent = t(`dashboard.print.help.${help}.title`);
+
+        let html = `<p>${escapeHtml(t(`dashboard.print.help.${help}.intro`))}</p>`;
+        if (reason && help !== "storage") html += `<pre class="gc-help-reason">${escapeHtml(reason)}</pre>`;
+        html += "<ol>";
+        for (let n = 1; n <= LOOKUP_HELP[help].steps; n++) {
+            html += `<li>${escapeHtml(t(`dashboard.print.help.${help}.step${n}`))}</li>`;
+        }
+        html += `</ol><p><a href="${LOOKUP_HELP[help].url}" target="_blank" rel="noopener">${escapeHtml(t("dashboard.print.help.more"))}</a></p>`;
+        document.getElementById("lookup-help-content").innerHTML = html;
+
+        const close = document.getElementById("lookup-help-close");
+        close.onclick = () => dialog.close();
+        dialog.showModal();
+        close.focus();
+    }
+
+    /**
      * The closing report of the last print.
      *
      * Read only, and built from what the server recorded when the print ended
@@ -2828,8 +2888,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const title = document.getElementById("print-summary-title");
         const content = document.getElementById("print-summary-content");
 
-        title.textContent = summary.jobName
-            ? t("dashboard.summary.title", { job: summary.jobName })
+        // The model's title where the job was named after its print profile,
+        // the same name the card showed while it ran
+        const name = summary.modelTitle || summary.jobName;
+        title.textContent = name
+            ? t("dashboard.summary.title", { job: name })
             : t("dashboard.summary.lastPrint");
 
         const { layer: humanLayer, total: humanTotal } = humanLayers(summary.layerNum, summary.totalLayers);

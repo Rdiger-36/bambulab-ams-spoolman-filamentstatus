@@ -22,7 +22,7 @@ import {
 import { fetchSliceInfo, calcFullConsumption, calcPartialConsumption, completedLayerIndex, resolveSliceSlots, orderedAmsSlots, decodeStudioMapping, sliceFetchRetryDue, SLICE_FETCH_RETRY_MS, SLICE_FETCH_ATTEMPTS } from "./gcode.js";
 import { getMapping, clearMapping, setMapping, spoolIdsAssignedElsewhere } from "./mappings.js";
 import { learnPresets } from "./presets.js";
-import { rememberPrintStart, recallPrintStart, forgetPrintStart } from "./printstate.js";
+import { rememberPrintStart, recallPrintStart, forgetPrintStart, rememberSlicedFile, recallSlicedFile } from "./printstate.js";
 import { uniqueSpoolForSlot } from "../public/match.js";
 import { humanLayers } from "../public/shared.js";
 import { describePrintError, describePrintErrorInAll } from "./printerrors.js";
@@ -145,6 +145,10 @@ export async function loadSliceInfo(printer, jobName, gcodeFile = null, fileName
  * first caller's result is kept on the printer and a fetch still in flight is
  * shared rather than started again.
  *
+ * The outcome is logged here, once, whoever asked. The dashboard's look while
+ * the job prepared used to fail without a line, and the print handler's own
+ * fetch at RUNNING then read "attempt 3 of 3" right after its first.
+ *
  * `freshStart` in `handlePrintStateChange()` clears both, so a cached file
  * never outlives the job it belongs to.
  *
@@ -161,8 +165,19 @@ export function ensureSliceInfo(printer, jobName, gcodeFile = null, fileName = n
 
     const promise = loadSliceInfo(printer, jobName, gcodeFile, fileName, running)
         .then(sliceInfo => {
-            if (sliceInfo) printer.currentSliceInfo = sliceInfo;
+            if (sliceInfo) {
+                printer.currentSliceInfo = sliceInfo;
+                // So a restart of the service during this print reads the same
+                // file again, whatever the job is called by then
+                if (printer.lastSliceFetch?.path) rememberSlicedFile(printer.id, printer.lastSliceFetch.path);
+                console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
+            } else {
+                console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
+            }
             return sliceInfo;
+        }, err => {
+            console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
+            throw err;
         })
         .finally(() => {
             if (printer.sliceFetchInFlight?.promise === promise) printer.sliceFetchInFlight = null;
@@ -183,6 +198,7 @@ export function runningPrint(printer) {
         startedAt: printer.printStartedAt ?? null,
         totalLayers: printer.currentTotalLayers ?? null,
         identity: printer.currentIdentity ?? null,
+        filePath: printer.currentFilePath ?? null,
     };
 }
 
@@ -197,29 +213,25 @@ export function runningPrint(printer) {
  * @returns {string} the clause
  */
 function describeSliceInfo(sliceInfo) {
-    return `${sliceInfo.filaments.length} filament(s), ${humanLayers(0, sliceInfo.totalLayers).total} layers`;
+    const model = sliceInfo.modelTitle ? `, model "${sliceInfo.modelTitle}" (the job is named after its print profile)` : "";
+    return `${sliceInfo.filaments.length} filament(s), ${humanLayers(0, sliceInfo.totalLayers).total} layers${model}`;
 }
 
 /**
- * One fetch of the running print's sliced file, with the log lines around it.
+ * One fetch of the running print's sliced file, for the print handler.
  *
- * Shared by the fetch at RUNNING and the retries after it, so both say the
- * same thing. A failure that leaves attempts says when the next one comes,
- * the last one says that the print will not be tracked.
+ * Shared by the fetch at RUNNING and the retries after it. The outcome is in
+ * the log either way, written by `ensureSliceInfo()`, and a failure is not the
+ * handler's to deal with: the print goes on, tracked or not.
  *
  * @param {object} printer - the printer runtime object
  * @param {string} jobName - `subtask_name` of the job
  */
 async function fetchSliceInfoForPrint(printer, jobName) {
     try {
-        const sliceInfo = await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, runningPrint(printer));
-        if (sliceInfo) {
-            console.log(printer.name, printer.logFilePath, `[Print] Slice info loaded: ${describeSliceInfo(sliceInfo)}`);
-            return;
-        }
-        console.log(printer.name, printer.logFilePath, `[Print] ${sliceFetchFailure(printer.lastSliceFetch)}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
-    } catch (err) {
-        console.error(printer.name, printer.logFilePath, `[Print] Could not fetch slice info: ${err.message}, ${sliceFetchOutlook(printer.lastSliceFetch)}`);
+        await ensureSliceInfo(printer, jobName, printer.currentGcodeFile, printer.currentFileName, runningPrint(printer));
+    } catch {
+        // Already in the log, see ensureSliceInfo()
     }
 }
 
@@ -230,6 +242,8 @@ async function fetchSliceInfoForPrint(printer, jobName) {
  * @returns {string} one clause, without a full stop
  */
 function sliceFetchOutlook(record) {
+    // The look before the print runs does not count, see fetchSliceInfo()
+    if (record?.beforeRunning) return "looking again once the print runs";
     const attempt = record?.attempt || 1;
     if (record && !record.path && attempt < SLICE_FETCH_ATTEMPTS) {
         return `trying again in ${Math.round(SLICE_FETCH_RETRY_MS / 1000)} seconds`;
@@ -249,6 +263,14 @@ function sliceFetchOutlook(record) {
  */
 export function sliceFetchFailure(record) {
     if (!record) return "No sliced file was fetched";
+    if (record.error) {
+        // Nothing was tried: the login itself failed. The FTPS service of a
+        // P2S had hung on 2026-10-02 and answered the TLS handshake with plain
+        // text; the card then said "No sliced file on the printer" about a
+        // file that sat right under the first path, and the printer was
+        // rebooted for the file's name
+        return `FTPS login to the printer failed: ${record.error}`;
+    }
     if (!record.path) {
         // The printer's answer per path, when the fetch recorded one: a 550
         // from a printer without a USB stick and a data connection that never
@@ -706,9 +728,11 @@ export async function handlePrintStateChange(printer, print) {
         // duration count from the print, not from the restart.
         const recalled = firstSinceStart ? recallPrintStart(printer.id, jobName) : null;
         printer.printStartedAt = recalled ?? Date.now();
+        // The file the process before the restart read, when it got that far
+        printer.currentFilePath = recalled ? recallSlicedFile(printer.id, jobName) : null;
         if (recalled) {
             console.log(printer.name, printer.logFilePath,
-                `[Print] Found "${jobName ?? "the job"}" already running, started ${new Date(recalled).toISOString()}`);
+                `[Print] Found "${jobName ?? "the job"}" already running, started ${new Date(recalled).toISOString()}${printer.currentFilePath ? `, its sliced file was read from ${printer.currentFilePath}` : ""}`);
         } else {
             rememberPrintStart(printer.id, jobName, printer.printStartedAt);
         }
@@ -842,6 +866,7 @@ export async function handlePrintStateChange(printer, print) {
         const summary = {
             state:       newState,
             jobName:     printer.currentJobName || null,
+            modelTitle:  printer.currentSliceInfo?.modelTitle ?? null,
             endedAt:     Date.now(),
             startedAt:   printer.printStartedAt,
             durationMs:  printer.printStartedAt ? Date.now() - printer.printStartedAt : null,

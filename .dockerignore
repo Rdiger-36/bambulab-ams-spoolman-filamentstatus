@@ -1,5 +1,4 @@
 node_modules
-Dockerfile
 .DS_Store
 .dockerignore
 .env
@@ -29,4 +28,6 @@ test/
 scripts/test-server/
 scripts/extract-bambu-profiles.js
 scripts/fetch-print-errors.js
-docker-compose.yml
+# The Dockerfiles and the Compose files: the build context is the repository
+# root, this folder is only what describes the build, nothing in it runs.
+docker/

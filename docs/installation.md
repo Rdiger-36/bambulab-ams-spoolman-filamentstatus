@@ -57,6 +57,8 @@ services:
     restart: unless-stopped
 ```
 
+The Compose file above is [`docker/compose.yml`](../docker/compose.yml) in the repository, next to one for the `:dev` image, one that builds the image from a checkout and one that starts a Spoolman alongside; [its README](../docker/README.md) says which is which.
+
 Both volumes are worth mounting: `/app/printers` holds `printers.json`, `settings.json`, `mappings.json`, `apikeys.json`, `presets.json` and `printstate.json` and makes the configuration survive a container update, `/app/logs` keeps the logs.
 
 `TZ` sets the time zone the log timestamps follow. Without it the container runs on UTC.
