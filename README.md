@@ -12,7 +12,6 @@
 
 <p align="center">
   <a href="https://github.com/Rdiger-36/HaspelSync/releases/latest"><img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?style=flat-square&label=latest&color=blue" alt="latest release" /></a>
-  <a href="https://github.com/Rdiger-36/HaspelSync/releases"><img src="https://img.shields.io/github/v/release/Rdiger-36/HaspelSync?include_prereleases&style=flat-square&label=dev&color=orange" alt="latest pre-release" /></a>
   <img src="https://img.shields.io/badge/Node.js-%E2%89%A522-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <a href="docs/installation.md#supported-architectures"><img src="https://img.shields.io/badge/platforms-amd64%20%C2%B7%20arm64%20%C2%B7%20arm%2Fv7-lightgrey?style=flat-square&color=orange" alt="platforms" /></a>
@@ -42,6 +41,7 @@ An original Bambu Lab spool is recognised by its RFID tag and linked on its own;
 
 ## What changed in 1.3.0
 
+- **The project is called HaspelSync.** The image is `ghcr.io/rdiger-36/haspelsync`. The old name `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus` receives every release for a transition period and will be retired, so switch the image in `docker run` or Docker Compose; configuration and volumes stay as they are. A container from the old name says so itself.
 - **G-code tracking is the new default.** Filament consumption is read from the sliced file of the print instead of the AMS RFID remain percentage, so 3rd party spools without a tag are covered as well. The previous behaviour lives on as [Legacy mode](docs/legacy-mode.md).
 - **Everything is configured in the Web UI now.** The [settings page](docs/settings.md) holds every setting and the printer list.
 - **Environment variables and hand-written `printers.json` are deprecated.** They keep working, see [Deprecated configuration](docs/deprecated-configuration.md).
