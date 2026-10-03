@@ -75,6 +75,27 @@ test("the image notice is served, inactive outside a published image", async () 
     assert.match(body["legacy-image"].replacement, /^ghcr\.io\/rdiger-36\/haspelsync$/);
 });
 
+test("closing the image notice holds until the next start and writes nothing", async () => {
+    const { state } = await import("../src/state.js");
+    const { legacyImageNotice, LEGACY_IMAGE } = await import("../src/imagenotice.js");
+
+    const { status, body } = await call(`${app.url}/api/notices/legacy-image/ack`, "POST", {});
+    assert.equal(status, 200);
+    assert.equal(body.ok, true);
+    assert.equal((await call(`${app.url}/api/notices`)).body["legacy-image"].acknowledged, true);
+    assert.equal(legacyImageNotice(LEGACY_IMAGE).acknowledged, true);
+
+    // The dismissal is held in memory only: settings.json, written by the
+    // earlier acknowledgements, knows nothing of it, so the next start asks
+    // again for as long as the container runs from the old name.
+    assert.equal("legacy-image" in app.readJson("settings.json").notices, false);
+
+    // What a restart does
+    state.legacyImageNoticeDismissed = false;
+    assert.equal(legacyImageNotice(LEGACY_IMAGE).acknowledged, false);
+    assert.equal((await call(`${app.url}/api/notices`)).body["legacy-image"].acknowledged, false);
+});
+
 test("a container from the old image name is told so, in the log on every start", async () => {
     const { legacyImageNotice, legacyImageLogLines, LEGACY_IMAGE } = await import("../src/imagenotice.js");
 

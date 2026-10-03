@@ -17,7 +17,7 @@
 
 ## Supported architectures
 
-Pulling `ghcr.io/rdiger-36/haspelsync:latest` retrieves the right image for your machine. The image was published as `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus` before the project became HaspelSync; that name still receives every release for a transition period, but it will be retired, so an installation that pulls it should switch to the new name. A container started from the old name says so itself: in `docker logs` on every start, once on the dashboard, and under **System** on the settings page for as long as it is true.
+Pulling `ghcr.io/rdiger-36/haspelsync:latest` retrieves the right image for your machine. The image was published as `ghcr.io/rdiger-36/bambulab-ams-spoolman-filamentstatus` before the project became HaspelSync; that name still receives every release for a transition period, but it will be retired, so an installation that pulls it should switch to the new name. A container started from the old name says so itself: in `docker logs` on every start, on the dashboard once after every start, and under **System** on the settings page for as long as it is true.
 
 | Docker platform | Also known as | Supported | Typical hardware |
 | :---- | :---- | :----: | :---- |
