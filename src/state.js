@@ -25,4 +25,10 @@ export const state = {
     // persisted: a restart clearing the lockouts costs an attacker the seconds
     // it takes to restart the service, which they cannot trigger anyway.
     loginFailures: new Map(),
+    // Whether the dashboard dialog about the deprecated image name was closed
+    // since this process started, see imagenotice.js. Deliberately not
+    // persisted: the dialog comes back on every start, a new version included,
+    // because the switch is a one line change that a dialog dismissed once and
+    // forever is never acted on.
+    legacyImageNoticeDismissed: false,
 };

@@ -7,7 +7,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { settings, spoolmanUrl, buildSpoolmanUrl, getSettingsView, updateSettings, coerceSetting, legacyMode, acknowledgeNotice } from "./settings.js";
 import { ENV_CONFIG_NOTICE, deprecatedConfig } from "./deprecation.js";
 import { UPGRADE_NOTICE, upgradeNotice } from "./upgradenotice.js";
-import { IMAGE_NOTICE, legacyImageNotice } from "./imagenotice.js";
+import { IMAGE_NOTICE, dismissLegacyImageNotice, legacyImageNotice } from "./imagenotice.js";
 import { buildDiagnosticsBundle, parseDiagnosticsScope, knownValues, systemInfo } from "./diagnostics.js";
 import { checkForUpdate } from "./update.js";
 import { maskCodes, maskSerial, maskText } from "./anonymize.js";
@@ -1298,11 +1298,13 @@ export function registerRoutes(app, printers) {
     // ---------------------------------------------------------------------
     // Notices
     //
-    // One entry so far: environment based configuration, deprecated since 1.3.0.
-    // The dashboard shows it once and the dismissal is stored server side, in
-    // settings.json beside the values, so it does not come back on the next
-    // browser. The notice disappears on its own once the values have been saved
-    // in the Web UI, which is why nothing here has to know the previous version.
+    // The dashboard shows each once and the dismissal is stored server side,
+    // in settings.json beside the values, so it does not come back on the next
+    // browser. The environment notice disappears on its own once the values
+    // have been saved in the Web UI, which is why nothing here has to know the
+    // previous version. The image notice is the exception: its dismissal is
+    // held in memory only, so it is back after every start until the image
+    // has been switched, see imagenotice.js.
     // ---------------------------------------------------------------------
 
     app.get("/api/notices", (req, res) => {
@@ -1324,6 +1326,11 @@ export function registerRoutes(app, printers) {
     app.post("/api/notices/:id/ack", (req, res) => {
         if (![UPGRADE_NOTICE, ENV_CONFIG_NOTICE, IMAGE_NOTICE].includes(req.params.id)) {
             return res.status(404).json({ ok: false, error: "Unknown notice", code: "unknownNotice" });
+        }
+
+        if (req.params.id === IMAGE_NOTICE) {
+            dismissLegacyImageNotice();
+            return res.json({ ok: true });
         }
 
         try {

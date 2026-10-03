@@ -315,8 +315,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     /**
      * The container runs from the old image name, which will stop receiving
-     * releases. Said once on the dashboard; the settings page keeps saying it
-     * under System, and the log says it on every start.
+     * releases. Said once per start of the service on the dashboard, so a
+     * restart and every new version ask again; the settings page keeps saying
+     * it under System, and the log says it on every start.
      */
     async function showLegacyImageNotice(notice) {
         if (!notice || !notice.active || notice.acknowledged) return;

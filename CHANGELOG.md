@@ -1,6 +1,7 @@
 -----------------------------------------------------------------------------------------------
 Unreleased
    - Changes:
+      - The dashboard dialog that says the container runs from the old image name comes back after every start of the service, so a restart and every new version ask again until the image has been switched. It was shown once and the dismissal was kept in settings.json, which left an installation that had clicked it away once with nothing but the log line to say the name will stop receiving releases. A dismissal an earlier version wrote is no longer read
       - The Docker files live in docker/: the Dockerfile, the one of the old image name, and four Compose files, one each for the :latest image, the :dev image, a build from the checkout and a stack together with Spoolman, with a README that says which is which. The docker-compose.yml in the repository root is gone; a checkout that was started with docker compose up from the root takes -f docker/compose.yml now, and every Compose file puts its volumes under docker/data/ next to itself
 
 -----------------------------------------------------------------------------------------------

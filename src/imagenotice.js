@@ -1,5 +1,5 @@
 import { imageName } from "./config.js";
-import { getAcknowledgedNotices } from "./settings.js";
+import { state } from "./state.js";
 
 /**
  * The notice for a container that runs from the old image name.
@@ -12,10 +12,18 @@ import { getAcknowledgedNotices } from "./settings.js";
  * file. An image cannot see the tag it was pulled by, so the name is baked
  * into each published image by its Dockerfile, see HASPELSYNC_IMAGE.
  *
+ * Unlike the other notices, closing this one holds only until the next start
+ * of the service: a restart and every new version show the dialog again for
+ * as long as the container runs from the old name. The notice is not a one
+ * time hint about something that already happened, it asks for a change that
+ * has not been made yet, and a dialog dismissed once and forever is never
+ * acted on. The log lines and the line under System on the settings page say
+ * it regardless.
+ *
  * This module must not import logger.js, for the reason settings.js gives.
  */
 
-/** Identifies the notice in `settings.json`, so a dismissal survives a restart. */
+/** Identifies the notice on `/api/notices`. */
 export const IMAGE_NOTICE = "legacy-image";
 
 /** The name the image was published under before the rename. */
@@ -35,6 +43,8 @@ const INSTALL_DOCS_URL = "https://github.com/Rdiger-36/HaspelSync/blob/main/docs
  *
  * `image` is the full name the container was started from, null for a
  * checkout or a locally built image, which is also never deprecated.
+ * `acknowledged` is whether the dialog was closed since this process started;
+ * a value an older version left in settings.json is not read.
  *
  * @param {string|null} [name] - the baked in image name, `imageName` unless a test says otherwise
  * @returns {{active: boolean, acknowledged: boolean, image: string|null, replacement: string, docs: string}}
@@ -42,11 +52,20 @@ const INSTALL_DOCS_URL = "https://github.com/Rdiger-36/HaspelSync/blob/main/docs
 export function legacyImageNotice(name = imageName) {
     return {
         active: name === LEGACY_IMAGE,
-        acknowledged: !!getAcknowledgedNotices()[IMAGE_NOTICE],
+        acknowledged: state.legacyImageNoticeDismissed,
         image: name ? `${REGISTRY_PATH}/${name}` : null,
         replacement: CURRENT_IMAGE,
         docs: INSTALL_DOCS_URL,
     };
+}
+
+/**
+ * Records that the dialog was closed, for the lifetime of this process only.
+ *
+ * Nothing is written: the dialog is meant to come back on the next start.
+ */
+export function dismissLegacyImageNotice() {
+    state.legacyImageNoticeDismissed = true;
 }
 
 /**
