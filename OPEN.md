@@ -286,35 +286,31 @@ mosquitto with a self signed certificate, standing in for the printer:
 
 None of this involved real hardware, so it says nothing about the items above.
 
-## Before the next official release
+## The 1.3.0 release
 
-The version deliberately stays on a `-dev` prerelease for now, currently
-`1.3.0-dev.21`. Every dev build is one `chore/version-1.3.0-dev.N` pull request
-that moves `package.json`, `package-lock.json` and `src/config.js` together,
-renames the changelog's `Unreleased` block and folds it into the draft below,
-followed by an annotated tag on the merge commit.
+The dev phase ended with `1.3.0-dev.30`; dev.29 was the build that renamed the
+project to HaspelSync. The version is `1.3.0` in `package.json`,
+`package-lock.json` and `src/config.js`, and the consolidated release block,
+written for a reader of 1.2.1, replaced the thirty `Version 1.3.0-dev.*` blocks
+in `CHANGELOG.md`. Fixes of behaviour only a dev build had were left out of it
+on purpose; the dev blocks stay in the history of `CHANGELOG.md`. Every tag
+publishes two images, `haspelsync` and, built on top of it from
+`docker/Dockerfile.legacy`, the old name; a container from the old name says so
+in its log and on the dashboard after every start.
 
-- [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
-  The publish workflow compares the tag against `package.json` and aborts on a
-  mismatch, so a bump in only one of them fails the build. Not to be done ahead
-  of time: the bump happens when the release is actually wanted, and the maintainer says
-  when that is.
-- [ ] Replace the `1.3.0-dev.*` blocks in `CHANGELOG.md` with the consolidated
-  release block drafted in `docs/changelog-1.3.0-draft.md`. The dev blocks stay
-  as they are for the whole dev phase, because they are what testers on the dev
-  images read to see what changed between two builds. This has to happen before
-  the tag is pushed: the release body is the `CHANGELOG.md` section for exactly
-  that version, so without a `Version 1.3.0` section the release says it has no
-  notes. The draft is folded forward at every bump and covers up to `dev.18`.
 - [ ] Delete the `v1.3.0-dev.*` releases once `v1.3.0` is out, and keep their
   tags. A pre-release carries the generated pull request list of one dev step
   and that step's changelog section, and neither is lost with it: the pull
   requests keep their labels, and the dev blocks stay in the history of
-  `CHANGELOG.md` after the consolidated block replaces them. The tag is the part
-  that carries something of its own, which is the commit that went into
-  `:1.3.0-dev.<n>` on ghcr, where the image outlives the release either way. A
-  ref costs nothing and the compare links of the remaining notes are built from
-  it.
+  `CHANGELOG.md`. The tag is the part that carries something of its own, which
+  is the commit that went into `:1.3.0-dev.<n>` on ghcr, where the image
+  outlives the release either way. A ref costs nothing and the compare links of
+  the remaining notes are built from it.
+- [ ] The next version takes a fresh `Unreleased` block at the top of
+  `CHANGELOG.md`, renamed at its bump the way the dev builds were, and a
+  version bump moves `package.json`, `package-lock.json` and `src/config.js`
+  together: the publish workflow compares the tag against `package.json` and
+  aborts on a mismatch.
 
 Tag behaviour, after the hardening in `c053561`:
 
