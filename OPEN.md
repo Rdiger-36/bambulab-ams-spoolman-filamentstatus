@@ -289,12 +289,12 @@ None of this involved real hardware, so it says nothing about the items above.
 ## Before the next official release
 
 The version deliberately stays on a `-dev` prerelease for now, currently
-`1.3.0-dev.29`, the build that renamed the project to HaspelSync. Every dev
+`1.3.0-dev.30`; dev.29 was the build that renamed the project to HaspelSync. Every dev
 build is one `chore/version-1.3.0-dev.N` pull request that moves
 `package.json`, `package-lock.json` and `src/config.js` together, renames the
 changelog's `Unreleased` block and folds it into the draft below, followed by
 an annotated tag on the merge commit. Since dev.29 every tag publishes two
-images, `haspelsync` and, built on top of it from `Dockerfile.legacy`, the old
+images, `haspelsync` and, built on top of it from `docker/Dockerfile.legacy`, the old
 name; a container from the old name says so in its log and on the dashboard.
 
 - [ ] Set the version to `1.3.0` in **both** `package.json` and `src/config.js`.
@@ -310,8 +310,8 @@ name; a container from the old name says so in its log and on the dashboard.
   that version, so without a `Version 1.3.0` section the release says it has no
   notes. The draft on `main` is folded forward raw at every bump; the version
   to use is the one on the branch `docs/changelog-1.3.0-consolidated-v2`,
-  rewritten for a reader of 1.2.1 and covering up to `dev.29`, the rename
-  included. Fixes of behaviour only a dev build had are left out of it on
+  rewritten for a reader of 1.2.1 and covering up to `dev.30` and what sits
+  under `Unreleased` after it, the rename included. Fixes of behaviour only a dev build had are left out of it on
   purpose. The bump to 1.3.0 is made on that branch, with labels `maintenance`
   and `documentation`.
 - [ ] Delete the `v1.3.0-dev.*` releases once `v1.3.0` is out, and keep their
