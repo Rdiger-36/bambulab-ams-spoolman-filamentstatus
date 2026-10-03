@@ -1,4 +1,9 @@
 -----------------------------------------------------------------------------------------------
+Unreleased
+   - Changes:
+      - The Docker files live in docker/: the Dockerfile, the one of the old image name, and four Compose files, one each for the :latest image, the :dev image, a build from the checkout and a stack together with Spoolman, with a README that says which is which. The docker-compose.yml in the repository root is gone; a checkout that was started with docker compose up from the root takes -f docker/compose.yml now, and every Compose file puts its volumes under docker/data/ next to itself
+
+-----------------------------------------------------------------------------------------------
 Version 1.3.0-dev.30
    Fifth release candidate for 1.3.0. The print card says why nothing will be booked and what to do, names the model where the printer names the job after its print profile, and a reprint from the printer's screen is tracked after a restart of the service. Like dev.29, what is found on it goes into 1.3.0
    - New Features:
